@@ -27,10 +27,16 @@ def reshape_data_leaves_for_distribution(data_leaf):
     return data
 
 
-def distribute_data_params_and_key(data, params, key):
-    """Broadcast data, replicate params, and split a PRNG key to all devices."""
+def distribute_data(data):
+    """Broadcast data to all devices. The first axis must be divisible by ndevices."""
     data = jax.tree_map(reshape_data_leaves_for_distribution, data)
     data = kfac_utils.broadcast_all_local_devices(data)
+    return data
+
+
+def distribute_data_params_and_key(data, params, key):
+    """Broadcast data, replicate params, and split a PRNG key to all devices."""
+    data = distribute_data(data)
     params = kfac_utils.replicate_all_local_devices(params)
     sharded_key = kfac_utils.make_different_rng_key_on_all_devices(key)
 

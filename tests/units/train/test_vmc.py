@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import jax
 import kfac_ferminet_alpha.utils as kfac_utils
 import numpy as np
+from numpy.lib.ufunclike import fix
 
 import vmcnet.train as train
 import vmcnet.utils as utils
@@ -17,7 +18,7 @@ def _make_dummy_data_params_and_key():
     keys = jax.random.split(key, 4)
     key = keys[0]
 
-    data = jax.random.normal(keys[1], shape=(10, 5, 2))
+    data = jax.random.normal(keys[1], shape=(10 * jax.device_count(), 5, 2))
 
     param_shapes = ((3, 1), (5, 7))
     params = [
@@ -28,10 +29,13 @@ def _make_dummy_data_params_and_key():
     return data, params, key
 
 
-def _make_dummy_metropolis_fns(data, key):
+def _make_dummy_metropolis_fns(data, key, data_will_be_pmapped=False):
     """Make a random proposal with the shape of data and accept every other row."""
     key, subkey = jax.random.split(key)
-    fixed_proposal = jax.random.normal(subkey, shape=data.shape)
+    proposal_shape = data.shape
+    if data_will_be_pmapped:
+        proposal_shape = (data.shape[0] // jax.device_count(),) + data.shape[1:]
+    fixed_proposal = jax.random.normal(subkey, shape=proposal_shape)
 
     def proposal_fn(params, data, key):
         """Add a fixed proposal to the data."""
@@ -52,17 +56,27 @@ def _make_dummy_metropolis_fns(data, key):
     return fixed_proposal, proposal_fn, acceptance_fn, update_data_fn, key
 
 
-def _get_expected_alternate_row_update(data, fixed_proposal, num_updates):
+def _get_expected_alternate_row_update(
+    data, fixed_proposal, num_updates, pmapped=False
+):
     """Get the result after updating every other row of data num_updates times."""
-    expected_new_data = data
-    # update every other row of data by adding num_updates * fixed_proposal
-    expected_new_data = jax.ops.index_update(
-        expected_new_data,
-        jax.ops.index[::2, ...],
-        (data + num_updates * fixed_proposal)[::2],
-    )
 
-    return expected_new_data
+    def single_device_update(data, fixed_proposal):
+        expected_new_data = data
+        # update every other row of data by adding num_updates * fixed_proposal
+        expected_new_data = jax.ops.index_update(
+            expected_new_data,
+            jax.ops.index[::2, ...],
+            (data + num_updates * fixed_proposal)[::2],
+        )
+
+        return expected_new_data
+
+    if pmapped:
+        fixed_proposal = kfac_utils.replicate_all_local_devices(fixed_proposal)
+        return jax.pmap(single_device_update)(data, fixed_proposal)
+
+    return single_device_update(data, fixed_proposal)
 
 
 def test_metropolis_step():
@@ -131,7 +145,7 @@ def test_vmc_loop_logging(caplog):
         caplog.clear()
         data, params, key = _make_dummy_data_params_and_key()
         _, proposal_fn, acceptance_fn, update_data_fn, key = _make_dummy_metropolis_fns(
-            data, key
+            data, key, data_will_be_pmapped=pmapped
         )
         nchains = data.shape[0]
 
@@ -170,10 +184,12 @@ def test_vmc_loop_number_of_updates():
         acceptance_fn,
         update_data_fn,
         key,
-    ) = _make_dummy_metropolis_fns(data, key)
+    ) = _make_dummy_metropolis_fns(data, key, data_will_be_pmapped=True)
     nchains = data.shape[0]
 
-    old_data = data
+    # keep a copy here because vmc_loop deletes the original buffer
+    data_copy = jnp.array(data)
+    data_copy = utils.distribute.distribute_data(data_copy)
 
     data, params, key = utils.distribute.distribute_data_params_and_key(
         data, params, key
@@ -209,16 +225,23 @@ def test_vmc_loop_number_of_updates():
     )
 
     new_optimizer_state = kfac_utils.get_first(new_optimizer_state)
-    new_data = jnp.reshape(new_data, old_data.shape)
 
+    num_updates = nskip * nepochs + nburn
     expected_data = _get_expected_alternate_row_update(
-        old_data, fixed_proposal, nskip * nepochs + nburn
+        data_copy, fixed_proposal, num_updates, pmapped=True
     )
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
-    # check that the expected number of "data updates" have been done
-    np.testing.assert_allclose(new_data, expected_data, rtol=1e-5)
+    # check that the expected number of "data updates" have been done. Since repeatedly
+    # increasing the size of data accumulates relative numerical error on the order of
+    # n * eps, we set an absolute tolerance of n * eps * max(result)
+    print(new_data - expected_data)
+    np.testing.assert_allclose(
+        new_data,
+        expected_data,
+        atol=num_updates * np.finfo(jnp.float32).eps * jnp.max(new_data),
+    )
 
 
 def test_vmc_loop_newtons_x_squared():
