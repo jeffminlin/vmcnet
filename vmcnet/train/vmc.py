@@ -2,6 +2,7 @@
 import collections
 import logging
 import os
+from typing import Callable, Tuple
 
 import jax.numpy as jnp
 import jax
@@ -11,8 +12,42 @@ import vmcnet.utils as utils
 
 
 def take_metropolis_step(data, params, proposal_fn, acceptance_fn, update_data_fn, key):
+    """Split a single step of updating data into proposal and acceptance.
+
+    Following Metropolis-Hastings Markov Chain Monte Carlo, a transition from one data
+    state to another is split into proposal and acceptance. When used in a Metropolis
+    routine to approximate a stationary distribution P, the proposal and acceptance
+    functions should satisfy detailed balance, i.e.,
+
+        proposal_prob_ij * acceptance_ij * P_i = proposal_prob_ji * acceptance_ji * P_j,
+
+    where proposal_prob_ij is the likelihood of proposing the transition from state i to
+    state j, acceptance_ij is the likelihood of accepting a transition from state i
+    to state j, and P_i is the probability of being in state i.
+
+    Args:
+        data (pytree-like): data to update
+        params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
+            model params
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> proposed_data, key
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+            to proposal_fn and used to randomly accept proposals with probabilities
+            output by acceptance_fn
+
+    Returns:
+        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
+            new jax PRNG key split from previous one
+    """
     key, subkey = jax.random.split(key)
-    proposed_data = proposal_fn(params, data)
+    proposed_data, key = proposal_fn(params, data, key)
     accept_prob = acceptance_fn(params, data, proposed_data)
     move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
     new_data = update_data_fn(data, proposed_data, move_mask)
@@ -21,13 +56,46 @@ def take_metropolis_step(data, params, proposal_fn, acceptance_fn, update_data_f
 
 
 def walk_data(nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, key):
-    # The code below approximately does
-    # accept_sum = 0.0
-    # for _ in range(nsteps):
-    #     accept_prob, data, key = take_metropolis_step(
-    #         data, params, proposal_fn, acceptance_fn, update_data_fn, key
-    #     )
-    #     accept_sum += accept_prob
+    """Take multiple Metropolis-Hastings steps, via take_metropolis_step.
+
+    This function is roughly equivalent to
+    
+    ```
+    accept_sum = 0.0
+    for _ in range(nsteps):
+        accept_prob, data, key = take_metropolis_step(
+            data, params, proposal_fn, acceptance_fn, update_data_fn, key
+        )
+        accept_sum += accept_prob
+    return accept_sum / nsteps, data, key
+    ```
+
+    but has better tracing/pmap behavior due to the use of jax.lax.scan instead of a
+    python for loop. See :func:`~vmcnet.train.vmc.take_metropolis_step`.
+
+    Args:
+        nsteps (int): number of steps to take
+        data (pytree-like): data to walk (update) with each step
+        params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
+            model params
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> proposed_data, key
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+            to proposal_fn and used to randomly accept proposals with probabilities
+            output by acceptance_fn
+
+    Returns:
+        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
+            new jax PRNG key split (possibly multiple times) from previous one
+    """
+
     def step_fn(carry, x):
         del x
         accept_prob, data, key = take_metropolis_step(

@@ -34,10 +34,10 @@ def _make_dummy_metropolis_fns(data, key):
     key, subkey = jax.random.split(key)
     fixed_proposal = jax.random.normal(subkey, shape=data.shape)
 
-    def proposal_fn(params, data):
+    def proposal_fn(params, data, key):
         """Add a fixed proposal to the data."""
         del params
-        return data + fixed_proposal
+        return data + fixed_proposal, key
 
     def acceptance_fn(params, data, proposed_data):
         """Accept every other row of the proposal."""
@@ -301,9 +301,9 @@ def test_vmc_loop_newtons_x_squared():
     nskip = 1
 
     # define some dummy functions which don't do anything
-    def proposal_fn(x, data):
+    def proposal_fn(x, data, key):
         del x
-        return data
+        return data, key
 
     def acceptance_fn(x, data, proposed_data):
         del x, data, proposed_data
