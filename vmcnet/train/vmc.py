@@ -1,0 +1,266 @@
+"""Main VMC loop."""
+import collections
+import logging
+import os
+
+import jax.numpy as jnp
+import jax
+import numpy as np
+
+import vmcnet.utils as utils
+
+
+def take_metropolis_step(data, params, proposal_fn, acceptance_fn, update_data_fn, key):
+    key, subkey = jax.random.split(key)
+    proposed_data = proposal_fn(params, data)
+    accept_prob = acceptance_fn(params, data, proposed_data)
+    move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
+    new_data = update_data_fn(data, proposed_data, move_mask)
+
+    return jnp.mean(accept_prob), new_data, key
+
+
+def walk_data(nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, key):
+    # The code below approximately does
+    # accept_sum = 0.0
+    # for _ in range(nsteps):
+    #     accept_prob, data, key = take_metropolis_step(
+    #         data, params, proposal_fn, acceptance_fn, update_data_fn, key
+    #     )
+    #     accept_sum += accept_prob
+    def step_fn(carry, x):
+        del x
+        accept_prob, data, key = take_metropolis_step(
+            carry[1], params, proposal_fn, acceptance_fn, update_data_fn, carry[2]
+        )
+        return (carry[0] + accept_prob, data, key), None
+
+    out = jax.lax.scan(step_fn, (0.0, data, key), xs=None, length=nsteps)
+    accept_sum, data, key = out[0]
+    return accept_sum / nsteps, data, key
+
+
+def make_burning_step(proposal_fn, acceptance_fn, update_data_fn, pmapped=True):
+    def burning_step(data, params, key):
+        _, data, key = take_metropolis_step(
+            data, params, proposal_fn, acceptance_fn, update_data_fn, key
+        )
+        return data, key
+
+    if not pmapped:
+        return burning_step
+
+    return jax.pmap(burning_step, donate_argnums=(0, 1, 2))
+
+
+def make_training_step(
+    nskip,
+    proposal_fn,
+    acceptance_fn,
+    update_data_fn,
+    model_eval,
+    energy_fn,
+    update_param_fn,
+    metric_fns=None,
+    clipping_fn=None,
+    pmapped=True,
+):
+    nskip = max(nskip, 1)
+
+    def training_step(data, params, optimizer_state, key):
+        accept_ratio, data, key = walk_data(
+            nskip, data, params, proposal_fn, acceptance_fn, update_data_fn, key,
+        )
+        params, optimizer_state, metrics = update_param_fn(
+            data,
+            params,
+            optimizer_state,
+            model_eval,
+            energy_fn,
+            metric_fns=metric_fns,
+            clipping_fn=clipping_fn,
+        )
+        return accept_ratio, data, params, optimizer_state, metrics, key
+
+    if not pmapped:
+        return training_step
+
+    return jax.pmap(training_step, donate_argnums=(0, 1, 2, 3))
+
+
+def update_position_and_amplitude(data, proposed_data, move_mask):
+    pos_mask = jnp.reshape(move_mask, (-1,) + (len(data["position"].shape) - 1) * (1,))
+    new_position = jnp.where(pos_mask, proposed_data["position"], data["position"])
+    new_amplitude = jnp.where(move_mask, proposed_data["amplitude"], data["amplitude"])
+    return {"position": new_position, "amplitude": new_amplitude}
+
+
+def move_history_window(energy_history, variance_history, obs, epoch, nhistory):
+    energy_history.append(obs["energy"])
+    variance_history.append(obs["variance"])
+    if epoch >= nhistory:
+        energy_history.popleft()
+        variance_history.popleft()
+
+
+def get_checkpoint_metric(energy_history, variance_history, nchains, variance_scale):
+
+    energy_running_avg = jnp.average(energy_history)
+    variance_running_avg = jnp.average(variance_history)
+    error_adjusted_running_avg = energy_running_avg + variance_scale * jnp.sqrt(
+        variance_running_avg / (len(energy_history) * nchains)
+    )
+
+    return error_adjusted_running_avg
+
+
+def checkpoint(
+    epoch,
+    params,
+    optimizer_state,
+    data,
+    metrics,
+    energy_history,
+    variance_history,
+    checkpoint_metric,
+    logdir=None,
+    variance_scale=10.0,
+    checkpoint_every=None,
+    checkpoint_dir="checkpoints",
+    nhistory=50,
+):
+    if logdir is None or metrics is None:
+        return checkpoint_metric, ""
+
+    for metric, metric_val in metrics.items():
+        utils.io.write_metric_to_file(metric_val, logdir, metric)
+
+    if checkpoint_every is not None:
+        if (epoch + 1) % checkpoint_every == 0:
+            utils.io.save_params(
+                os.path.join(logdir, checkpoint_dir),
+                str(epoch + 1) + ".npz",
+                data,
+                params,
+                optimizer_state,
+            )
+
+    move_history_window(energy_history, variance_history, metrics, epoch, nhistory)
+    checkpoint_str = ""
+    error_adjusted_running_avg = get_checkpoint_metric(
+        energy_history, variance_history, data.shape[0], variance_scale
+    )
+    if error_adjusted_running_avg < checkpoint_metric:
+        utils.io.save_params(
+            logdir, "checkpoint.npz", data, params, optimizer_state,
+        )
+        checkpoint_str = ", new weights saved"
+
+    return jnp.minimum(error_adjusted_running_avg, checkpoint_metric), checkpoint_str
+
+
+def log_vmc_loop_state(epoch, metrics, checkpoint_str):
+    template = ", ".join(
+        [
+            "Epoch {:5d}",
+            "Energy: {:.5e} ({:.5e})",
+            "Variance: {:.5e} ({:.5e})",
+            "Acceptance Ratio: {:.5f}",
+        ]
+    )
+    template = template + checkpoint_str
+    info_out = template.format(
+        epoch + 1,
+        float(metrics["energy"]),
+        float(metrics["energy_noclip"]),
+        float(metrics["variance"]),
+        float(metrics["variance_noclip"]),
+        float(metrics["accept_ratio"]),
+    )
+    logging.info(info_out)
+
+
+def vmc_loop(
+    params,
+    optimizer_state,
+    model_eval,
+    initial_data,
+    nburn,
+    nepochs,
+    nskip,
+    proposal_fn,
+    acceptance_fn,
+    energy_fn,
+    update_data_fn,
+    update_param_fn,
+    key,
+    metric_fns=None,
+    clipping_fn=None,
+    logdir=None,
+    checkpoint_every=None,
+    checkpoint_dir="checkpoints",
+    checkpoint_variance_scale=10.0,
+    nhistory=50,
+    pmapped=True,
+):
+    checkpointdir = None
+    if logdir is not None:
+        logging.info("Saving to " + logdir)
+        os.makedirs(logdir, exist_ok=True)
+        if checkpoint_every is not None:
+            checkpointdir = utils.io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
+            os.makedirs(os.path.join(logdir, checkpointdir), exist_ok=False)
+
+    data = initial_data
+
+    burning_step = make_burning_step(
+        proposal_fn, acceptance_fn, update_data_fn, pmapped=pmapped
+    )
+    training_step = make_training_step(
+        nskip,
+        proposal_fn,
+        acceptance_fn,
+        update_data_fn,
+        model_eval,
+        energy_fn,
+        update_param_fn,
+        metric_fns=metric_fns,
+        clipping_fn=clipping_fn,
+        pmapped=pmapped,
+    )
+
+    logging.info("Burning for " + str(nburn) + " steps")
+    for _ in range(nburn):
+        data, key = burning_step(data, params, key)
+
+    checkpoint_metric = np.inf
+    energy_history = collections.deque()
+    variance_history = collections.deque()
+    for epoch in range(nepochs):
+        # for checkpointing; want to save the state that resulted in the best metrics,
+        # not the state one step later
+        old_params = params
+        old_optimizer_state = optimizer_state
+        accept_ratio, data, params, optimizer_state, metrics, key = training_step(
+            data, params, optimizer_state, key
+        )
+        checkpoint_metric, checkpoint_str = checkpoint(
+            epoch,
+            old_params,
+            old_optimizer_state,
+            data,
+            metrics,
+            energy_history,
+            variance_history,
+            checkpoint_metric,
+            logdir=logdir,
+            variance_scale=checkpoint_variance_scale,
+            checkpoint_every=None,
+            checkpoint_dir=checkpoint_dir,
+            nhistory=nhistory,
+        )
+        if metrics is not None:
+            metrics["accept_ratio"] = accept_ratio
+            log_vmc_loop_state(epoch, metrics, checkpoint_str)
+
+    return params, optimizer_state, data
