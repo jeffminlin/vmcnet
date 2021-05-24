@@ -1,3 +1,10 @@
+# Research notes
+notes/
+
+# logs, saved weights and models
+slurm_out/
+logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +134,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# VS Code settings
+.vscode/
