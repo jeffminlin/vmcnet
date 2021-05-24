@@ -2,16 +2,26 @@
 import collections
 import logging
 import os
-from typing import Callable, Tuple
+from typing import Callable, Dict, Tuple, TypeVar
 
 import jax.numpy as jnp
 import jax
-import numpy as np
 
 import vmcnet.utils as utils
 
+D = TypeVar("D")  # to represent a pytree or pytree-like object containing MCMC data
+P = TypeVar("P")  # to represent a pytree or pytree-like object containing params
+O = TypeVar("O")  # to represent optimizer state
 
-def take_metropolis_step(data, params, proposal_fn, acceptance_fn, update_data_fn, key):
+
+def take_metropolis_step(
+    data: D,
+    params: P,
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    key: jnp.ndarray,
+) -> Tuple[jnp.float32, D, jnp.ndarray]:
     """Split a single step of updating data into proposal and acceptance.
 
     Following Metropolis-Hastings Markov Chain Monte Carlo, a transition from one data
@@ -55,11 +65,18 @@ def take_metropolis_step(data, params, proposal_fn, acceptance_fn, update_data_f
     return jnp.mean(accept_prob), new_data, key
 
 
-def walk_data(nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, key):
+def walk_data(
+    nsteps: int,
+    data: D,
+    params: P,
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    key: jnp.ndarray,
+) -> Tuple[jnp.float32, D, jnp.ndarray]:
     """Take multiple Metropolis-Hastings steps, via take_metropolis_step.
 
-    This function is roughly equivalent to
-    
+    This function is roughly equivalent to:
     ```
     accept_sum = 0.0
     for _ in range(nsteps):
@@ -108,7 +125,12 @@ def walk_data(nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, 
     return accept_sum / nsteps, data, key
 
 
-def make_burning_step(proposal_fn, acceptance_fn, update_data_fn, pmapped=True):
+def make_burning_step(
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    pmapped: bool = True,
+) -> Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]]:
     """Factory to create a burning step.
 
     This provides the functionality to optionally apply jax.pmap to a single walker
@@ -154,8 +176,13 @@ def make_burning_step(proposal_fn, acceptance_fn, update_data_fn, pmapped=True):
 
 
 def make_training_step(
-    nskip, proposal_fn, acceptance_fn, update_data_fn, update_param_fn, pmapped=True
-):
+    nskip: int,
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    pmapped: bool = True,
+) -> Callable[[D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]]:
     """Factory to create a training step.
 
     This provides the functionality to optionally apply jax.pmap to a single training
@@ -215,85 +242,214 @@ def make_training_step(
     return jax.pmap(training_step, donate_argnums=(0, 1, 2, 3))
 
 
-def update_position_and_amplitude(data, proposed_data, move_mask):
-    pos_mask = jnp.reshape(move_mask, (-1,) + (len(data["position"].shape) - 1) * (1,))
-    new_position = jnp.where(pos_mask, proposed_data["position"], data["position"])
-    new_amplitude = jnp.where(move_mask, proposed_data["amplitude"], data["amplitude"])
-    return {"position": new_position, "amplitude": new_amplitude}
+def move_history_window(
+    running_energy_avg: jnp.float32,
+    running_variance_avg: jnp.float32,
+    energy_history: collections.deque,
+    variance_history: collections.deque,
+    metrics: Dict,
+    epoch: int,
+    nhistory: int,
+) -> Tuple[jnp.float32, jnp.float32]:
+    """Append energy/variance to running history, remove oldest if length > nhistory."""
+    if nhistory <= 0:
+        return running_energy_avg, running_variance_avg
 
+    energy, variance = metrics["energy"], metrics["variance"]
+    running_energy_sum = len(energy_history) * running_energy_avg
+    running_variance_sum = len(variance_history) * running_variance_avg
 
-def move_history_window(energy_history, variance_history, obs, epoch, nhistory):
-    energy_history.append(obs["energy"])
-    variance_history.append(obs["variance"])
+    energy_history.append(energy)
+    running_energy_sum += energy
+    variance_history.append(variance)
+    running_variance_sum += variance
+
     if epoch >= nhistory:
-        energy_history.popleft()
-        variance_history.popleft()
+        oldest_energy = energy_history.popleft()
+        running_energy_sum -= oldest_energy
+        oldest_variance = variance_history.popleft()
+        running_variance_sum -= oldest_variance
 
-
-def get_checkpoint_metric(energy_history, variance_history, nchains, variance_scale):
-
-    energy_running_avg = jnp.average(energy_history)
-    variance_running_avg = jnp.average(variance_history)
-    error_adjusted_running_avg = energy_running_avg + variance_scale * jnp.sqrt(
-        variance_running_avg / (len(energy_history) * nchains)
+    return (
+        running_energy_sum / len(energy_history),
+        running_variance_sum / len(variance_history),
     )
 
-    return error_adjusted_running_avg
+
+def get_checkpoint_metric(
+    energy_running_avg: jnp.float32,
+    variance_running_avg: jnp.float32,
+    nsamples: int,
+    variance_scale: float,
+) -> jnp.float32:
+    """Get an error-adjusted running average of the energy for checkpointing.
+    
+    The parameter variance_scale can be tuned and probably should scale linearly with
+    some estimate of the integrated autocorrelation. Higher means more allergic to high
+    variance, lower means more allergic to high energies.
+
+    Args:
+        energy_running_avg (jnp.float32): running average of the energy
+        variance_running_avg (jnp.float32): running average of the variance
+        nsamples (int): total number of samples reflected in the running averages, equal
+            to the number of parallel chains times the length of the history
+        variance_scale (float): weight of the variance part of the checkpointing metric.
+            The final effect on the variance part is to scale it by
+            jnp.sqrt(variance_scale), i.e. to treat it like the integrated
+            autocorrelation.
+
+    Returns:
+        jnp.float32: error adjusted running average of the energy
+    """
+    # TODO(Jeffmin): eventually maybe put in some cheap best guess at the IAC?
+    if variance_scale <= 0.0 or nsamples <= 0:
+        return energy_running_avg
+
+    effective_nsamples = nsamples / variance_scale
+    return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
 def checkpoint(
-    epoch,
-    params,
-    optimizer_state,
-    data,
-    metrics,
-    energy_history,
-    variance_history,
-    checkpoint_metric,
-    logdir=None,
-    variance_scale=10.0,
-    checkpoint_every=None,
-    checkpoint_dir="checkpoints",
-    nhistory=50,
-):
-    if logdir is None or metrics is None:
-        return checkpoint_metric, ""
+    epoch: int,
+    params: P,
+    optimizer_state: O,
+    data: D,
+    metrics: Dict,
+    nchains: int,
+    running_energy_avg: jnp.float32,
+    running_variance_avg: jnp.float32,
+    energy_history: collections.deque[jnp.float32],
+    variance_history: collections.deque[jnp.float32],
+    checkpoint_metric: jnp.float32,
+    logdir: str = None,
+    variance_scale: float = 10.0,
+    checkpoint_every: int = None,
+    checkpoint_dir: str = "checkpoints",
+    nhistory: int = 50,
+) -> Tuple[jnp.float32, jnp.float32, jnp.float32, str]:
+    """Checkpoint the current state of the VMC loop.
 
+    There are two situations to checkpoint:
+        1) Regularly, every x epochs, to handle job preemption and track
+        parameters/metrics/state over time, and
+        2) Whenever a checkpoint metric improves, i.e. the error adjusted running
+        average of the energy.
+
+    This function handles both of these cases, as well as writing all current metrics to
+    their own files. This currently touches the disk repeatedly, once for each metric,
+    which is probably fairly inefficient, especially if called every epoch (as it
+    currently is in :func:`~vmcnet.train.vmc.vmc_loop`).
+
+    This is not a *pure* function, as it modifies energy_history and variance_history.
+
+    Args:
+        epoch (int): current epoch number
+        params (pytree-like): model parameters. Needs to be serializable via `np.savez`
+        optimizer_state (pytree-like): running state of the optimizer other than the
+            trainable parameters. Needs to be serialiable via `np.savez`
+        data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
+            to be serializable via `np.savez`
+        metrics (dict): dictionary of metrics. If this is not None, then it must include
+            "energy" and "variance". Metrics are currently flattened and written to a
+            row of a text file. See :func:`utils.io.write_metric_to_file`.
+        nchains (int): number of parallel MCMC chains being run. This can be difficult
+            to infer from data, depending on the structure of data, whether data has
+            been pmapped, etc.
+        running_energy_avg (jnp.float32): running average of energies
+        running_variance_avg (jnp.float32): running average of variances
+        energy_history (collections.deque[jnp.float32]): running history of energies
+        variance_history (collections.deque[jnp.float32]): running history of variances
+        checkpoint_metric (jnp.float32): current best error adjusted running average of
+            the energy history
+        logdir (str, optional): name of parent log directory. If None, no checkpointing
+            is done. Defaults to None.
+        variance_scale (float, optional): scale of the variance term in the
+            error-adjusted running avg of the energy. Higher means the variance is more
+            important, and lower means the energy is more important. See
+            :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
+        checkpoint_every (int, optional): how often to regularly save checkpoints. If
+            None, checkpoints are only saved when the error-adjusted running avg of the
+            energy improves. Defaults to None.
+        checkpoint_dir (str, optional): name of subdirectory to save the regular
+            checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
+            Defaults to "checkpoints".
+        nhistory (int, optional): How much history to keep in the running histories of
+            the energy and variance. Defaults to 50.
+
+    Returns:
+        (jnp.float32, jnp.float32, jnp.float32, str):
+        (
+            updated running average of the energy,
+            updated running average of the variance,
+            updated checkpoint metric, and
+            string indicating if checkpointing has been done
+        )
+    """
+    checkpoint_str = ""
+    if logdir is None or metrics is None:
+        # do nothing
+        return (
+            running_energy_avg,
+            running_variance_avg,
+            checkpoint_metric,
+            checkpoint_str,
+        )
+
+    # TODO(Jeffmin): do something more efficient than writing separately to disk for
+    # every metric, maybe something like pandas? Also maybe shouldn't be every epoch.
     for metric, metric_val in metrics.items():
-        utils.io.write_metric_to_file(metric_val, logdir, metric)
+        utils.io.append_metric_to_file(metric_val, logdir, metric)
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
             utils.io.save_params(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
+                epoch,
                 data,
                 params,
                 optimizer_state,
             )
+        checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
-    move_history_window(energy_history, variance_history, metrics, epoch, nhistory)
-    checkpoint_str = ""
+    running_energy_avg, running_variance_avg = move_history_window(
+        running_energy_avg,
+        running_variance_avg,
+        energy_history,
+        variance_history,
+        metrics,
+        epoch,
+        nhistory,
+    )
     error_adjusted_running_avg = get_checkpoint_metric(
-        energy_history, variance_history, data.shape[0], variance_scale
+        running_energy_avg,
+        running_variance_avg,
+        nchains * len(energy_history),
+        variance_scale,
     )
     if error_adjusted_running_avg < checkpoint_metric:
         utils.io.save_params(
-            logdir, "checkpoint.npz", data, params, optimizer_state,
+            logdir, "checkpoint.npz", epoch, data, params, optimizer_state,
         )
-        checkpoint_str = ", new weights saved"
+        checkpoint_str = checkpoint_str + ", best weights saved"
 
-    return jnp.minimum(error_adjusted_running_avg, checkpoint_metric), checkpoint_str
+    return (
+        running_energy_avg,
+        running_variance_avg,
+        jnp.minimum(error_adjusted_running_avg, checkpoint_metric),
+        checkpoint_str,
+    )
 
 
-def log_vmc_loop_state(epoch, metrics, checkpoint_str):
+def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str):
+    """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
     epoch_str = "Epoch {:5d}".format(epoch + 1)
     energy_str = "Energy: {:.5e}".format(float(metrics["energy"]))
     variance_str = "Variance: {:.5e}".format(float(metrics["variance"]))
     accept_ratio_str = "Accept ratio: {:.5f}".format(float(metrics["accept_ratio"]))
 
     if "energy_noclip" in metrics:
-        energy_str = energy_str + "({:.5e})".format(float(metrics["energy_noclip"]))
+        energy_str = energy_str + " ({:.5e})".format(float(metrics["energy_noclip"]))
 
     if "variance_noclip" in metrics:
         variance_str = variance_str + " ({:.5e})".format(
@@ -306,24 +462,97 @@ def log_vmc_loop_state(epoch, metrics, checkpoint_str):
 
 
 def vmc_loop(
-    params,
-    optimizer_state,
-    initial_data,
-    nburn,
-    nepochs,
-    nskip,
-    proposal_fn,
-    acceptance_fn,
-    update_data_fn,
-    update_param_fn,
-    key,
-    logdir=None,
-    checkpoint_every=None,
-    checkpoint_dir="checkpoints",
-    checkpoint_variance_scale=10.0,
-    nhistory=50,
-    pmapped=True,
-):
+    params: P,
+    optimizer_state: O,
+    initial_data: D,
+    nchains: int,
+    nburn: int,
+    nepochs: int,
+    nskip: int,
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    key: jnp.ndarray,
+    logdir: str = None,
+    checkpoint_every: int = None,
+    checkpoint_dir: str = "checkpoints",
+    checkpoint_variance_scale: float = 10.0,
+    nhistory: int = 50,
+    pmapped: bool = True,
+) -> Tuple[P, O, D]:
+    """Main Variational Monte Carlo loop routine.
+
+    Variational Monte Carlo (VMC) can be generically viewed as minimizing a
+    parameterized variational loss stochastically by sampling over a data distribution
+    via Monte Carlo sampling. This function implements this idea at a high level, using
+    proposal and acceptance functions to sample the data distribution, and passing the
+    optimization step to a generic function `update_param_fn`.
+
+    As is custom in VMC, some number of burn-in steps are run before any training
+    occurs. Some data update steps are also taken in between each parameter update
+    during training. Theoretically, whether these are necessary or helpful is not
+    completely clear.
+    
+    Practically, the burn-in steps usually lead to higher quality gradient steps once
+    the training starts, and seems to be a good idea whenever burning is much cheaper
+    than gradient/parameter update calculations. Likewise, inserting a number of
+    intermediate data-only update steps between parameter updates during training,
+    controlled by `nskip`, seems to be a good idea in the same regime.
+
+    Args:
+        params (pytree-like): model parameters which are trained. If pmapped is True,
+            this should already be replicated over all devices.
+        optimizer_state (pytree-like): initial state of the optimizer. If pmapped is
+            True, this should contain state which has been sharded over all devices.
+        initial_data (pytree-like): initial data. If pmapped is True, this should
+            contain data which as been sharded over all devices.
+        nchains (int): number of parallel MCMC chains being run. This can be difficult
+            to infer from data, depending on the structure of data, whether data has
+            been pmapped, etc.
+        nburn (int): number of data updates to do before training starts. All data
+            except for the final data after burning is thrown away.
+        nepochs (int): number of parameter updates to do
+        nskip (int): number of data updates to do between each parameter update. All
+            data except for the final data after nskip iterations is thrown away.
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> proposed_data, key
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+        update_param_fn (Callable): function which updates the parameters. Has signature
+            (data, params, optimizer_state) 
+                -> (new_params, optimizer_state, dict: metrics).
+            If metrics is not None, it is required to have the entries "energy" and
+            "variance" at a minimum.
+        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+            to proposal_fn and used to randomly accept proposals with probabilities
+            output by acceptance_fn
+        logdir (str, optional): name of parent log directory. If None, no checkpointing
+            is done. Defaults to None.
+        checkpoint_every (int, optional): how often to regularly save checkpoints. If
+            None, checkpoints are only saved when the error-adjusted running avg of the
+            energy improves. Defaults to None.
+        checkpoint_dir (str, optional): name of subdirectory to save the regular
+            checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
+            Defaults to "checkpoints".
+        checkpoint_variance_scale (float, optional): scale of the variance term in the
+            error-adjusted running avg of the energy. Higher means the variance is more
+            important, and lower means the energy is more important. See
+            :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
+        nhistory (int, optional): How much history to keep in the running histories of
+            the energy and variance. Defaults to 50.
+        pmapped (bool, optional): whether to apply jax.pmap to the burning and training
+            steps. Defaults to True.
+
+    Returns:
+        A tuple of (trained parameters, final optimizer state, final data). These are
+        the same structure as (params, optimizer_state, initial_data).
+    """
     checkpointdir = None
     if logdir is not None:
         logging.info("Saving to " + logdir)
@@ -350,9 +579,11 @@ def vmc_loop(
     for _ in range(nburn):
         data, key = burning_step(data, params, key)
 
-    checkpoint_metric = np.inf
-    energy_history = collections.deque()
-    variance_history = collections.deque()
+    checkpoint_metric = jnp.inf
+    running_energy_avg = 0.0
+    running_variance_avg = 0.0
+    energy_history: collections.deque[jnp.float32] = collections.deque()
+    variance_history: collections.deque[jnp.float32] = collections.deque()
     for epoch in range(nepochs):
         # for checkpointing; want to save the state that resulted in the best metrics,
         # not the state one step later
@@ -361,12 +592,20 @@ def vmc_loop(
         accept_ratio, data, params, optimizer_state, metrics, key = training_step(
             data, params, optimizer_state, key
         )
-        checkpoint_metric, checkpoint_str = checkpoint(
+        (
+            running_energy_avg,
+            running_variance_avg,
+            checkpoint_metric,
+            checkpoint_str,
+        ) = checkpoint(
             epoch,
             old_params,
             old_optimizer_state,
             data,
             metrics,
+            nchains,
+            running_energy_avg,
+            running_variance_avg,
             energy_history,
             variance_history,
             checkpoint_metric,

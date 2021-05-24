@@ -111,42 +111,6 @@ def test_walk_data():
     np.testing.assert_allclose(new_data, expected_new_data, rtol=1e-5)
 
 
-def test_update_position_and_amplitude():
-    """Test that the mask modification is working for the position update."""
-    seed = 0
-    key = jax.random.PRNGKey(seed)
-    keys = jax.random.split(key, 4)
-
-    nbatch = 10
-    nparticles = 7
-    ndim = 3
-
-    pos = jax.random.normal(keys[0], shape=(nbatch, nparticles, ndim))
-    proposed_pos = jax.random.normal(keys[1], shape=(nbatch, nparticles, ndim))
-    amplitude = jax.random.normal(keys[2], shape=(nbatch,))
-    proposed_amplitude = jax.random.normal(keys[3], shape=(nbatch,))
-
-    data = {"position": pos, "amplitude": amplitude}
-    proposed_data = {"position": proposed_pos, "amplitude": proposed_amplitude}
-    move_mask = jnp.array(
-        [True, False, True, True, False, True, False, False, False, False]
-    )
-    inverted_mask = jnp.invert(move_mask)
-    updated_data = train.vmc.update_position_and_amplitude(
-        data, proposed_data, move_mask
-    )
-
-    for datum in data:
-        # updated data should be equal to the proposed data where move_mask is True
-        np.testing.assert_allclose(
-            updated_data[datum][move_mask, ...], proposed_data[datum][move_mask, ...]
-        )
-        # updated data should be equal to the original data where move_mask is False
-        np.testing.assert_allclose(
-            updated_data[datum][inverted_mask, ...], data[datum][inverted_mask, ...]
-        )
-
-
 def test_vmc_loop_logging(caplog):
     """Test vmc_loop logging. Uses pytest's caplog fixture to capture logs."""
     nburn = 4
@@ -170,6 +134,7 @@ def test_vmc_loop_logging(caplog):
         _, proposal_fn, acceptance_fn, update_data_fn, key = _make_dummy_metropolis_fns(
             data, key
         )
+        nchains = data.shape[0]
 
         if pmapped:
             data, params, key = utils.distribute.distribute_data_params_and_key(
@@ -181,6 +146,7 @@ def test_vmc_loop_logging(caplog):
                 params,
                 None,
                 data,
+                nchains,
                 nburn,
                 nepochs,
                 nskip,
@@ -206,6 +172,7 @@ def test_vmc_loop_number_of_updates():
         update_data_fn,
         key,
     ) = _make_dummy_metropolis_fns(data, key)
+    nchains = data.shape[0]
 
     old_data = data
 
@@ -231,6 +198,7 @@ def test_vmc_loop_number_of_updates():
         params,
         optimizer_state,
         data,
+        nchains,
         nburn,
         nepochs,
         nskip,
@@ -271,6 +239,7 @@ def test_vmc_loop_newtons_x_squared():
 
     x = a + 2.5
     dummy_data = jnp.zeros((jax.device_count(),))
+    nchains = dummy_data.shape[0]
 
     dummy_data, x, key = utils.distribute.distribute_data_params_and_key(
         dummy_data, x, key
@@ -306,6 +275,7 @@ def test_vmc_loop_newtons_x_squared():
         x,
         None,
         dummy_data,
+        nchains,
         nburn,
         nepochs,
         nskip,

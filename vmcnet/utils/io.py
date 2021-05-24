@@ -11,10 +11,23 @@ def open_or_create(path, filename, option):
     return open(filepath, option)
 
 
-def save_params(directory, name, data, params, optimizer_state):
+def append_metric_to_file(new_metric, logdir, name):
+    """Appends a number or list of numbers to a text file."""
+    dumped_metric = np.array(new_metric).reshape((1, -1))
+
+    with open_or_create(logdir, name + ".txt", "a") as outfile:
+        np.savetxt(outfile, dumped_metric)
+
+
+def save_params(directory, name, epoch, data, params, optimizer_state):
+    """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
         np.savez(
-            file_handle, data=data, params=params, optimizer_state=optimizer_state,
+            file_handle,
+            epoch=epoch,
+            data=data,
+            params=params,
+            optimizer_state=optimizer_state,
         )
 
 
