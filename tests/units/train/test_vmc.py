@@ -3,9 +3,8 @@ import logging
 
 import jax.numpy as jnp
 import jax
-import numpy as np
-
 import kfac_ferminet_alpha.utils as kfac_utils
+import numpy as np
 
 import vmcnet.train as train
 import vmcnet.utils as utils

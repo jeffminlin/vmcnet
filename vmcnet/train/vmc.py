@@ -4,8 +4,9 @@ import logging
 import os
 from typing import Callable, Dict, Tuple, TypeVar
 
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.utils as utils
 
@@ -172,7 +173,7 @@ def make_burning_step(
     if not pmapped:
         return burning_step
 
-    return jax.pmap(burning_step, donate_argnums=(0, 1, 2))
+    return utils.distribute.pmap(burning_step, donate_argnums=(0, 1, 2))
 
 
 def make_training_step(
@@ -234,12 +235,13 @@ def make_training_step(
         params, optimizer_state, metrics = update_param_fn(
             data, params, optimizer_state
         )
+        accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, params, optimizer_state, metrics, key
 
     if not pmapped:
         return training_step
 
-    return jax.pmap(training_step, donate_argnums=(0, 1, 2, 3))
+    return utils.distribute.pmap(training_step, donate_argnums=(0, 1, 2, 3))
 
 
 def move_history_window(
@@ -397,6 +399,7 @@ def checkpoint(
 
     # TODO(Jeffmin): do something more efficient than writing separately to disk for
     # every metric, maybe something like pandas? Also maybe shouldn't be every epoch.
+    # Might be better to switch to something like TensorBoard -- need to do research
     for metric, metric_val in metrics.items():
         utils.io.append_metric_to_file(metric_val, logdir, metric)
 
@@ -528,7 +531,7 @@ def vmc_loop(
             (data, params, optimizer_state) 
                 -> (new_params, optimizer_state, dict: metrics).
             If metrics is not None, it is required to have the entries "energy" and
-            "variance" at a minimum.
+            "variance" at a minimum. If metrics is None, no checkpointing is done.
         key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
@@ -592,6 +595,14 @@ def vmc_loop(
         accept_ratio, data, params, optimizer_state, metrics, key = training_step(
             data, params, optimizer_state, key
         )
+        if metrics is None:  # don't checkpoint if no metrics to checkpoint
+            continue
+
+        metrics["accept_ratio"] = accept_ratio
+        if pmapped:
+            # Assume all metrics have been collectively reduced to be the same on
+            # all devices
+            metrics = kfac_utils.get_first(metrics)
         (
             running_energy_avg,
             running_variance_avg,
@@ -615,8 +626,6 @@ def vmc_loop(
             checkpoint_dir=checkpoint_dir,
             nhistory=nhistory,
         )
-        if metrics is not None:
-            metrics["accept_ratio"] = accept_ratio
-            log_vmc_loop_state(epoch, metrics, checkpoint_str)
+        log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
     return params, optimizer_state, data

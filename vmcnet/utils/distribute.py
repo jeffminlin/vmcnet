@@ -1,8 +1,16 @@
 """Helper functions for distributing computation to multiple devices."""
+import functools
+
 import jax
 import jax.numpy as jnp
-
 from kfac_ferminet_alpha import utils as kfac_utils
+
+# axis name to pmap over
+PMAP_AXIS_NAME = "pmap_axis"
+
+# shortcuts to use a pmapped axis called PMAP_AXIS_NAME
+pmap = functools.partial(jax.pmap, axis_name=PMAP_AXIS_NAME)
+pmean_if_pmap = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_NAME)
 
 
 def reshape_data_leaves_for_distribution(data_leaf):
