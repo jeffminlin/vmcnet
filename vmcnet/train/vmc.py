@@ -109,6 +109,38 @@ def walk_data(nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, 
 
 
 def make_burning_step(proposal_fn, acceptance_fn, update_data_fn, pmapped=True):
+    """Factory to create a burning step.
+
+    This provides the functionality to optionally apply jax.pmap to a single walker
+    step. Only one step is traced so that the first burning step is traced but
+    subsequent steps are properly jit-compiled.
+
+    For more about the Metropolis step itself, see
+    :func:`~vmcnet.train.vmc.take_metropolis_step`
+    and to see it in use, see
+    :func:`~vmcnet.train.vmc.vmc_loop`.
+
+    Args:
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> proposed_data, key
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+        pmapped (bool, optional): whether to apply jax.pmap to the burning step.
+            Defaults to True.
+
+    Returns:
+        Callable: function with signature
+            (data, params, key) -> (data, key),
+        with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
+        the original (data, params, key) buffers are deleted in the pmapped version so
+        that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
+    """
+
     def burning_step(data, params, key):
         _, data, key = take_metropolis_step(
             data, params, proposal_fn, acceptance_fn, update_data_fn, key
@@ -122,17 +154,50 @@ def make_burning_step(proposal_fn, acceptance_fn, update_data_fn, pmapped=True):
 
 
 def make_training_step(
-    nskip,
-    proposal_fn,
-    acceptance_fn,
-    update_data_fn,
-    model_eval,
-    energy_fn,
-    update_param_fn,
-    metric_fns=None,
-    clipping_fn=None,
-    pmapped=True,
+    nskip, proposal_fn, acceptance_fn, update_data_fn, update_param_fn, pmapped=True
 ):
+    """Factory to create a training step.
+
+    This provides the functionality to optionally apply jax.pmap to a single training
+    step. Only one step is traced so that the first training step is traced but
+    subsequent steps are properly jit-compiled.
+
+    The training step consists of two parts:
+        1) the walker, which updates the data nskip times (so-called nskip because we
+        'skip' these parameter updates). 
+        2) the parameter updates, which occurs once per training step, and is the only
+        time `energy_fn` is evaluated during the training step.
+    
+    See :func:`~vmcnet.train.vmc.vmc_loop`.
+
+    Args:
+        nskip (int): number of steps to walk data before applying a parameter update
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> (proposed_data, key).
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance_prob
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+        update_param_fn (Callable): function which updates the parameters. Has signature
+            (data, params, optimizer_state) 
+                -> (new_params, optimizer_state, dict: metrics).
+            If metrics is not None, it is required to have the entries "energy" and
+            "variance" at a minimum.
+        pmapped (bool, optional): whether to apply jax.pmap to the burning step.
+            Defaults to True.
+
+    Returns:
+        Callable: function with signature
+            (data, params, optimizer_state, key)
+                -> (accept_ratio, data, params, optmizer_state, metrics, key),
+        with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
+        the original (data, params, optimizer_state, key) buffers are deleted in the
+        pmapped version so that XLA is potentially more memory-efficient on the GPU.
+        See :func:`jax.pmap`.
+    """
     nskip = max(nskip, 1)
 
     def training_step(data, params, optimizer_state, key):
@@ -140,13 +205,7 @@ def make_training_step(
             nskip, data, params, proposal_fn, acceptance_fn, update_data_fn, key,
         )
         params, optimizer_state, metrics = update_param_fn(
-            data,
-            params,
-            optimizer_state,
-            model_eval,
-            energy_fn,
-            metric_fns=metric_fns,
-            clipping_fn=clipping_fn,
+            data, params, optimizer_state
         )
         return accept_ratio, data, params, optimizer_state, metrics, key
 
@@ -228,42 +287,36 @@ def checkpoint(
 
 
 def log_vmc_loop_state(epoch, metrics, checkpoint_str):
-    template = ", ".join(
-        [
-            "Epoch {:5d}",
-            "Energy: {:.5e} ({:.5e})",
-            "Variance: {:.5e} ({:.5e})",
-            "Acceptance Ratio: {:.5f}",
-        ]
-    )
-    template = template + checkpoint_str
-    info_out = template.format(
-        epoch + 1,
-        float(metrics["energy"]),
-        float(metrics["energy_noclip"]),
-        float(metrics["variance"]),
-        float(metrics["variance_noclip"]),
-        float(metrics["accept_ratio"]),
-    )
+    epoch_str = "Epoch {:5d}".format(epoch + 1)
+    energy_str = "Energy: {:.5e}".format(float(metrics["energy"]))
+    variance_str = "Variance: {:.5e}".format(float(metrics["variance"]))
+    accept_ratio_str = "Accept ratio: {:.5f}".format(float(metrics["accept_ratio"]))
+
+    if "energy_noclip" in metrics:
+        energy_str = energy_str + "({:.5e})".format(float(metrics["energy_noclip"]))
+
+    if "variance_noclip" in metrics:
+        variance_str = variance_str + " ({:.5e})".format(
+            float(metrics["variance_noclip"])
+        )
+
+    info_out = ", ".join([epoch_str, energy_str, variance_str, accept_ratio_str])
+    info_out = info_out + checkpoint_str
     logging.info(info_out)
 
 
 def vmc_loop(
     params,
     optimizer_state,
-    model_eval,
     initial_data,
     nburn,
     nepochs,
     nskip,
     proposal_fn,
     acceptance_fn,
-    energy_fn,
     update_data_fn,
     update_param_fn,
     key,
-    metric_fns=None,
-    clipping_fn=None,
     logdir=None,
     checkpoint_every=None,
     checkpoint_dir="checkpoints",
@@ -289,11 +342,7 @@ def vmc_loop(
         proposal_fn,
         acceptance_fn,
         update_data_fn,
-        model_eval,
-        energy_fn,
         update_param_fn,
-        metric_fns=metric_fns,
-        clipping_fn=clipping_fn,
         pmapped=pmapped,
     )
 

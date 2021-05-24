@@ -160,16 +160,8 @@ def test_vmc_loop_logging(caplog):
         "variance_noclip": np.pi,
     }
 
-    def update_param_fn(
-        data,
-        params,
-        optimizer_state,
-        model_eval,
-        energy_fn,
-        metric_fns=None,
-        clipping_fn=None,
-    ):
-        del data, model_eval, energy_fn, metric_fns, clipping_fn
+    def update_param_fn(data, params, optimizer_state):
+        del data
         return params, optimizer_state, fixed_metrics
 
     for pmapped in [True, False]:
@@ -188,14 +180,12 @@ def test_vmc_loop_logging(caplog):
             train.vmc.vmc_loop(
                 params,
                 None,
-                None,
                 data,
                 nburn,
                 nepochs,
                 nskip,
                 proposal_fn,
                 acceptance_fn,
-                None,
                 update_data_fn,
                 update_param_fn,
                 key,
@@ -232,30 +222,20 @@ def test_vmc_loop_number_of_updates():
     # possibly data-dependent (e.g. KFAC/Adam's running metrics)
     optimizer_state = kfac_utils.replicate_all_local_devices(0)
 
-    def update_param_fn(
-        data,
-        params,
-        optimizer_state,
-        model_eval,
-        energy_fn,
-        metric_fns=None,
-        clipping_fn=None,
-    ):
-        del data, model_eval, energy_fn, metric_fns, clipping_fn
+    def update_param_fn(data, params, optimizer_state):
+        del data
         optimizer_state += 1
         return params, optimizer_state, None
 
     _, new_optimizer_state, new_data = train.vmc.vmc_loop(
         params,
         optimizer_state,
-        None,
         data,
         nburn,
         nepochs,
         nskip,
         proposal_fn,
         acceptance_fn,
-        None,
         update_data_fn,
         update_param_fn,
         key,
@@ -314,16 +294,8 @@ def test_vmc_loop_newtons_x_squared():
         return data
 
     # do Newton's method, x <- x - f'(x) / f''(x)
-    def update_param_fn(
-        data,
-        x,
-        optimizer_state,
-        model_eval,
-        energy_fn,
-        metric_fns=None,
-        clipping_fn=None,
-    ):
-        del data, model_eval, energy_fn, metric_fns, clipping_fn
+    def update_param_fn(data, x, optimizer_state):
+        del data
         dmodel = 2.0 * (x - a) + 4.0 * jnp.power(x - a, 3)
         ddmodel = 2.0 + 12.0 * jnp.power(x - a, 2)
 
@@ -333,14 +305,12 @@ def test_vmc_loop_newtons_x_squared():
     min_x, _, _ = train.vmc.vmc_loop(
         x,
         None,
-        None,
         dummy_data,
         nburn,
         nepochs,
         nskip,
         proposal_fn,
         acceptance_fn,
-        None,
         update_data_fn,
         update_param_fn,
         key,
