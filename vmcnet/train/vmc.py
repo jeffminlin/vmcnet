@@ -10,8 +10,10 @@ from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.utils as utils
 
-D = TypeVar("D")  # to represent a pytree or pytree-like object containing MCMC data
-P = TypeVar("P")  # to represent a pytree or pytree-like object containing params
+# to represent a pytree or pytree-like object containing MCMC data, e.g. walker
+# positions and wave function amplitudes, or other auxilliary MCMC data
+D = TypeVar("D")
+P = TypeVar("P")  # to represent a pytree or pytree-like object containing model params
 O = TypeVar("O")  # to represent optimizer state
 
 
@@ -54,7 +56,7 @@ def take_metropolis_step(
             output by acceptance_fn
 
     Returns:
-        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
+        (jnp.float32, pytree-like, jnp.ndarray): mean acceptance probability, new data,
             new jax PRNG key split from previous one
     """
     key, subkey = jax.random.split(key)
@@ -223,7 +225,8 @@ def make_training_step(
                 -> (accept_ratio, data, params, optmizer_state, metrics, key),
         with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
         the original (data, params, optimizer_state, key) buffers are deleted in the
-        pmapped version so that XLA is potentially more memory-efficient on the GPU.
+        pmapped version using the donate_argnums flag so that XLA is potentially more
+        memory-efficient on the GPU.
         See :func:`jax.pmap`.
     """
     nskip = max(nskip, 1)
