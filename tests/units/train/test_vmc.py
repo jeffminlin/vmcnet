@@ -1,11 +1,10 @@
 """Testing main VMC routine."""
 import logging
 
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
 import kfac_ferminet_alpha.utils as kfac_utils
 import numpy as np
-from numpy.lib.ufunclike import fix
 
 import vmcnet.train as train
 import vmcnet.utils as utils
