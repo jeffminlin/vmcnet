@@ -2,6 +2,7 @@
 from setuptools import setup, find_packages
 
 REQUIRED_PACKAGES = [
+    "flax",
     "jax",
     "jaxlib",
     "kfac_ferminet_alpha @ git+https://github.com/deepmind/deepmind_research#egg=kfac_ferminet_alpha&subdirectory=kfac_ferminet_alpha",
