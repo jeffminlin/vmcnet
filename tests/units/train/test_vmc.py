@@ -176,10 +176,10 @@ def test_vmc_loop_number_of_updates():
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
-    for device_id in range(jax.device_count()):
+    for device_index in range(jax.device_count()):
         np.testing.assert_allclose(
-            new_data[device_id],
-            jnp.array([num_updates, 0, 3 * num_updates, 0]) + device_id,
+            new_data[device_index],
+            jnp.array([num_updates, 0, 3 * num_updates, 0]) + device_index,
         )
 
 
