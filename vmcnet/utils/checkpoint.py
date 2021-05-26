@@ -70,7 +70,7 @@ class RunningEnergyVariance(NamedTuple):
 def get_checkpoint_metric(
     energy_running_avg: jnp.float32,
     variance_running_avg: jnp.float32,
-    nchains: int,
+    nsamples: int,
     variance_scale: float,
 ) -> jnp.float32:
     """Get an error-adjusted running average of the energy for checkpointing.
@@ -82,7 +82,7 @@ def get_checkpoint_metric(
     Args:
         energy_running_avg (jnp.float32): running average of the energy
         variance_running_avg (jnp.float32): running average of the variance
-        nchains (int): total number of samples reflected in the running averages, equal
+        nsamples (int): total number of samples reflected in the running averages, equal
             to the number of parallel chains times the length of the history
         variance_scale (float): weight of the variance part of the checkpointing metric.
             The final effect on the variance part is to scale it by
@@ -93,11 +93,11 @@ def get_checkpoint_metric(
         jnp.float32: error adjusted running average of the energy
     """
     # TODO(Jeffmin): eventually maybe put in some cheap best guess at the IAC?
-    if variance_scale <= 0.0 or nchains <= 0:
+    if variance_scale <= 0.0 or nsamples <= 0:
         return energy_running_avg
 
-    effective_nchains = nchains / variance_scale
-    return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nchains)
+    effective_nsamples = nsamples / variance_scale
+    return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
 def save_metrics_and_handle_checkpoints(
