@@ -7,6 +7,7 @@ import vmcnet.mcmc as mcmc
 
 
 def test_symmetric_acceptance():
+    """Test acceptance probabilities in the symmetric proposal case."""
     old_amplitudes = jnp.array([1.0, -jnp.pi, 0.0, 1e-5])
     new_amplitudes = jnp.array([0.0, 1.0, 3.0, 4.0])
 
