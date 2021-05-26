@@ -1,7 +1,4 @@
 """Harmonic oscillator model."""
-from dataclasses import InitVar
-from typing import List, Sequence, Union
-
 import flax
 import jax
 import jax.numpy as jnp
