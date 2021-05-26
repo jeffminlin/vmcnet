@@ -88,9 +88,11 @@ def test_metropolis_step():
         update_data_fn,
         key,
     ) = _make_dummy_metropolis_fns(data, key)
-    accept_prob, new_data, _ = train.vmc.take_metropolis_step(
-        data, params, proposal_fn, acceptance_fn, update_data_fn, key
+
+    metrop_step_fn = train.vmc.make_metropolis_step(
+        proposal_fn, acceptance_fn, update_data_fn
     )
+    accept_prob, new_data, _ = metrop_step_fn(data, params, key)
     expected_new_data = _get_expected_alternate_row_update(data, fixed_proposal, 1)
 
     np.testing.assert_allclose(accept_prob, 0.5)
@@ -114,8 +116,11 @@ def test_walk_data():
         update_data_fn,
         key,
     ) = _make_dummy_metropolis_fns(data, key)
+    metrop_step_fn = train.vmc.make_metropolis_step(
+        proposal_fn, acceptance_fn, update_data_fn
+    )
     accept_prob, new_data, _ = train.vmc.walk_data(
-        nsteps, data, params, proposal_fn, acceptance_fn, update_data_fn, key
+        nsteps, data, params, key, metrop_step_fn
     )
     expected_new_data = _get_expected_alternate_row_update(data, fixed_proposal, nsteps)
 
@@ -153,6 +158,10 @@ def test_vmc_loop_logging(caplog):
                 data, params, key
             )
 
+        metrop_step_fn = train.vmc.make_metropolis_step(
+            proposal_fn, acceptance_fn, update_data_fn
+        )
+
         with caplog.at_level(logging.INFO):
             train.vmc.vmc_loop(
                 params,
@@ -162,9 +171,7 @@ def test_vmc_loop_logging(caplog):
                 nburn,
                 nepochs,
                 nskip,
-                proposal_fn,
-                acceptance_fn,
-                update_data_fn,
+                metrop_step_fn,
                 update_param_fn,
                 key,
                 pmapped=pmapped,
@@ -203,6 +210,10 @@ def test_vmc_loop_number_of_updates():
     # possibly data-dependent (e.g. KFAC/Adam's running metrics)
     optimizer_state = kfac_utils.replicate_all_local_devices(0)
 
+    metrop_step_fn = train.vmc.make_metropolis_step(
+        proposal_fn, acceptance_fn, update_data_fn
+    )
+
     def update_param_fn(data, params, optimizer_state):
         del data
         optimizer_state += 1
@@ -216,9 +227,7 @@ def test_vmc_loop_number_of_updates():
         nburn,
         nepochs,
         nskip,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
+        metrop_step_fn,
         update_param_fn,
         key,
     )
@@ -283,6 +292,10 @@ def test_vmc_loop_newtons_x_squared():
         del proposed_data, move_mask
         return data
 
+    metrop_step_fn = train.vmc.make_metropolis_step(
+        proposal_fn, acceptance_fn, update_data_fn
+    )
+
     # do Newton's method, x <- x - f'(x) / f''(x)
     def update_param_fn(data, x, optimizer_state):
         del data
@@ -300,9 +313,7 @@ def test_vmc_loop_newtons_x_squared():
         nburn,
         nepochs,
         nskip,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
+        metrop_step_fn,
         update_param_fn,
         key,
     )

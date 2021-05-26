@@ -18,15 +18,12 @@ P = TypeVar("P")  # represents a pytree or pytree-like object containing model p
 O = TypeVar("O")  # represents optimizer state
 
 
-def take_metropolis_step(
-    data: D,
-    params: P,
+def make_metropolis_step(
     proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
     acceptance_fn: Callable[[P, D, D], jnp.ndarray],
     update_data_fn: Callable[[D, D, jnp.ndarray], D],
-    key: jnp.ndarray,
-) -> Tuple[jnp.float32, D, jnp.ndarray]:
-    """Split a single step of updating data into proposal and acceptance.
+) -> Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]:
+    """Factory to create a function which takes a single metropolis step.
 
     Following Metropolis-Hastings Markov Chain Monte Carlo, a transition from one data
     state to another is split into proposal and acceptance. When used in a Metropolis
@@ -40,9 +37,6 @@ def take_metropolis_step(
     to state j, and P_i is the probability of being in state i.
 
     Args:
-        data (pytree-like): data to update
-        params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
-            model params
         proposal_fn (Callable): proposal function which produces new proposed data. Has
             the signature (params, data, key) -> proposed_data, key
         acceptance_fn (Callable): acceptance function which produces a vector of numbers
@@ -52,41 +46,40 @@ def take_metropolis_step(
             data, the proposed data, and the array mask identifying which proposals to
             accept. Has the signature
             (data, proposed_data, mask) -> new_data
-        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
-            to proposal_fn and used to randomly accept proposals with probabilities
-            output by acceptance_fn
 
     Returns:
-        (jnp.float32, pytree-like, jnp.ndarray): mean acceptance probability, new data,
-            new jax PRNG key split from previous one
+        Callable: function which takes in (data, params, key) and outputs
+        (mean acceptance probability, new data, new jax PRNG key split from previous
+        one)
     """
-    key, subkey = jax.random.split(key)
-    proposed_data, key = proposal_fn(params, data, key)
-    accept_prob = acceptance_fn(params, data, proposed_data)
-    move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
-    new_data = update_data_fn(data, proposed_data, move_mask)
 
-    return jnp.mean(accept_prob), new_data, key
+    def metrop_step_fn(data, params, key):
+        """Take a single metropolis step."""
+        key, subkey = jax.random.split(key)
+        proposed_data, key = proposal_fn(params, data, key)
+        accept_prob = acceptance_fn(params, data, proposed_data)
+        move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
+        new_data = update_data_fn(data, proposed_data, move_mask)
+
+        return jnp.mean(accept_prob), new_data, key
+
+    return metrop_step_fn
 
 
 def walk_data(
     nsteps: int,
     data: D,
     params: P,
-    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
-    update_data_fn: Callable[[D, D, jnp.ndarray], D],
     key: jnp.ndarray,
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
 ) -> Tuple[jnp.float32, D, jnp.ndarray]:
-    """Take multiple Metropolis-Hastings steps, via take_metropolis_step.
+    """Take multiple Metropolis-Hastings steps.
 
     This function is roughly equivalent to:
     ```
     accept_sum = 0.0
     for _ in range(nsteps):
-        accept_prob, data, key = take_metropolis_step(
-            data, params, proposal_fn, acceptance_fn, update_data_fn, key
-        )
+        accept_prob, data, key = metropolis_step_fn(data, params, key)
         accept_sum += accept_prob
     return accept_sum / nsteps, data, key
     ```
@@ -99,18 +92,11 @@ def walk_data(
         data (pytree-like): data to walk (update) with each step
         params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
             model params
-        proposal_fn (Callable): proposal function which produces new proposed data. Has
-            the signature (params, data, key) -> proposed_data, key
-        acceptance_fn (Callable): acceptance function which produces a vector of numbers
-            used to create a mask for accepting the proposals. Has the signature
-            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
-        update_data_fn (Callable): function used to update the data given the original
-            data, the proposed data, and the array mask identifying which proposals to
-            accept. Has the signature
-            (data, proposed_data, mask) -> new_data
         key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
 
     Returns:
         (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
@@ -119,9 +105,7 @@ def walk_data(
 
     def step_fn(carry, x):
         del x
-        accept_prob, data, key = take_metropolis_step(
-            carry[1], params, proposal_fn, acceptance_fn, update_data_fn, carry[2]
-        )
+        accept_prob, data, key = metrop_step_fn(carry[1], params, carry[2])
         return (carry[0] + accept_prob, data, key), None
 
     out = jax.lax.scan(step_fn, (0.0, data, key), xs=None, length=nsteps)
@@ -130,32 +114,24 @@ def walk_data(
 
 
 def make_burning_step(
-    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
-    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     pmapped: bool = True,
 ) -> Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]]:
-    """Factory to create a burning step.
+    """Factory to create a burning step, which is an optionally pmapped Metropolis step.
 
-    This provides the functionality to optionally apply jax.pmap to a single walker
+    This provides the functionality to optionally apply jax.pmap to a single Metropolis
     step. Only one step is traced so that the first burning step is traced but
-    subsequent steps are properly jit-compiled.
+    subsequent steps are properly jit-compiled. The acceptance probabilities (which
+    typically don't mean much during burning) are thrown away.
 
     For more about the Metropolis step itself, see
-    :func:`~vmcnet.train.vmc.take_metropolis_step`
+    :func:`~vmcnet.train.vmc.make_metropolis_step`
     and to see it in use, see
     :func:`~vmcnet.train.vmc.vmc_loop`.
 
     Args:
-        proposal_fn (Callable): proposal function which produces new proposed data. Has
-            the signature (params, data, key) -> proposed_data, key
-        acceptance_fn (Callable): acceptance function which produces a vector of numbers
-            used to create a mask for accepting the proposals. Has the signature
-            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
-        update_data_fn (Callable): function used to update the data given the original
-            data, the proposed data, and the array mask identifying which proposals to
-            accept. Has the signature
-            (data, proposed_data, mask) -> new_data
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
         pmapped (bool, optional): whether to apply jax.pmap to the burning step.
             Defaults to True.
 
@@ -163,14 +139,13 @@ def make_burning_step(
         Callable: function with signature
             (data, params, key) -> (data, key),
         with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original (data, params, key) buffers are deleted in the pmapped version so
-        that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
+        the original (data, params, key) buffers are deleted in the pmapped version via
+        the `donate_argumns` argument so that XLA is potentially more memory-efficient
+        on the GPU. See :func:`jax.pmap`.
     """
 
     def burning_step(data, params, key):
-        _, data, key = take_metropolis_step(
-            data, params, proposal_fn, acceptance_fn, update_data_fn, key
-        )
+        _, data, key = metrop_step_fn(data, params, key)
         return data, key
 
     if not pmapped:
@@ -181,9 +156,7 @@ def make_burning_step(
 
 def make_training_step(
     nskip: int,
-    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
-    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
     pmapped: bool = True,
 ) -> Callable[[D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]]:
@@ -203,15 +176,8 @@ def make_training_step(
 
     Args:
         nskip (int): number of steps to walk data before applying a parameter update
-        proposal_fn (Callable): proposal function which produces new proposed data. Has
-            the signature (params, data, key) -> (proposed_data, key).
-        acceptance_fn (Callable): acceptance function which produces a vector of numbers
-            used to create a mask for accepting the proposals. Has the signature
-            (params, data, proposed_data) -> jnp.ndarray: acceptance_prob
-        update_data_fn (Callable): function used to update the data given the original
-            data, the proposed data, and the array mask identifying which proposals to
-            accept. Has the signature
-            (data, proposed_data, mask) -> new_data
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
             (data, params, optimizer_state)
                 -> (new_params, optimizer_state, dict: metrics).
@@ -233,9 +199,7 @@ def make_training_step(
     nskip = max(nskip, 1)
 
     def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walk_data(
-            nskip, data, params, proposal_fn, acceptance_fn, update_data_fn, key
-        )
+        accept_ratio, data, key = walk_data(nskip, data, params, key, metrop_step_fn)
         params, optimizer_state, metrics = update_param_fn(
             data, params, optimizer_state
         )
@@ -256,9 +220,7 @@ def vmc_loop(
     nburn: int,
     nepochs: int,
     nskip: int,
-    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
-    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
     key: jnp.ndarray,
     logdir: str = None,
@@ -302,15 +264,8 @@ def vmc_loop(
         nepochs (int): number of parameter updates to do
         nskip (int): number of data updates to do between each parameter update. All
             data except for the final data after nskip iterations is thrown away.
-        proposal_fn (Callable): proposal function which produces new proposed data. Has
-            the signature (params, data, key) -> proposed_data, key
-        acceptance_fn (Callable): acceptance function which produces a vector of numbers
-            used to create a mask for accepting the proposals. Has the signature
-            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
-        update_data_fn (Callable): function used to update the data given the original
-            data, the proposed data, and the array mask identifying which proposals to
-            accept. Has the signature
-            (data, proposed_data, mask) -> new_data
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
             (data, params, optimizer_state)
                 -> (new_params, optimizer_state, dict: metrics).
@@ -345,20 +300,13 @@ def vmc_loop(
         checkpoint_metric,
         running_energy_and_variance,
     ) = utils.checkpoint.initialize_checkpointing_metrics(
-        logdir, checkpoint_every, checkpoint_dir, nhistory_max
+        checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
     data = initial_data
 
-    burning_step = make_burning_step(
-        proposal_fn, acceptance_fn, update_data_fn, pmapped=pmapped
-    )
+    burning_step = make_burning_step(metrop_step_fn, pmapped=pmapped)
     training_step = make_training_step(
-        nskip,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
-        update_param_fn,
-        pmapped=pmapped,
+        nskip, metrop_step_fn, update_param_fn, pmapped=pmapped
     )
 
     logging.info("Burning for " + str(nburn) + " steps")

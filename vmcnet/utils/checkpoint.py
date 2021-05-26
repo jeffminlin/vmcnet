@@ -312,7 +312,10 @@ def save_metrics_and_regular_checkpoint(
 
 
 def initialize_checkpointing_metrics(
-    logdir: str, checkpoint_every: int, checkpoint_dir: str, nhistory_max: int
+    checkpoint_dir: str,
+    nhistory_max: int,
+    logdir: str = None,
+    checkpoint_every: int = None,
 ) -> Tuple[str, jnp.float32, RunningEnergyVariance]:
     """Initialize checkpointing objects.
 
