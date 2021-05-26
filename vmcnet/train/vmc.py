@@ -155,7 +155,7 @@ def make_burning_step(
 
 
 def make_training_step(
-    nskip: int,
+    nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
     pmapped: bool = True,
@@ -167,15 +167,15 @@ def make_training_step(
     subsequent steps are properly jit-compiled.
 
     The training step consists of two parts:
-        1) the walker, which updates the data nskip times (so-called nskip because we
-        'skip' these parameter updates).
+        1) the walker, which updates the data `nsteps_per_param_update` times
         2) the parameter updates, which occurs once per training step, and is the only
         time `energy_fn` is evaluated during the training step.
 
     See :func:`~vmcnet.train.vmc.vmc_loop`.
 
     Args:
-        nskip (int): number of steps to walk data before applying a parameter update
+        nsteps_per_param_update (int): number of steps to walk data before applying a
+            parameter update
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
@@ -196,10 +196,12 @@ def make_training_step(
         memory-efficient on the GPU.
         See :func:`jax.pmap`.
     """
-    nskip = max(nskip, 1)
+    nsteps_per_param_update = max(nsteps_per_param_update, 1)
 
     def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walk_data(nskip, data, params, key, metrop_step_fn)
+        accept_ratio, data, key = walk_data(
+            nsteps_per_param_update, data, params, key, metrop_step_fn
+        )
         params, optimizer_state, metrics = update_param_fn(
             data, params, optimizer_state
         )
@@ -219,7 +221,7 @@ def vmc_loop(
     nchains: int,
     nburn: int,
     nepochs: int,
-    nskip: int,
+    nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
     key: jnp.ndarray,
@@ -247,7 +249,7 @@ def vmc_loop(
     the training starts, and seems to be a good idea whenever burning is much cheaper
     than gradient/parameter update calculations. Likewise, inserting a number of
     intermediate data-only update steps between parameter updates during training,
-    controlled by `nskip`, seems to be a good idea in the same regime.
+    controlled by `nsteps_per_param_update`, seems to be a good idea in the same regime.
 
     Args:
         params (pytree-like): model parameters which are trained. If pmapped is True,
@@ -262,8 +264,9 @@ def vmc_loop(
         nburn (int): number of data updates to do before training starts. All data
             except for the final data after burning is thrown away.
         nepochs (int): number of parameter updates to do
-        nskip (int): number of data updates to do between each parameter update. All
-            data except for the final data after nskip iterations is thrown away.
+        nsteps_per_param_update (int): number of data updates to do between each
+            parameter update. All data except for the final data after
+            nsteps_per_param_update iterations is thrown away.
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
@@ -306,7 +309,7 @@ def vmc_loop(
 
     burning_step = make_burning_step(metrop_step_fn, pmapped=pmapped)
     training_step = make_training_step(
-        nskip, metrop_step_fn, update_param_fn, pmapped=pmapped
+        nsteps_per_param_update, metrop_step_fn, update_param_fn, pmapped=pmapped
     )
 
     logging.info("Burning for " + str(nburn) + " steps")

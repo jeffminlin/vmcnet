@@ -84,7 +84,7 @@ def test_vmc_loop_logging(caplog):
     """Test vmc_loop logging. Uses pytest's caplog fixture to capture logs."""
     nburn = 4
     nepochs = 13  # eventual number of parameter updates
-    nskip = 10
+    nsteps_per_param_update = 10
 
     fixed_metrics = {
         "energy": 1.0,
@@ -117,7 +117,7 @@ def test_vmc_loop_logging(caplog):
                 nchains,
                 nburn,
                 nepochs,
-                nskip,
+                nsteps_per_param_update,
                 metrop_step_fn,
                 update_param_fn,
                 key,
@@ -129,7 +129,11 @@ def test_vmc_loop_logging(caplog):
 
 
 def test_vmc_loop_number_of_updates():
-    """Test updating data nskip * nepochs + nburn times and params nepoch times."""
+    """Test number of updates.
+
+    Make sure that data is updated nsteps_per_param_update * nepochs + nburn times and
+    params is updated nepoch times.
+    """
     data, params, key = _make_dummy_data_params_and_key()
     metrop_step_fn = _make_dummy_metropolis_fn()
     nchains = data.shape[0]
@@ -141,7 +145,7 @@ def test_vmc_loop_number_of_updates():
 
     nburn = 5
     nepochs = 17  # eventual number of parameter updates
-    nskip = 2
+    nsteps_per_param_update = 2
 
     # storing the number of parameter updates in optimizer_state, replicated on each
     # device; with a real optimizer this is probably something more exciting and
@@ -160,7 +164,7 @@ def test_vmc_loop_number_of_updates():
         nchains,
         nburn,
         nepochs,
-        nskip,
+        nsteps_per_param_update,
         metrop_step_fn,
         update_param_fn,
         key,
@@ -168,7 +172,7 @@ def test_vmc_loop_number_of_updates():
 
     new_optimizer_state = kfac_utils.get_first(new_optimizer_state)
 
-    num_updates = nskip * nepochs + nburn
+    num_updates = nsteps_per_param_update * nepochs + nburn
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
@@ -204,7 +208,7 @@ def test_vmc_loop_newtons_x_squared():
 
     nburn = 0
     nepochs = 10
-    nskip = 1
+    nsteps_per_param_update = 1
 
     # define some dummy functions which don't do anything
     def proposal_fn(x, data, key):
@@ -239,7 +243,7 @@ def test_vmc_loop_newtons_x_squared():
         nchains,
         nburn,
         nepochs,
-        nskip,
+        nsteps_per_param_update,
         metrop_step_fn,
         update_param_fn,
         key,
