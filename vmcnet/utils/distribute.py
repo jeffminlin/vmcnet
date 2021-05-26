@@ -16,13 +16,13 @@ pmean_if_pmap = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_
 def reshape_data_leaves_for_distribution(data_leaf):
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
     num_devices = jax.device_count()
-    batch_size = data_leaf.shape[0]
-    if batch_size % num_devices != 0:
+    nchains = data_leaf.shape[0]
+    if nchains % num_devices != 0:
         raise ValueError(
-            "Batch size must be divisible by number of devices, "
-            "got batch size {} for {} devices.".format(batch_size, num_devices)
+            "Number of chains must be divisible by number of devices, "
+            "got nchains {} for {} devices.".format(nchains, num_devices)
         )
-    distributed_data_shape = (num_devices, batch_size // num_devices)
+    distributed_data_shape = (num_devices, nchains // num_devices)
     data = jnp.reshape(data_leaf, distributed_data_shape + data_leaf.shape[1:])
     return data
 
