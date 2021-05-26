@@ -1,5 +1,4 @@
 """Test Metropolis routines."""
-from jax._src.lax.lax import exp
 import jax.numpy as jnp
 import numpy as np
 
