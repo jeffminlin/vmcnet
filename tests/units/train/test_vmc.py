@@ -99,7 +99,7 @@ def test_metropolis_step():
 
 def test_walk_data():
     """Test a few Metropolis steps.
-    
+
     Test that taking a few Metropolis steps is equivalent to skipping to the end and
     taking one big step. Specifically, with a single proposal fn which adds a constant
     array at each step, test that taking a few steps is equivalent to adding that
@@ -245,9 +245,9 @@ def test_vmc_loop_number_of_updates():
 
 def test_vmc_loop_newtons_x_squared():
     """Test Newton's method to find the min of f(x) = (x - a)^2 + (x - a)^4.
-    
+
     For this function, it can be shown that for x' = x - f'(x) / f''(x),
-    
+
         (x' - a) / (x - a) = 8(x - a)^2 / (2 + 12(x - a)^2),
 
     which is globally (super)linear convergence with rate at least 2/3, and locally
