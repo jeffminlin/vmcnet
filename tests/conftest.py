@@ -8,7 +8,7 @@ import chex
 
 def pytest_addoption(parser):
     """Provide the --chex_n_cpu_devices arg to pytest."""
-    parser.addoption("--chex_n_cpu_devices", type=int)
+    parser.addoption("--chex_n_cpu_devices", type=int, default=4)
 
 
 def pytest_configure(config):

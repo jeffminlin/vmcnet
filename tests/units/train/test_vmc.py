@@ -14,89 +14,51 @@ def _make_dummy_data_params_and_key():
     """Make some random data, params, and a key."""
     seed = 0
     key = jax.random.PRNGKey(seed)
-    keys = jax.random.split(key, 4)
-    key = keys[0]
-
-    data = jax.random.normal(keys[1], shape=(10 * jax.device_count(), 5, 2))
-
-    param_shapes = ((3, 1), (5, 7))
-    params = [
-        jax.random.normal(keys[i + 2], shape=shape)
-        for i, shape in enumerate(param_shapes)
-    ]
+    data = jnp.array([0, 0, 0, 0])
+    params = [jnp.array([1, 2, 3]), jnp.array([[4, 5], [6, 7]])]
 
     return data, params, key
 
 
-def _make_dummy_metropolis_fns(data, key, data_will_be_pmapped=False):
+def _make_different_pmappable_data(data):
+    """Adding (0, 1, ..., ndevices - 1) to the data and concatenating."""
+    ndevices = jax.device_count()
+    return jnp.concatenate([data + i for i in range(ndevices)])
+
+
+def _make_dummy_metropolis_fn():
     """Make a random proposal with the shape of data and accept every other row."""
-    key, subkey = jax.random.split(key)
-    proposal_shape = data.shape
-    if data_will_be_pmapped:
-        proposal_shape = (data.shape[0] // jax.device_count(),) + data.shape[1:]
-    fixed_proposal = jax.random.normal(subkey, shape=proposal_shape)
 
     def proposal_fn(params, data, key):
         """Add a fixed proposal to the data."""
         del params
-        return data + fixed_proposal, key
+        return data + jnp.array([1, 2, 3, 4]), key
 
     def acceptance_fn(params, data, proposed_data):
         """Accept every other row of the proposal."""
         del params, proposed_data
-        acceptance_prob = jnp.zeros(data.shape[0])
-        acceptance_prob = jax.ops.index_update(acceptance_prob, jax.ops.index[::2], 1.0)
-        return acceptance_prob
+        return jnp.array([True, False, True, False], dtype=bool)
 
     def update_data_fn(data, proposed_data, move_mask):
         pos_mask = jnp.reshape(move_mask, (-1,) + (len(data.shape) - 1) * (1,))
         return jnp.where(pos_mask, proposed_data, data)
 
-    return fixed_proposal, proposal_fn, acceptance_fn, update_data_fn, key
+    metrop_step_fn = train.vmc.make_metropolis_step(
+        proposal_fn, acceptance_fn, update_data_fn
+    )
 
-
-def _get_expected_alternate_row_update(
-    data, fixed_proposal, num_updates, pmapped=False
-):
-    """Get the result after updating every other row of data num_updates times."""
-
-    def single_device_update(data, fixed_proposal):
-        expected_new_data = data
-        # update every other row of data by adding num_updates * fixed_proposal
-        expected_new_data = jax.ops.index_update(
-            expected_new_data,
-            jax.ops.index[::2, ...],
-            (data + num_updates * fixed_proposal)[::2],
-        )
-
-        return expected_new_data
-
-    if pmapped:
-        fixed_proposal = kfac_utils.replicate_all_local_devices(fixed_proposal)
-        return jax.pmap(single_device_update)(data, fixed_proposal)
-
-    return single_device_update(data, fixed_proposal)
+    return metrop_step_fn
 
 
 def test_metropolis_step():
     """Test the acceptance probability and data update for a single Metropolis step."""
     data, params, key = _make_dummy_data_params_and_key()
-    (
-        fixed_proposal,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
-        key,
-    ) = _make_dummy_metropolis_fns(data, key)
+    metrop_step_fn = _make_dummy_metropolis_fn()
 
-    metrop_step_fn = train.vmc.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
     accept_prob, new_data, _ = metrop_step_fn(data, params, key)
-    expected_new_data = _get_expected_alternate_row_update(data, fixed_proposal, 1)
 
     np.testing.assert_allclose(accept_prob, 0.5)
-    np.testing.assert_allclose(new_data, expected_new_data)
+    np.testing.assert_allclose(new_data, jnp.array([1, 0, 3, 0]))
 
 
 def test_walk_data():
@@ -109,23 +71,13 @@ def test_walk_data():
     """
     nsteps = 6
     data, params, key = _make_dummy_data_params_and_key()
-    (
-        fixed_proposal,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
-        key,
-    ) = _make_dummy_metropolis_fns(data, key)
-    metrop_step_fn = train.vmc.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
+    metrop_step_fn = _make_dummy_metropolis_fn()
     accept_prob, new_data, _ = train.vmc.walk_data(
         nsteps, data, params, key, metrop_step_fn
     )
-    expected_new_data = _get_expected_alternate_row_update(data, fixed_proposal, nsteps)
 
     np.testing.assert_allclose(accept_prob, 0.5)
-    np.testing.assert_allclose(new_data, expected_new_data, rtol=1e-5)
+    np.testing.assert_allclose(new_data, jnp.array([nsteps, 0, 3 * nsteps, 0]))
 
 
 def test_vmc_loop_logging(caplog):
@@ -148,19 +100,14 @@ def test_vmc_loop_logging(caplog):
     for pmapped in [True, False]:
         caplog.clear()
         data, params, key = _make_dummy_data_params_and_key()
-        _, proposal_fn, acceptance_fn, update_data_fn, key = _make_dummy_metropolis_fns(
-            data, key, data_will_be_pmapped=pmapped
-        )
+        metrop_step_fn = _make_dummy_metropolis_fn()
         nchains = data.shape[0]
 
         if pmapped:
+            data = _make_different_pmappable_data(data)
             data, params, key = utils.distribute.distribute_data_params_and_key(
                 data, params, key
             )
-
-        metrop_step_fn = train.vmc.make_metropolis_step(
-            proposal_fn, acceptance_fn, update_data_fn
-        )
 
         with caplog.at_level(logging.INFO):
             train.vmc.vmc_loop(
@@ -184,19 +131,10 @@ def test_vmc_loop_logging(caplog):
 def test_vmc_loop_number_of_updates():
     """Test updating data nskip * nepochs + nburn times and params nepoch times."""
     data, params, key = _make_dummy_data_params_and_key()
-    (
-        fixed_proposal,
-        proposal_fn,
-        acceptance_fn,
-        update_data_fn,
-        key,
-    ) = _make_dummy_metropolis_fns(data, key, data_will_be_pmapped=True)
+    metrop_step_fn = _make_dummy_metropolis_fn()
     nchains = data.shape[0]
 
-    # keep a copy here because vmc_loop deletes the original buffer
-    data_copy = jnp.array(data)
-    data_copy = utils.distribute.distribute_data(data_copy)
-
+    data = _make_different_pmappable_data(data)
     data, params, key = utils.distribute.distribute_data_params_and_key(
         data, params, key
     )
@@ -209,10 +147,6 @@ def test_vmc_loop_number_of_updates():
     # device; with a real optimizer this is probably something more exciting and
     # possibly data-dependent (e.g. KFAC/Adam's running metrics)
     optimizer_state = kfac_utils.replicate_all_local_devices(0)
-
-    metrop_step_fn = train.vmc.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
 
     def update_param_fn(data, params, optimizer_state):
         del data
@@ -235,21 +169,14 @@ def test_vmc_loop_number_of_updates():
     new_optimizer_state = kfac_utils.get_first(new_optimizer_state)
 
     num_updates = nskip * nepochs + nburn
-    expected_data = _get_expected_alternate_row_update(
-        data_copy, fixed_proposal, num_updates, pmapped=True
-    )
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
-    # check that the expected number of "data updates" have been done. Since repeatedly
-    # increasing the size of data accumulates relative numerical error on the order of
-    # n * eps, we set an absolute tolerance of n * eps * max(result)
-    print(new_data - expected_data)
-    np.testing.assert_allclose(
-        new_data,
-        expected_data,
-        atol=num_updates * np.finfo(jnp.float32).eps * jnp.max(new_data),
-    )
+    for device_id in range(jax.device_count()):
+        np.testing.assert_allclose(
+            new_data[device_id],
+            jnp.array([num_updates, 0, 3 * num_updates, 0]) + device_id,
+        )
 
 
 def test_vmc_loop_newtons_x_squared():
