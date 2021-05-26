@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 from vmcnet.updates.data import PositionAmplitudeData
 
-P = TypeVar("P")  # to represent a pytree or pytree-like object containing params
+P = TypeVar("P")  # to represent a pytree or pytree-like object containing model params
 
 
 def gaussian_proposal(
@@ -58,12 +58,15 @@ def metropolis_symmetric_acceptance(
 
     The general Metropolis-Hastings choice of acceptance ratio for moves from state i to
     state j is given by
-    
+
         accept_ij = min(1, (P_j * proposal_prob_ji) / (P_i * proposal_prob_ij)).
 
     When proposal_prob is symmetric (assumed in this function), this simply reduces to
     accept_ij = min(1, P_j / P_i). Some care is taken to avoid numerical overflow and
     division by zero.
+
+    The inputs are wavefunction amplitudes psi or log(|psi|), so the probability P_i
+    refers to |psi(i)|^2.
 
     Args:
         amplitude (jnp.ndarray): one-dimensional array of wavefunction amplitudes for
