@@ -23,4 +23,4 @@ def test_update_position_and_amplitude():
     )
 
     np.testing.assert_allclose(updated_data.position, jnp.array([1, 0, 0, 4]))
-    np.testing.assert_allclose(updated_data.amplitude, jnp.array([-2, -1, -1, -5]))
+    np.testing.assert_allclose(updated_data.amplitude, jnp.array([-1, -1, -1, -4]))
