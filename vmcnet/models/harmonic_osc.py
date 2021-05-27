@@ -58,15 +58,28 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
     configuration is specified, then the corresponding ground state configuration is the
     one where the particles fill the lowest energy orbitals per spin.
 
-    This model evaluates the lowest n energy orbitals for n particles input; the .apply
-    method has the signature (params, [x]) -> [orbital_matrix], where x has shape
-    (..., n, 1) and orbital_matrix has shape (..., n, n), and the notation [**] is used
-    to denote a pytree structure. The params consist of a model-specific omega. When
-    this omega matches the omega in the potential, then this model.apply(params, x)
-    evaluates the first n eigenfunctions of the Hamiltonian on x.
+    For a single spin, the model evaluates the lowest n energy orbitals, where n is the
+    number of particles for that spin. In this model, each spin corresponds to a leaf in
+    the input pytree x.
+
+    If x is a single array (spinless input), then when this omega matches the omega in
+    the potential, then model.apply(params, x) evaluates the first n eigenfunctions
+    of the Hamiltonian on x. If there are multiple leaves in x, each of which is a
+    different spin, then this behavior is mapped over each leaf.
+
+    In other words, the .apply method has the signature
+
+        (params, [x]) -> [orbital_matrix],
+
+    where x has shape (..., n, 1) and orbital_matrix has shape (..., n, n), and the
+    bracket notation is used to denote a pytree structure of spin. For example, if the
+    inputs are (params, {"up": x_up, "down": x_down}), then the output will be
+    {"up": orbitals_up, "down": orbitals_down}. The params consist of a single number, a
+    model-specific omega.
 
     Because the particles are completely non-interacting in this model, there are no
-    interactions computed between the leaves of the input pytree.
+    interactions computed between the leaves of the input pytree (or even between
+    particles in a single leaf).
 
     Attributes:
         omega_init (jnp.float32): initial value for omega in the model; when this
@@ -93,10 +106,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
         gaussian_envelopes = jnp.exp(-jnp.square(sqrt_omega_x) / 2.0)
 
         # orbitals are (..., n, n)
-        orbitals = jax.tree_multimap(
-            lambda x, y: x * y, gaussian_envelopes, hermite_polys
-        )
-        return orbitals
+        return gaussian_envelopes * hermite_polys
 
     def __call__(self, xs):
         return jax.tree_map(self._single_leaf_call, xs)
