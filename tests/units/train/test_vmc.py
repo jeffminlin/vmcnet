@@ -6,59 +6,20 @@ import jax.numpy as jnp
 import kfac_ferminet_alpha.utils as kfac_utils
 import numpy as np
 
+import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.utils as utils
 
-
-def _make_dummy_data_params_and_key():
-    """Make some random data, params, and a key."""
-    seed = 0
-    key = jax.random.PRNGKey(seed)
-    data = jnp.array([0, 0, 0, 0])
-    params = [jnp.array([1, 2, 3]), jnp.array([[4, 5], [6, 7]])]
-
-    return data, params, key
+from ..mcmc.test_metropolis import (
+    _make_dummy_data_params_and_key,
+    _make_dummy_metropolis_fn,
+)
 
 
 def _make_different_pmappable_data(data):
     """Adding (0, 1, ..., ndevices - 1) to the data and concatenating."""
     ndevices = jax.device_count()
     return jnp.concatenate([data + i for i in range(ndevices)])
-
-
-def _make_dummy_metropolis_fn():
-    """Make a random proposal with the shape of data and accept every other row."""
-
-    def proposal_fn(params, data, key):
-        """Add a fixed proposal to the data."""
-        del params
-        return data + jnp.array([1, 2, 3, 4]), key
-
-    def acceptance_fn(params, data, proposed_data):
-        """Accept every other row of the proposal."""
-        del params, proposed_data
-        return jnp.array([True, False, True, False], dtype=bool)
-
-    def update_data_fn(data, proposed_data, move_mask):
-        pos_mask = jnp.reshape(move_mask, (-1,) + (len(data.shape) - 1) * (1,))
-        return jnp.where(pos_mask, proposed_data, data)
-
-    metrop_step_fn = train.vmc.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
-
-    return metrop_step_fn
-
-
-def test_metropolis_step():
-    """Test the acceptance probability and data update for a single Metropolis step."""
-    data, params, key = _make_dummy_data_params_and_key()
-    metrop_step_fn = _make_dummy_metropolis_fn()
-
-    accept_prob, new_data, _ = metrop_step_fn(data, params, key)
-
-    np.testing.assert_allclose(accept_prob, 0.5)
-    np.testing.assert_allclose(new_data, jnp.array([1, 0, 3, 0]))
 
 
 def test_walk_data():
@@ -223,7 +184,7 @@ def test_vmc_loop_newtons_x_squared():
         del proposed_data, move_mask
         return data
 
-    metrop_step_fn = train.vmc.make_metropolis_step(
+    metrop_step_fn = mcmc.metropolis.make_metropolis_step(
         proposal_fn, acceptance_fn, update_data_fn
     )
 

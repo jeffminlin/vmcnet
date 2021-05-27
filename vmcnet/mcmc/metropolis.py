@@ -6,7 +6,58 @@ import jax.numpy as jnp
 
 from vmcnet.updates.data import PositionAmplitudeData
 
+# represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
+# and wave function amplitudes, or other auxilliary MCMC data
+D = TypeVar("D")
 P = TypeVar("P")  # to represent a pytree or pytree-like object containing model params
+
+
+def make_metropolis_step(
+    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
+    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+) -> Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]:
+    """Factory to create a function which takes a single metropolis step.
+
+    Following Metropolis-Hastings Markov Chain Monte Carlo, a transition from one data
+    state to another is split into proposal and acceptance. When used in a Metropolis
+    routine to approximate a stationary distribution P, the proposal and acceptance
+    functions should satisfy detailed balance, i.e.,
+
+        proposal_prob_ij * acceptance_ij * P_i = proposal_prob_ji * acceptance_ji * P_j,
+
+    where proposal_prob_ij is the likelihood of proposing the transition from state i to
+    state j, acceptance_ij is the likelihood of accepting a transition from state i
+    to state j, and P_i is the probability of being in state i.
+
+    Args:
+        proposal_fn (Callable): proposal function which produces new proposed data. Has
+            the signature (params, data, key) -> proposed_data, key
+        acceptance_fn (Callable): acceptance function which produces a vector of numbers
+            used to create a mask for accepting the proposals. Has the signature
+            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+        update_data_fn (Callable): function used to update the data given the original
+            data, the proposed data, and the array mask identifying which proposals to
+            accept. Has the signature
+            (data, proposed_data, mask) -> new_data
+
+    Returns:
+        Callable: function which takes in (data, params, key) and outputs
+        (mean acceptance probability, new data, new jax PRNG key split from previous
+        one)
+    """
+
+    def metrop_step_fn(data, params, key):
+        """Take a single metropolis step."""
+        key, subkey = jax.random.split(key)
+        proposed_data, key = proposal_fn(params, data, key)
+        accept_prob = acceptance_fn(params, data, proposed_data)
+        move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
+        new_data = update_data_fn(data, proposed_data, move_mask)
+
+        return jnp.mean(accept_prob), new_data, key
+
+    return metrop_step_fn
 
 
 def gaussian_proposal(
@@ -103,7 +154,7 @@ def metropolis_symmetric_acceptance(
     )
 
 
-def make_position_and_amplitude_metrpolis_symmetric_acceptance(
+def make_position_and_amplitude_metropolis_symmetric_acceptance(
     logabs: bool = True,
 ) -> Callable[[P, PositionAmplitudeData, PositionAmplitudeData], jnp.ndarray]:
     """Factory to make a Metropolis acceptance function on PositionAmplitudeData.
