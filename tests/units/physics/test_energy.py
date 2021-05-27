@@ -13,7 +13,7 @@ def _make_dummy_log_f():
 
 
 def _make_dummy_x():
-    return jnp.array([[1.0], [2.0], [3.0]])
+    return jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
 
 
 def test_laplacian_psi_over_psi():
@@ -25,7 +25,7 @@ def test_laplacian_psi_over_psi():
 
     local_laplacian = physics.energy.laplacian_psi_over_psi(grad_log_f, None, x)
 
-    np.testing.assert_allclose(local_laplacian, 3 * 2 / f(None, x), rtol=1e-6)
+    np.testing.assert_allclose(local_laplacian, 6 * 2 / f(None, x), rtol=1e-6)
 
 
 def test_make_harmonic_oscillator_local_energy_with_zero_omega():

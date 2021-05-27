@@ -51,15 +51,16 @@ def laplacian_psi_over_psi(
     n = flat_x.shape[0]
     identity_mat = jnp.eye(n)
 
-    grad_log_psi_of_flat_x = lambda flat_in: grad_log_psi(
-        params, jnp.reshape(flat_in, x_shape)
-    )
+    def flattened_grad_log_psi_of_flat_x(flat_x_in):
+        """Flattened input to flattened output version of grad_log_psi."""
+        grad_log_psi_out = grad_log_psi(params, jnp.reshape(flat_x_in, x_shape))
+        return jnp.reshape(grad_log_psi_out, (-1,))
 
     def step_fn(carry, unused):
         del unused
         i = carry[0]
         primals, tangents = jax.jvp(
-            grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
+            flattened_grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
         )
         return (i + 1, carry[1] + primals[i] ** 2 + tangents[i]), None
 
