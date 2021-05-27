@@ -48,7 +48,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
         psi_n(x) = C * exp(-omega * x^2 / 2) * H_n(sqrt(omega) * x),
 
     where C is a normalizing constant and H_n is the nth Hermite polynomial. The
-    corresponding energy level is simply E_n = n + (1/2).
+    corresponding energy level is simply E_n = omega * (n + (1/2)).
 
     With N non-interacting particles, the total many-body Hamiltonian is simply
     H = sum_i H_i, and the above single-particle energy eigenfunctions become analogous
