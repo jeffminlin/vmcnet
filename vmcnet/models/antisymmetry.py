@@ -32,7 +32,7 @@ def slogdet_product(xs) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return sign_prod, log_prod
 
 
-def logdet_product(xs) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def logdet_product(xs) -> jnp.ndarray:
     """Compute the log|prod_x det(x)| of the leaves x of a pytree (throwing away sign).
 
     Because we don't need to carry sign, the logic can be made slightly simpler and
