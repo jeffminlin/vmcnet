@@ -2,7 +2,6 @@
 from typing import Callable, Sequence, Union
 
 import flax
-import jax.numpy as jnp
 
 
 class ComposedModel(flax.linen.Module):
