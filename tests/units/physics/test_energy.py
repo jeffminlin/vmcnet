@@ -1,5 +1,4 @@
 """Testing energy calculations."""
-import functools
 import jax
 import jax.numpy as jnp
 import numpy as np
