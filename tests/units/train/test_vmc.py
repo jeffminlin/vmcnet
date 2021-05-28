@@ -18,7 +18,7 @@ from ..mcmc.test_metropolis import (
 
 def _make_different_pmappable_data(data):
     """Adding (0, 1, ..., ndevices - 1) to the data and concatenating."""
-    ndevices = jax.device_count()
+    ndevices = jax.local_device_count()
     return jnp.concatenate([data + i for i in range(ndevices)])
 
 
@@ -143,7 +143,7 @@ def test_vmc_loop_number_of_updates():
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
-    for device_index in range(jax.device_count()):
+    for device_index in range(jax.local_device_count()):
         np.testing.assert_allclose(
             new_data[device_index],
             jnp.array([num_updates, 0, 3 * num_updates, 0]) + device_index,
@@ -166,7 +166,7 @@ def test_vmc_loop_newtons_x_squared():
     a = jax.random.normal(subkey, shape=(1,))
 
     x = a + 2.5
-    dummy_data = jnp.zeros((jax.device_count(),))
+    dummy_data = jnp.zeros((jax.local_device_count(),))
     nchains = dummy_data.shape[0]
 
     (

@@ -18,7 +18,7 @@ replicate_all_local_devices = (
 
 def reshape_data_leaves_for_distribution(data_leaf):
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
-    num_devices = jax.device_count()
+    num_devices = jax.local_device_count()
     nchains = data_leaf.shape[0]
     if nchains % num_devices != 0:
         raise ValueError(
