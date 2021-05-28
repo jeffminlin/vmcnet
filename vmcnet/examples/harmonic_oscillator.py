@@ -1,7 +1,14 @@
 """Harmonic oscillator model."""
+from typing import Callable, TypeVar
+
 import flax
 import jax
 import jax.numpy as jnp
+
+import vmcnet.models as models
+import vmcnet.physics as physics
+
+P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
 
 
 def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:
@@ -48,7 +55,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
         psi_n(x) = C * exp(-omega * x^2 / 2) * H_n(sqrt(omega) * x),
 
     where C is a normalizing constant and H_n is the nth Hermite polynomial. The
-    corresponding energy level is simply E_n = n + (1/2).
+    corresponding energy level is simply E_n = omega * (n + (1/2)).
 
     With N non-interacting particles, the total many-body Hamiltonian is simply
     H = sum_i H_i, and the above single-particle energy eigenfunctions become analogous
@@ -110,3 +117,72 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
 
     def __call__(self, xs):
         return jax.tree_map(self._single_leaf_call, xs)
+
+
+def make_harmonic_oscillator_spin_half_model(
+    nspin_first: int, model_omega_init: jnp.float32
+) -> flax.linen.Module:
+    """Create a spin-1/2 quantum harmonic oscillator wavefunction (two spins).
+
+    Args:
+        nspin_first (int): number of the alpha spin type, where the number of spins of
+            each type is (alpha, beta); the model assumes that its input along the
+            second-to-last dimension has size alpha + beta
+        model_omega_init (jnp.float32): spring constant inside the model; when it
+            matches the spring constant in the hamiltonian, then this model evaluates an
+            eigenstate
+
+    Returns:
+        flax.linen.Module: spin-1/2 wavefunction for the quantum harmonic oscillator,
+        with one trainable parameter (the model omega)
+    """
+    split_spin_fn = lambda x: jnp.split(x, [nspin_first], axis=-2)
+    orbitals = HarmonicOscillatorOrbitals(model_omega_init)
+    logdet_fn = models.antisymmetry.logdet_product
+
+    return models.construct.ComposedModel([split_spin_fn, orbitals, logdet_fn])
+
+
+def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.float32:
+    """Potential energy for independent harmonic oscillators with spring constant omega.
+
+    This function computes sum_i 0.5 * (omega * x_i)^2. If x has more than one axis,
+    these are simply summed over, so this corresponds to an isotropic harmonic
+    oscillator potential.
+
+    This function should be vmapped in order to be applied to batches of inputs, as it
+    expects the first axis of x to correspond to the particle index.
+
+    Args:
+        omega (jnp.float32): spring constant
+        x (jnp.ndarray): array of particle positions, where the first axis corresponds
+            to particle index
+
+    Returns:
+        jnp.float32: potential energy value for this configuration x
+    """
+    return 0.5 * jnp.sum(jnp.square(omega * x))
+
+
+def make_harmonic_oscillator_local_energy(
+    omega: jnp.float32, log_psi: Callable[[P, jnp.ndarray], jnp.ndarray]
+) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+    """Factory to create a local energy fn for the harmonic oscillator log|psi|.
+
+    Args:
+        omega (jnp.float32): spring constant for the harmonic oscillator
+        log_psi (Callable): function which evaluates log|psi| for a harmonic oscillator
+            model wavefunction psi. Has the signature (params, x) -> log|psi(x)|.
+
+    Returns:
+        Callable: local energy function with the signature (params, x) -> local energy
+        associated to the wavefunction psi
+    """
+    grad_log_psi = jax.grad(log_psi, argnums=1)
+
+    def local_energy(params, x):
+        kinetic = -0.5 * physics.energy.laplacian_psi_over_psi(grad_log_psi, params, x)
+        potential = harmonic_oscillator_potential(omega, x)
+        return kinetic + potential
+
+    return jax.vmap(local_energy, in_axes=(None, 0), out_axes=0)
