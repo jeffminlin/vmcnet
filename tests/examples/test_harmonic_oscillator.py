@@ -44,7 +44,8 @@ def _make_initial_positions_and_model(model_omega, nchains):
 
     key, subkey = jax.random.split(key)
     params = log_psi_model.init(key, random_particle_positions)
-    return log_psi_model, params, random_particle_positions, key
+    amplitudes = log_psi_model.apply(params, random_particle_positions)
+    return log_psi_model, params, random_particle_positions, amplitudes, key
 
 
 def test_harmonic_osc_orbital_shape():
@@ -109,6 +110,7 @@ def test_five_particle_ground_state_harmonic_oscillator():
         params,
         random_particle_positions,
         _,
+        _,
     ) = _make_initial_positions_and_model(omega, 4)
 
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
@@ -141,7 +143,7 @@ def test_harmonic_oscillator_vmc(caplog):
         key,
     ) = _make_initial_positions_and_model(model_omega, nchains)
 
-    local_energy_fn = physics.energy.make_harmonic_oscillator_local_energy(
+    local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         spring_constant, log_psi_model.apply
     )
 
