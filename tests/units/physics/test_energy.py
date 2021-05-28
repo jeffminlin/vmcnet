@@ -25,6 +25,8 @@ def test_laplacian_psi_over_psi():
 
     local_laplacian = physics.energy.laplacian_psi_over_psi(grad_log_f, None, x)
 
+    # d^2f/dx_i^2 = 2 for all i, so the Laplacian is simply 2 * n, where n is the number
+    # of particles. We then divide by f(x) to get (nabla^2 f) / f
     np.testing.assert_allclose(local_laplacian, 6 * 2 / f(None, x), rtol=1e-6)
 
 
@@ -37,6 +39,10 @@ def test_make_harmonic_oscillator_local_energy_with_zero_omega():
     local_energy_fn = physics.energy.make_harmonic_oscillator_local_energy(0.0, log_f)
 
     kinetic = local_energy_fn(None, multichain_x)  # kinetic only because omega = 0
+
+    # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
+    # particles per sample we expect each sample x to have kinetic energy
+    # -(1/2) * 3 * 2 / f(x), or -3 / f(x)
     expected = jnp.expand_dims(-3.0 / vmapped_f(None, multichain_x), axis=-1)
 
     np.testing.assert_allclose(kinetic, expected, rtol=1e-6)
@@ -53,6 +59,10 @@ def test_make_harmonic_oscillator_local_energy_with_nonzero_omega():
     local_energy_fn = physics.energy.make_harmonic_oscillator_local_energy(omega, log_f)
 
     local_energy = local_energy_fn(None, multichain_x)
+
+    # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
+    # particles per sample we expect each sample x to have kinetic energy
+    # -(1/2) * 3 * 2 / f(x), or -3 / f(x)
     kinetic = jnp.expand_dims(-3.0 / vmapped_f(None, multichain_x), axis=-1)
     potential = 0.5 * jnp.sum(jnp.square(omega * multichain_x), axis=-2)
 
