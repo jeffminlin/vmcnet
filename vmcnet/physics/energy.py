@@ -2,7 +2,6 @@
 from typing import Callable, TypeVar
 
 import jax
-from jax._src.api import grad
 import jax.numpy as jnp
 
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
@@ -66,48 +65,3 @@ def laplacian_psi_over_psi(
 
     out, _ = jax.lax.scan(step_fn, (0, 0.0), xs=None, length=n)
     return out[1]
-
-
-def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.float32:
-    """Potential energy for independent harmonic oscillators with spring constant omega.
-
-    This function computes sum_i 0.5 * (omega * x_i)^2. If x has more than one axis,
-    these are simply summed over, so this corresponds to an isotropic harmonic
-    oscillator potential.
-
-    This function should be vmapped in order to be applied to batches of inputs, as it
-    expects the first axis of x to correspond to the particle index.
-
-    Args:
-        omega (jnp.float32): spring constant
-        x (jnp.ndarray): array of particle positions, where the first axis corresponds
-            to particle index
-
-    Returns:
-        jnp.float32: potential energy value for this configuration x
-    """
-    return 0.5 * jnp.sum(jnp.square(omega * x))
-
-
-def make_harmonic_oscillator_local_energy(
-    omega: jnp.float32, log_psi: Callable[[P, jnp.ndarray], jnp.ndarray]
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
-    """Factory to create a local energy fn for the harmonic oscillator log|psi|.
-
-    Args:
-        omega (jnp.float32): spring constant for the harmonic oscillator
-        log_psi (Callable): function which evaluates log|psi| for a harmonic oscillator
-            model wavefunction psi. Has the signature (params, x) -> log|psi(x)|.
-
-    Returns:
-        Callable: local energy function with the signature (params, x) -> local energy
-        associated to the wavefunction psi
-    """
-    grad_log_psi = jax.grad(log_psi, argnums=1)
-
-    def local_energy(params, x):
-        kinetic = -0.5 * laplacian_psi_over_psi(grad_log_psi, params, x)
-        potential = harmonic_oscillator_potential(omega, x)
-        return kinetic + potential
-
-    return jax.vmap(local_energy, in_axes=(None, 0), out_axes=0)
