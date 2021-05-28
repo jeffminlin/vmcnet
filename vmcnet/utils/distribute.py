@@ -11,6 +11,9 @@ PMAP_AXIS_NAME = "pmap_axis"
 # shortcuts to use a pmapped axis called PMAP_AXIS_NAME
 pmap = functools.partial(jax.pmap, axis_name=PMAP_AXIS_NAME)
 pmean_if_pmap = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_NAME)
+replicate_all_local_devices = (
+    lambda x: None if None else kfac_utils.replicate_all_local_devices(x)
+)
 
 
 def reshape_data_leaves_for_distribution(data_leaf):
@@ -37,8 +40,8 @@ def distribute_data(data):
 def distribute_data_params_optstate_and_key(data, params, optimizer_state, key):
     """Split data, replicate params and opt state, and split PRNG key to all devices."""
     data = distribute_data(data)
-    params = kfac_utils.replicate_all_local_devices(params)
-    optimizer_state = kfac_utils.replicate_all_local_devices(optimizer_state)
+    params = replicate_all_local_devices(params)
+    optimizer_state = replicate_all_local_devices(optimizer_state)
     sharded_key = kfac_utils.make_different_rng_key_on_all_devices(key)
 
     return data, params, optimizer_state, sharded_key
