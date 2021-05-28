@@ -1,6 +1,7 @@
 """Tests for the quantum harmonic oscillator."""
 import logging
 
+from kfac_ferminet_alpha import utils as kfac_utils
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -147,8 +148,11 @@ def test_harmonic_oscillator_vmc(caplog):
         spring_constant, log_psi_model.apply
     )
 
-    def optimizer_apply(grad, params, state):
-        return jax.tree_map(lambda a, b: a - learning_rate * b, params, grad), state
+    def sgd_apply(grad, params, learning_rate):
+        return (
+            jax.tree_map(lambda a, b: a - learning_rate * b, params, grad),
+            learning_rate,
+        )
 
     proposal_fn = mcmc.metropolis.make_position_and_amplitude_gaussian_proposal(
         log_psi_model.apply, std_move
@@ -162,23 +166,19 @@ def test_harmonic_oscillator_vmc(caplog):
         proposal_fn, acceptance_fn, update_data_fn
     )
     update_param_fn = updates.params.create_position_amplitude_data_update_param_fn(
-        log_psi_model.apply, local_energy_fn, nchains, optimizer_apply
+        log_psi_model.apply, local_energy_fn, nchains, sgd_apply
     )
 
-    (
-        random_particle_positions,
-        params,
-        key,
-    ) = utils.distribute.distribute_data_params_and_key(
-        random_particle_positions, params, key
-    )
-    amplitudes = utils.distribute.distribute_data(amplitudes)
     data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
+    data, params, key = utils.distribute.distribute_data_params_and_key(
+        data, params, key
+    )
+    optimizer_state = kfac_utils.replicate_all_local_devices(learning_rate)
 
     with caplog.at_level(logging.INFO):
         params, _, _ = train.vmc.vmc_loop(
             params,
-            None,
+            optimizer_state,
             data,
             nchains,
             nburn,

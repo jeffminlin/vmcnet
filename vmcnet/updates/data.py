@@ -15,7 +15,7 @@ def update_position_and_amplitude(
     proposed_data: PositionAmplitudeData,
     move_mask: jnp.ndarray,
 ) -> PositionAmplitudeData:
-    """Update a data dict which holds both position and amplitude info.
+    """Update a data NamedTuple which holds both position and amplitude info.
 
     Holding both particle position and wavefn amplitude in the data can be advantageous
     to avoid recalculating amplitudes in some routines, e.g. acceptance probabilities.
