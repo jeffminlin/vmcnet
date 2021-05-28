@@ -8,31 +8,11 @@ import numpy as np
 
 import vmcnet.examples.harmonic_oscillator as qho
 import vmcnet.mcmc as mcmc
-import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
 
 from ..units.physics.test_energy import _make_dummy_log_f
-
-
-def _make_input_tree():
-    x1 = jnp.array(
-        [
-            [[1], [2], [3]],
-            [[4], [5], [6]],
-        ]
-    )
-    x2 = jnp.array(
-        [
-            [[7], [8]],
-            [[9], [10]],
-        ]
-    )
-
-    xs = {0: x1, 1: (x2, x1)}
-
-    return xs
 
 
 def _make_initial_positions_and_model(model_omega, nchains):
@@ -52,7 +32,20 @@ def _make_initial_positions_and_model(model_omega, nchains):
 def test_harmonic_osc_orbital_shape():
     """Test that putting in a pytree of inputs gives a pytree of orbitals."""
     orbital_model = qho.HarmonicOscillatorOrbitals(4.0)
-    xs = _make_input_tree()
+    x1 = jnp.array(
+        [
+            [[1], [2], [3]],
+            [[4], [5], [6]],
+        ]
+    )
+    x2 = jnp.array(
+        [
+            [[7], [8]],
+            [[9], [10]],
+        ]
+    )
+
+    xs = {0: x1, 1: (x2, x1)}
 
     key = jax.random.PRNGKey(0)
 
@@ -125,10 +118,16 @@ def test_five_particle_ground_state_harmonic_oscillator():
 
 
 def test_harmonic_oscillator_vmc(caplog):
-    """Test that the trainable omega converges to the true spring constant."""
+    """Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
+
+    Integration test for the overall API, to make sure it comes together correctly and
+    can optimize a simple 1 parameter model rapidly.
+    """
+    # Problem parameters
     model_omega = 2.5
     spring_constant = 1.5
 
+    # Training hyperparameters
     nchains = 100 * jax.device_count()
     nburn = 100
     nepochs = 50
@@ -136,6 +135,7 @@ def test_harmonic_oscillator_vmc(caplog):
     std_move = 0.25
     learning_rate = 1e-4
 
+    # Initialize model and chains of walkers
     (
         log_psi_model,
         params,
@@ -143,11 +143,14 @@ def test_harmonic_oscillator_vmc(caplog):
         amplitudes,
         key,
     ) = _make_initial_positions_and_model(model_omega, nchains)
+    data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
 
+    # Setup metropolis step
     metrop_step_fn = mcmc.metropolis.make_position_amplitude_gaussian_metropolis_step(
         std_move, log_psi_model.apply
     )
 
+    # Setup parameter updates
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         spring_constant, log_psi_model.apply
     )
@@ -162,12 +165,13 @@ def test_harmonic_oscillator_vmc(caplog):
         log_psi_model.apply, local_energy_fn, nchains, sgd_apply
     )
 
-    data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
+    # Distribute everything via jax.pmap
     data, params, key = utils.distribute.distribute_data_params_and_key(
         data, params, key
     )
     optimizer_state = kfac_utils.replicate_all_local_devices(learning_rate)
 
+    # Train!
     with caplog.at_level(logging.INFO):
         params, _, _ = train.vmc.vmc_loop(
             params,
@@ -182,6 +186,7 @@ def test_harmonic_oscillator_vmc(caplog):
             key,
         )
 
+    # Grab the one parameter and make sure it converged to sqrt(spring constant)
     np.testing.assert_allclose(
         jax.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
     )
