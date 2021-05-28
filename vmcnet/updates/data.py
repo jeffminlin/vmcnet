@@ -1,5 +1,6 @@
 """Routines for updating data given some proposed data and accepted walker moves."""
 from typing import NamedTuple
+
 import jax.numpy as jnp
 
 
@@ -10,7 +11,7 @@ class PositionAmplitudeData(NamedTuple):
     amplitude: jnp.ndarray
 
 
-def update_position_and_amplitude(
+def update_position_amplitude(
     data: PositionAmplitudeData,
     proposed_data: PositionAmplitudeData,
     move_mask: jnp.ndarray,

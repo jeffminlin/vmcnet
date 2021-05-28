@@ -41,7 +41,7 @@ def _make_dummy_metropolis_fn():
     return metrop_step_fn
 
 
-def _dummy_model_eval(params, x):
+def _dummy_model_apply(params, x):
     """Model eval that outputs indices of the flattened x in the shape of x."""
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
 
@@ -57,10 +57,10 @@ def test_metropolis_step():
     np.testing.assert_allclose(new_data, jnp.array([1, 0, 3, 0]))
 
 
-def test_make_position_and_amplitude_gaussian_proposal():
-    """Test that a model_eval is passed through correctly when making a proposal_fn."""
-    proposal_fn = mcmc.metropolis.make_position_and_amplitude_gaussian_proposal(
-        _dummy_model_eval, 1.0
+def test_make_position_amplitude_gaussian_proposal():
+    """Test that a model_apply is passed through correctly when making a proposal_fn."""
+    proposal_fn = mcmc.metropolis.make_position_amplitude_gaussian_proposal(
+        _dummy_model_apply, 1.0
     )
     positions, params, key = _make_dummy_data_params_and_key()
     # use the "wrong" amplitudes here so we can make sure the "right" ones come out of

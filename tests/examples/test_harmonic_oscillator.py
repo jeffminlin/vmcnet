@@ -144,6 +144,10 @@ def test_harmonic_oscillator_vmc(caplog):
         key,
     ) = _make_initial_positions_and_model(model_omega, nchains)
 
+    metrop_step_fn = mcmc.metropolis.make_position_amplitude_gaussian_metropolis_step(
+        std_move, log_psi_model.apply
+    )
+
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         spring_constant, log_psi_model.apply
     )
@@ -154,17 +158,6 @@ def test_harmonic_oscillator_vmc(caplog):
             learning_rate,
         )
 
-    proposal_fn = mcmc.metropolis.make_position_and_amplitude_gaussian_proposal(
-        log_psi_model.apply, std_move
-    )
-    acceptance_fn = (
-        mcmc.metropolis.make_position_and_amplitude_metropolis_symmetric_acceptance()
-    )
-    update_data_fn = updates.data.update_position_and_amplitude
-
-    metrop_step_fn = mcmc.metropolis.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
     update_param_fn = updates.params.create_position_amplitude_data_update_param_fn(
         log_psi_model.apply, local_energy_fn, nchains, sgd_apply
     )
