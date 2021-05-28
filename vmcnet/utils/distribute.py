@@ -12,7 +12,7 @@ PMAP_AXIS_NAME = "pmap_axis"
 pmap = functools.partial(jax.pmap, axis_name=PMAP_AXIS_NAME)
 pmean_if_pmap = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_NAME)
 replicate_all_local_devices = (
-    lambda x: None if None else kfac_utils.replicate_all_local_devices(x)
+    lambda x: None if x is None else kfac_utils.replicate_all_local_devices(x)
 )
 
 
