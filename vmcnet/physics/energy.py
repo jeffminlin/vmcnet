@@ -62,7 +62,7 @@ def laplacian_psi_over_psi(
         primals, tangents = jax.jvp(
             flattened_grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
         )
-        return (i + 1, carry[1] + primals[i] ** 2 + tangents[i]), None
+        return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
 
     out, _ = jax.lax.scan(step_fn, (0, jnp.array([0.0])), xs=None, length=n)
     return out[1]

@@ -80,7 +80,7 @@ def test_symmetric_acceptance():
     log_old_amplitudes = jnp.log(jnp.abs(old_amplitudes))
     log_new_amplitudes = jnp.log(jnp.abs(new_amplitudes))
 
-    expected_accept_prob = jnp.array([0.0, 1.0 / jnp.pi ** 2, 1.0, 1.0])
+    expected_accept_prob = jnp.array([0.0, 1.0 / jnp.square(jnp.pi), 1.0, 1.0])
 
     acceptance_prob = mcmc.metropolis.metropolis_symmetric_acceptance(
         old_amplitudes, new_amplitudes, logabs=False
