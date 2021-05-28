@@ -1,4 +1,6 @@
 """Tests for the quantum harmonic oscillator."""
+import logging
+
 import jax
 import jax.numpy as jnp
 import numpy as np
