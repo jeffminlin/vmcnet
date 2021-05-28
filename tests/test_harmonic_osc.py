@@ -39,7 +39,5 @@ def test_five_particle_ground_state_harmonic_oscillator():
     local_energies = local_energy_fn(params, random_particle_positions)
 
     np.testing.assert_allclose(
-        local_energies,
-        omega * (0.5 + 1.5 + 0.5 + 1.5 + 2.5) * jnp.ones((4, 1)),
-        rtol=1e-5,
+        local_energies, omega * (0.5 + 1.5 + 0.5 + 1.5 + 2.5) * jnp.ones(4), rtol=1e-5
     )

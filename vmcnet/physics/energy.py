@@ -64,7 +64,7 @@ def laplacian_psi_over_psi(
         )
         return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
 
-    out, _ = jax.lax.scan(step_fn, (0, jnp.array([0.0])), xs=None, length=n)
+    out, _ = jax.lax.scan(step_fn, (0, 0.0), xs=None, length=n)
     return out[1]
 
 

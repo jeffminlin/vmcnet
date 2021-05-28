@@ -90,4 +90,6 @@ def test_symmetric_acceptance():
     )
 
     np.testing.assert_allclose(acceptance_prob, expected_accept_prob)
-    np.testing.assert_allclose(acceptance_prob_from_log, expected_accept_prob)
+    np.testing.assert_allclose(
+        acceptance_prob_from_log, expected_accept_prob, rtol=1e-6
+    )

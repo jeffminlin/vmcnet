@@ -7,8 +7,8 @@ import vmcnet.physics as physics
 
 
 def _make_dummy_log_f():
-    f = lambda _, x: jnp.sum(jnp.square(x) + 3 * x)
-    log_f = lambda _, x: jnp.log(jnp.abs(f(_, x)))
+    f = lambda unused_params, x: jnp.sum(jnp.square(x) + 3 * x)
+    log_f = lambda unused_params, x: jnp.log(jnp.abs(f(unused_params, x)))
     return f, log_f
 
 
@@ -43,7 +43,7 @@ def test_make_harmonic_oscillator_local_energy_with_zero_omega():
     # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
     # particles per sample we expect each sample x to have kinetic energy
     # -(1/2) * 3 * 2 / f(x), or -3 / f(x)
-    expected = jnp.expand_dims(-3.0 / vmapped_f(None, multichain_x), axis=-1)
+    expected = -3.0 / vmapped_f(None, multichain_x)
 
     np.testing.assert_allclose(kinetic, expected, rtol=1e-6)
 
@@ -63,7 +63,7 @@ def test_make_harmonic_oscillator_local_energy_with_nonzero_omega():
     # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
     # particles per sample we expect each sample x to have kinetic energy
     # -(1/2) * 3 * 2 / f(x), or -3 / f(x)
-    kinetic = jnp.expand_dims(-3.0 / vmapped_f(None, multichain_x), axis=-1)
-    potential = 0.5 * jnp.sum(jnp.square(omega * multichain_x), axis=-2)
+    kinetic = -3.0 / vmapped_f(None, multichain_x)
+    potential = 0.5 * jnp.sum(jnp.square(omega * multichain_x), axis=(-1, -2))
 
     np.testing.assert_allclose(local_energy, kinetic + potential, rtol=1e-6)
