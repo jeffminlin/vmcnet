@@ -66,14 +66,19 @@ def test_vmc_loop_logging(caplog):
 
         if pmapped:
             data = _make_different_pmappable_data(data)
-            data, params, key = utils.distribute.distribute_data_params_and_key(
-                data, params, key
+            (
+                data,
+                params,
+                optimizer_state,
+                key,
+            ) = utils.distribute.distribute_data_params_optstate_and_key(
+                data, params, None, key
             )
 
         with caplog.at_level(logging.INFO):
             train.vmc.vmc_loop(
                 params,
-                None,
+                optimizer_state,
                 data,
                 nchains,
                 nburn,
@@ -100,18 +105,19 @@ def test_vmc_loop_number_of_updates():
     nchains = data.shape[0]
 
     data = _make_different_pmappable_data(data)
-    data, params, key = utils.distribute.distribute_data_params_and_key(
-        data, params, key
-    )
+    # storing the number of parameter updates in optimizer_state, replicated on each
+    # device; with a real optimizer this is probably something more exciting and
+    # possibly data-dependent (e.g. KFAC/Adam's running metrics)
+    (
+        data,
+        params,
+        optimizer_state,
+        key,
+    ) = utils.distribute.distribute_data_params_optstate_and_key(data, params, 0, key)
 
     nburn = 5
     nepochs = 17  # eventual number of parameter updates
     nsteps_per_param_update = 2
-
-    # storing the number of parameter updates in optimizer_state, replicated on each
-    # device; with a real optimizer this is probably something more exciting and
-    # possibly data-dependent (e.g. KFAC/Adam's running metrics)
-    optimizer_state = kfac_utils.replicate_all_local_devices(0)
 
     def update_param_fn(data, params, optimizer_state):
         del data
@@ -163,8 +169,13 @@ def test_vmc_loop_newtons_x_squared():
     dummy_data = jnp.zeros((jax.device_count(),))
     nchains = dummy_data.shape[0]
 
-    dummy_data, x, key = utils.distribute.distribute_data_params_and_key(
-        dummy_data, x, key
+    (
+        dummy_data,
+        x,
+        optimizer_state,
+        key,
+    ) = utils.distribute.distribute_data_params_optstate_and_key(
+        dummy_data, x, None, key
     )
 
     nburn = 0
@@ -199,7 +210,7 @@ def test_vmc_loop_newtons_x_squared():
 
     min_x, _, _ = train.vmc.vmc_loop(
         x,
-        None,
+        optimizer_state,
         dummy_data,
         nchains,
         nburn,

@@ -1,7 +1,6 @@
 """Proposal and acceptance fns for Metropolis-Hastings Markov-Chain Monte Carlo."""
 from typing import Callable, Tuple, TypeVar
 
-import flax
 import jax
 import jax.numpy as jnp
 

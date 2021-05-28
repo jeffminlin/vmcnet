@@ -1,7 +1,6 @@
 """Tests for the quantum harmonic oscillator."""
 import logging
 
-from kfac_ferminet_alpha import utils as kfac_utils
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -166,10 +165,14 @@ def test_harmonic_oscillator_vmc(caplog):
     )
 
     # Distribute everything via jax.pmap
-    data, params, key = utils.distribute.distribute_data_params_and_key(
-        data, params, key
+    (
+        data,
+        params,
+        optimizer_state,
+        key,
+    ) = utils.distribute.distribute_data_params_optstate_and_key(
+        data, params, learning_rate, key
     )
-    optimizer_state = kfac_utils.replicate_all_local_devices(learning_rate)
 
     # Train!
     with caplog.at_level(logging.INFO):
