@@ -1,2 +1,4 @@
 """Physical calculations."""
-from . import energy
+from . import core
+from . import kinetic
+from . import potential

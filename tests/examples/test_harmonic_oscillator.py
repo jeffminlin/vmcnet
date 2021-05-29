@@ -11,7 +11,7 @@ import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
 
-from ..units.physics.test_energy import _make_dummy_log_f
+from ..units.physics.test_core import _make_dummy_log_f
 
 
 def _make_initial_positions_and_model(model_omega, nchains):

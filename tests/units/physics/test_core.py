@@ -23,7 +23,7 @@ def test_laplacian_psi_over_psi():
 
     grad_log_f = jax.grad(log_f, argnums=1)
 
-    local_laplacian = physics.energy.laplacian_psi_over_psi(grad_log_f, None, x)
+    local_laplacian = physics.core.laplacian_psi_over_psi(grad_log_f, None, x)
 
     # d^2f/dx_i^2 = 2 for all i, so the Laplacian is simply 2 * n, where n is the number
     # of particles. We then divide by f(x) to get (nabla^2 f) / f
@@ -50,7 +50,7 @@ def test_total_energy_grad():
         del a
         return target_local_energies
 
-    total_energy_value_and_grad = physics.energy.create_value_and_grad_energy_fn(
+    total_energy_value_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
     )
 

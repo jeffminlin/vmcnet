@@ -37,7 +37,7 @@ def create_position_amplitude_data_update_param_fn(
             (PositionAmplitudeData, params, optimizer_state)
             -> (new_params, new_optimizer_state)
     """
-    energy_data_val_and_grad = physics.energy.create_value_and_grad_energy_fn(
+    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
     )
 
