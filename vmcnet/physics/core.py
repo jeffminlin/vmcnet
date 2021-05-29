@@ -37,7 +37,7 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     params: P,
     x: jnp.ndarray,
-) -> jnp.ndarray:
+) -> jnp.float32:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
     The computation is done by computing (forward-mode) derivatives of the gradient to
@@ -71,7 +71,7 @@ def laplacian_psi_over_psi(
         x (jnp.ndarray): second input to grad_log_psi
 
     Returns:
-        jnp.ndarray: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
+        jnp.float32: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
     flat_x = jnp.reshape(x, (-1,))

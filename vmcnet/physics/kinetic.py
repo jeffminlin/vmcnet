@@ -26,9 +26,9 @@ def create_continuous_kinetic_energy(
         Evaluates on batches due to the jax.vmap call, so it has signature
         (params, x) -> kinetic energy array with shape (x.shape[0],)
     """
-    grad_log_psi = jax.grad(log_psi_apply, argnums=1)
+    grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
     def kinetic_energy_fn(params, x):
-        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi, params, x)
+        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
 
     return jax.vmap(kinetic_energy_fn, in_axes=(None, 0), out_axes=0)

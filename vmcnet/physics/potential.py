@@ -40,19 +40,18 @@ def _compute_soft_norm(
     )
 
 
-def create_electron_nuclei_coulomb_potential(
-    nuclei_locations: jnp.ndarray,
-    nuclei_charges: jnp.ndarray,
+def create_electron_ion_coulomb_potential(
+    ion_locations: jnp.ndarray,
+    ion_charges: jnp.ndarray,
     strength: jnp.float32 = 1.0,
     softening_term: jnp.float32 = 0.0,
 ) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
-    """Computes the total coulomb potential attraction between electron and nuclei.
+    """Computes the total coulomb potential attraction between electron and ion.
 
     Args:
-        nuclei_locations (jnp.ndarray): an (n, d) array of nuclei positions, where n
-            is the number of nucleus positions and d is the dimension of the space they
-            live in
-        nuclei_charges (jnp.ndarray): an (n,) array of nuclei charges, in units of one
+        ion_locations (jnp.ndarray): an (n, d) array of ion positions, where n is the
+            number of ion positions and d is the dimension of the space they live in
+        ion_charges (jnp.ndarray): an (n,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
         strength (jnp.float32, optional): amount to multiply the overall interaction by.
             Defaults to 1.0.
@@ -62,19 +61,19 @@ def create_electron_nuclei_coulomb_potential(
 
     Returns:
         Callable: function which computes the potential energy due to the attraction
-        between electrons and nuclei. Has the signature
+        between electrons and ion. Has the signature
         (params, electron_positions of shape (..., n_elec, d))
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
     def potential_fn(params, x):
         del params
-        electron_ion_displacements = _compute_displacements(x, nuclei_locations)
+        electron_ion_displacements = _compute_displacements(x, ion_locations)
         electron_ion_distances = _compute_soft_norm(
             electron_ion_displacements, softening_term=softening_term
         )
-        coulomb_attraction = nuclei_charges / electron_ion_distances
-        return strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
+        coulomb_attraction = ion_charges / electron_ion_distances
+        return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
 
     return potential_fn
 
@@ -105,7 +104,7 @@ def create_electron_electron_coulomb_potential(
             electron_electron_displacements, softening_term=softening_term
         )
         return jnp.sum(
-            jnp.triu(-strength / electron_electron_distances, k=1), axis=(-1, -2)
+            jnp.triu(strength / electron_electron_distances, k=1), axis=(-1, -2)
         )
 
     return potential_fn
