@@ -59,7 +59,7 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
-        params, optimizer_state = optimizer_apply(grad_energy, optimizer_state, params)
+        params, optimizer_state = optimizer_apply(grad_energy, params, optimizer_state)
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
         return params, optimizer_state, metrics, key
 
