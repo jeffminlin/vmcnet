@@ -26,12 +26,12 @@ def _rolled_concat(arrays, n, axis=-1):
 
 def _tree_sum(tree1, tree2):
     """Leaf-wise sum of two pytrees with the same structure."""
-    return jax.tree_map(lambda a, b: a + b, tree1, (tree2,))
+    return jax.tree_map(lambda a, b: a + b, tree1, tree2)
 
 
 def _tree_prod(tree1, tree2):
     """Leaf-wise produdct of two pytrees with the same structure."""
-    return jax.tree_map(lambda a, b: a * b, tree1, (tree2,))
+    return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
 def _valid_skip(x, y):
@@ -144,7 +144,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         self._unmixed_dense = flax.linen.Dense(
             self.ndense,
             kernel_init=self.kernel_initializer_unmixed,
-            bias_initializer=self.bias_initializer,
+            bias_init=self.bias_initializer,
         )
         self._mixed_dense = flax.linen.Dense(
             self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
@@ -262,7 +262,7 @@ class FermiNetBackflow(flax.linen.Module):
             stream_1e, stream_2e = FermiNetResidualBlock(
                 spin_split=self.spin_split,
                 ndense_1e=features[0],
-                ndense_2d=features[1],
+                ndense_2e=features[1],
                 kernel_initializer_unmixed=self.kernel_initializer_unmixed,
                 kernel_initializer_mixed=self.kernel_initializer_mixed,
                 kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
@@ -340,35 +340,40 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
     def _isotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
-        x_extend = jnp.expand_dims(x, axis=-1)
-        # (..., nelec, nion, d, 1)
-        x_nion = jnp.swapaxes(x_extend, axis1=-2, axis2=-3)
-        # conv_out_flipped has shape (..., nelec, d, nion, norbitals),
-        # this applies nion parallel convolutions which map 1 -> norbitals
-        conv_out_flipped = flax.linen.Conv(
+        d = x.shape[-1]
+        # x_nion is (..., nelec, d, nion)
+        x_nion = jnp.swapaxes(x, axis1=-1, axis2=-2)
+        batch_shapes = x_nion.shape[:-1]  # (..., nelec, d)
+        nion = x.shape[-1]
+        conv_in = jnp.reshape(x_nion, (-1, nion, 1))
+        # conv_out has shape (batch_shapes, nion, norbitals),
+        # this applies nion parallel maps which go 1 -> norbitals
+        conv_out = flax.linen.Conv(
             norbitals,
             1,
             kernel_init=self.kernel_initializer_envelope_dim,
             use_bias=False,
-        )(x_nion)
-        return jnp.swapaxes(conv_out_flipped, axis1=-1, axis2=-3)
+        )(conv_in)
+        conv_out = jnp.reshape(conv_out, batch_shapes + (nion, norbitals))
+        return jnp.swapaxes(conv_out, axis1=-1, axis2=-3)
 
     def _anisotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
+        batch_shapes = x.shape[:-2]  # (..., nelec)
         d = x.shape[-1]
-        # conv_out_flat has shape (..., nelec, nion, norbitals * d)
-        # this applies nion parallel convolutions which map d -> d * norbitals
+        nion = x.shape[-2]
+        conv_in = jnp.reshape(x, (-1, nion, d))
+        # conv_out_flat has shape (batch_shapes, nion, d * norbitals)
+        # this applies nion parallel maps which go d -> d * norbitals
         conv_out_flat = flax.linen.Conv(
-            norbitals * d,
+            d * norbitals,
             1,
             kernel_init=self.kernel_initializer_envelope_dim,
             use_bias=False,
-        )(x)
-        conv_out_flipped = jnp.reshape(
-            conv_out_flat, conv_out_flat.shape[:-2] + (d, norbitals)
-        )
+        )(conv_in)
+        conv_out = jnp.reshape(conv_out_flat, batch_shapes + (nion, d, norbitals))
         conv_out = jnp.swapaxes(
-            jnp.swapaxes(conv_out_flipped, axis1=-1, axis2=-3), axis1=-1, axis2=-2
-        )
+            jnp.swapaxes(conv_out, axis1=-1, axis2=-3), axis1=-1, axis2=-2
+        )  # (..., nelec, norbitals, nion, d)
         return conv_out
 
     @flax.linen.compact
@@ -389,7 +394,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
                     self._compute_exponential_envelopes, isotropic=self.isotropic_decay
                 ),
                 r_ei_split,
-                (self.norbitals,),
+                list(self.norbitals),
             )
             orbs = _tree_prod(orbs, exp_envelopes)
         return orbs
