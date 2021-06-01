@@ -5,6 +5,8 @@ import jax.numpy as jnp
 from jax.nn.initializers import (
     zeros,
     ones,
+    uniform,
+    normal,
     orthogonal,
     delta_orthogonal,
     xavier_normal,
@@ -23,6 +25,8 @@ WeightInitializer = Callable[[Key, Shape, Dtype], jnp.ndarray]
 INITIALIZER_CONSTRUCTORS: Dict[str, Callable] = {
     "zeros": lambda: zeros,
     "ones": lambda: ones,
+    "uniform": uniform,
+    "normal": normal,
     "orthogonal": orthogonal,
     "delta_orthogonal": delta_orthogonal,
     "xavier_normal": xavier_normal,
@@ -37,20 +41,36 @@ INITIALIZER_CONSTRUCTORS: Dict[str, Callable] = {
     "lecun_uniform": lecun_uniform,
 }
 
+VALID_KERNEL_INITIALIZERS = INITIALIZER_CONSTRUCTORS.keys()
 
-def validate_initializer(name: str) -> None:
-    valid_initializers = INITIALIZER_CONSTRUCTORS.keys()
-    if name not in valid_initializers:
+VALID_BIAS_INITIALIZERS = ["zeros", "ones", "uniform", "normal"]
+
+
+def validate_kernel_initializer(name: str) -> None:
+    if name not in VALID_KERNEL_INITIALIZERS:
         raise ValueError(
-            "Invalid weight initializer requested, {} was requested, but available "
-            "initializers are: ".format(name) + ", ".join(valid_initializers)
+            "Invalid kernel initializer requested, {} was requested, but available "
+            "initializers are: ".format(name) + ", ".join(VALID_KERNEL_INITIALIZERS)
         )
 
 
-def get_initializer(name: str, **kwargs: Any) -> WeightInitializer:
-    validate_initializer(name)
+def get_kernel_initializer(name: str, **kwargs: Any) -> WeightInitializer:
+    validate_kernel_initializer(name)
     constructor = INITIALIZER_CONSTRUCTORS[name]
-    if name == "orthogonal" or "delta_orthogonal":
-        return constructor(kwargs.get("scale", 1.0))
+    if name == "orthogonal" or name == "delta_orthogonal":
+        return constructor(scale=kwargs.get("scale", 1.0))
     else:
         return constructor()
+
+
+def validate_bias_initializer(name: str) -> None:
+    if name not in VALID_BIAS_INITIALIZERS:
+        raise ValueError(
+            "Invalid bias initializer requested, {} was requested, but available "
+            "initializers are: ".format(name) + ", ".join(VALID_BIAS_INITIALIZERS)
+        )
+
+
+def get_bias_initializer(name: str) -> WeightInitializer:
+    validate_bias_initializer(name)
+    return INITIALIZER_CONSTRUCTORS[name]()
