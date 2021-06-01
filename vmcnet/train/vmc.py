@@ -295,7 +295,7 @@ def vmc_loop(
             checkpoint_metric,
             logdir=logdir,
             variance_scale=checkpoint_variance_scale,
-            checkpoint_every=None,
+            checkpoint_every=checkpoint_every,
             checkpoint_dir=checkpoint_dir,
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)

@@ -25,7 +25,7 @@ def save_params(directory, name, epoch, data, params, optimizer_state):
         np.savez(
             file_handle,
             epoch=epoch,
-            data=data,
+            data=data._asdict(),
             params=params,
             optimizer_state=optimizer_state,
         )
