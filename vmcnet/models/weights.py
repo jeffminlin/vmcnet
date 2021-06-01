@@ -47,6 +47,7 @@ VALID_BIAS_INITIALIZERS = ["zeros", "ones", "uniform", "normal"]
 
 
 def validate_kernel_initializer(name: str) -> None:
+    """Check that a kernel initializer name is in the list of supported kernel inits."""
     if name not in VALID_KERNEL_INITIALIZERS:
         raise ValueError(
             "Invalid kernel initializer requested, {} was requested, but available "
@@ -55,6 +56,7 @@ def validate_kernel_initializer(name: str) -> None:
 
 
 def get_kernel_initializer(name: str, **kwargs: Any) -> WeightInitializer:
+    """Get a kernel initializer."""
     validate_kernel_initializer(name)
     constructor = INITIALIZER_CONSTRUCTORS[name]
     if name == "orthogonal" or name == "delta_orthogonal":
@@ -64,6 +66,7 @@ def get_kernel_initializer(name: str, **kwargs: Any) -> WeightInitializer:
 
 
 def validate_bias_initializer(name: str) -> None:
+    """Check that a bias initializer name is in the list of supported bias inits."""
     if name not in VALID_BIAS_INITIALIZERS:
         raise ValueError(
             "Invalid bias initializer requested, {} was requested, but available "
@@ -72,5 +75,6 @@ def validate_bias_initializer(name: str) -> None:
 
 
 def get_bias_initializer(name: str) -> WeightInitializer:
+    """Get a bias initializer."""
     validate_bias_initializer(name)
     return INITIALIZER_CONSTRUCTORS[name]()
