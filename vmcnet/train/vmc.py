@@ -160,7 +160,9 @@ def make_training_step(
         )
 
     def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walker(params, data, key)
+        accept_ratio, data, key = walk_data(
+            nsteps_per_param_update, data, params, key, metrop_step_fn
+        )
         params, optimizer_state, metrics, key = update_param_fn(
             data, params, optimizer_state, key
         )
