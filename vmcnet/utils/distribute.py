@@ -1,12 +1,15 @@
 """Helper functions for distributing computation to multiple devices."""
 import functools
-from typing import TypeVar
+from typing import Callable, Tuple, TypeVar
 
 import jax
-from jax import core
 import jax.numpy as jnp
+from jax import core
 
 T = TypeVar("T")  # representing an arbitrary pytree
+D = TypeVar("D")  # represents a pytree or pytree-like object containing MCMC data
+P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+O = TypeVar("O")  # represents optimizer state
 
 # axis name to pmap over
 PMAP_AXIS_NAME = "pmap_axis"
@@ -81,9 +84,29 @@ def distribute_data(data):
     return data
 
 
-def distribute_data_params_optstate_and_key(data, params, optimizer_state, key):
-    """Split data, replicate params and opt state, and split PRNG key to all devices."""
-    data = distribute_data(data)
+def distribute_data_params_optstate_and_key(
+    data: D,
+    params: P,
+    optimizer_state: O,
+    key: jnp.ndarray,
+    distribute_data_fn: Callable[D, D] = distribute_data,
+) -> Tuple[D, P, O, jnp.ndarray]:
+    """Split data, replicate params and opt state, and split PRNG key to all devices.
+
+    Args:
+        data: the MCMC data to distribute
+        params: model parameters
+        optimizer_state: optimizer state
+        key: RNG key
+        distribute_data_fn: custom function for distributing the MCMC data, for the case where some of the data
+            needs to be replicated instead of distributed across the devices. Default works if there is no data
+            that requires replication.
+
+    Returns:
+        Tuple[D, P, O, jnp.ndarray]: tuple of data, params, optimizer_state, and key, each of which has been either
+        distributed or replicated across all devices, as appopriate.
+    """
+    data = distribute_data_fn(data)
     params = replicate_all_local_devices(params)
     optimizer_state = replicate_all_local_devices(optimizer_state)
     sharded_key = make_different_rng_key_on_all_devices(key)

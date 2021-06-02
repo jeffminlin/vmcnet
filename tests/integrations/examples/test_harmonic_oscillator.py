@@ -1,12 +1,12 @@
 """Integration tests for the quantum harmonic oscillator."""
-import logging
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 import vmcnet.examples.harmonic_oscillator as qho
-import vmcnet.updates as updates
+from vmcnet.mcmc.simple_position_amplitude import (
+    make_simple_position_amplitude_data,
+)
 
 from .sgd_train import sgd_vmc_loop_with_logging
 
@@ -72,7 +72,7 @@ def test_harmonic_oscillator_vmc(caplog):
         amplitudes,
         key,
     ) = _make_initial_params_and_data(model_omega, nchains)
-    data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
+    data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
 
     # Local energy function
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
