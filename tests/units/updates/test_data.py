@@ -5,7 +5,7 @@ import numpy as np
 import vmcnet.updates as updates
 
 
-def test_update_position_and_amplitude():
+def test_update_position_amplitude():
     """Test that the mask modification is working for the position update."""
     pos = jnp.array([0, 0, 0, 0])
     proposed_pos = jnp.array([1, 2, 3, 4])
@@ -17,7 +17,7 @@ def test_update_position_and_amplitude():
 
     move_mask = jnp.array([True, False, False, True])
 
-    updated_data = updates.data.update_position_and_amplitude(
+    updated_data = updates.data.update_position_amplitude(
         data, proposed_data, move_mask
     )
 

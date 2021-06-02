@@ -3,10 +3,8 @@ import logging
 
 import jax
 import jax.numpy as jnp
-import kfac_ferminet_alpha.utils as kfac_utils
 import numpy as np
 
-import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.utils as utils
 
@@ -18,7 +16,7 @@ from ..mcmc.test_metropolis import (
 
 def _make_different_pmappable_data(data):
     """Adding (0, 1, ..., ndevices - 1) to the data and concatenating."""
-    ndevices = jax.device_count()
+    ndevices = jax.local_device_count()
     return jnp.concatenate([data + i for i in range(ndevices)])
 
 
@@ -66,14 +64,19 @@ def test_vmc_loop_logging(caplog):
 
         if pmapped:
             data = _make_different_pmappable_data(data)
-            data, params, key = utils.distribute.distribute_data_params_and_key(
-                data, params, key
+            (
+                data,
+                params,
+                optimizer_state,
+                key,
+            ) = utils.distribute.distribute_data_params_optstate_and_key(
+                data, params, None, key
             )
 
         with caplog.at_level(logging.INFO):
             train.vmc.vmc_loop(
                 params,
-                None,
+                optimizer_state,
                 data,
                 nchains,
                 nburn,
@@ -100,18 +103,19 @@ def test_vmc_loop_number_of_updates():
     nchains = data.shape[0]
 
     data = _make_different_pmappable_data(data)
-    data, params, key = utils.distribute.distribute_data_params_and_key(
-        data, params, key
-    )
+    # storing the number of parameter updates in optimizer_state, replicated on each
+    # device; with a real optimizer this is probably something more exciting and
+    # possibly data-dependent (e.g. KFAC/Adam's running metrics)
+    (
+        data,
+        params,
+        optimizer_state,
+        key,
+    ) = utils.distribute.distribute_data_params_optstate_and_key(data, params, 0, key)
 
     nburn = 5
     nepochs = 17  # eventual number of parameter updates
     nsteps_per_param_update = 2
-
-    # storing the number of parameter updates in optimizer_state, replicated on each
-    # device; with a real optimizer this is probably something more exciting and
-    # possibly data-dependent (e.g. KFAC/Adam's running metrics)
-    optimizer_state = kfac_utils.replicate_all_local_devices(0)
 
     def update_param_fn(data, params, optimizer_state):
         del data
@@ -131,84 +135,14 @@ def test_vmc_loop_number_of_updates():
         key,
     )
 
-    new_optimizer_state = kfac_utils.get_first(new_optimizer_state)
+    new_optimizer_state = utils.distribute.get_first(new_optimizer_state)
 
     num_updates = nsteps_per_param_update * nepochs + nburn
 
     # check that nepochs "parameter updates" have been done
     assert nepochs == new_optimizer_state
-    for device_index in range(jax.device_count()):
+    for device_index in range(jax.local_device_count()):
         np.testing.assert_allclose(
             new_data[device_index],
             jnp.array([num_updates, 0, 3 * num_updates, 0]) + device_index,
         )
-
-
-def test_vmc_loop_newtons_x_squared():
-    """Test Newton's method to find the min of f(x) = (x - a)^2 + (x - a)^4.
-
-    For this function, it can be shown that for x' = x - f'(x) / f''(x),
-
-        (x' - a) / (x - a) = 8(x - a)^2 / (2 + 12(x - a)^2),
-
-    which is globally (super)linear convergence with rate at least 2/3, and locally
-    cubic convergence.
-    """
-    seed = 0
-    key = jax.random.PRNGKey(seed)
-    key, subkey = jax.random.split(key)
-    a = jax.random.normal(subkey, shape=(1,))
-
-    x = a + 2.5
-    dummy_data = jnp.zeros((jax.device_count(),))
-    nchains = dummy_data.shape[0]
-
-    dummy_data, x, key = utils.distribute.distribute_data_params_and_key(
-        dummy_data, x, key
-    )
-
-    nburn = 0
-    nepochs = 10
-    nsteps_per_param_update = 1
-
-    # define some dummy functions which don't do anything
-    def proposal_fn(x, data, key):
-        del x
-        return data, key
-
-    def acceptance_fn(x, data, proposed_data):
-        del x, data, proposed_data
-        return jnp.ones((1,))
-
-    def update_data_fn(data, proposed_data, move_mask):
-        del proposed_data, move_mask
-        return data
-
-    metrop_step_fn = mcmc.metropolis.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
-
-    # do Newton's method, x <- x - f'(x) / f''(x)
-    def update_param_fn(data, x, optimizer_state):
-        del data
-        dmodel = 2.0 * (x - a) + 4.0 * jnp.power(x - a, 3)
-        ddmodel = 2.0 + 12.0 * jnp.power(x - a, 2)
-
-        new_x = x - dmodel / ddmodel
-        return new_x, optimizer_state, None
-
-    min_x, _, _ = train.vmc.vmc_loop(
-        x,
-        None,
-        dummy_data,
-        nchains,
-        nburn,
-        nepochs,
-        nsteps_per_param_update,
-        metrop_step_fn,
-        update_param_fn,
-        key,
-    )
-    min_x = kfac_utils.get_first(min_x)
-
-    np.testing.assert_allclose(min_x, a)

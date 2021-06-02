@@ -4,7 +4,6 @@ from typing import Callable, Dict, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
-from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.utils as utils
 
@@ -280,7 +279,7 @@ def vmc_loop(
         if pmapped:
             # Assume all metrics have been collectively reduced to be the same on
             # all devices
-            metrics = kfac_utils.get_first(metrics)
+            metrics = utils.distribute.get_first(metrics)
 
         (
             checkpoint_metric,

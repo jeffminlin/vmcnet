@@ -1,21 +1,30 @@
 """Routines for updating data given some proposed data and accepted walker moves."""
 from typing import NamedTuple
+
 import jax.numpy as jnp
 
 
 class PositionAmplitudeData(NamedTuple):
-    """NamedTuple of data holding positions and wavefunction amplitudes."""
+    """NamedTuple of data holding positions and wavefunction amplitudes.
+
+    The first dimension of position and amplitude should match, but position can have
+    more dimensions.
+
+    Attributes:
+        position (jnp.ndarray): array of shape (n, ...)
+        amplitude (jnp.ndarray): array of shape (n,)
+    """
 
     position: jnp.ndarray
     amplitude: jnp.ndarray
 
 
-def update_position_and_amplitude(
+def update_position_amplitude(
     data: PositionAmplitudeData,
     proposed_data: PositionAmplitudeData,
     move_mask: jnp.ndarray,
 ) -> PositionAmplitudeData:
-    """Update a data dict which holds both position and amplitude info.
+    """Update a data NamedTuple which holds both position and amplitude info.
 
     Holding both particle position and wavefn amplitude in the data can be advantageous
     to avoid recalculating amplitudes in some routines, e.g. acceptance probabilities.

@@ -4,7 +4,7 @@ from typing import Callable, Tuple, TypeVar
 import jax
 import jax.numpy as jnp
 
-from vmcnet.updates.data import PositionAmplitudeData
+from vmcnet.updates.data import PositionAmplitudeData, update_position_amplitude
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
@@ -77,31 +77,6 @@ def gaussian_proposal(
     return positions + std_move * jax.random.normal(subkey, shape=positions.shape), key
 
 
-def make_position_and_amplitude_gaussian_proposal(
-    model_eval: Callable[[P, jnp.ndarray], jnp.ndarray], std_move: jnp.float32
-) -> Callable[
-    [P, PositionAmplitudeData, jnp.ndarray], Tuple[PositionAmplitudeData, jnp.ndarray]
-]:
-    """Factory to make a gaussian proposal on PositionAmplitudeData.
-
-    Args:
-        model_eval (Callable): function which evaluates a model. Has signature
-            (params, position) -> amplitude
-        std_move (jnp.float32): standard deviation of the proposed moves
-
-    Returns:
-        Callable: proposal function which can be passed to the main VMC routine. Has
-        signature (params, PositionAmplitudeData, key) -> (PositionAmplitudeData, key).
-    """
-
-    def proposal_fn(params, data, key):
-        proposed_position, key = gaussian_proposal(data.position, std_move, key)
-        proposed_amplitude = model_eval(params, proposed_position)
-        return PositionAmplitudeData(proposed_position, proposed_amplitude), key
-
-    return proposal_fn
-
-
 def metropolis_symmetric_acceptance(
     amplitude: jnp.ndarray, proposed_amplitude: jnp.ndarray, logabs: bool = True
 ) -> jnp.ndarray:
@@ -154,7 +129,32 @@ def metropolis_symmetric_acceptance(
     )
 
 
-def make_position_and_amplitude_metropolis_symmetric_acceptance(
+def make_position_amplitude_gaussian_proposal(
+    model_apply: Callable[[P, jnp.ndarray], jnp.ndarray], std_move: jnp.float32
+) -> Callable[
+    [P, PositionAmplitudeData, jnp.ndarray], Tuple[PositionAmplitudeData, jnp.ndarray]
+]:
+    """Factory to make a gaussian proposal on PositionAmplitudeData.
+
+    Args:
+        model_apply (Callable): function which evaluates a model. Has signature
+            (params, position) -> amplitude
+        std_move (jnp.float32): standard deviation of the proposed moves
+
+    Returns:
+        Callable: proposal function which can be passed to the main VMC routine. Has
+        signature (params, PositionAmplitudeData, key) -> (PositionAmplitudeData, key).
+    """
+
+    def proposal_fn(params, data, key):
+        proposed_position, key = gaussian_proposal(data.position, std_move, key)
+        proposed_amplitude = model_apply(params, proposed_position)
+        return PositionAmplitudeData(proposed_position, proposed_amplitude), key
+
+    return proposal_fn
+
+
+def make_position_amplitude_metropolis_symmetric_acceptance(
     logabs: bool = True,
 ) -> Callable[[P, PositionAmplitudeData, PositionAmplitudeData], jnp.ndarray]:
     """Factory to make a Metropolis acceptance function on PositionAmplitudeData.
@@ -176,3 +176,33 @@ def make_position_and_amplitude_metropolis_symmetric_acceptance(
         )
 
     return acceptance_fn
+
+
+def make_position_amplitude_gaussian_metropolis_step(
+    std_move: jnp.float32,
+    model_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
+    logabs: bool = True,
+) -> Callable[
+    [P, PositionAmplitudeData, jnp.ndarray],
+    Tuple[jnp.float32, PositionAmplitudeData, jnp.ndarray],
+]:
+    """Make a gaussian proposal with Metropolis acceptance for PositionAmplitudeData.
+
+    Args:
+        std_move (jnp.float32): standard deviation of the proposed moves
+        model_apply (Callable): function which evaluates a model. Has signature
+            (params, position) -> amplitude
+        logabs (bool, optional): whether the provided amplitudes represent psi
+            (logabs = False) or log|psi| (logabs = True). Defaults to True.
+
+    Returns:
+        Callable: function which does a metropolis step. Has the signature
+            (params, PositionAmplitudeData, key)
+            -> (mean acceptance probability, PositionAmplitudeData, new_key)
+    """
+    proposal_fn = make_position_amplitude_gaussian_proposal(model_apply, std_move)
+    accept_fn = make_position_amplitude_metropolis_symmetric_acceptance(logabs=logabs)
+    metrop_step_fn = make_metropolis_step(
+        proposal_fn, accept_fn, update_position_amplitude
+    )
+    return metrop_step_fn
