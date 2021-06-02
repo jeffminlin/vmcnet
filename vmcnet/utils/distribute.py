@@ -70,6 +70,8 @@ def mean_all_local_devices(x):
 
 p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 
+p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
+
 
 def reshape_data_leaves_for_distribution(data_leaf):
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
