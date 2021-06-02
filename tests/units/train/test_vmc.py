@@ -3,7 +3,6 @@ import logging
 
 import jax
 import jax.numpy as jnp
-import kfac_ferminet_alpha.utils as kfac_utils
 import numpy as np
 
 import vmcnet.mcmc as mcmc
@@ -137,7 +136,7 @@ def test_vmc_loop_number_of_updates():
         key,
     )
 
-    new_optimizer_state = kfac_utils.get_first(new_optimizer_state)
+    new_optimizer_state = utils.distribute.get_first(new_optimizer_state)
 
     num_updates = nsteps_per_param_update * nepochs + nburn
 
@@ -220,6 +219,6 @@ def test_vmc_loop_newtons_x_squared():
         update_param_fn,
         key,
     )
-    min_x = kfac_utils.get_first(min_x)
+    min_x = utils.distribute.get_first(min_x)
 
     np.testing.assert_allclose(min_x, a)
