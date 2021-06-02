@@ -207,6 +207,8 @@ class FermiNetResidualBlock(flax.linen.Module):
             [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
+        advance_2e (bool, optional): whether to apply the FermiNetTwoElectronLayer to
+            the two-electron stream, or to return it untransformed. Defaults to False.
     """
 
     spin_split: Union[int, Sequence[int]]
@@ -222,6 +224,7 @@ class FermiNetResidualBlock(flax.linen.Module):
     use_bias: bool = True
     skip_connection: bool = True
     cyclic_spins: bool = False
+    advance_2e: bool = False
 
     @flax.linen.compact
     def __call__(
@@ -240,16 +243,17 @@ class FermiNetResidualBlock(flax.linen.Module):
             cyclic_spins=self.cyclic_spins,
         )(in_1e, in_2e)
 
-        out_2e = None
-        if in_2e is not None:
-            out_2e = FermiNetTwoElectronLayer(
-                self.ndense_2e,
-                self.kernel_initializer_2e_2e_stream,
-                self.bias_initializer_2e_stream,
-                self.activation_fn,
-                use_bias=self.use_bias,
-                skip_connection=self.skip_connection,
-            )(in_2e)
+        if not self.advance_2e or in_2e is None:
+            return out_1e, in_2e
+
+        out_2e = FermiNetTwoElectronLayer(
+            self.ndense_2e,
+            self.kernel_initializer_2e_2e_stream,
+            self.bias_initializer_2e_stream,
+            self.activation_fn,
+            use_bias=self.use_bias,
+            skip_connection=self.skip_connection,
+        )(in_2e)
 
         return out_1e, out_2e
 
@@ -508,7 +512,10 @@ class FermiNetBackflow(flax.linen.Module):
             include_ee_norm=self.include_ee_norm,
         )
 
-        for features in self.ndense_list:
+        for layer, features in enumerate(self.ndense_list):
+            advance_2e = True
+            if layer == len(self.ndense_list) - 1:
+                advance_2e = False
             stream_1e, stream_2e = FermiNetResidualBlock(
                 spin_split=self.spin_split,
                 ndense_1e=features[0],
@@ -523,6 +530,7 @@ class FermiNetBackflow(flax.linen.Module):
                 use_bias=self.use_bias,
                 skip_connection=self.skip_connection,
                 cyclic_spins=self.cyclic_spins,
+                advance_2e=advance_2e,
             )(stream_1e, stream_2e)
 
         return stream_1e, r_ei
