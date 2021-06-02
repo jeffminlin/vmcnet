@@ -70,6 +70,6 @@ class Dense(flax.linen.Module):
             y = y + bias
 
         if self.register_kfac:
-            return utils.kfac.register_repeated_dense(y, inputs, kernel, bias)
+            return utils.kfac.register_dense(y, inputs, kernel, bias)
         else:
             return y
