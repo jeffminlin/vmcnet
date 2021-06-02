@@ -5,7 +5,15 @@ import jax.numpy as jnp
 
 
 class PositionAmplitudeData(NamedTuple):
-    """NamedTuple of data holding positions and wavefunction amplitudes."""
+    """NamedTuple of data holding positions and wavefunction amplitudes.
+
+    The first dimension of position and amplitude should match, but position can have
+    more dimensions.
+
+    Attributes:
+        position (jnp.ndarray): array of shape (n, ...)
+        amplitude (jnp.ndarray): array of shape (n,)
+    """
 
     position: jnp.ndarray
     amplitude: jnp.ndarray
