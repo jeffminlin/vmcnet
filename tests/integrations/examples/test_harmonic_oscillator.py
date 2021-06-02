@@ -21,7 +21,7 @@ def _make_initial_params_and_data(model_omega, nchains):
     log_psi_model = qho.make_harmonic_oscillator_spin_half_model(2, model_omega)
 
     key, subkey = jax.random.split(key)
-    params = log_psi_model.init(key, random_particle_positions)
+    params = log_psi_model.init(subkey, random_particle_positions)
     amplitudes = log_psi_model.apply(params, random_particle_positions)
     return log_psi_model, params, random_particle_positions, amplitudes, key
 
