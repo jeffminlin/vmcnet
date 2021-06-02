@@ -28,7 +28,7 @@ def wrap_if_pmap(p_func):
 # shortcuts to use a pmapped axis called PMAP_AXIS_NAME
 pmap = functools.partial(jax.pmap, axis_name=PMAP_AXIS_NAME)
 
-broadcast_all_local_devices = jax.pmap(lambda x: x)
+broadcast_all_local_devices = pmap(lambda x: x)
 
 
 def replicate_all_local_devices(obj: T) -> T:
