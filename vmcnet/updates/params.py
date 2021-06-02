@@ -16,8 +16,8 @@ def create_grad_energy_update_param_fn(
     nchains: int,
     optimizer_apply: Callable[[P, P, O], Tuple[P, O]],
     get_position_fn: Callable[[D], jnp.ndarray],
-) -> Callable[[D, P, O], Tuple[P, O, Dict]]:
-    """Create the `update_param_fn` based on the gradient of the local energy.
+) -> Callable[[D, P, O, jnp.ndarray], Tuple[P, O, Dict, jnp.ndarray]]:
+    """Create the `update_param_fn` based on the gradient of the total energy.
 
     See :func:`~vmcnet.train.vmc.make_training_step` for its usage.
 
@@ -35,14 +35,14 @@ def create_grad_energy_update_param_fn(
     Returns:
         Callable: function which updates the parameters given the current data, params,
         and optimizer state. The signature of this function is
-            (data, params, optimizer_state)
-            -> (new_params, new_optimizer_state, metrics)
+            (data, params, optimizer_state, key)
+            -> (new_params, new_optimizer_state, metrics, key)
     """
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
     )
 
-    def update_param_fn(data, params, optimizer_state):
+    def update_param_fn(data, params, optimizer_state, key):
         position = get_position_fn(data)
         energy_data, grad_energy = energy_data_val_and_grad(params, position)
         energy, aux_energy_data = energy_data
@@ -50,6 +50,6 @@ def create_grad_energy_update_param_fn(
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(grad_energy, params, optimizer_state)
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
-        return params, optimizer_state, metrics
+        return params, optimizer_state, metrics, key
 
     return update_param_fn

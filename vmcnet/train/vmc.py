@@ -105,7 +105,7 @@ def make_burning_step(
 def make_training_step(
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    update_param_fn: Callable[[D, P, O, jnp.ndarray], Tuple[P, O, Dict, jnp.ndarray]],
     pmapped: bool = True,
 ) -> Callable[[D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]]:
     """Factory to create a training step.
@@ -127,8 +127,8 @@ def make_training_step(
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
-            (data, params, optimizer_state)
-                -> (new_params, optimizer_state, dict: metrics).
+            (data, params, optimizer_state, key)
+                -> (new_params, optimizer_state, dict: metrics, key).
             If metrics is not None, it is required to have the entries "energy" and
             "variance" at a minimum.
         pmapped (bool, optional): whether to apply jax.pmap to the burning step.
@@ -149,8 +149,8 @@ def make_training_step(
         accept_ratio, data, key = walk_data(
             nsteps_per_param_update, data, params, key, metrop_step_fn
         )
-        params, optimizer_state, metrics = update_param_fn(
-            data, params, optimizer_state
+        params, optimizer_state, metrics, key = update_param_fn(
+            data, params, optimizer_state, key
         )
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, params, optimizer_state, metrics, key
@@ -170,7 +170,7 @@ def vmc_loop(
     nepochs: int,
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    update_param_fn: Callable[[D, P, O, jnp.ndarray], Tuple[P, O, Dict, jnp.ndarray]],
     key: jnp.ndarray,
     logdir: str = None,
     checkpoint_every: int = None,
@@ -178,6 +178,9 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
     pmapped: bool = True,
+    override_training_step: Callable[
+        [D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]
+    ] = None,
 ) -> Tuple[P, O, D]:
     """Main Variational Monte Carlo loop routine.
 
@@ -217,8 +220,8 @@ def vmc_loop(
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
-            (data, params, optimizer_state)
-                -> (new_params, optimizer_state, dict: metrics).
+            (data, params, optimizer_state, key)
+                -> (new_params, optimizer_state, dict: metrics, key).
             If metrics is not None, it is required to have the entries "energy" and
             "variance" at a minimum. If metrics is None, no checkpointing is done.
         key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
@@ -258,6 +261,8 @@ def vmc_loop(
     training_step = make_training_step(
         nsteps_per_param_update, metrop_step_fn, update_param_fn, pmapped=pmapped
     )
+    if override_training_step is not None:
+        training_step = override_training_step
 
     logging.info("Burning for " + str(nburn) + " steps")
     for _ in range(nburn):
