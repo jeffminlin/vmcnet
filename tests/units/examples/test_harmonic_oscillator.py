@@ -5,7 +5,7 @@ import numpy as np
 
 import vmcnet.examples.harmonic_oscillator as qho
 
-from ..physics.test_energy import _make_dummy_log_f
+from ..physics.test_core import _make_dummy_log_f
 
 
 def test_harmonic_osc_orbital_shape():
