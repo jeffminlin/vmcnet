@@ -89,7 +89,7 @@ def compute_input_streams(
     """
     input_1e, r_ei = compute_electron_ion(elec_pos, ion_pos, include_ei_norm)
     input_2e = None
-    if not include_ee:
+    if include_ee:
         input_2e = compute_electron_electron(elec_pos, include_ee_norm)
     return input_1e, input_2e, r_ei
 
@@ -149,7 +149,9 @@ def compute_electron_electron(
         n = elec_pos.shape[-2]
         eye_n = jnp.eye(n)
         r_ee_diag_ones = input_2e + eye_n[..., None]
-        r_ee_norm = jnp.linalg.norm(r_ee_diag_ones, axis=-1) * (1.0 - eye_n)
+        r_ee_norm = jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (
+            1.0 - eye_n
+        )
         input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
     return input_2e
 
