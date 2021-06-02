@@ -35,7 +35,7 @@ def create_position_amplitude_data_update_param_fn(
         Callable: function which updates the parameters given the current data, params,
         and optimizer state. The signature of this function is
             (PositionAmplitudeData, params, optimizer_state)
-            -> (new_params, new_optimizer_state)
+            -> (new_params, new_optimizer_state, metrics)
     """
     energy_data_val_and_grad = physics.energy.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
