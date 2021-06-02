@@ -14,6 +14,7 @@ pmean_if_pmap = functools.partial(kfac_utils.pmean_if_pmap, axis_name=PMAP_AXIS_
 replicate_all_local_devices = (
     lambda x: None if x is None else kfac_utils.replicate_all_local_devices(x)
 )
+mean_all_local_devices = lambda x: pmean_if_pmap(jnp.mean(x))
 
 
 def reshape_data_leaves_for_distribution(data_leaf):
