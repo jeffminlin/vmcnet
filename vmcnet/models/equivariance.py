@@ -18,7 +18,7 @@ def _split_mean(splits, x, axis=-2, keepdims=True):
     split_x_mean = jax.tree_map(
         functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
     )
-    return split_x, split_x_mean
+    return split_x_mean
 
 
 def _rolled_concat(arrays, n, axis=-1):
@@ -331,38 +331,46 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             split_concat = [
                 _rolled_concat(split_means, idx) for idx in range(len(split_means))
             ]
-            dense_split_1e_means = jax.tree_map(self._mixed_dense, split_concat)
+            all_spins = jnp.concatenate(split_concat, axis=-2)
+            dense_mixed = self._mixed_dense(all_spins)
+            dense_mixed_split = jnp.split(dense_mixed, len(split_concat), axis=-2)
         else:
             split_concat = jnp.concatenate(split_means, axis=-1)
-            dense_split_1e_means = self._mixed_dense(split_concat)
-            dense_split_1e_means = [dense_split_1e_means, dense_split_1e_means]
-        return dense_split_1e_means
+            dense_mixed = self._mixed_dense(split_concat)
+            dense_mixed_split = [dense_mixed, dense_mixed]
+        return dense_mixed_split
 
     def _compute_transformed_2e_means(self, in_2e):
+        # [spin: (..., nelec[spin], nelec_total, d)]
         split_2e = jnp.split(in_2e, self.spin_split, axis=-3)
+
         concat_2e = []
         for spin in range(len(split_2e)):
             split_arrays = _split_mean(
                 self.spin_split, split_2e[spin], axis=-2, keepdims=False
-            )[1]
+            )  # [spin1: [spin2: (..., nelec[spin1], d)]]
             if self.cyclic_spins:
                 concat_arrays = _rolled_concat(split_arrays, spin)
             else:
                 concat_arrays = jnp.concatenate(split_arrays, axis=-1)
+            # concat_arrays is [spin: (..., nelec[spin1], d * nspins)]
             concat_2e.append(concat_arrays)
-        return jax.tree_map(self._dense_2e, concat_2e)
+
+        all_spins = jnp.concatenate(concat_2e, axis=-2)
+        dense_2e = self._dense_2e(all_spins)
+        return jnp.split(dense_2e, self.spin_split, axis=-2)
 
     def __call__(self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None) -> jnp.ndarray:
-        split_1e, split_1e_means = _split_mean(
-            self.spin_split, in_1e, axis=-2, keepdims=True
-        )
-        dense_split_1e = jax.tree_map(self._unmixed_dense, split_1e)
-        dense_split_1e_means = self._compute_transformed_1e_means(split_1e_means)
-        dense_out = _tree_sum(dense_split_1e, dense_split_1e_means)
+        dense_unmixed = self._unmixed_dense(in_1e)
+        dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
+
+        split_1e_means = _split_mean(self.spin_split, in_1e, axis=-2, keepdims=True)
+        dense_mixed_split = self._compute_transformed_1e_means(split_1e_means)
+        dense_out = _tree_sum(dense_unmixed_split, dense_mixed_split)
 
         if in_2e is not None:
-            dense_split_2e = self._compute_transformed_2e_means(in_2e)
-            dense_out = _tree_sum(dense_out, dense_split_2e)
+            dense_2e_split = self._compute_transformed_2e_means(in_2e)
+            dense_out = _tree_sum(dense_out, dense_2e_split)
 
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
