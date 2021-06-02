@@ -63,7 +63,7 @@ def walk_data(
 
 def make_burning_step(
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    pmapped: bool = True,
+    apply_pmap: bool = True,
 ) -> Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]]:
     """Factory to create a burning step, which is an optionally pmapped Metropolis step.
 
@@ -80,7 +80,7 @@ def make_burning_step(
     Args:
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
-        pmapped (bool, optional): whether to apply jax.pmap to the burning step.
+        apply_pmap (bool, optional): whether to apply jax.pmap to the burning step.
             Defaults to True.
 
     Returns:
@@ -96,7 +96,7 @@ def make_burning_step(
         _, data, key = metrop_step_fn(data, params, key)
         return data, key
 
-    if not pmapped:
+    if not apply_pmap:
         return burning_step
 
     return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
@@ -106,7 +106,8 @@ def make_training_step(
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, O, jnp.ndarray], Tuple[P, O, Dict, jnp.ndarray]],
-    pmapped: bool = True,
+    apply_walker_pmap: bool = True,
+    apply_param_update_pmap: bool = True,
 ) -> Callable[[D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]]:
     """Factory to create a training step.
 
@@ -131,8 +132,10 @@ def make_training_step(
                 -> (new_params, optimizer_state, dict: metrics, key).
             If metrics is not None, it is required to have the entries "energy" and
             "variance" at a minimum.
-        pmapped (bool, optional): whether to apply jax.pmap to the burning step.
+        apply_walker_pmap (bool, optional): whether to apply jax.pmap to the walker.
             Defaults to True.
+        apply_param_update_pmap (bool, optional): whether to apply jax.pmap to the
+            parameter update funtion. Defaults to True.
 
     Returns:
         Callable: function with signature
@@ -145,20 +148,24 @@ def make_training_step(
     """
     nsteps_per_param_update = max(nsteps_per_param_update, 1)
 
+    def walker(params, data, key):
+        return walk_data(nsteps_per_param_update, data, params, key, metrop_step_fn)
+
+    if apply_walker_pmap:
+        walker = utils.distribute.pmap(walker, donate_argnums=(1, 2))
+
+    if apply_param_update_pmap:
+        update_param_fn = utils.distribute.pmap(update_param_fn, donate_argnums=(0, 3))
+
     def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walk_data(
-            nsteps_per_param_update, data, params, key, metrop_step_fn
-        )
+        accept_ratio, data, key = walker(params, data, key)
         params, optimizer_state, metrics, key = update_param_fn(
             data, params, optimizer_state, key
         )
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, params, optimizer_state, metrics, key
 
-    if not pmapped:
-        return training_step
-
-    return utils.distribute.pmap(training_step, donate_argnums=(0, 3))
+    return training_step
 
 
 def vmc_loop(
@@ -177,10 +184,8 @@ def vmc_loop(
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
-    pmapped: bool = True,
-    override_training_step: Callable[
-        [D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]
-    ] = None,
+    apply_walker_pmap: bool = True,
+    apply_param_update_pmap: bool = True,
 ) -> Tuple[P, O, D]:
     """Main Variational Monte Carlo loop routine.
 
@@ -241,8 +246,10 @@ def vmc_loop(
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
         nhistory_max (int, optional): How much history to keep in the running histories
             of the energy and variance. Defaults to 200.
-        pmapped (bool, optional): whether to apply jax.pmap to the burning and training
-            steps. Defaults to True.
+        apply_walker_pmap (bool, optional): whether to apply jax.pmap to the walker
+            steps during burning and training. Defaults to True.
+        apply_param_update_pmap (bool, optional): whether to apply jax.pmap to the
+            parameter update funtion during training. Defaults to True.
 
     Returns:
         A tuple of (trained parameters, final optimizer state, final data). These are
@@ -257,12 +264,14 @@ def vmc_loop(
     )
     data = initial_data
 
-    burning_step = make_burning_step(metrop_step_fn, pmapped=pmapped)
+    burning_step = make_burning_step(metrop_step_fn, apply_pmap=apply_walker_pmap)
     training_step = make_training_step(
-        nsteps_per_param_update, metrop_step_fn, update_param_fn, pmapped=pmapped
+        nsteps_per_param_update,
+        metrop_step_fn,
+        update_param_fn,
+        apply_walker_pmap=apply_walker_pmap,
+        apply_param_update_pmap=apply_param_update_pmap,
     )
-    if override_training_step is not None:
-        training_step = override_training_step
 
     logging.info("Burning for " + str(nburn) + " steps")
     for _ in range(nburn):
@@ -280,7 +289,7 @@ def vmc_loop(
             continue
 
         metrics["accept_ratio"] = accept_ratio
-        if pmapped:
+        if apply_param_update_pmap:
             # Assume all metrics have been collectively reduced to be the same on
             # all devices
             metrics = utils.distribute.get_first(metrics)

@@ -82,7 +82,8 @@ def test_vmc_loop_logging(caplog):
                 metrop_step_fn,
                 update_param_fn,
                 key,
-                pmapped=pmapped,
+                apply_walker_pmap=pmapped,
+                apply_param_update_pmap=pmapped,
             )
 
         # 1 line for burning, nepochs lines for training
