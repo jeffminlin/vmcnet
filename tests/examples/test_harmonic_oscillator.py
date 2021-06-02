@@ -14,7 +14,7 @@ import vmcnet.utils as utils
 from ..units.physics.test_energy import _make_dummy_log_f
 
 
-def _make_initial_positions_and_model(model_omega, nchains):
+def _make_initial_params_and_data(model_omega, nchains):
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
     random_particle_positions = jax.random.normal(subkey, shape=(nchains, 5, 1))
@@ -104,7 +104,7 @@ def test_five_particle_ground_state_harmonic_oscillator():
         random_particle_positions,
         _,
         _,
-    ) = _make_initial_positions_and_model(omega, 4)
+    ) = _make_initial_params_and_data(omega, 4)
 
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         omega, log_psi_model.apply
@@ -141,7 +141,7 @@ def test_harmonic_oscillator_vmc(caplog):
         random_particle_positions,
         amplitudes,
         key,
-    ) = _make_initial_positions_and_model(model_omega, nchains)
+    ) = _make_initial_params_and_data(model_omega, nchains)
     data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
 
     # Setup metropolis step
