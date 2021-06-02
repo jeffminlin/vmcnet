@@ -42,7 +42,7 @@ def replicate_all_local_devices(obj: T) -> T:
 
 def make_different_rng_key_on_all_devices(rng: jnp.ndarray) -> jnp.ndarray:
     """Split a PRNG key to all local devices."""
-    rng = jax.random.fold_in(rng, jax.host_id())
+    rng = jax.random.fold_in(rng, jax.process_index())
     rng = jax.random.split(rng, jax.local_device_count())
     return broadcast_all_local_devices(rng)
 
