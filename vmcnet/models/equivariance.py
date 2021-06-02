@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.models.weights import WeightInitializer
+from vmcnet.models.weights import WeightInitializer, zeros
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
@@ -638,41 +638,43 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
     def _isotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
-        d = x.shape[-1]
+        nion = x.shape[-2]
         # x_nion is (..., nelec, d, nion)
         x_nion = jnp.swapaxes(x, axis1=-1, axis2=-2)
-        batch_shapes = x_nion.shape[:-1]  # (..., nelec, d)
-        nion = x.shape[-1]
-        conv_in = jnp.reshape(x_nion, (-1, nion, 1))
-        # conv_out has shape (batch_shapes, nion, norbitals),
+        x_nion = jnp.expand_dims(x_nion, axis=-1)
+        # split_out has shape [(... nelec, d, 1, norbitals)] * nion,
         # this applies nion parallel maps which go 1 -> norbitals
-        conv_out = flax.linen.Conv(
-            norbitals,
-            1,
-            kernel_init=self.kernel_initializer_envelope_dim,
+        split_out = SplitDense(
+            nion,
+            (norbitals,) * nion,
+            self.kernel_initializer_envelope_dim,
+            zeros,
             use_bias=False,
-        )(conv_in)
-        conv_out = jnp.reshape(conv_out, batch_shapes + (nion, norbitals))
-        return jnp.swapaxes(conv_out, axis1=-1, axis2=-3)
+        )(x_nion)
+        # concat_out is (..., nelec, d, nion, norbitals)
+        concat_out = jnp.concatenate(split_out, axis=-2)
+        return jnp.swapaxes(concat_out, axis1=-1, axis2=-3)
 
     def _anisotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
-        batch_shapes = x.shape[:-2]  # (..., nelec)
-        d = x.shape[-1]
+        batch_shapes = x.shape[:-2]
         nion = x.shape[-2]
-        conv_in = jnp.reshape(x, (-1, nion, d))
-        # conv_out_flat has shape (batch_shapes, nion, d * norbitals)
+        d = x.shape[-1]
+        # split_out has shape [(... nelec, 1, d * norbitals)] * nion,
         # this applies nion parallel maps which go d -> d * norbitals
-        conv_out_flat = flax.linen.Conv(
-            d * norbitals,
-            1,
-            kernel_init=self.kernel_initializer_envelope_dim,
+        split_out = SplitDense(
+            nion,
+            (d * norbitals,) * nion,
+            self.kernel_initializer_envelope_dim,
+            zeros,
             use_bias=False,
-        )(conv_in)
-        conv_out = jnp.reshape(conv_out_flat, batch_shapes + (nion, d, norbitals))
-        conv_out = jnp.swapaxes(
-            jnp.swapaxes(conv_out, axis1=-1, axis2=-3), axis1=-1, axis2=-2
-        )  # (..., nelec, norbitals, nion, d)
-        return conv_out
+        )(x)
+
+        concat_out = jnp.concatenate(split_out, axis=-2)  # (..., nion, d * norbitals)
+        out = jnp.reshape(concat_out, batch_shapes + (nion, d, norbitals))
+        out = jnp.swapaxes(out, axis1=-1, axis2=-3)  # (..., norbitals, d, nion)
+        out = jnp.swapaxes(out, axis1=-1, axis2=-2)  # (..., norbitals, nion, d)
+
+        return out
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
