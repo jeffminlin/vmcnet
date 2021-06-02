@@ -121,8 +121,6 @@ def create_value_and_grad_energy_fn(
             (params, x) -> (Hpsi / psi)(x)
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
-        optimizer_apply (Callable): applies an update to the parameters. Has signature
-            (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
 
     Returns:
         Callable: function which computes the energy value and gradient. Has signature
@@ -138,11 +136,9 @@ def create_value_and_grad_energy_fn(
         # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
         # compiled version of these two computations, since the quality of the gradients
         # is fairly crucial to the success of the algorithm
-        energy = utils.distribute.pmean_if_pmap(jnp.mean(local_energies))
+        energy = utils.distribute.mean_all_local_devices(local_energies)
         variance = (
-            utils.distribute.pmean_if_pmap(
-                jnp.mean(jnp.square(local_energies - energy))
-            )
+            utils.distribute.mean_all_local_devices(jnp.square(local_energies - energy))
             * nchains
             / (nchains - 1)
         )  # adjust by n / (n - 1) to get an unbiased estimator

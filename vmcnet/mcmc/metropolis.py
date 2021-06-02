@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.updates.data import PositionAmplitudeData, update_position_amplitude
-import vmcnet.mcmc as mcmc
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
@@ -201,13 +200,9 @@ def make_position_amplitude_gaussian_metropolis_step(
             (params, PositionAmplitudeData, key)
             -> (mean acceptance probability, PositionAmplitudeData, new_key)
     """
-    proposal_fn = mcmc.metropolis.make_position_amplitude_gaussian_proposal(
-        model_apply, std_move
-    )
-    accept_fn = mcmc.metropolis.make_position_amplitude_metropolis_symmetric_acceptance(
-        logabs=logabs
-    )
-    metrop_step_fn = mcmc.metropolis.make_metropolis_step(
+    proposal_fn = make_position_amplitude_gaussian_proposal(model_apply, std_move)
+    accept_fn = make_position_amplitude_metropolis_symmetric_acceptance(logabs=logabs)
+    metrop_step_fn = make_metropolis_step(
         proposal_fn, accept_fn, update_position_amplitude
     )
     return metrop_step_fn
