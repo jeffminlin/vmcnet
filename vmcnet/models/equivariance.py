@@ -224,7 +224,7 @@ class FermiNetResidualBlock(flax.linen.Module):
     use_bias: bool = True
     skip_connection: bool = True
     cyclic_spins: bool = False
-    advance_2e: bool = False
+    advance_2e: bool = True
 
     @flax.linen.compact
     def __call__(
