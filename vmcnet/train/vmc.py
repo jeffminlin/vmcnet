@@ -87,9 +87,9 @@ def make_burning_step(
         Callable: function with signature
             (data, params, key) -> (data, key),
         with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original (data, params, key) buffers are deleted in the pmapped version via
-        the `donate_argnums` argument so that XLA is potentially more memory-efficient
-        on the GPU. See :func:`jax.pmap`.
+        the original (data, key) buffers are deleted in the pmapped version via the
+        `donate_argnums` argument so that XLA is potentially more memory-efficient on
+        the GPU. See :func:`jax.pmap`.
     """
 
     def burning_step(data, params, key):
@@ -99,7 +99,7 @@ def make_burning_step(
     if not pmapped:
         return burning_step
 
-    return utils.distribute.pmap(burning_step, donate_argnums=(0, 1, 2))
+    return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
 
 
 def make_training_step(
