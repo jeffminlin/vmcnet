@@ -6,9 +6,10 @@ import flax
 import jax
 import jax.numpy as jnp
 
+from vmcnet.models.core import Activation, Dense, _valid_skip
+from vmcnet.models.jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
+from vmcnet.models.weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.models.weights import WeightInitializer, zeros
-from vmcnet.models.core import Activation, Dense
 
 
 def _split_mean(
@@ -41,10 +42,6 @@ def _tree_sum(tree1, tree2):
 def _tree_prod(tree1, tree2):
     """Leaf-wise product of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
-
-
-def _valid_skip(x: jnp.ndarray, y: jnp.ndarray) -> bool:
-    return x.shape[-1] == y.shape[-1]
 
 
 def compute_input_streams(
@@ -683,77 +680,34 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     use_bias: bool = True
     isotropic_decay: bool = False
 
-    def _isotropy_on_leaf(self, r_ei_leaf: jnp.ndarray, norbitals: int) -> jnp.ndarray:
-        """Isotropic scaling of the electron-ion displacements."""
-        nion = r_ei_leaf.shape[-2]
-
-        # swap axes around and inject an axis to go from
-        # r_ei_leaf: (..., nelec, nion, d) -> x_nion: (..., nelec, d, nion, 1)
-        x_nion = jnp.swapaxes(r_ei_leaf, axis1=-1, axis2=-2)
-        x_nion = jnp.expand_dims(x_nion, axis=-1)
-
-        # split x_nion along the ion axis and apply nion parallel maps 1 -> norbitals
-        # along the last axis, resulting in
-        # [i: (..., nelec, d, 1, norbitals)], where i is the ion index
-        split_out = SplitDense(
-            nion,
-            (norbitals,) * nion,
-            self.kernel_initializer_envelope_dim,
-            zeros,
-            use_bias=False,
-            register_kfac=False,
-        )(x_nion)
-
-        # concatenate over the ion axis, then swap axes to get
-        # an output of shape (..., nelec, norbitals, nion, d)
-        concat_out = jnp.concatenate(split_out, axis=-2)
-        return jnp.swapaxes(concat_out, axis1=-1, axis2=-3)
-
-    def _anisotropy_on_leaf(
-        self, r_ei_leaf: jnp.ndarray, norbitals: int
-    ) -> jnp.ndarray:
-        """Anisotropic scaling of the electron-ion displacements."""
-        batch_shapes = r_ei_leaf.shape[:-2]
-        nion = r_ei_leaf.shape[-2]
-        d = r_ei_leaf.shape[-1]
-
-        # split x along the ion axis and apply nion parallel maps d -> d * norbitals
-        # along the last axis, resulting in [i: (..., nelec, 1, d * norbitals)]
-        split_out = SplitDense(
-            nion,
-            (d * norbitals,) * nion,
-            self.kernel_initializer_envelope_dim,
-            zeros,
-            use_bias=False,
-        )(r_ei_leaf)
-
-        # concatenate over the ion axis, then reshape the last axis to separate out the
-        # norbitals dxd transformations and swap axes around to return
-        # (..., nelec, norbitals, nion, d)
-        concat_out = jnp.concatenate(split_out, axis=-2)
-        out = jnp.reshape(concat_out, batch_shapes + (nion, d, norbitals))
-        out = jnp.swapaxes(out, axis1=-1, axis2=-3)
-        out = jnp.swapaxes(out, axis1=-1, axis2=-2)
-
-        return out
+    def setup(self):
+        # workaround MyPy's typing error for callable attribute
+        self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
+        self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
     def _compute_exponential_envelopes_on_leaf(
         self, r_ei_leaf: jnp.ndarray, norbitals: int, isotropic: bool = False
     ) -> jnp.ndarray:
         """Pick a type of exp envelope and multiply by the linear part element-wise."""
         if isotropic:
-            conv_out = self._isotropy_on_leaf(r_ei_leaf, norbitals)
+            scale_out = _isotropy_on_leaf(
+                r_ei_leaf, norbitals, self._kernel_initializer_envelope_dim
+            )
         else:
-            conv_out = self._anisotropy_on_leaf(r_ei_leaf, norbitals)
-        # conv_out has shape (..., nelec, norbitals, nion, d)
-        distances = jnp.linalg.norm(conv_out, axis=-1)
+            scale_out = _anisotropy_on_leaf(
+                r_ei_leaf, norbitals, self._kernel_initializer_envelope_dim
+            )
+        # scale_out has shape (..., nelec, norbitals, nion, d)
+        distances = jnp.linalg.norm(scale_out, axis=-1)
         inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
+
         lin_comb_nion = Dense(
             1,
             kernel_init=self.kernel_initializer_envelope_ion,
             use_bias=False,
             register_kfac=False,
         )(inv_exp_distances)
+
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
     @flax.linen.compact
