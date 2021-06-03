@@ -147,8 +147,8 @@ def compute_electron_electron(
     input_2e = _compute_displacements(elec_pos, elec_pos)
     if include_ee_norm:
         n = elec_pos.shape[-2]
-        eye_n = jnp.eye(n)
-        r_ee_diag_ones = input_2e + eye_n[..., None]
+        eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
+        r_ee_diag_ones = input_2e + eye_n
         r_ee_norm = jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (
             1.0 - eye_n
         )
