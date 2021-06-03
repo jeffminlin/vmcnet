@@ -1,10 +1,15 @@
 """Combine pieces to form full models."""
 from typing import Callable, List, Optional, Sequence, Tuple, Union
+from vmcnet.models.jastrow import IsotropicAtomicExpDecay
 
 import flax
 import jax.numpy as jnp
 
-from vmcnet.models.antisymmetry import logdet_product
+from vmcnet.models.antisymmetry import (
+    logdet_product,
+    SplitBruteForceAntisymmetrizedResNet,
+    ComposedBruteForceAntisymmetrizedResNet,
+)
 from vmcnet.models.core import Activation
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
@@ -219,3 +224,119 @@ class SingleDeterminantFermiNet(flax.linen.Module):
             isotropic_decay=self.isotropic_decay,
         )(stream_1e, r_ei)
         return logdet_product(orbitals)
+
+
+class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
+    spin_split: Union[int, Sequence[int]]
+    ndense_list: List[Tuple[int, int]]
+    ndense_resnet: int
+    nlayers_resnet: int
+    kernel_initializer_unmixed: WeightInitializer
+    kernel_initializer_mixed: WeightInitializer
+    kernel_initializer_2e_1e_stream: WeightInitializer
+    kernel_initializer_2e_2e_stream: WeightInitializer
+    kernel_initializer_resnet: WeightInitializer
+    kernel_initializer_jastrow: WeightInitializer
+    bias_initializer_1e_stream: WeightInitializer
+    bias_initializer_2e_stream: WeightInitializer
+    bias_initializer_resnet: WeightInitializer
+    activation_fn: Activation
+    ion_pos: Optional[jnp.ndarray] = None
+    include_2e_stream: bool = True
+    include_ei_norm: bool = True
+    include_ee_norm: bool = True
+    streams_use_bias: bool = True
+    resnet_use_bias: bool = True
+    skip_connection: bool = True
+    cyclic_spins: bool = True
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        stream_1e, r_ei = FermiNetBackflow(
+            spin_split=self.spin_split,
+            ndense_list=self.ndense_list,
+            kernel_initializer_unmixed=self.kernel_initializer_unmixed,
+            kernel_initializer_mixed=self.kernel_initializer_mixed,
+            kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
+            kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
+            bias_initializer_1e_stream=self.bias_initializer_1e_stream,
+            bias_initializer_2e_stream=self.bias_initializer_2e_stream,
+            activation_fn=self.activation_fn,
+            ion_pos=self.ion_pos,
+            include_2e_stream=self.include_2e_stream,
+            include_ei_norm=self.include_ei_norm,
+            include_ee_norm=self.include_ee_norm,
+            use_bias=self.streams_use_bias,
+            skip_connection=self.skip_connection,
+            cyclic_spins=self.cyclic_spins,
+        )(elec_pos)
+        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        antisymmetric_part = SplitBruteForceAntisymmetrizedResNet(
+            self.ndense_resnet,
+            self.nlayers_resnet,
+            self.activation_fn,
+            self.kernel_initializer_resnet,
+            self.bias_initializer_resnet,
+            use_bias=self.resnet_use_bias,
+        )(split_spins)
+        jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
+
+        return antisymmetric_part + jastrow_part
+
+
+class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
+    spin_split: Union[int, Sequence[int]]
+    ndense_list: List[Tuple[int, int]]
+    ndense_resnet: int
+    nlayers_resnet: int
+    kernel_initializer_unmixed: WeightInitializer
+    kernel_initializer_mixed: WeightInitializer
+    kernel_initializer_2e_1e_stream: WeightInitializer
+    kernel_initializer_2e_2e_stream: WeightInitializer
+    kernel_initializer_resnet: WeightInitializer
+    kernel_initializer_jastrow: WeightInitializer
+    bias_initializer_1e_stream: WeightInitializer
+    bias_initializer_2e_stream: WeightInitializer
+    bias_initializer_resnet: WeightInitializer
+    activation_fn: Activation
+    ion_pos: Optional[jnp.ndarray] = None
+    include_2e_stream: bool = True
+    include_ei_norm: bool = True
+    include_ee_norm: bool = True
+    streams_use_bias: bool = True
+    resnet_use_bias: bool = True
+    skip_connection: bool = True
+    cyclic_spins: bool = True
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        stream_1e, r_ei = FermiNetBackflow(
+            spin_split=self.spin_split,
+            ndense_list=self.ndense_list,
+            kernel_initializer_unmixed=self.kernel_initializer_unmixed,
+            kernel_initializer_mixed=self.kernel_initializer_mixed,
+            kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
+            kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
+            bias_initializer_1e_stream=self.bias_initializer_1e_stream,
+            bias_initializer_2e_stream=self.bias_initializer_2e_stream,
+            activation_fn=self.activation_fn,
+            ion_pos=self.ion_pos,
+            include_2e_stream=self.include_2e_stream,
+            include_ei_norm=self.include_ei_norm,
+            include_ee_norm=self.include_ee_norm,
+            use_bias=self.streams_use_bias,
+            skip_connection=self.skip_connection,
+            cyclic_spins=self.cyclic_spins,
+        )(elec_pos)
+        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        antisymmetric_part = ComposedBruteForceAntisymmetrizedResNet(
+            self.ndense_resnet,
+            self.nlayers_resnet,
+            self.activation_fn,
+            self.kernel_initializer_resnet,
+            self.bias_initializer_resnet,
+            use_bias=self.resnet_use_bias,
+        )(split_spins)
+        jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
+
+        return antisymmetric_part + jastrow_part
