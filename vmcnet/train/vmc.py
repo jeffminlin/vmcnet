@@ -155,7 +155,7 @@ def make_training_step(
         walker = utils.distribute.pmap(walker, donate_argnums=(1, 2))
 
     if apply_param_update_pmap:
-        update_param_fn = utils.distribute.pmap(update_param_fn, donate_argnums=(0, 3))
+        update_param_fn = utils.distribute.pmap(update_param_fn, donate_argnums=(3,))
 
     def training_step(data, params, optimizer_state, key):
         accept_ratio, data, key = walker(params, data, key)
