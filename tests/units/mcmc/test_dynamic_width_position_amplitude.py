@@ -76,7 +76,11 @@ def test_update_move_metadata_fn():
     """
     nmoves_per_update = 5
     original_std_move = 0.9
-    adjust_std_move_fn = lambda val, accept_avg: val * accept_avg
+
+    def multiplicative_adjustment(val, accept_avg):
+        return val * accept_avg
+
+    adjust_std_move_fn = multiplicative_adjustment()
 
     move_masks = jnp.array(
         [

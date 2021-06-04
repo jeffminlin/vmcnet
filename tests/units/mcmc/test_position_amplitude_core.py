@@ -26,14 +26,12 @@ def test_gaussian_proposal_with_nonzero_step_width():
     np.testing.assert_allclose(new_data.amplitude, jnp.array([0, 1, 2, 3]))
 
 
-def test_update_gaussian_position_amplitude():
+def test_update_position_amplitude():
     """Test that the mask modification is working for the position update."""
     pos = jnp.array([0, 0, 0, 0])
     proposed_pos = jnp.array([1, 2, 3, 4])
     amplitude = jnp.array([-1, -1, -1, -1])
     proposed_amplitude = jnp.array([-1, -2, -3, -4])
-    std_move = 0.3
-    mean_accept_prob = 0.5
     old_metadata_value = 3
     new_metadata_value = 4
 

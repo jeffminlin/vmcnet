@@ -89,7 +89,7 @@ def distribute_data_params_optstate_and_key(
     params: P,
     optimizer_state: O,
     key: jnp.ndarray,
-    distribute_data_fn: Callable[D, D] = distribute_data,
+    distribute_data_fn: Callable[[D], D] = distribute_data,
 ) -> Tuple[D, P, O, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
@@ -98,13 +98,14 @@ def distribute_data_params_optstate_and_key(
         params: model parameters
         optimizer_state: optimizer state
         key: RNG key
-        distribute_data_fn: custom function for distributing the MCMC data, for the case where some of the data
-            needs to be replicated instead of distributed across the devices. Default works if there is no data
-            that requires replication.
+        distribute_data_fn: custom function for distributing the MCMC data, for the case
+            where some of the data needs to be replicated instead of distributed across
+            the devices. Default works if there is no data that requires replication.
 
     Returns:
-        Tuple[D, P, O, jnp.ndarray]: tuple of data, params, optimizer_state, and key, each of which has been either
-        distributed or replicated across all devices, as appopriate.
+        Tuple[D, P, O, jnp.ndarray]: tuple of data, params, optimizer_state, and key,
+        each of which has been either distributed or replicated across all devices,
+        as appopriate.
     """
     data = distribute_data_fn(data)
     params = replicate_all_local_devices(params)

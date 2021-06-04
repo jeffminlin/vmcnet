@@ -15,7 +15,7 @@ def create_local_energy_update_param_fn(
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,
     optimizer_apply: Callable[[P, P, O], Tuple[P, O]],
-    get_position_fn: Callable[D, jnp.ndarray],
+    get_position_fn: Callable[[D], jnp.ndarray],
 ) -> Callable[[D, P, O], Tuple[P, O, Dict]]:
     """Create the `update_param_fn` based on the gradient of the local energy.
 

@@ -1,5 +1,5 @@
-"""Helper functions for position amplitude data with fixed-width gaussian
-steps and no metadata."""
+"""Helper functions for position amplitude data with fixed-width gaussian steps."""
+
 from typing import Callable, TypeVar
 
 import jax.numpy as jnp
@@ -17,13 +17,13 @@ P = TypeVar("P")
 
 
 class SimplePositionAmplitudeData(PositionAmplitudeData):
-    """NamedTuple of data holding positions and wavefunction amplitudes, and nothing else."""
+    """NamedTuple of positions, amplitudes, and nothing else."""
 
     move_metadata: None
 
 
 def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.ndarray):
-    """Creates SimplePositionAmplitudeData by filling in the move_metadata field with a None value
+    """Create SimplePositionAmplitudeData from position and amplitude.
 
     Args:
         position (jnp.ndarray): the particle positions
@@ -40,7 +40,7 @@ def make_simple_pos_amp_gaussian_step(
     std_move: jnp.float32,
     logabs: bool = True,
 ):
-    """Creates a simple metropolis step for PositionAmplitudeData with fixed gaussian step width
+    """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
     Args:
         model_apply (Callable): function which evaluates a model. Has signature
