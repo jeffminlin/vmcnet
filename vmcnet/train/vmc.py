@@ -288,11 +288,15 @@ def vmc_loop(
         if metrics is None:  # don't checkpoint if no metrics to checkpoint
             continue
 
-        metrics["accept_ratio"] = accept_ratio
         if apply_param_update_pmap:
             # Assume all metrics have been collectively reduced to be the same on
             # all devices
             metrics = utils.distribute.get_first(metrics)
+
+        if apply_walker_pmap:
+            accept_ratio = utils.distribute.get_first(accept_ratio)
+
+        metrics["accept_ratio"] = accept_ratio
 
         (
             checkpoint_metric,
