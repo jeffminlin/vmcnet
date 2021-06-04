@@ -7,7 +7,10 @@ from vmcnet.models.weights import WeightInitializer, zeros
 
 
 def _isotropy_on_leaf(
-    r_ei_leaf: jnp.ndarray, norbitals: int, kernel_initializer: WeightInitializer
+    r_ei_leaf: jnp.ndarray,
+    norbitals: int,
+    kernel_initializer: WeightInitializer,
+    register_kfac: bool = True,
 ) -> jnp.ndarray:
     """Isotropic scaling of the electron-ion displacements."""
     nion = r_ei_leaf.shape[-2]
@@ -26,7 +29,7 @@ def _isotropy_on_leaf(
         kernel_initializer,
         zeros,
         use_bias=False,
-        register_kfac=False,
+        register_kfac=register_kfac,
     )(x_nion)
 
     # concatenate over the ion axis, then swap axes to get
@@ -36,7 +39,10 @@ def _isotropy_on_leaf(
 
 
 def _anisotropy_on_leaf(
-    r_ei_leaf: jnp.ndarray, norbitals: int, kernel_initializer: WeightInitializer
+    r_ei_leaf: jnp.ndarray,
+    norbitals: int,
+    kernel_initializer: WeightInitializer,
+    register_kfac: bool = True,
 ) -> jnp.ndarray:
     """Anisotropic scaling of the electron-ion displacements."""
     batch_shapes = r_ei_leaf.shape[:-2]
@@ -51,6 +57,7 @@ def _anisotropy_on_leaf(
         kernel_initializer,
         zeros,
         use_bias=False,
+        register_kfac=register_kfac,
     )(r_ei_leaf)
 
     # concatenate over the ion axis, then reshape the last axis to separate out the
@@ -74,7 +81,9 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
     @flax.linen.compact
     def __call__(self, r_ei: jnp.ndarray) -> jnp.ndarray:
         # scale_out has shape (..., nelec, 1, nion, d)
-        scale_out = _isotropy_on_leaf(r_ei, 1, self._kernel_initializer)
+        scale_out = _isotropy_on_leaf(
+            r_ei, 1, self._kernel_initializer, register_kfac=True
+        )
         scaled_distances = jnp.linalg.norm(scale_out, axis=-1)
 
         abs_lin_comb_distances = jnp.sum(scaled_distances, axis=(-1, -2, -3))
