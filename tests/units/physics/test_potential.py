@@ -14,11 +14,16 @@ def _get_test_elec_pos():
     )
 
 
-def test_electron_ion_coulomb_potential():
-    """Test values/shape for electron-ion potentials."""
-    elec_pos = _get_test_elec_pos()
+def _get_test_ions():
     ion_pos = jnp.array([[-4.0, 0.0], [0.0, 0.0], [2.0, 1.0]])
     ion_charges = jnp.array([1.0, 2.0, 3.0])
+    return ion_pos, ion_charges
+
+
+def test_electron_ion_coulomb_potential_value():
+    """Test values for electron-ion potentials."""
+    elec_pos = _get_test_elec_pos()
+    ion_pos, ion_charges = _get_test_ions()
 
     individual_potentials = -1.0 * jnp.array(
         [
@@ -39,6 +44,20 @@ def test_electron_ion_coulomb_potential():
     actual_out = potential_energy_fn(None, elec_pos)
 
     np.testing.assert_allclose(actual_out, desired_out)
+
+
+def test_electron_ion_coulomb_potential_shape():
+    """Test shape for electron-ion potentials."""
+    elec_pos = _get_test_elec_pos()
+    ion_pos, ion_charges = _get_test_ions()
+
+    potential_energy_fn = physics.potential.create_electron_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+    out = potential_energy_fn(None, elec_pos)
+
+    nchains = elec_pos.shape[0]
+    assert out.shape == (nchains,)
 
 
 def test_electron_electron_coulomb_potential():
