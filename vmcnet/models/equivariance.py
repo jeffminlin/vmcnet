@@ -691,11 +691,17 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         """Pick a type of exp envelope and multiply by the linear part element-wise."""
         if isotropic:
             scale_out = _isotropy_on_leaf(
-                r_ei_leaf, norbitals, self._kernel_initializer_envelope_dim
+                r_ei_leaf,
+                norbitals,
+                self._kernel_initializer_envelope_dim,
+                register_kfac=False,
             )
         else:
             scale_out = _anisotropy_on_leaf(
-                r_ei_leaf, norbitals, self._kernel_initializer_envelope_dim
+                r_ei_leaf,
+                norbitals,
+                self._kernel_initializer_envelope_dim,
+                register_kfac=True,
             )
         # scale_out has shape (..., nelec, norbitals, nion, d)
         distances = jnp.linalg.norm(scale_out, axis=-1)
