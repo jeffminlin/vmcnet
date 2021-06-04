@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from vmcnet.utils.distribute import mean_all_local_devices
 
 from .position_amplitude_core import (
+    make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeData,
 )
@@ -63,7 +64,7 @@ def make_dynamic_width_position_amplitude_data(
     Returns:
         DynamicWidthPositionAmplitudeData
     """
-    return DynamicWidthPositionAmplitudeData(
+    return make_position_amplitude_data(
         position,
         amplitude,
         MoveMetadata(std_move, move_acceptance_sum, moves_since_update),

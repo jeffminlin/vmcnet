@@ -5,12 +5,11 @@ import numpy as np
 
 import vmcnet.mcmc as mcmc
 
-from ..utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
-
-
-def _dummy_model_apply(params, x):
-    """Model eval that outputs indices of the flattened x in the shape of x."""
-    return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
+from ..utils import (
+    make_dummy_data_params_and_key,
+    make_dummy_metropolis_fn,
+    dummy_model_apply,
+)
 
 
 def test_symmetric_acceptance():

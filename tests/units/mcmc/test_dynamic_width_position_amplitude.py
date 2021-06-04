@@ -80,8 +80,6 @@ def test_update_move_metadata_fn():
     def multiplicative_adjustment(val, accept_avg):
         return val * accept_avg
 
-    adjust_std_move_fn = multiplicative_adjustment()
-
     move_masks = jnp.array(
         [
             [1.0, 0.0, 0.0, 1.0],
@@ -95,7 +93,7 @@ def test_update_move_metadata_fn():
     std_move_after_update = 0.54  # original_std_move * mean(move_masks)
 
     update_metadata_fn = dwpa.make_update_move_metadata_fn(
-        nmoves_per_update, adjust_std_move_fn
+        nmoves_per_update, multiplicative_adjustment
     )
     metadata = dwpa.MoveMetadata(original_std_move, 0.0, 0)
 

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import vmcnet.mcmc as mcmc
 
-from .test_metropolis import _make_dummy_data_params_and_key, _dummy_model_apply
+from ..utils import make_dummy_data_params_and_key, dummy_model_apply
 
 
 def test_gaussian_proposal_with_nonzero_step_width():
@@ -11,19 +11,19 @@ def test_gaussian_proposal_with_nonzero_step_width():
     std_move = 0.3
     proposal_fn = (
         mcmc.position_amplitude_core.make_position_amplitude_gaussian_proposal(
-            _dummy_model_apply, lambda _: std_move
+            dummy_model_apply, lambda _: std_move
         )
     )
-    positions, params, key = _make_dummy_data_params_and_key()
+    positions, params, key = make_dummy_data_params_and_key()
     # use the "wrong" amplitudes here so we can make sure the "right" ones come out of
     # the proposal
     amplitudes = jnp.array([-1, -1, -1, -1])
-    data = mcmc.position_amplitude_core.PositionAmplitudeData(
+    data = mcmc.position_amplitude_core.make_position_amplitude_data(
         positions, amplitudes, None
     )
 
     new_data, _ = proposal_fn(params, data, key)
-    np.testing.assert_allclose(new_data.amplitude, jnp.array([0, 1, 2, 3]))
+    np.testing.assert_allclose(new_data.walker_data.amplitude, jnp.array([0, 1, 2, 3]))
 
 
 def test_update_position_amplitude():
@@ -35,8 +35,10 @@ def test_update_position_amplitude():
     old_metadata_value = 3
     new_metadata_value = 4
 
-    data = mcmc.position_amplitude_core.PositionAmplitudeData(pos, amplitude, None)
-    proposed_data = mcmc.position_amplitude_core.PositionAmplitudeData(
+    data = mcmc.position_amplitude_core.make_position_amplitude_data(
+        pos, amplitude, None
+    )
+    proposed_data = mcmc.position_amplitude_core.make_position_amplitude_data(
         proposed_pos, proposed_amplitude, old_metadata_value
     )
 
@@ -49,9 +51,10 @@ def test_update_position_amplitude():
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
-    np.testing.assert_allclose(updated_data.position, jnp.array([1, 0, 0, 4]))
-    np.testing.assert_allclose(updated_data.amplitude, jnp.array([-1, -1, -1, -4]))
-    np.testing.assert_allclose(updated_data.move_metadata, new_metadata_value)
+    ((position, amplitude), move_metadata) = updated_data
+    np.testing.assert_allclose(position, jnp.array([1, 0, 0, 4]))
+    np.testing.assert_allclose(amplitude, jnp.array([-1, -1, -1, -4]))
+    np.testing.assert_allclose(move_metadata, new_metadata_value)
 
 
 def test_distribute_position_amplitude_data():
@@ -60,17 +63,16 @@ def test_distribute_position_amplitude_data():
     amplitude = jnp.array([-1, -2, -3, -4])
     metadata = jnp.array([2, 3])
 
-    data = mcmc.position_amplitude_core.PositionAmplitudeData(pos, amplitude, metadata)
+    data = mcmc.position_amplitude_core.make_position_amplitude_data(
+        pos, amplitude, metadata
+    )
 
     data = mcmc.position_amplitude_core.distribute_position_amplitude_data(data)
 
     for device_index in range(4):
+        ((position, amplitude), move_metadata) = data
         # Position and amplitude are distributed across devices
-        np.testing.assert_equal(data.position[device_index], jnp.array([device_index]))
-        np.testing.assert_equal(
-            data.amplitude[device_index], jnp.array([-device_index - 1])
-        )
+        np.testing.assert_equal(position[device_index], jnp.array([device_index]))
+        np.testing.assert_equal(amplitude[device_index], jnp.array([-device_index - 1]))
         # Metadata is replicated across devices
-        np.testing.assert_array_equal(
-            data.move_metadata[device_index], jnp.array([2, 3])
-        )
+        np.testing.assert_array_equal(move_metadata[device_index], jnp.array([2, 3]))

@@ -14,6 +14,24 @@ P = TypeVar("P")
 M = TypeVar("M")
 
 
+class PositionAmplitudeWalkerData(NamedTuple):
+    """NamedTuple of walker data holding just positions and amplitudes.
+
+    Holding both particle position and wavefn amplitude in the same named
+    tuple allows us to simultaneously mask over both in the acceptance function.
+
+    The first dimension of position and amplitude should match, but position can have
+    more dimensions.
+
+    Attributes:
+        position (jnp.ndarray): array of shape (n, ...)
+        amplitude (jnp.ndarray): array of shape (n,)
+    """
+
+    position: jnp.ndarray
+    amplitude: jnp.ndarray
+
+
 class PositionAmplitudeData(NamedTuple):
     """NamedTuple of data holding positions, amplitudes, and optional metadata.
 
@@ -22,18 +40,31 @@ class PositionAmplitudeData(NamedTuple):
     Furthermore, holding additional metadata can enable more sophisticated metropolis
     algorithms such as dynamically adjusted gaussian step sizes.
 
-    The first dimension of position and amplitude should match, but position can have
-    more dimensions.
-
     Attributes:
-        position (jnp.ndarray): array of shape (n, ...)
-        amplitude (jnp.ndarray): array of shape (n,)
+        walker_data (PositionAmplitudeWalkerData): the positions and amplitudes
         move_metadata (any, optional): any metadata needed for the metropolis algorithm
     """
 
-    position: jnp.ndarray
-    amplitude: jnp.ndarray
+    walker_data: PositionAmplitudeWalkerData
     move_metadata: Any
+
+
+def make_position_amplitude_data(
+    position: jnp.ndarray, amplitude: jnp.ndarray, move_metadata: Any
+):
+    """Create PositionAmplitudeData from position, amplitude, and move_metadata.
+
+    Args:
+        position (jnp.ndarray): the particle positions
+        amplitude (jnp.ndarray): the wavefunction amplitudes
+        move_metadata (Any): other required metadata for the metropolis algorithm
+
+    Returns:
+        PositionAmplitudeData
+    """
+    return PositionAmplitudeData(
+        PositionAmplitudeWalkerData(position, amplitude), move_metadata
+    )
 
 
 def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
@@ -45,7 +76,7 @@ def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
     Returns:
         jnp.ndarray: the particle positions from the data
     """
-    return data.position
+    return data.walker_data.position
 
 
 def distribute_position_amplitude_data(
@@ -59,11 +90,10 @@ def distribute_position_amplitude_data(
     Returns:
         PositionAmplitudeData: the distributed data.
     """
-    (position, amplitude, move_metadata) = data
-    position = distribute_data(position)
-    amplitude = distribute_data(amplitude)
+    (walker_data, move_metadata) = data
+    walker_data = distribute_data(walker_data)
     move_metadata = replicate_all_local_devices(move_metadata)
-    return PositionAmplitudeData(position, amplitude, move_metadata)
+    return PositionAmplitudeData(walker_data, move_metadata)
 
 
 def make_position_amplitude_gaussian_proposal(
@@ -93,11 +123,11 @@ def make_position_amplitude_gaussian_proposal(
     def proposal_fn(params: P, data: PositionAmplitudeData, key: jnp.float32):
         std_move = get_std_move(data)
         proposed_position, key = metropolis.gaussian_proposal(
-            data.position, std_move, key
+            data.walker_data.position, std_move, key
         )
         proposed_amplitude = model_apply(params, proposed_position)
         return (
-            PositionAmplitudeData(
+            make_position_amplitude_data(
                 proposed_position, proposed_amplitude, data.move_metadata
             ),
             key,
@@ -126,7 +156,9 @@ def make_position_amplitude_metropolis_symmetric_acceptance(
     ):
         del params
         return metropolis.metropolis_symmetric_acceptance(
-            data.amplitude, proposed_data.amplitude, logabs=logabs
+            data.walker_data.amplitude,
+            proposed_data.walker_data.amplitude,
+            logabs=logabs,
         )
 
     return acceptance_fn
@@ -170,14 +202,22 @@ def make_position_amplitude_update(
         proposed_data: PositionAmplitudeData,
         move_mask: jnp.ndarray,
     ) -> PositionAmplitudeData:
-        pos_mask = jnp.reshape(move_mask, (-1,) + (len(data.position.shape) - 1) * (1,))
-        new_position = jnp.where(pos_mask, proposed_data.position, data.position)
-        new_amplitude = jnp.where(move_mask, proposed_data.amplitude, data.amplitude)
+        pos_mask = jnp.reshape(
+            move_mask, (-1,) + (len(data.walker_data.position.shape) - 1) * (1,)
+        )
+        new_position = jnp.where(
+            pos_mask, proposed_data.walker_data.position, data.walker_data.position
+        )
+        new_amplitude = jnp.where(
+            move_mask, proposed_data.walker_data.amplitude, data.walker_data.amplitude
+        )
         new_move_metadata = data.move_metadata
         if update_move_metadata_fn:
             new_move_metadata = update_move_metadata_fn(data.move_metadata, move_mask)
 
-        return PositionAmplitudeData(new_position, new_amplitude, new_move_metadata)
+        return make_position_amplitude_data(
+            new_position, new_amplitude, new_move_metadata
+        )
 
     return update_position_amplitude
 

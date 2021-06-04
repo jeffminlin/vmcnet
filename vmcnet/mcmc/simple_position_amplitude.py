@@ -5,6 +5,7 @@ from typing import Callable, TypeVar
 import jax.numpy as jnp
 
 from .position_amplitude_core import (
+    make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeData,
 )
@@ -32,7 +33,7 @@ def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.nd
     Returns:
         SimplePositionAmplitudeData
     """
-    return SimplePositionAmplitudeData(position, amplitude, None)
+    return make_position_amplitude_data(position, amplitude, None)
 
 
 def make_simple_pos_amp_gaussian_step(

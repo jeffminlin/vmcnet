@@ -1,9 +1,8 @@
 """Test a hydrogen-like atom."""
 import jax
 import numpy as np
-
 import vmcnet.examples.hydrogen_like_atom as hla
-import vmcnet.updates as updates
+from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude_data
 
 from .sgd_train import sgd_vmc_loop_with_logging
 
@@ -33,7 +32,7 @@ def test_hydrogen_like_vmc(caplog):
     key, subkey = jax.random.split(key)
     params = log_psi_model.init(key, init_elec_pos)
     amplitudes = log_psi_model.apply(params, init_elec_pos)
-    data = updates.data.PositionAmplitudeData(init_elec_pos, amplitudes)
+    data = make_simple_position_amplitude_data(init_elec_pos, amplitudes)
 
     # Local energy
     local_energy_fn = hla.make_hydrogen_like_local_energy(
