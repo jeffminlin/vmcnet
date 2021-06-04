@@ -93,6 +93,7 @@ def make_burning_step(
     """
 
     def burning_step(data, params, key):
+        logging.debug("Tracing burning step")
         _, data, key = metrop_step_fn(data, params, key)
         return data, key
 
@@ -149,6 +150,7 @@ def make_training_step(
     nsteps_per_param_update = max(nsteps_per_param_update, 1)
 
     def walker(params, data, key):
+        logging.debug("Tracing walker for training")
         return walk_data(nsteps_per_param_update, data, params, key, metrop_step_fn)
 
     if apply_walker_pmap:
