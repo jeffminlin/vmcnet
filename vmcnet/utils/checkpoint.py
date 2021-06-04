@@ -332,8 +332,8 @@ def initialize_checkpointing_metrics(
         logging.info("Saving to " + logdir)
         os.makedirs(logdir, exist_ok=True)
         if checkpoint_every is not None:
-            checkpointdir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
-            os.makedirs(os.path.join(logdir, checkpointdir), exist_ok=False)
+            checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
+            os.makedirs(os.path.join(logdir, checkpoint_dir), exist_ok=False)
 
     checkpoint_metric = jnp.inf
     running_energy_and_variance = RunningEnergyVariance(
