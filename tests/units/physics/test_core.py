@@ -5,21 +5,13 @@ import numpy as np
 
 import vmcnet.physics as physics
 
-
-def _make_dummy_log_f():
-    f = lambda unused_params, x: jnp.sum(jnp.square(x) + 3 * x)
-    log_f = lambda unused_params, x: jnp.log(jnp.abs(f(unused_params, x)))
-    return f, log_f
-
-
-def _make_dummy_x():
-    return jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+from ..utils import make_dummy_log_f, make_dummy_x
 
 
 def test_laplacian_psi_over_psi():
     """Test (nabla^2 f)(x) / f(x) for f(x) = sum_i x_i^2 + 3x_i."""
-    f, log_f = _make_dummy_log_f()
-    x = _make_dummy_x()
+    f, log_f = make_dummy_log_f()
+    x = make_dummy_x()
 
     grad_log_f = jax.grad(log_f, argnums=1)
 
@@ -36,7 +28,7 @@ def test_total_energy_grad():
     # log_psi_grad(x) = (grad_a psi / psi)(x) = sum(x^2)
     log_psi_apply = lambda a, x: a * jnp.sum(jnp.square(x), axis=-1)
     a = 3.5
-    x = _make_dummy_x()
+    x = make_dummy_x()
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
     nchains = x.shape[0]
 

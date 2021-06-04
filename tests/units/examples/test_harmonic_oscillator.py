@@ -5,7 +5,7 @@ import numpy as np
 
 import vmcnet.examples.harmonic_oscillator as qho
 
-from ..physics.test_core import _make_dummy_log_f
+from ..utils import make_dummy_log_f
 
 
 def test_harmonic_osc_orbital_shape():
@@ -38,7 +38,7 @@ def test_harmonic_osc_orbital_shape():
 
 def test_make_harmonic_oscillator_local_energy_with_zero_omega():
     """Test the creation of the harmonic oscillator local energy with omega = 0."""
-    f, log_f = _make_dummy_log_f()
+    f, log_f = make_dummy_log_f()
     vmapped_f = jax.vmap(f, in_axes=(None, 0), out_axes=0)
     multichain_x = jnp.reshape(jnp.arange(12, dtype=jnp.float32), (4, 3, 1))
 
@@ -56,7 +56,7 @@ def test_make_harmonic_oscillator_local_energy_with_zero_omega():
 
 def test_make_harmonic_oscillator_local_energy_with_nonzero_omega():
     """Test the creation of the harmonic oscillator local energy with omega = 1.0."""
-    f, log_f = _make_dummy_log_f()
+    f, log_f = make_dummy_log_f()
     vmapped_f = jax.vmap(f, in_axes=(None, 0), out_axes=0)
     multichain_x = jnp.reshape(jnp.arange(12, dtype=jnp.float32), (4, 3, 1))
 
