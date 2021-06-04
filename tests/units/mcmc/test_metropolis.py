@@ -6,39 +6,7 @@ import numpy as np
 import vmcnet.mcmc as mcmc
 import vmcnet.updates as updates
 
-
-def _make_dummy_data_params_and_key():
-    """Make some random data, params, and a key."""
-    seed = 0
-    key = jax.random.PRNGKey(seed)
-    data = jnp.array([0, 0, 0, 0])
-    params = [jnp.array([1, 2, 3]), jnp.array([[4, 5], [6, 7]])]
-
-    return data, params, key
-
-
-def _make_dummy_metropolis_fn():
-    """Make a random proposal with the shape of data and accept every other row."""
-
-    def proposal_fn(params, data, key):
-        """Add a fixed proposal to the data."""
-        del params
-        return data + jnp.array([1, 2, 3, 4]), key
-
-    def acceptance_fn(params, data, proposed_data):
-        """Accept every other row of the proposal."""
-        del params, proposed_data
-        return jnp.array([True, False, True, False], dtype=bool)
-
-    def update_data_fn(data, proposed_data, move_mask):
-        pos_mask = jnp.reshape(move_mask, (-1,) + (len(data.shape) - 1) * (1,))
-        return jnp.where(pos_mask, proposed_data, data)
-
-    metrop_step_fn = mcmc.metropolis.make_metropolis_step(
-        proposal_fn, acceptance_fn, update_data_fn
-    )
-
-    return metrop_step_fn
+from ..utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
 
 
 def _dummy_model_apply(params, x):
@@ -48,8 +16,8 @@ def _dummy_model_apply(params, x):
 
 def test_metropolis_step():
     """Test the acceptance probability and data update for a single Metropolis step."""
-    data, params, key = _make_dummy_data_params_and_key()
-    metrop_step_fn = _make_dummy_metropolis_fn()
+    data, params, key = make_dummy_data_params_and_key()
+    metrop_step_fn = make_dummy_metropolis_fn()
 
     accept_prob, new_data, _ = metrop_step_fn(data, params, key)
 
@@ -62,7 +30,7 @@ def test_make_position_amplitude_gaussian_proposal():
     proposal_fn = mcmc.metropolis.make_position_amplitude_gaussian_proposal(
         _dummy_model_apply, 1.0
     )
-    positions, params, key = _make_dummy_data_params_and_key()
+    positions, params, key = make_dummy_data_params_and_key()
     # use the "wrong" amplitudes here so we can make sure the "right" ones come out of
     # the proposal
     amplitudes = jnp.array([-1, -1, -1, -1])

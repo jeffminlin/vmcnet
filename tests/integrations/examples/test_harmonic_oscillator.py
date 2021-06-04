@@ -6,10 +6,9 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.examples.harmonic_oscillator as qho
-import vmcnet.mcmc as mcmc
-import vmcnet.train as train
 import vmcnet.updates as updates
-import vmcnet.utils as utils
+
+from .sgd_train import sgd_vmc_loop_with_logging
 
 
 def _make_initial_params_and_data(model_omega, nchains):
@@ -75,50 +74,25 @@ def test_harmonic_oscillator_vmc(caplog):
     ) = _make_initial_params_and_data(model_omega, nchains)
     data = updates.data.PositionAmplitudeData(random_particle_positions, amplitudes)
 
-    # Setup metropolis step
-    metrop_step_fn = mcmc.metropolis.make_position_amplitude_gaussian_metropolis_step(
-        std_move, log_psi_model.apply
-    )
-
-    # Setup parameter updates
+    # Local energy function
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         spring_constant, log_psi_model.apply
     )
 
-    def sgd_apply(grad, params, learning_rate):
-        return (
-            jax.tree_map(lambda a, b: a - learning_rate * b, params, grad),
-            learning_rate,
-        )
-
-    update_param_fn = updates.params.create_position_amplitude_data_update_param_fn(
-        log_psi_model.apply, local_energy_fn, nchains, sgd_apply
-    )
-
-    # Distribute everything via jax.pmap
-    (
+    params = sgd_vmc_loop_with_logging(
+        caplog,
         data,
         params,
-        optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
-        data, params, learning_rate, key
+        nchains,
+        nburn,
+        nepochs,
+        nsteps_per_param_update,
+        std_move,
+        learning_rate,
+        log_psi_model,
+        local_energy_fn,
     )
-
-    # Train!
-    with caplog.at_level(logging.INFO):
-        params, _, _ = train.vmc.vmc_loop(
-            params,
-            optimizer_state,
-            data,
-            nchains,
-            nburn,
-            nepochs,
-            nsteps_per_param_update,
-            metrop_step_fn,
-            update_param_fn,
-            key,
-        )
 
     # Grab the one parameter and make sure it converged to sqrt(spring constant)
     np.testing.assert_allclose(

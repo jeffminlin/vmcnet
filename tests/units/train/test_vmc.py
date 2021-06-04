@@ -8,10 +8,7 @@ import numpy as np
 import vmcnet.train as train
 import vmcnet.utils as utils
 
-from ..mcmc.test_metropolis import (
-    _make_dummy_data_params_and_key,
-    _make_dummy_metropolis_fn,
-)
+from ..utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
 
 
 def _make_different_pmappable_data(data):
@@ -29,8 +26,8 @@ def test_walk_data():
     multiple of the proposal array directly (where the moves are accepted).
     """
     nsteps = 6
-    data, params, key = _make_dummy_data_params_and_key()
-    metrop_step_fn = _make_dummy_metropolis_fn()
+    data, params, key = make_dummy_data_params_and_key()
+    metrop_step_fn = make_dummy_metropolis_fn()
     accept_prob, new_data, _ = train.vmc.walk_data(
         nsteps, data, params, key, metrop_step_fn
     )
@@ -58,8 +55,8 @@ def test_vmc_loop_logging(caplog):
 
     for pmapped in [True, False]:
         caplog.clear()
-        data, params, key = _make_dummy_data_params_and_key()
-        metrop_step_fn = _make_dummy_metropolis_fn()
+        data, params, key = make_dummy_data_params_and_key()
+        metrop_step_fn = make_dummy_metropolis_fn()
         nchains = data.shape[0]
 
         if pmapped:
@@ -98,8 +95,8 @@ def test_vmc_loop_number_of_updates():
     Make sure that data is updated nsteps_per_param_update * nepochs + nburn times and
     params is updated nepoch times.
     """
-    data, params, key = _make_dummy_data_params_and_key()
-    metrop_step_fn = _make_dummy_metropolis_fn()
+    data, params, key = make_dummy_data_params_and_key()
+    metrop_step_fn = make_dummy_metropolis_fn()
     nchains = data.shape[0]
 
     data = _make_different_pmappable_data(data)
