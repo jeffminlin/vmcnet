@@ -1,6 +1,7 @@
 """Shared routines for position amplitude metropolis data."""
 from typing import Any, Callable, NamedTuple, Optional, Tuple, TypeVar
 
+import jax
 import jax.numpy as jnp
 import vmcnet.mcmc.metropolis as metropolis
 from vmcnet.utils.distribute import (
@@ -202,22 +203,21 @@ def make_position_amplitude_update(
         proposed_data: PositionAmplitudeData,
         move_mask: jnp.ndarray,
     ) -> PositionAmplitudeData:
-        pos_mask = jnp.reshape(
-            move_mask, (-1,) + (len(data.walker_data.position.shape) - 1) * (1,)
+        def mask_on_first_dimension(old_data: jnp.ndarray, proposal: jnp.ndarray):
+            shaped_mask = jnp.reshape(move_mask, (-1, *(1,) * (old_data.ndim - 1)))
+            return jnp.where(shaped_mask, proposal, old_data)
+
+        new_walker_data = jax.tree_multimap(
+            mask_on_first_dimension,
+            data.walker_data,
+            proposed_data.walker_data,
         )
-        new_position = jnp.where(
-            pos_mask, proposed_data.walker_data.position, data.walker_data.position
-        )
-        new_amplitude = jnp.where(
-            move_mask, proposed_data.walker_data.amplitude, data.walker_data.amplitude
-        )
+
         new_move_metadata = data.move_metadata
         if update_move_metadata_fn:
             new_move_metadata = update_move_metadata_fn(data.move_metadata, move_mask)
 
-        return make_position_amplitude_data(
-            new_position, new_amplitude, new_move_metadata
-        )
+        return PositionAmplitudeData(new_walker_data, new_move_metadata)
 
     return update_position_amplitude
 
