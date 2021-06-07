@@ -93,12 +93,11 @@ def make_burning_step(
     """
 
     def burning_step(data, params, key):
-        logging.debug("Tracing burning step")
         _, data, key = metrop_step_fn(data, params, key)
         return data, key
 
     if not apply_pmap:
-        return jax.jit(burning_step)
+        return burning_step
 
     return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
 
@@ -150,13 +149,10 @@ def make_training_step(
     nsteps_per_param_update = max(nsteps_per_param_update, 1)
 
     def walker(params, data, key):
-        logging.debug("Tracing walker for training")
         return walk_data(nsteps_per_param_update, data, params, key, metrop_step_fn)
 
     if apply_walker_pmap:
         walker = utils.distribute.pmap(walker, donate_argnums=(1, 2))
-    else:
-        walker = jax.jit(walker)
 
     if apply_param_update_pmap:
         update_param_fn = utils.distribute.pmap(
@@ -164,9 +160,7 @@ def make_training_step(
         )
 
     def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walk_data(
-            nsteps_per_param_update, data, params, key, metrop_step_fn
-        )
+        accept_ratio, data, key = walker(params, data, key)
         params, optimizer_state, metrics, key = update_param_fn(
             data, params, optimizer_state, key
         )
