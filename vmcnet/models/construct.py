@@ -240,7 +240,8 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     bias_initializer_1e_stream: WeightInitializer
     bias_initializer_2e_stream: WeightInitializer
     bias_initializer_resnet: WeightInitializer
-    activation_fn: Activation
+    activation_fn_backflow: Activation
+    activation_fn_resnet: Activation
     ion_pos: Optional[jnp.ndarray] = None
     include_2e_stream: bool = True
     include_ei_norm: bool = True
@@ -261,7 +262,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
             bias_initializer_1e_stream=self.bias_initializer_1e_stream,
             bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-            activation_fn=self.activation_fn,
+            activation_fn=self.activation_fn_backflow,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
@@ -274,7 +275,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         antisymmetric_part = SplitBruteForceAntisymmetrizedResNet(
             self.ndense_resnet,
             self.nlayers_resnet,
-            self.activation_fn,
+            self.activation_fn_resnet,
             self.kernel_initializer_resnet,
             self.bias_initializer_resnet,
             use_bias=self.resnet_use_bias,
@@ -298,7 +299,8 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     bias_initializer_1e_stream: WeightInitializer
     bias_initializer_2e_stream: WeightInitializer
     bias_initializer_resnet: WeightInitializer
-    activation_fn: Activation
+    activation_fn_backflow: Activation
+    activation_fn_resnet: Activation
     ion_pos: Optional[jnp.ndarray] = None
     include_2e_stream: bool = True
     include_ei_norm: bool = True
@@ -319,7 +321,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
             bias_initializer_1e_stream=self.bias_initializer_1e_stream,
             bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-            activation_fn=self.activation_fn,
+            activation_fn=self.activation_fn_backflow,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
@@ -332,7 +334,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         antisymmetric_part = ComposedBruteForceAntisymmetrizedResNet(
             self.ndense_resnet,
             self.nlayers_resnet,
-            self.activation_fn,
+            self.activation_fn_resnet,
             self.kernel_initializer_resnet,
             self.bias_initializer_resnet,
             use_bias=self.resnet_use_bias,
