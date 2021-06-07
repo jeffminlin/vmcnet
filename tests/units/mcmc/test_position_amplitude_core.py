@@ -27,7 +27,7 @@ def test_gaussian_proposal_with_nonzero_step_width():
     np.testing.assert_allclose(new_data.walker_data.amplitude, jnp.array([0, 1, 2, 3]))
 
 
-def get_data_for_test_update():
+def _get_data_for_test_update():
     pos = jnp.array([[0, 0], [0, 0], [0, 0], [0, 0]])
     proposed_pos = jnp.array([[1, 1], [2, 2], [3, 4], [4, 3]])
     amplitude = jnp.array([-1, -1, -1, -1])
@@ -56,7 +56,7 @@ def test_update_position_amplitude():
         move_mask,
         expected_position,
         expected_amplitude,
-    ) = get_data_for_test_update()
+    ) = _get_data_for_test_update()
 
     updated_metadata_value = 4
 
@@ -81,7 +81,7 @@ def test_update_position_amplitude_no_metadata_update_fn():
         move_mask,
         expected_position,
         expected_amplitude,
-    ) = get_data_for_test_update()
+    ) = _get_data_for_test_update()
 
     update_position_amplitude = (
         mcmc.position_amplitude_core.make_position_amplitude_update()
