@@ -157,7 +157,6 @@ class ComposedBruteForceAntisymmetrizedResNet(flax.linen.Module):
 
     def _get_single_leaf_perm(self, x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         n = x.shape[-2]
-        d = x.shape[-1]
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
