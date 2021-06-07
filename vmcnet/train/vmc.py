@@ -98,7 +98,7 @@ def make_burning_step(
         return data, key
 
     if not apply_pmap:
-        return burning_step
+        return jax.jit(burning_step)
 
     return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
 
@@ -155,6 +155,8 @@ def make_training_step(
 
     if apply_walker_pmap:
         walker = utils.distribute.pmap(walker, donate_argnums=(1, 2))
+    else:
+        walker = jax.jit(walker)
 
     if apply_param_update_pmap:
         update_param_fn = utils.distribute.pmap(
