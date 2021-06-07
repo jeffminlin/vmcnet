@@ -111,7 +111,7 @@ class SimpleResNet(flax.linen.Module):
             self.ndense_final,
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
-            use_bias=self.use_bias,
+            use_bias=False,
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
