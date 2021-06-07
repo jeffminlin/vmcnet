@@ -10,7 +10,7 @@ P = TypeVar("P")  # Represents model parameters
 O = TypeVar("O")  # represents optimizer state
 
 
-def create_local_energy_update_param_fn(
+def create_grad_energy_update_param_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,

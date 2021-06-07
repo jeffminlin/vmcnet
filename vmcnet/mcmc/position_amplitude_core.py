@@ -166,7 +166,7 @@ def make_position_amplitude_metropolis_symmetric_acceptance(
 
 
 def make_position_amplitude_update(
-    update_move_metadata_fn: Optional[Callable[[M, jnp.ndarray], M]]
+    update_move_metadata_fn: Optional[Callable[[M, jnp.ndarray], M]] = None
 ) -> Callable[
     [
         PositionAmplitudeData,
@@ -204,17 +204,17 @@ def make_position_amplitude_update(
         move_mask: jnp.ndarray,
     ) -> PositionAmplitudeData:
         def mask_on_first_dimension(old_data: jnp.ndarray, proposal: jnp.ndarray):
-            shaped_mask = jnp.reshape(move_mask, (-1, *(1,) * (old_data.ndim - 1)))
+            shaped_mask = jnp.reshape(move_mask, (-1, *((1,) * (old_data.ndim - 1))))
             return jnp.where(shaped_mask, proposal, old_data)
 
-        new_walker_data = jax.tree_multimap(
+        new_walker_data = jax.tree_map(
             mask_on_first_dimension,
             data.walker_data,
             proposed_data.walker_data,
         )
 
-        new_move_metadata = data.move_metadata
-        if update_move_metadata_fn:
+        new_move_metadata = proposed_data.move_metadata
+        if update_move_metadata_fn is not None:
             new_move_metadata = update_move_metadata_fn(data.move_metadata, move_mask)
 
         return PositionAmplitudeData(new_walker_data, new_move_metadata)

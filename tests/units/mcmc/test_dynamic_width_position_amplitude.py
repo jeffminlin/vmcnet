@@ -6,7 +6,7 @@ import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 
 
 def test_threshold_adjust_std_move_no_adjustment():
-    """Test that when mean acceptance is close to target, no adjustment is made"""
+    """Test that when mean acceptance is close to target, no adjustment is made."""
     target = 0.5
     threshold_delta = 0.1
     adjust_delta = 0.1
@@ -30,7 +30,7 @@ def test_threshold_adjust_std_move_no_adjustment():
 
 
 def test_threshold_adjust_std_move_increase_width():
-    """Test that when mean acceptance is above target, step_width is increased"""
+    """Test that when mean acceptance is above target, step_width is increased."""
     target = 0.5
     threshold_delta = 0.1
     adjust_delta = 0.1
@@ -50,7 +50,7 @@ def test_threshold_adjust_std_move_increase_width():
 
 
 def test_threshold_adjust_std_move_decrease_width():
-    """Test that when mean acceptance is below target, step_width is decreased"""
+    """Test that when mean acceptance is below target, step_width is decreased."""
     target = 0.5
     threshold_delta = 0.1
     adjust_delta = 0.1
@@ -70,10 +70,7 @@ def test_threshold_adjust_std_move_decrease_width():
 
 
 def test_update_move_metadata_fn():
-    """
-    Test that update_move_metadata_fn updates at the right times and passes through
-    the update function as expected
-    """
+    """Test that update_move_metadata_fn works as expected."""
     nmoves_per_update = 5
     original_std_move = 0.9
 
@@ -97,7 +94,7 @@ def test_update_move_metadata_fn():
     )
     metadata = dwpa.MoveMetadata(original_std_move, 0.0, 0)
 
-    # Expect no change on first four updates, then multiply by 0.1
+    # Expect no change on first four updates, then multiply by average acceptance
     for i in range(0, 4):
         metadata = update_metadata_fn(metadata, move_masks[i])
         np.testing.assert_allclose(metadata.moves_since_update, i + 1)

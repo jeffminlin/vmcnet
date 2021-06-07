@@ -1,4 +1,5 @@
 """Test core routines for position amplitude data."""
+import jax
 import jax.numpy as jnp
 import numpy as np
 import vmcnet.mcmc as mcmc
@@ -26,41 +27,78 @@ def test_gaussian_proposal_with_nonzero_step_width():
     np.testing.assert_allclose(new_data.walker_data.amplitude, jnp.array([0, 1, 2, 3]))
 
 
-def test_update_position_amplitude():
-    """Test that the mask modification is working for the position update."""
+def get_data_for_test_update():
     pos = jnp.array([[0, 0], [0, 0], [0, 0], [0, 0]])
     proposed_pos = jnp.array([[1, 1], [2, 2], [3, 4], [4, 3]])
     amplitude = jnp.array([-1, -1, -1, -1])
     proposed_amplitude = jnp.array([-1, -2, -3, -4])
-    old_metadata_value = 3
-    new_metadata_value = 4
+    original_metadata_value = 2
+    proposed_metadata_value = 3
 
     data = mcmc.position_amplitude_core.make_position_amplitude_data(
-        pos, amplitude, None
+        pos, amplitude, original_metadata_value
     )
     proposed_data = mcmc.position_amplitude_core.make_position_amplitude_data(
-        proposed_pos, proposed_amplitude, old_metadata_value
+        proposed_pos, proposed_amplitude, proposed_metadata_value
     )
-
     move_mask = jnp.array([True, False, False, True])
+    expected_position = jnp.array([[1, 1], [0, 0], [0, 0], [4, 3]])
+    expected_amplitude = jnp.array([-1, -1, -1, -4])
+
+    return (data, proposed_data, move_mask, expected_position, expected_amplitude)
+
+
+def test_update_position_amplitude():
+    """Test mask application and metadata update."""
+    (
+        data,
+        proposed_data,
+        move_mask,
+        expected_position,
+        expected_amplitude,
+    ) = get_data_for_test_update()
+
+    updated_metadata_value = 4
 
     update_position_amplitude = (
         mcmc.position_amplitude_core.make_position_amplitude_update(
-            lambda old_val, _2: new_metadata_value
+            lambda old_val, _2: updated_metadata_value
         )
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
     ((position, amplitude), move_metadata) = updated_data
-    np.testing.assert_allclose(position, jnp.array([[1, 1], [0, 0], [0, 0], [4, 3]]))
-    np.testing.assert_allclose(amplitude, jnp.array([-1, -1, -1, -4]))
-    np.testing.assert_allclose(move_metadata, new_metadata_value)
+    np.testing.assert_allclose(position, expected_position)
+    np.testing.assert_allclose(amplitude, expected_amplitude)
+    np.testing.assert_allclose(move_metadata, updated_metadata_value)
+
+
+def test_update_position_amplitude_no_metadata_update_fn():
+    """Test that proposed metadata is returned directly when no update fn is given."""
+    (
+        data,
+        proposed_data,
+        move_mask,
+        expected_position,
+        expected_amplitude,
+    ) = get_data_for_test_update()
+
+    update_position_amplitude = (
+        mcmc.position_amplitude_core.make_position_amplitude_update()
+    )
+    updated_data = update_position_amplitude(data, proposed_data, move_mask)
+
+    ((position, amplitude), move_metadata) = updated_data
+    np.testing.assert_allclose(position, expected_position)
+    np.testing.assert_allclose(amplitude, expected_amplitude)
+    np.testing.assert_allclose(move_metadata, proposed_data.move_metadata)
 
 
 def test_distribute_position_amplitude_data():
-    """Test proper distribution of position, amplitude, and metadata"""
-    pos = jnp.array([0, 1, 2, 3])
-    amplitude = jnp.array([-1, -2, -3, -4])
+    """Test proper distribution of position, amplitude, and metadata."""
+    ndevices = jax.local_device_count()
+    pos = jnp.arange(ndevices)
+    amplitude = -1 * jnp.arange(ndevices) - 1
     metadata = jnp.array([2, 3])
 
     data = mcmc.position_amplitude_core.make_position_amplitude_data(
@@ -69,7 +107,7 @@ def test_distribute_position_amplitude_data():
 
     data = mcmc.position_amplitude_core.distribute_position_amplitude_data(data)
 
-    for device_index in range(4):
+    for device_index in range(ndevices):
         ((position, amplitude), move_metadata) = data
         # Position and amplitude are distributed across devices
         np.testing.assert_equal(position[device_index], jnp.array([device_index]))

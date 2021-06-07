@@ -39,7 +39,7 @@ def sgd_vmc_loop_with_logging(
             learning_rate,
         )
 
-    update_param_fn = updates.params.create_local_energy_update_param_fn(
+    update_param_fn = updates.params.create_grad_energy_update_param_fn(
         log_psi_model.apply,
         local_energy_fn,
         nchains,
