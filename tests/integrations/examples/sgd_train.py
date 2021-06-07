@@ -2,11 +2,16 @@
 import logging
 
 import jax
-
-import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
+from vmcnet.mcmc.position_amplitude_core import (
+    distribute_position_amplitude_data,
+    get_position_from_data,
+)
+from vmcnet.mcmc.simple_position_amplitude import (
+    make_simple_pos_amp_gaussian_step,
+)
 
 
 def sgd_vmc_loop_with_logging(
@@ -25,9 +30,7 @@ def sgd_vmc_loop_with_logging(
 ):
     """Run a VMC test with a very simple SGD optimizer and given model."""
     # Setup metropolis step
-    metrop_step_fn = mcmc.metropolis.make_position_amplitude_gaussian_metropolis_step(
-        std_move, log_psi_model.apply
-    )
+    metrop_step_fn = make_simple_pos_amp_gaussian_step(log_psi_model.apply, std_move)
 
     # Define parameter updates
     def sgd_apply(grad, params, learning_rate):
@@ -36,8 +39,12 @@ def sgd_vmc_loop_with_logging(
             learning_rate,
         )
 
-    update_param_fn = updates.params.create_position_amplitude_data_update_param_fn(
-        log_psi_model.apply, local_energy_fn, nchains, sgd_apply
+    update_param_fn = updates.params.create_grad_energy_update_param_fn(
+        log_psi_model.apply,
+        local_energy_fn,
+        nchains,
+        sgd_apply,
+        get_position_from_data,
     )
 
     # Distribute everything via jax.pmap
@@ -47,7 +54,7 @@ def sgd_vmc_loop_with_logging(
         optimizer_state,
         key,
     ) = utils.distribute.distribute_data_params_optstate_and_key(
-        data, params, learning_rate, key
+        data, params, learning_rate, key, distribute_position_amplitude_data
     )
 
     # Train!
