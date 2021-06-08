@@ -156,108 +156,6 @@ def compute_electron_electron(
     return input_2e
 
 
-class FermiNetResidualBlock(flax.linen.Module):
-    """A single residual block in the FermiNet equivariant part.
-
-    Combines the one-electron and two-electron streams.
-
-    Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
-            or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        ndense_1e (int): number of dense nodes in the one-electron stream part
-        ndense_2e (int): number of dense nodes in the two-electron stream part
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        activation_fn (Activation): activation function in the electron streams. Has
-            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        use_bias (bool, optional): whether to add a bias term in the electron streams.
-            Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
-        advance_2e (bool, optional): whether to apply the FermiNetTwoElectronLayer to
-            the two-electron stream, or to return it untransformed. Defaults to False.
-    """
-
-    spin_split: Union[int, Sequence[int]]
-    ndense_1e: int
-    ndense_2e: int
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
-    activation_fn: Activation
-    use_bias: bool = True
-    skip_connection: bool = True
-    cyclic_spins: bool = False
-    advance_2e: bool = True
-
-    @flax.linen.compact
-    def __call__(
-        self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
-    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
-        out_1e = FermiNetOneElectronLayer(
-            self.spin_split,
-            self.ndense_1e,
-            self.kernel_initializer_unmixed,
-            self.kernel_initializer_mixed,
-            self.kernel_initializer_2e_1e_stream,
-            self.bias_initializer_1e_stream,
-            self.activation_fn,
-            use_bias=self.use_bias,
-            skip_connection=self.skip_connection,
-            cyclic_spins=self.cyclic_spins,
-        )(in_1e, in_2e)
-
-        if not self.advance_2e or in_2e is None:
-            return out_1e, in_2e
-
-        out_2e = FermiNetTwoElectronLayer(
-            self.ndense_2e,
-            self.kernel_initializer_2e_2e_stream,
-            self.bias_initializer_2e_stream,
-            self.activation_fn,
-            use_bias=self.use_bias,
-            skip_connection=self.skip_connection,
-        )(in_2e)
-
-        return out_1e, out_2e
-
-
 class FermiNetOneElectronLayer(flax.linen.Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
@@ -426,6 +324,108 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
             nonlinear_out = nonlinear_out + x
 
         return nonlinear_out
+
+
+class FermiNetResidualBlock(flax.linen.Module):
+    """A single residual block in the FermiNet equivariant part.
+
+    Combines the one-electron and two-electron streams.
+
+    Attributes:
+        spin_split (int or Sequence[int]): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        ndense_1e (int): number of dense nodes in the one-electron stream part
+        ndense_2e (int): number of dense nodes in the two-electron stream part
+        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
+            unmixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the previous one-electron stream output. Has
+            signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
+            mixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the average of the previous one-electron
+            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
+            two-electron part of the one-electron stream. This initializes the part of
+            the dense kernel which multiplies the average of the previous two-electron
+            stream which is mixed into the one-electron stream. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
+            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        activation_fn (Activation): activation function in the electron streams. Has
+            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        use_bias (bool, optional): whether to add a bias term in the electron streams.
+            Defaults to True.
+        skip_connection (bool, optional): whether to add residual skip connections
+            whenever the shapes of the input and outputs of the streams match. Defaults
+            to True.
+        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
+            stream should satisfy a cyclic equivariance structure, i.e. if there are
+            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
+            but before the linear transformation, cyclic equivariance means the inputs
+            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
+            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
+            When there are only two spins (spin-1/2 case), then this is equivalent to
+            true spin equivariance. Defaults to False (original FermiNet).
+        advance_2e (bool, optional): whether to apply the FermiNetTwoElectronLayer to
+            the two-electron stream, or to return it untransformed. Defaults to False.
+    """
+
+    spin_split: Union[int, Sequence[int]]
+    ndense_1e: int
+    ndense_2e: int
+    kernel_initializer_unmixed: WeightInitializer
+    kernel_initializer_mixed: WeightInitializer
+    kernel_initializer_2e_1e_stream: WeightInitializer
+    kernel_initializer_2e_2e_stream: WeightInitializer
+    bias_initializer_1e_stream: WeightInitializer
+    bias_initializer_2e_stream: WeightInitializer
+    activation_fn: Activation
+    use_bias: bool = True
+    skip_connection: bool = True
+    cyclic_spins: bool = False
+    advance_2e: bool = True
+
+    @flax.linen.compact
+    def __call__(
+        self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
+    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+        out_1e = FermiNetOneElectronLayer(
+            self.spin_split,
+            self.ndense_1e,
+            self.kernel_initializer_unmixed,
+            self.kernel_initializer_mixed,
+            self.kernel_initializer_2e_1e_stream,
+            self.bias_initializer_1e_stream,
+            self.activation_fn,
+            use_bias=self.use_bias,
+            skip_connection=self.skip_connection,
+            cyclic_spins=self.cyclic_spins,
+        )(in_1e, in_2e)
+
+        if not self.advance_2e or in_2e is None:
+            return out_1e, in_2e
+
+        out_2e = FermiNetTwoElectronLayer(
+            self.ndense_2e,
+            self.kernel_initializer_2e_2e_stream,
+            self.bias_initializer_2e_stream,
+            self.activation_fn,
+            use_bias=self.use_bias,
+            skip_connection=self.skip_connection,
+        )(in_2e)
+
+        return out_1e, out_2e
 
 
 class FermiNetBackflow(flax.linen.Module):
