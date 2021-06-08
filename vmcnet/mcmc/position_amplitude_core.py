@@ -1,6 +1,7 @@
 """Shared routines for position amplitude metropolis data."""
 from typing import Any, Callable, NamedTuple, Optional, Tuple, TypeVar
 
+import flax.serialization as serialization
 import jax
 import jax.numpy as jnp
 import vmcnet.mcmc.metropolis as metropolis
@@ -48,6 +49,25 @@ class PositionAmplitudeData(NamedTuple):
 
     walker_data: PositionAmplitudeWalkerData
     move_metadata: Any
+
+
+# def serialize_pa(data: PositionAmplitudeData):
+#     return {
+#         "position": d.walker_data.position,
+#         "amplitude": d.walker_data.amplitude,
+#         "metadata": d.move_metadata,
+#     }
+#
+#
+# def deserialize_pa(d):
+#     return make_position_amplitude_data(d["position"], d["amplitude"], d["metadata"])
+#
+#
+# serialization.register_serialization_state(
+#     PositionAmplitudeData,
+#     serialize_pa,
+#     deserialize_pa,
+# )
 
 
 def make_position_amplitude_data(
@@ -209,8 +229,8 @@ def make_position_amplitude_update(
 
         new_walker_data = jax.tree_map(
             mask_on_first_dimension,
-            data.walker_data,
-            proposed_data.walker_data,
+            PositionAmplitudeWalkerData(data.walker_data),
+            PositionAmplitudeWalkerData(proposed_data.walker_data),
         )
 
         new_move_metadata = proposed_data.move_metadata

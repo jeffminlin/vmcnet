@@ -2,6 +2,7 @@
 import os
 
 import numpy as np
+import flax.serialization as serialization
 
 
 def open_or_create(path, filename, option):
@@ -19,16 +20,19 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_params(directory, name, epoch, data, params, optimizer_state):
+def save_params(directory, name, epoch, data, params, optimizer_state, key):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
-        np.savez(
-            file_handle,
-            epoch=epoch,
-            data=data._asdict(),
-            params=params,
-            optimizer_state=optimizer_state,
+        file_handle.write(
+            serialization.to_bytes((epoch, data, params, optimizer_state, key))
         )
+
+
+def reload_params(target, directory, name):
+    """Save a VMC state."""
+    with open_or_create(directory, name, "rb") as file_handle:
+        deserialized = serialization.from_bytes(target, file_handle.read())
+        return deserialized
 
 
 def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):

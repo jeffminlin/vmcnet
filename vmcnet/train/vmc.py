@@ -288,6 +288,7 @@ def vmc_loop(
             old_params,
             old_optimizer_state,
             data,
+            key,
             metrics,
             nchains,
             running_energy_and_variance,

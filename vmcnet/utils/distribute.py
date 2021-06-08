@@ -117,3 +117,7 @@ def distribute_data_params_optstate_and_key(
     sharded_key = make_different_rng_key_on_all_devices(key)
 
     return data, params, optimizer_state, sharded_key
+
+
+def distribute_reloaded_data(pytree):
+    return jax.tree_map(broadcast_all_local_devices, pytree)

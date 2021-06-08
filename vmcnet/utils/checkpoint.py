@@ -107,6 +107,7 @@ def save_metrics_and_handle_checkpoints(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -170,6 +171,7 @@ def save_metrics_and_handle_checkpoints(
         params,
         optimizer_state,
         data,
+        key,
         metrics,
         logdir,
         checkpoint_dir,
@@ -182,6 +184,7 @@ def save_metrics_and_handle_checkpoints(
         params,
         optimizer_state,
         data,
+        key,
         metrics,
         nchains,
         running_energy_and_variance,
@@ -199,6 +202,7 @@ def track_and_save_best_checkpoint(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -247,7 +251,9 @@ def track_and_save_best_checkpoint(
         energy.avg, variance.avg, nchains * len(energy.history), variance_scale
     )
     if error_adjusted_running_avg < checkpoint_metric:
-        io.save_params(logdir, "checkpoint.npz", epoch, data, params, optimizer_state)
+        io.save_params(
+            logdir, "checkpoint.npz", epoch, data, params, optimizer_state, key
+        )
         checkpoint_str = checkpoint_str + ", best weights saved"
     return checkpoint_str, error_adjusted_running_avg
 
@@ -257,6 +263,7 @@ def save_metrics_and_regular_checkpoint(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     logdir: str,
     checkpoint_dir: str,
@@ -308,6 +315,7 @@ def save_metrics_and_regular_checkpoint(
                 data,
                 params,
                 optimizer_state,
+                key,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 

@@ -4,17 +4,23 @@ import logging
 import jax
 import jax.numpy as jnp
 import optax
-
-import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
+import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
+import vmcnet.utils.io as io
 
 
 def main():
+    """Main routines."""
+    logging.info("Starting!")
+    reload_checkpoint_dir = "../logs/B/ferminet/adam/"
+    checkpoint_file = "checkpoint.npz"
+    log_dir = "/logs/B/ferminet/adam/reload"
+
     """Main routines."""
     logging.info("Starting!")
 
@@ -99,15 +105,17 @@ def main():
         get_position_fn=pacore.get_position_from_data,
     )
 
+    (epoch, data, params, optimizer_state, key) = io.reload_params(
+        (3, data, params, optimizer_state, key), reload_checkpoint_dir, checkpoint_file
+    )
+
     # Distribute everything via jax.pmap
     (
         data,
         params,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
-        data, params, optimizer_state, key, pacore.distribute_position_amplitude_data
-    )
+    ) = utils.distribute.distribute_reloaded_data((data, params, optimizer_state, key))
 
     params, optimizer_state, data = train.vmc.vmc_loop(
         params,
