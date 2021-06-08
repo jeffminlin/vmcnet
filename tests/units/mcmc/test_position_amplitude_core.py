@@ -67,7 +67,9 @@ def test_update_position_amplitude():
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
-    ((position, amplitude), move_metadata) = updated_data
+    position = updated_data.walker_data.position
+    amplitude = updated_data.walker_data.amplitude
+    move_metadata = updated_data.move_metadata
     np.testing.assert_allclose(position, expected_position)
     np.testing.assert_allclose(amplitude, expected_amplitude)
     np.testing.assert_allclose(move_metadata, updated_metadata_value)
@@ -88,7 +90,9 @@ def test_update_position_amplitude_no_metadata_update_fn():
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
-    ((position, amplitude), move_metadata) = updated_data
+    position = updated_data.walker_data.position
+    amplitude = updated_data.walker_data.amplitude
+    move_metadata = updated_data.move_metadata
     np.testing.assert_allclose(position, expected_position)
     np.testing.assert_allclose(amplitude, expected_amplitude)
     np.testing.assert_allclose(move_metadata, proposed_data.move_metadata)
@@ -108,7 +112,9 @@ def test_distribute_position_amplitude_data():
     data = mcmc.position_amplitude_core.distribute_position_amplitude_data(data)
 
     for device_index in range(ndevices):
-        ((position, amplitude), move_metadata) = data
+        position = data.walker_data.position
+        amplitude = data.walker_data.amplitude
+        move_metadata = data.move_metadata
         # Position and amplitude are distributed across devices
         np.testing.assert_equal(position[device_index], jnp.array([device_index]))
         np.testing.assert_equal(amplitude[device_index], jnp.array([-device_index - 1]))

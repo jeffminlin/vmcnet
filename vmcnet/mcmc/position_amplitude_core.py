@@ -1,6 +1,7 @@
 """Shared routines for position amplitude metropolis data."""
-from typing import Any, Callable, NamedTuple, Optional, Tuple, TypeVar
+from typing import Any, Callable, Optional, Tuple, TypeVar
 
+import chex
 import flax.serialization as serialization
 import jax
 import jax.numpy as jnp
@@ -16,7 +17,8 @@ P = TypeVar("P")
 M = TypeVar("M")
 
 
-class PositionAmplitudeWalkerData(NamedTuple):
+@chex.dataclass
+class PositionAmplitudeWalkerData:
     """NamedTuple of walker data holding just positions and amplitudes.
 
     Holding both particle position and wavefn amplitude in the same named
@@ -34,7 +36,8 @@ class PositionAmplitudeWalkerData(NamedTuple):
     amplitude: jnp.ndarray
 
 
-class PositionAmplitudeData(NamedTuple):
+@chex.dataclass
+class PositionAmplitudeData:
     """NamedTuple of data holding positions, amplitudes, and optional metadata.
 
     Holding both particle position and wavefn amplitude in the data can be advantageous
@@ -51,23 +54,27 @@ class PositionAmplitudeData(NamedTuple):
     move_metadata: Any
 
 
-# def serialize_pa(data: PositionAmplitudeData):
-#     return {
-#         "position": d.walker_data.position,
-#         "amplitude": d.walker_data.amplitude,
-#         "metadata": d.move_metadata,
-#     }
-#
-#
-# def deserialize_pa(d):
-#     return make_position_amplitude_data(d["position"], d["amplitude"], d["metadata"])
-#
-#
-# serialization.register_serialization_state(
-#     PositionAmplitudeData,
-#     serialize_pa,
-#     deserialize_pa,
-# )
+def serialize_pa(d: PositionAmplitudeData):
+    return {
+        "position": d.walker_data.position,
+        "amplitude": d.walker_data.amplitude,
+        "metadata": serialization.to_state_dict(d.move_metadata),
+    }
+
+
+def deserialize_pa(pa, d):
+    return make_position_amplitude_data(
+        d["position"],
+        d["amplitude"],
+        serialization.from_state_dict(pa.move_metadata, d["metadata"]),
+    )
+
+
+serialization.register_serialization_state(
+    PositionAmplitudeData,
+    serialize_pa,
+    deserialize_pa,
+)
 
 
 def make_position_amplitude_data(
@@ -84,7 +91,8 @@ def make_position_amplitude_data(
         PositionAmplitudeData
     """
     return PositionAmplitudeData(
-        PositionAmplitudeWalkerData(position, amplitude), move_metadata
+        walker_data=PositionAmplitudeWalkerData(position=position, amplitude=amplitude),
+        move_metadata=move_metadata,
     )
 
 
@@ -111,10 +119,11 @@ def distribute_position_amplitude_data(
     Returns:
         PositionAmplitudeData: the distributed data.
     """
-    (walker_data, move_metadata) = data
+    walker_data = data.walker_data
+    move_metadata = data.move_metadata
     walker_data = distribute_data(walker_data)
     move_metadata = replicate_all_local_devices(move_metadata)
-    return PositionAmplitudeData(walker_data, move_metadata)
+    return PositionAmplitudeData(walker_data=walker_data, move_metadata=move_metadata)
 
 
 def make_position_amplitude_gaussian_proposal(
@@ -228,16 +237,16 @@ def make_position_amplitude_update(
             return jnp.where(shaped_mask, proposal, old_data)
 
         new_walker_data = jax.tree_map(
-            mask_on_first_dimension,
-            PositionAmplitudeWalkerData(data.walker_data),
-            PositionAmplitudeWalkerData(proposed_data.walker_data),
+            mask_on_first_dimension, data.walker_data, proposed_data.walker_data
         )
 
         new_move_metadata = proposed_data.move_metadata
         if update_move_metadata_fn is not None:
             new_move_metadata = update_move_metadata_fn(data.move_metadata, move_mask)
 
-        return PositionAmplitudeData(new_walker_data, new_move_metadata)
+        return PositionAmplitudeData(
+            walker_data=new_walker_data, move_metadata=new_move_metadata
+        )
 
     return update_position_amplitude
 

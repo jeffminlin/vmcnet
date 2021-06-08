@@ -92,7 +92,9 @@ def test_update_move_metadata_fn():
     update_metadata_fn = dwpa.make_update_move_metadata_fn(
         nmoves_per_update, multiplicative_adjustment
     )
-    metadata = dwpa.MoveMetadata(original_std_move, 0.0, 0)
+    metadata = dwpa.MoveMetadata(
+        std_move=original_std_move, move_acceptance_sum=0.0, moves_since_update=0
+    )
 
     # Expect no change on first four updates, then multiply by average acceptance
     for i in range(0, 4):

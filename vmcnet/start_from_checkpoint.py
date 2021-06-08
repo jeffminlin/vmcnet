@@ -17,9 +17,9 @@ import vmcnet.utils.io as io
 def main():
     """Main routines."""
     logging.info("Starting!")
-    reload_checkpoint_dir = "../logs/B/ferminet/adam/"
+    reload_checkpoint_dir = "logs/B/ferminet/adam/"
     checkpoint_file = "checkpoint.npz"
-    log_dir = "/logs/B/ferminet/adam/reload"
+    log_dir = "logs/B/ferminet/adam/reload"
 
     """Main routines."""
     logging.info("Starting!")
@@ -28,11 +28,12 @@ def main():
     ion_charges = jnp.array([5.0])
 
     nchains = 1000 * jax.local_device_count()
-    nburn = 1
     nepochs = 50000
+    nburn_zero = 0
     nsteps_per_param_update = 10
     nmoves_per_width_update = 100
-    std_move = 0.08
+    dummy_std_move = 0.08
+    dummy_epoch = 0
     learning_rate = 1e-4
 
     key = jax.random.PRNGKey(0)
@@ -65,7 +66,7 @@ def main():
     params = log_psi.init(subkey, init_pos)
     amplitudes = log_psi.apply(params, init_pos)
     data = dwpa.make_dynamic_width_position_amplitude_data(
-        init_pos, amplitudes, std_move
+        init_pos, amplitudes, dummy_std_move
     )
 
     # Setup metropolis step
@@ -106,7 +107,9 @@ def main():
     )
 
     (epoch, data, params, optimizer_state, key) = io.reload_params(
-        (3, data, params, optimizer_state, key), reload_checkpoint_dir, checkpoint_file
+        (dummy_epoch, data, params, optimizer_state, key),
+        reload_checkpoint_dir,
+        checkpoint_file,
     )
 
     # Distribute everything via jax.pmap
@@ -122,14 +125,14 @@ def main():
         optimizer_state,
         data,
         nchains,
-        nburn,
+        nburn_zero,
         nepochs,
         nsteps_per_param_update,
         metrop_step_fn,
         update_param_fn,
         key,
-        logdir="logs/B/ferminet/adam",
-        checkpoint_every=1,
+        logdir=log_dir,
+        checkpoint_every=100,
     )
     logging.info("Completed!")
 

@@ -22,7 +22,7 @@ def main():
     ion_charges = jnp.array([5.0])
 
     nchains = 1000 * jax.local_device_count()
-    nburn = 1
+    nburn = 1000
     nepochs = 50000
     nsteps_per_param_update = 10
     nmoves_per_width_update = 100
@@ -121,7 +121,7 @@ def main():
         update_param_fn,
         key,
         logdir="logs/B/ferminet/adam",
-        checkpoint_every=1,
+        checkpoint_every=100,
     )
     logging.info("Completed!")
 
