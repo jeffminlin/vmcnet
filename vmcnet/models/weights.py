@@ -1,4 +1,4 @@
-"""Process kernel initializers names."""
+"""Functions to get weight initializers from names."""
 from typing import Any, Callable, Dict, Iterable
 
 import jax.numpy as jnp
