@@ -17,8 +17,8 @@ import vmcnet.utils.io as io
 def main():
     """Main routines."""
     logging.info("Starting!")
-    reload_checkpoint_dir = "logs/B/ferminet/adam/"
-    checkpoint_file = "checkpoint.npz"
+    reload_checkpoint_dir = "logs/B/ferminet/adam/checkpoints"
+    checkpoint_file = "10.npz"
     log_dir = "logs/B/ferminet/adam/reload"
 
     """Main routines."""
@@ -27,8 +27,8 @@ def main():
     ion_pos = jnp.array([[0.0, 0.0, 0.0]])
     ion_charges = jnp.array([5.0])
 
-    nchains = 1000 * jax.local_device_count()
-    nepochs = 50000
+    nchains = 10 * jax.local_device_count()
+    nepochs = 10
     nburn_zero = 0
     nsteps_per_param_update = 10
     nmoves_per_width_update = 100

@@ -28,10 +28,10 @@ def save_params(directory, name, epoch, data, params, optimizer_state, key):
         )
 
 
-def reload_params(target, directory, name):
+def reload_params(template, directory, name):
     """Save a VMC state."""
     with open_or_create(directory, name, "rb") as file_handle:
-        deserialized = serialization.from_bytes(target, file_handle.read())
+        deserialized = serialization.from_bytes(template, file_handle.read())
         return deserialized
 
 

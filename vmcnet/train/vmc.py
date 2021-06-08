@@ -265,9 +265,12 @@ def vmc_loop(
 
     for epoch in range(nepochs):
         # for checkpointing; want to save the state that resulted in the best metrics,
-        # not the state one step later
+        # not the state one step later.
         old_params = params
         old_optimizer_state = optimizer_state
+        old_data = data
+        old_key = key
+
         accept_ratio, data, params, optimizer_state, metrics, key = training_step(
             data, params, optimizer_state, key
         )
@@ -287,8 +290,8 @@ def vmc_loop(
             epoch,
             old_params,
             old_optimizer_state,
-            data,
-            key,
+            old_data,
+            old_key,
             metrics,
             nchains,
             running_energy_and_variance,
