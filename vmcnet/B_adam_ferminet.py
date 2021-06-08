@@ -4,17 +4,20 @@ import logging
 import jax
 import jax.numpy as jnp
 import optax
-
-import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
+import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
+import vmcnet.utils.io as io
+
+reload_checkpoint_dir = "logs/B/ferminet/adam/checkpoints"
+checkpoint_file = "10.npz"
 
 
-def main():
+def main(reload_from_checkpoint: bool = False):
     """Main routines."""
     logging.info("Starting!")
 
@@ -23,6 +26,9 @@ def main():
 
     nchains = 10 * jax.local_device_count()
     nburn = 10
+    if reload_from_checkpoint:
+        nburn = 0
+
     nepochs = 20
     nsteps_per_param_update = 10
     nmoves_per_width_update = 100
@@ -99,17 +105,41 @@ def main():
         get_position_fn=pacore.get_position_from_data,
     )
 
-    # Distribute everything via jax.pmap
-    (
-        data,
-        params,
-        optimizer_state,
-        key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
-        data, params, optimizer_state, key, pacore.distribute_position_amplitude_data
-    )
+    if reload_from_checkpoint:
+        # Reload data from checkpoint
+        dummy_epoch = 0
+        (epoch, data, params, optimizer_state, key) = io.reload_params(
+            (dummy_epoch, data, params, optimizer_state, key),
+            reload_checkpoint_dir,
+            checkpoint_file,
+        )
+        # Data is already structured with first index indicating device. Directly
+        # distribute it back across the devices it came from.
+        (
+            data,
+            params,
+            optimizer_state,
+            key,
+        ) = utils.distribute.distribute_reloaded_data(
+            (data, params, optimizer_state, key)
+        )
+    else:
+        # Distribute everything via jax.pmap, distributing/replicating/splitting as
+        # appropriate for each piece of data.
+        (
+            data,
+            params,
+            optimizer_state,
+            key,
+        ) = utils.distribute.distribute_data_params_optstate_and_key(
+            data,
+            params,
+            optimizer_state,
+            key,
+            pacore.distribute_position_amplitude_data,
+        )
 
-    params, optimizer_state, data = train.vmc.vmc_loop(
+    train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,
