@@ -7,8 +7,14 @@ import vmcnet.mcmc as mcmc
 
 def make_dummy_log_f():
     """Make a simple function and its log for testing."""
-    f = lambda unused_params, x: jnp.sum(jnp.square(x) + 3 * x)
-    log_f = lambda unused_params, x: jnp.log(jnp.abs(f(unused_params, x)))
+
+    def f(params, x):
+        del params
+        return jnp.sum(jnp.square(x) + 3 * x)
+
+    def log_f(params, x):
+        return jnp.log(jnp.abs(f(params, x)))
+
     return f, log_f
 
 

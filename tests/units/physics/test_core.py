@@ -26,7 +26,9 @@ def test_total_energy_grad():
     """Test the custom gradient of the total energy."""
     # since log|psi(x)| = a * sum(x^2), we have
     # log_psi_grad(x) = (grad_a psi / psi)(x) = sum(x^2)
-    log_psi_apply = lambda a, x: a * jnp.sum(jnp.square(x), axis=-1)
+    def log_psi_apply(a, x):
+        return a * jnp.sum(jnp.square(x), axis=-1)
+
     a = 3.5
     x = make_dummy_x()
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
