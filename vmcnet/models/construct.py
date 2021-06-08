@@ -24,6 +24,7 @@ class ComposedModel(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x):
+        """Call submodels on the output of the previous one one at a time."""
         outputs = x
         for model in self.submodels:
             outputs = model(outputs)
@@ -135,6 +136,7 @@ class SingleDeterminantFermiNet(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        """Compose FermiNet backflow -> orbitals -> log determinant product."""
         nelec_total = elec_pos.shape[-2]
         if isinstance(self.spin_split, Sequence):
             nall_but_last = functools.reduce(lambda a, b: a + b, self.spin_split)

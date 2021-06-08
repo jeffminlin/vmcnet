@@ -212,6 +212,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     cyclic_spins: bool = True
 
     def setup(self):
+        """Setup Dense layers."""
         # workaround MyPy's typing error for callable attribute
         self._activation_fn = self.activation_fn
 
@@ -229,6 +230,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         )
 
     def _compute_transformed_1e_means(self, split_means):
+        """Apply a dense layer to the concatenated averages of the 1e stream."""
         if self.cyclic_spins:
             split_concat = [
                 _rolled_concat(split_means, idx) for idx in range(len(split_means))
@@ -243,6 +245,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         return dense_mixed_split
 
     def _compute_transformed_2e_means(self, in_2e):
+        """Apply a dense layer to the concatenated averages of the 2e stream."""
         # [spin: (..., nelec[spin], nelec_total, d)]
         split_2e = jnp.split(in_2e, self.spin_split, axis=-3)
 
@@ -263,6 +266,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
     def __call__(self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None) -> jnp.ndarray:
+        """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output."""
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
 
@@ -307,6 +311,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
     skip_connection: bool = True
 
     def setup(self):
+        """Setup Dense layer."""
         # workaround MyPy's typing error for callable attribute
         self._activation_fn = self.activation_fn
         self._dense = flax.linen.Dense(
@@ -317,6 +322,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply a Dense layer in parallel to all electron pairs."""
         dense_out = self._dense(x)
         nonlinear_out = self._activation_fn(dense_out)
 
@@ -400,6 +406,7 @@ class FermiNetResidualBlock(flax.linen.Module):
     def __call__(
         self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+        """Apply the one-electron layer and optionally the two-electron layer."""
         out_1e = FermiNetOneElectronLayer(
             self.spin_split,
             self.ndense_1e,
@@ -504,6 +511,7 @@ class FermiNetBackflow(flax.linen.Module):
     def __call__(
         self, elec_pos: jnp.ndarray
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+        """Iterate through self.ndense_list, applying a corresponding residual block."""
         stream_1e, stream_2e, r_ei = compute_input_streams(
             elec_pos,
             self.ion_pos,
@@ -567,6 +575,7 @@ class SplitDense(flax.linen.Module):
     use_bias: bool = True
 
     def setup(self):
+        """Set up the dense layers for each split."""
         if isinstance(self.spin_split, int):
             nspins = self.spin_split
         else:
@@ -590,6 +599,7 @@ class SplitDense(flax.linen.Module):
         ]
 
     def __call__(self, x: jnp.ndarray) -> List[jnp.ndarray]:
+        """Split the input and apply a dense layer to each split."""
         x_split = jnp.split(x, self.spin_split, axis=-2)
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
@@ -642,6 +652,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     def _compute_exponential_envelopes(
         self, x: jnp.ndarray, norbitals: int, isotropic: bool = False
     ) -> jnp.ndarray:
+        """Pick a type of exp envelope and multiply by the linear part element-wise."""
         # x is (..., nelec, nion, d)
         if isotropic:
             conv_out = self._isotropy(x, norbitals)
@@ -656,6 +667,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
     def _isotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
+        """Isotropic scaling of the electron-ion displacements."""
         nion = x.shape[-2]
         # x_nion is (..., nelec, d, nion)
         x_nion = jnp.swapaxes(x, axis1=-1, axis2=-2)
@@ -674,6 +686,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return jnp.swapaxes(concat_out, axis1=-1, axis2=-3)
 
     def _anisotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
+        """Anisotropic scaling of the electron-ion displacements."""
         batch_shapes = x.shape[:-2]
         nion = x.shape[-2]
         d = x.shape[-1]
@@ -696,6 +709,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
+        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes."""
         # orbs has shapes [(..., nelec[spin], norbitals[spin])]
         orbs = SplitDense(
             self.spin_split,
