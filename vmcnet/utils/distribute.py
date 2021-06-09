@@ -81,19 +81,19 @@ def reshape_data_leaves_for_distribution(data_leaf):
     return data
 
 
-def distribute_data(data):
-    """Split data to all devices. The first axis must be divisible by ndevices."""
+def default_distribute_data(data):
+    """Split all data to all devices. The first axis must be divisible by ndevices."""
     data = jax.tree_map(reshape_data_leaves_for_distribution, data)
     data = broadcast_all_local_devices(data)
     return data
 
 
-def distribute_data_params_optstate_and_key(
+def distribute_vmc_state(
     data: D,
     params: P,
     optimizer_state: S,
     key: jnp.ndarray,
-    distribute_data_fn: Callable[[D], D] = distribute_data,
+    distribute_data_fn: Callable[[D], D] = default_distribute_data,
 ) -> Tuple[D, P, S, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
@@ -119,18 +119,17 @@ def distribute_data_params_optstate_and_key(
     return data, params, optimizer_state, sharded_key
 
 
-def distribute_reloaded_data(
+def distribute_vmc_state_from_checkpoint(
     data: D,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     key: jnp.ndarray,
-) -> Tuple[D, P, O, jnp.ndarray]:
+) -> Tuple[D, P, S, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
     Intended for use on data, params, optimizer, and key that have been reloaded from
-    a checkpoint. Since checkpoints save all data as if it is distributed, distribution
-    simply broadcasts it back to the devices. Similarly, the key argument is expected to
-    contain one key per device and is also broadcasted. Params and optimizer state are
+    a checkpoint. Data and key is saved independently for each device, so on reload
+    we simply broadcast it back to the devices. Params and optimizer state are
     replicated.
     """
     data = broadcast_all_local_devices(data)

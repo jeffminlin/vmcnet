@@ -107,7 +107,7 @@ def main(reload_from_checkpoint: bool = False):
 
     if reload_from_checkpoint:
         # Reload data from checkpoint
-        (epoch, data, params, optimizer_state, key) = io.reload_params(
+        (epoch, data, params, optimizer_state, key) = io.reload_vmc_state(
             reload_checkpoint_dir,
             checkpoint_file,
         )
@@ -118,7 +118,7 @@ def main(reload_from_checkpoint: bool = False):
             params,
             optimizer_state,
             key,
-        ) = utils.distribute.distribute_reloaded_data(
+        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
             data,
             params,
             optimizer_state,
@@ -132,7 +132,7 @@ def main(reload_from_checkpoint: bool = False):
             params,
             optimizer_state,
             key,
-        ) = utils.distribute.distribute_data_params_optstate_and_key(
+        ) = utils.distribute.distribute_vmc_state(
             data,
             params,
             optimizer_state,

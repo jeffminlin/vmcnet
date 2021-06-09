@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import vmcnet.mcmc.metropolis as metropolis
 from vmcnet.utils.distribute import (
     replicate_all_local_devices,
-    distribute_data,
+    default_distribute_data,
 )
 
 # Represents a pytree or pytree-like object containing model params
@@ -106,7 +106,7 @@ def distribute_position_amplitude_data(
     """
     walker_data = data["walker_data"]
     move_metadata = data["move_metadata"]
-    walker_data = distribute_data(walker_data)
+    walker_data = default_distribute_data(walker_data)
     move_metadata = replicate_all_local_devices(move_metadata)
     return PositionAmplitudeData(walker_data=walker_data, move_metadata=move_metadata)
 

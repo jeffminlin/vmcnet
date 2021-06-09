@@ -1,8 +1,10 @@
 """Test core routines for position amplitude data."""
+from typing import Tuple
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-from typing import Tuple
+
 import vmcnet.mcmc.position_amplitude_core as pacore
 
 from ..test_utils import make_dummy_data_params_and_key, dummy_model_apply

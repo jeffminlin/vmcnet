@@ -22,10 +22,10 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_params(
-    directory,
-    name,
-    epoch,
+def save_vmc_state(
+    directory: str,
+    name: str,
+    epoch: int,
     data,
     params,
     optimizer_state,
@@ -37,19 +37,23 @@ def save_params(
             file_handle,
             e=epoch,
             d=data,
+            # Params and opt_state are always replicated, so only save one copy.
+            # Params must also be converted from a frozen_dict to a dict.
             p=get_first(params.unfreeze()),
             o=get_first(optimizer_state),
             k=key,
         )
 
 
-def reload_params(directory, name):
-    """Save a VMC state."""
-
+def reload_vmc_state(directory: str, name: str):
+    """Reload a VMC state from a saved checkpoint."""
     with open_or_create(directory, name, "rb") as file_handle:
+        # np.savez wraps non-array objects in arrays for storage, so call
+        # tolist() on such objects to get them back to their original type.
         npz_file = np.load(file_handle, allow_pickle=True)
         epoch = npz_file["e"].tolist()
         data = npz_file["d"].tolist()
+        # Params are stored by flax as a frozen dict, so mimic that behavior here.
         params = frozen_dict.freeze(npz_file["p"].tolist())
         optimizer_state = npz_file["o"].tolist()
         key = npz_file["k"]

@@ -250,7 +250,7 @@ def track_and_save_best_checkpoint(
         energy.avg, variance.avg, nchains * len(energy.history), variance_scale
     )
     if error_adjusted_running_avg < checkpoint_metric:
-        io.save_params(
+        io.save_vmc_state(
             logdir,
             "checkpoint.npz",
             epoch,
@@ -313,7 +313,7 @@ def save_metrics_and_regular_checkpoint(
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
-            io.save_params(
+            io.save_vmc_state(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
                 epoch,

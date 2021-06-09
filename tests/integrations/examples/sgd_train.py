@@ -53,7 +53,7 @@ def sgd_vmc_loop_with_logging(
         params,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
+    ) = utils.distribute.distribute_vmc_state(
         data, params, learning_rate, key, distribute_position_amplitude_data
     )
 

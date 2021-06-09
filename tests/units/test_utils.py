@@ -1,6 +1,8 @@
 """Shared pieces for unit tests."""
+import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 import vmcnet.mcmc as mcmc
 
@@ -28,7 +30,9 @@ def make_dummy_data_params_and_key():
     seed = 0
     key = jax.random.PRNGKey(seed)
     data = jnp.array([0, 0, 0, 0])
-    params = [jnp.array([1, 2, 3]), jnp.array([[4, 5], [6, 7]])]
+    params = frozen_dict.freeze(
+        {"kernel_1": jnp.array([1, 2, 3]), "kernel_2": jnp.array([[4, 5], [6, 7]])}
+    )
 
     return data, params, key
 
@@ -60,3 +64,8 @@ def make_dummy_metropolis_fn():
 def dummy_model_apply(params, x):
     """Model eval that outputs indices of the flattened x in the shape of x."""
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
+
+
+def assert_pytree_equal(pytree1, pytree2):
+    """Use jax.tree_map to assert equality at all leaves of two pytrees."""
+    jax.tree_map(lambda l1, l2: np.testing.assert_allclose(l1, l2), pytree1, pytree2)

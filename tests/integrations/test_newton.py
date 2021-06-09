@@ -32,7 +32,7 @@ def test_vmc_loop_newtons_x_squared():
         x,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
+    ) = utils.distribute.distribute_vmc_state(
         dummy_data, x, None, key
     )
 

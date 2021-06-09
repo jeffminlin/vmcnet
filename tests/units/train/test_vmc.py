@@ -66,7 +66,7 @@ def test_vmc_loop_logging(caplog):
                 params,
                 optimizer_state,
                 key,
-            ) = utils.distribute.distribute_data_params_optstate_and_key(
+            ) = utils.distribute.distribute_vmc_state(
                 data, params, None, key
             )
 
@@ -108,7 +108,7 @@ def test_vmc_loop_number_of_updates():
         params,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(data, params, 0, key)
+    ) = utils.distribute.distribute_vmc_state(data, params, 0, key)
 
     nburn = 5
     nepochs = 17  # eventual number of parameter updates
