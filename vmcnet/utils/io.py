@@ -20,19 +20,38 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_params(directory, name, epoch, data, params, optimizer_state, key):
+def save_params(
+    directory,
+    name,
+    epoch,
+    data,
+    params,
+    optimizer_state,
+    key,
+):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
-        file_handle.write(
-            serialization.to_bytes((epoch, data, params, optimizer_state, key))
+        np.savez(
+            file_handle,
+            e=epoch,
+            d=data,
+            p=params.unfreeze(),
+            o=optimizer_state,
+            k=key,
         )
 
 
-def reload_params(template, directory, name):
+def reload_params(directory, name):
     """Save a VMC state."""
+
     with open_or_create(directory, name, "rb") as file_handle:
-        deserialized = serialization.from_bytes(template, file_handle.read())
-        return deserialized
+        npz_file = np.load(file_handle, allow_pickle=True)
+        epoch = npz_file["e"].tolist()
+        data = npz_file["d"].tolist()
+        params = npz_file["p"].tolist()
+        optimizer_state = npz_file["o"].tolist()
+        key = npz_file["k"]
+        return (epoch, data, params, optimizer_state, key)
 
 
 def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):

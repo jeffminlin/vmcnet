@@ -2,7 +2,6 @@
 from typing import Callable, TypeVar
 
 import chex
-import flax.serialization as serialization
 import jax
 import jax.numpy as jnp
 from vmcnet.utils.distribute import mean_all_local_devices
@@ -36,29 +35,6 @@ class MoveMetadata:
     std_move: jnp.float32
     move_acceptance_sum: jnp.float32
     moves_since_update: jnp.int32
-
-
-def serialize_mm(m: MoveMetadata):
-    return {
-        "std_move": m.std_move,
-        "move_acceptance_sum": m.move_acceptance_sum,
-        "moves_since_update": m.moves_since_update,
-    }
-
-
-def deserialize_mm(_, d):
-    return MoveMetadata(
-        std_move=d["std_move"],
-        move_acceptance_sum=d["move_acceptance_sum"],
-        moves_since_update=d["moves_since_update"],
-    )
-
-
-serialization.register_serialization_state(
-    MoveMetadata,
-    serialize_mm,
-    deserialize_mm,
-)
 
 
 class DynamicWidthPositionAmplitudeData(PositionAmplitudeData):
@@ -98,6 +74,28 @@ def make_dynamic_width_position_amplitude_data(
             move_acceptance_sum=move_acceptance_sum,
             moves_since_update=moves_since_update,
         ),
+    )
+
+
+def dynamic_pa_to_savable_dict(pa: DynamicWidthPositionAmplitudeData):
+    return {
+        "p": pa.walker_data.position,
+        "a": pa.walker_data.amplitude,
+        "m": {
+            "std": pa.move_metadata.std_move,
+            "mas": pa.move_metadata.move_acceptance_sum,
+            "msu": pa.move_metadata.moves_since_update,
+        },
+    }
+
+
+def dynamic_pa_from_saved_dict(d):
+    return make_dynamic_width_position_amplitude_data(
+        d["p"],
+        d["a"],
+        d["m"]["std"],
+        d["m"]["mas"],
+        d["m"]["msu"],
     )
 
 

@@ -119,5 +119,16 @@ def distribute_data_params_optstate_and_key(
     return data, params, optimizer_state, sharded_key
 
 
-def distribute_reloaded_data(pytree):
-    return jax.tree_map(broadcast_all_local_devices, pytree)
+def distribute_reloaded_data(
+    data: D,
+    params: P,
+    optimizer_state: O,
+    key: jnp.ndarray,
+    distribute_data_fn: Callable[[D], D] = distribute_data,
+) -> Tuple[D, P, O, jnp.ndarray]:
+    data = distribute_data_fn(data)
+    params = replicate_all_local_devices(params)
+    optimizer_state = replicate_all_local_devices(optimizer_state)
+    key = broadcast_all_local_devices(key)
+
+    return data, params, optimizer_state, key

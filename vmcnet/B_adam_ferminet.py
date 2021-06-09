@@ -13,7 +13,7 @@ import vmcnet.updates as updates
 import vmcnet.utils as utils
 import vmcnet.utils.io as io
 
-reload_checkpoint_dir = "logs/B/ferminet/adam/checkpoints"
+reload_checkpoint_dir = "../logs/B/ferminet/adam/checkpoints"
 checkpoint_file = "10.npz"
 
 
@@ -107,12 +107,11 @@ def main(reload_from_checkpoint: bool = False):
 
     if reload_from_checkpoint:
         # Reload data from checkpoint
-        dummy_epoch = 0
         (epoch, data, params, optimizer_state, key) = io.reload_params(
-            (dummy_epoch, data, params, optimizer_state, key),
             reload_checkpoint_dir,
             checkpoint_file,
         )
+        data = dwpa.dynamic_pa_from_saved_dict(data)
         # Data is already structured with first index indicating device. Directly
         # distribute it back across the devices it came from.
         (
@@ -121,7 +120,11 @@ def main(reload_from_checkpoint: bool = False):
             optimizer_state,
             key,
         ) = utils.distribute.distribute_reloaded_data(
-            (data, params, optimizer_state, key)
+            data,
+            params,
+            optimizer_state,
+            key,
+            pacore.distribute_position_amplitude_data,
         )
     else:
         # Distribute everything via jax.pmap, distributing/replicating/splitting as
@@ -143,6 +146,7 @@ def main(reload_from_checkpoint: bool = False):
         params,
         optimizer_state,
         data,
+        dwpa.dynamic_pa_to_savable_dict,
         nchains,
         nburn,
         nepochs,
@@ -150,7 +154,7 @@ def main(reload_from_checkpoint: bool = False):
         metrop_step_fn,
         update_param_fn,
         key,
-        logdir="logs/B/ferminet/adam",
+        logdir="../logs/B/ferminet/adam",
         checkpoint_every=10,
     )
     logging.info("Completed!")

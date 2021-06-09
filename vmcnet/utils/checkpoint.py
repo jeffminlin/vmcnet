@@ -4,14 +4,13 @@ Running queues of energy and variance histories are tracked, along with their av
 Unlike many of the other routines in this package, these are not pure functions, as they
 modify the RunningMetrics inside RunningEnergyVariance.
 """
-from collections import deque
-from dataclasses import dataclass, field
 import logging
 import os
+from collections import deque
+from dataclasses import dataclass, field
 from typing import Dict, NamedTuple, Tuple, TypeVar
 
 import jax.numpy as jnp
-
 import vmcnet.utils.io as io
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
@@ -252,7 +251,13 @@ def track_and_save_best_checkpoint(
     )
     if error_adjusted_running_avg < checkpoint_metric:
         io.save_params(
-            logdir, "checkpoint.npz", epoch, data, params, optimizer_state, key
+            logdir,
+            "checkpoint.npz",
+            epoch,
+            data,
+            params,
+            optimizer_state,
+            key,
         )
         checkpoint_str = checkpoint_str + ", best weights saved"
     return checkpoint_str, error_adjusted_running_avg

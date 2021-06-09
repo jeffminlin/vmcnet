@@ -36,6 +36,20 @@ def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.nd
     return make_position_amplitude_data(position, amplitude, None)
 
 
+def simple_pa_to_savable_dict(d: PositionAmplitudeData):
+    return {
+        "position": d.walker_data.position,
+        "amplitude": d.walker_data.amplitude,
+    }
+
+
+def simple_pa_from_saved_dict(pa, d):
+    return make_position_amplitude_data(
+        d["position"],
+        d["amplitude"],
+    )
+
+
 def make_simple_pos_amp_gaussian_step(
     model_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     std_move: jnp.float32,

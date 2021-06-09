@@ -2,7 +2,6 @@
 from typing import Any, Callable, Optional, Tuple, TypeVar
 
 import chex
-import flax.serialization as serialization
 import jax
 import jax.numpy as jnp
 import vmcnet.mcmc.metropolis as metropolis
@@ -52,29 +51,6 @@ class PositionAmplitudeData:
 
     walker_data: PositionAmplitudeWalkerData
     move_metadata: Any
-
-
-def serialize_pa(d: PositionAmplitudeData):
-    return {
-        "position": d.walker_data.position,
-        "amplitude": d.walker_data.amplitude,
-        "metadata": serialization.to_state_dict(d.move_metadata),
-    }
-
-
-def deserialize_pa(pa, d):
-    return make_position_amplitude_data(
-        d["position"],
-        d["amplitude"],
-        serialization.from_state_dict(pa.move_metadata, d["metadata"]),
-    )
-
-
-serialization.register_serialization_state(
-    PositionAmplitudeData,
-    serialize_pa,
-    deserialize_pa,
-)
 
 
 def make_position_amplitude_data(
