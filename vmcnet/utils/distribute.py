@@ -124,9 +124,8 @@ def distribute_reloaded_data(
     params: P,
     optimizer_state: O,
     key: jnp.ndarray,
-    distribute_data_fn: Callable[[D], D] = distribute_data,
 ) -> Tuple[D, P, O, jnp.ndarray]:
-    data = distribute_data_fn(data)
+    data = broadcast_all_local_devices(data)
     params = replicate_all_local_devices(params)
     optimizer_state = replicate_all_local_devices(optimizer_state)
     key = broadcast_all_local_devices(key)

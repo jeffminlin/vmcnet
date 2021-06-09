@@ -1,7 +1,6 @@
 """Shared routines for position amplitude metropolis data."""
 from typing import Any, Callable, Optional, Tuple, TypeVar, TypedDict
 
-import chex
 import jax
 import jax.numpy as jnp
 import vmcnet.mcmc.metropolis as metropolis

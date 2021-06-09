@@ -1,8 +1,10 @@
 """Input/output utilities."""
 import os
 
+import flax.core.frozen_dict as frozen_dict
 import numpy as np
-import flax.serialization as serialization
+
+from .distribute import get_first
 
 
 def open_or_create(path, filename, option):
@@ -35,8 +37,8 @@ def save_params(
             file_handle,
             e=epoch,
             d=data,
-            p=params.unfreeze(),
-            o=optimizer_state,
+            p=get_first(params.unfreeze()),
+            o=get_first(optimizer_state),
             k=key,
         )
 
@@ -48,7 +50,7 @@ def reload_params(directory, name):
         npz_file = np.load(file_handle, allow_pickle=True)
         epoch = npz_file["e"].tolist()
         data = npz_file["d"].tolist()
-        params = npz_file["p"].tolist()
+        params = frozen_dict.freeze(npz_file["p"].tolist())
         optimizer_state = npz_file["o"].tolist()
         key = npz_file["k"]
         return (epoch, data, params, optimizer_state, key)

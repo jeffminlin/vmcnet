@@ -7,7 +7,6 @@ import jax.numpy as jnp
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
-    PositionAmplitudeData,
     PositionAmplitudeWalkerData,
 )
 

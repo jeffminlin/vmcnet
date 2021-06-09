@@ -13,7 +13,7 @@ import vmcnet.updates as updates
 import vmcnet.utils as utils
 import vmcnet.utils.io as io
 
-reload_checkpoint_dir = "../logs/B/ferminet/adam/checkpoints"
+reload_checkpoint_dir = "logs/B/ferminet/adam/checkpoints"
 checkpoint_file = "10.npz"
 
 
@@ -123,7 +123,6 @@ def main(reload_from_checkpoint: bool = False):
             params,
             optimizer_state,
             key,
-            pacore.distribute_position_amplitude_data,
         )
     else:
         # Distribute everything via jax.pmap, distributing/replicating/splitting as
@@ -152,7 +151,7 @@ def main(reload_from_checkpoint: bool = False):
         metrop_step_fn,
         update_param_fn,
         key,
-        logdir="../logs/B/ferminet/adam",
+        logdir="logs/B/ferminet/adam",
         checkpoint_every=10,
     )
     logging.info("Completed!")

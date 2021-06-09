@@ -8,7 +8,7 @@ import numpy as np
 import vmcnet.train as train
 import vmcnet.utils as utils
 
-from ..utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
+from ..test_utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
 
 
 def _make_different_pmappable_data(data):
