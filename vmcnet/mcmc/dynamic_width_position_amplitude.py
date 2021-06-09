@@ -1,7 +1,6 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
-from typing import Callable, TypeVar
+from typing import Callable, TypeVar, TypedDict
 
-import chex
 import jax
 import jax.numpy as jnp
 from vmcnet.utils.distribute import mean_all_local_devices
@@ -9,15 +8,14 @@ from vmcnet.utils.distribute import mean_all_local_devices
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
-    PositionAmplitudeData,
+    PositionAmplitudeWalkerData,
 )
 
 # Represents a pytree or pytree-like object containing model params
 P = TypeVar("P")
 
 
-@chex.dataclass
-class MoveMetadata:
+class MoveMetadata(TypedDict):
     """Metadata for metropolis algorithm with dynamically sized gaussian steps.
 
     Attributes:
@@ -37,9 +35,10 @@ class MoveMetadata:
     moves_since_update: jnp.int32
 
 
-class DynamicWidthPositionAmplitudeData(PositionAmplitudeData):
+class DynamicWidthPositionAmplitudeData(TypedDict):
     """NamedTuple holding positions and wavefunction amplitudes, plus MoveMetadata."""
 
+    walker_data: PositionAmplitudeWalkerData
     move_metadata: MoveMetadata
 
 
@@ -74,28 +73,6 @@ def make_dynamic_width_position_amplitude_data(
             move_acceptance_sum=move_acceptance_sum,
             moves_since_update=moves_since_update,
         ),
-    )
-
-
-def dynamic_pa_to_savable_dict(pa: DynamicWidthPositionAmplitudeData):
-    return {
-        "p": pa.walker_data.position,
-        "a": pa.walker_data.amplitude,
-        "m": {
-            "std": pa.move_metadata.std_move,
-            "mas": pa.move_metadata.move_acceptance_sum,
-            "msu": pa.move_metadata.moves_since_update,
-        },
-    }
-
-
-def dynamic_pa_from_saved_dict(d):
-    return make_dynamic_width_position_amplitude_data(
-        d["p"],
-        d["a"],
-        d["m"]["std"],
-        d["m"]["mas"],
-        d["m"]["msu"],
     )
 
 
@@ -165,9 +142,9 @@ def make_update_move_metadata_fn(
     def update_move_metadata(
         move_metadata: MoveMetadata, current_move_mask: jnp.ndarray
     ) -> MoveMetadata:
-        std_move = move_metadata.std_move
-        move_acceptance_sum = move_metadata.move_acceptance_sum
-        moves_since_update = move_metadata.moves_since_update
+        std_move = move_metadata["std_move"]
+        move_acceptance_sum = move_metadata["move_acceptance_sum"]
+        moves_since_update = move_metadata["moves_since_update"]
 
         current_avg_acceptance = mean_all_local_devices(current_move_mask)
         move_acceptance_sum = move_acceptance_sum + current_avg_acceptance
@@ -227,7 +204,7 @@ def make_dynamic_pos_amp_gaussian_step(
 
     return make_position_amplitude_gaussian_metropolis_step(
         model_apply,
-        lambda data: data.move_metadata.std_move,
+        lambda data: data["move_metadata"]["std_move"],
         update_move_metadata_fn,
         logabs,
     )

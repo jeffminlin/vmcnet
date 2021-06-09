@@ -111,7 +111,6 @@ def main(reload_from_checkpoint: bool = False):
             reload_checkpoint_dir,
             checkpoint_file,
         )
-        data = dwpa.dynamic_pa_from_saved_dict(data)
         # Data is already structured with first index indicating device. Directly
         # distribute it back across the devices it came from.
         (
@@ -146,7 +145,6 @@ def main(reload_from_checkpoint: bool = False):
         params,
         optimizer_state,
         data,
-        dwpa.dynamic_pa_to_savable_dict,
         nchains,
         nburn,
         nepochs,

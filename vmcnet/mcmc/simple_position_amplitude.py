@@ -1,6 +1,6 @@
 """Helper functions for position amplitude data with fixed-width gaussian steps."""
 
-from typing import Callable, TypeVar
+from typing import Callable, TypeVar, TypedDict
 
 import jax.numpy as jnp
 
@@ -8,6 +8,7 @@ from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeData,
+    PositionAmplitudeWalkerData,
 )
 
 # Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
@@ -17,9 +18,10 @@ D = TypeVar("D")
 P = TypeVar("P")
 
 
-class SimplePositionAmplitudeData(PositionAmplitudeData):
+class SimplePositionAmplitudeData(TypedDict):
     """NamedTuple of positions, amplitudes, and nothing else."""
 
+    walker_data: PositionAmplitudeWalkerData
     move_metadata: None
 
 
@@ -34,20 +36,6 @@ def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.nd
         SimplePositionAmplitudeData
     """
     return make_position_amplitude_data(position, amplitude, None)
-
-
-def simple_pa_to_savable_dict(d: PositionAmplitudeData):
-    return {
-        "position": d.walker_data.position,
-        "amplitude": d.walker_data.amplitude,
-    }
-
-
-def simple_pa_from_saved_dict(pa, d):
-    return make_position_amplitude_data(
-        d["position"],
-        d["amplitude"],
-    )
 
 
 def make_simple_pos_amp_gaussian_step(

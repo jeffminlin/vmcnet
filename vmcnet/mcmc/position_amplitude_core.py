@@ -1,5 +1,5 @@
 """Shared routines for position amplitude metropolis data."""
-from typing import Any, Callable, Optional, Tuple, TypeVar
+from typing import Any, Callable, Optional, Tuple, TypeVar, TypedDict
 
 import chex
 import jax
@@ -16,8 +16,7 @@ P = TypeVar("P")
 M = TypeVar("M")
 
 
-@chex.dataclass
-class PositionAmplitudeWalkerData:
+class PositionAmplitudeWalkerData(TypedDict):
     """NamedTuple of walker data holding just positions and amplitudes.
 
     Holding both particle position and wavefn amplitude in the same named
@@ -35,8 +34,7 @@ class PositionAmplitudeWalkerData:
     amplitude: jnp.ndarray
 
 
-@chex.dataclass
-class PositionAmplitudeData:
+class PositionAmplitudeData(TypedDict):
     """NamedTuple of data holding positions, amplitudes, and optional metadata.
 
     Holding both particle position and wavefn amplitude in the data can be advantageous
@@ -81,7 +79,15 @@ def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
     Returns:
         jnp.ndarray: the particle positions from the data
     """
-    return data.walker_data.position
+    return data["walker_data"]["position"]
+
+
+def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[jnp.ndarray, jnp.ndarray, Any]:
+    return (
+        data["walker_data"]["position"],
+        data["walker_data"]["amplitude"],
+        data["move_metadata"],
+    )
 
 
 def distribute_position_amplitude_data(
@@ -95,8 +101,8 @@ def distribute_position_amplitude_data(
     Returns:
         PositionAmplitudeData: the distributed data.
     """
-    walker_data = data.walker_data
-    move_metadata = data.move_metadata
+    walker_data = data["walker_data"]
+    move_metadata = data["move_metadata"]
     walker_data = distribute_data(walker_data)
     move_metadata = replicate_all_local_devices(move_metadata)
     return PositionAmplitudeData(walker_data=walker_data, move_metadata=move_metadata)
@@ -129,12 +135,12 @@ def make_position_amplitude_gaussian_proposal(
     def proposal_fn(params: P, data: PositionAmplitudeData, key: jnp.float32):
         std_move = get_std_move(data)
         proposed_position, key = metropolis.gaussian_proposal(
-            data.walker_data.position, std_move, key
+            data["walker_data"]["position"], std_move, key
         )
         proposed_amplitude = model_apply(params, proposed_position)
         return (
             make_position_amplitude_data(
-                proposed_position, proposed_amplitude, data.move_metadata
+                proposed_position, proposed_amplitude, data["move_metadata"]
             ),
             key,
         )
@@ -162,8 +168,8 @@ def make_position_amplitude_metropolis_symmetric_acceptance(
     ):
         del params
         return metropolis.metropolis_symmetric_acceptance(
-            data.walker_data.amplitude,
-            proposed_data.walker_data.amplitude,
+            data["walker_data"]["amplitude"],
+            proposed_data["walker_data"]["amplitude"],
             logabs=logabs,
         )
 
@@ -213,12 +219,14 @@ def make_position_amplitude_update(
             return jnp.where(shaped_mask, proposal, old_data)
 
         new_walker_data = jax.tree_map(
-            mask_on_first_dimension, data.walker_data, proposed_data.walker_data
+            mask_on_first_dimension, data["walker_data"], proposed_data["walker_data"]
         )
 
-        new_move_metadata = proposed_data.move_metadata
+        new_move_metadata = proposed_data["move_metadata"]
         if update_move_metadata_fn is not None:
-            new_move_metadata = update_move_metadata_fn(data.move_metadata, move_mask)
+            new_move_metadata = update_move_metadata_fn(
+                data["move_metadata"], move_mask
+            )
 
         return PositionAmplitudeData(
             walker_data=new_walker_data, move_metadata=new_move_metadata

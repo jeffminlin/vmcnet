@@ -2,7 +2,8 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import vmcnet.mcmc as mcmc
+from typing import Tuple
+import vmcnet.mcmc.position_amplitude_core as pacore
 
 from ..utils import make_dummy_data_params_and_key, dummy_model_apply
 
@@ -10,24 +11,28 @@ from ..utils import make_dummy_data_params_and_key, dummy_model_apply
 def test_gaussian_proposal_with_nonzero_step_width():
     """Test that a model_apply is passed through correctly when making a proposal_fn."""
     std_move = 0.3
-    proposal_fn = (
-        mcmc.position_amplitude_core.make_position_amplitude_gaussian_proposal(
-            dummy_model_apply, lambda _: std_move
-        )
+    proposal_fn = pacore.make_position_amplitude_gaussian_proposal(
+        dummy_model_apply, lambda _: std_move
     )
     positions, params, key = make_dummy_data_params_and_key()
     # use the "wrong" amplitudes here so we can make sure the "right" ones come out of
     # the proposal
     amplitudes = jnp.array([-1, -1, -1, -1])
-    data = mcmc.position_amplitude_core.make_position_amplitude_data(
-        positions, amplitudes, None
-    )
+    data = pacore.make_position_amplitude_data(positions, amplitudes, None)
 
     new_data, _ = proposal_fn(params, data, key)
-    np.testing.assert_allclose(new_data.walker_data.amplitude, jnp.array([0, 1, 2, 3]))
+    np.testing.assert_allclose(
+        new_data["walker_data"]["amplitude"], jnp.array([0, 1, 2, 3])
+    )
 
 
-def _get_data_for_test_update():
+def _get_data_for_test_update() -> Tuple[
+    pacore.PositionAmplitudeData,
+    pacore.PositionAmplitudeData,
+    jnp.ndarray,
+    jnp.ndarray,
+    jnp.ndarray,
+]:
     pos = jnp.array([[0, 0], [0, 0], [0, 0], [0, 0]])
     proposed_pos = jnp.array([[1, 1], [2, 2], [3, 4], [4, 3]])
     amplitude = jnp.array([-1, -1, -1, -1])
@@ -35,10 +40,8 @@ def _get_data_for_test_update():
     original_metadata_value = 2
     proposed_metadata_value = 3
 
-    data = mcmc.position_amplitude_core.make_position_amplitude_data(
-        pos, amplitude, original_metadata_value
-    )
-    proposed_data = mcmc.position_amplitude_core.make_position_amplitude_data(
+    data = pacore.make_position_amplitude_data(pos, amplitude, original_metadata_value)
+    proposed_data = pacore.make_position_amplitude_data(
         proposed_pos, proposed_amplitude, proposed_metadata_value
     )
     move_mask = jnp.array([True, False, False, True])
@@ -60,16 +63,12 @@ def test_update_position_amplitude():
 
     updated_metadata_value = 4
 
-    update_position_amplitude = (
-        mcmc.position_amplitude_core.make_position_amplitude_update(
-            lambda old_val, _2: updated_metadata_value
-        )
+    update_position_amplitude = pacore.make_position_amplitude_update(
+        lambda old_val, _2: updated_metadata_value
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
-    position = updated_data.walker_data.position
-    amplitude = updated_data.walker_data.amplitude
-    move_metadata = updated_data.move_metadata
+    (position, amplitude, move_metadata) = pacore.to_pam_tuple(updated_data)
     np.testing.assert_allclose(position, expected_position)
     np.testing.assert_allclose(amplitude, expected_amplitude)
     np.testing.assert_allclose(move_metadata, updated_metadata_value)
@@ -85,17 +84,13 @@ def test_update_position_amplitude_no_metadata_update_fn():
         expected_amplitude,
     ) = _get_data_for_test_update()
 
-    update_position_amplitude = (
-        mcmc.position_amplitude_core.make_position_amplitude_update()
-    )
+    update_position_amplitude = pacore.make_position_amplitude_update()
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 
-    position = updated_data.walker_data.position
-    amplitude = updated_data.walker_data.amplitude
-    move_metadata = updated_data.move_metadata
+    (position, amplitude, move_metadata) = pacore.to_pam_tuple(updated_data)
     np.testing.assert_allclose(position, expected_position)
     np.testing.assert_allclose(amplitude, expected_amplitude)
-    np.testing.assert_allclose(move_metadata, proposed_data.move_metadata)
+    np.testing.assert_allclose(move_metadata, proposed_data["move_metadata"])
 
 
 def test_distribute_position_amplitude_data():
@@ -105,16 +100,12 @@ def test_distribute_position_amplitude_data():
     amplitude = -1 * jnp.arange(ndevices) - 1
     metadata = jnp.array([2, 3])
 
-    data = mcmc.position_amplitude_core.make_position_amplitude_data(
-        pos, amplitude, metadata
-    )
+    data = pacore.make_position_amplitude_data(pos, amplitude, metadata)
 
-    data = mcmc.position_amplitude_core.distribute_position_amplitude_data(data)
+    data = pacore.distribute_position_amplitude_data(data)
 
     for device_index in range(ndevices):
-        position = data.walker_data.position
-        amplitude = data.walker_data.amplitude
-        move_metadata = data.move_metadata
+        (position, amplitude, move_metadata) = pacore.to_pam_tuple(data)
         # Position and amplitude are distributed across devices
         np.testing.assert_equal(position[device_index], jnp.array([device_index]))
         np.testing.assert_equal(amplitude[device_index], jnp.array([-device_index - 1]))
