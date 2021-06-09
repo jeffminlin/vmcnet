@@ -82,6 +82,10 @@ def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
 
 
 def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[jnp.ndarray, jnp.ndarray, Any]:
+    """Returns data as a (position, amplitude, move_metadata) tuple.
+
+    Useful for quickly assigning all three pieces to local variables for further use.
+    """
     return (
         data["walker_data"]["position"],
         data["walker_data"]["amplitude"],

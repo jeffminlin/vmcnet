@@ -125,6 +125,14 @@ def distribute_reloaded_data(
     optimizer_state: O,
     key: jnp.ndarray,
 ) -> Tuple[D, P, O, jnp.ndarray]:
+    """Split data, replicate params and opt state, and split PRNG key to all devices.
+
+    Intended for use on data, params, optimizer, and key that have been reloaded from
+    a checkpoint. Since checkpoints save all data as if it is distributed, distribution
+    simply broadcasts it back to the devices. Similarly, the key argument is expected to
+    contain one key per device and is also broadcasted. Params and optimizer state are
+    replicated.
+    """
     data = broadcast_all_local_devices(data)
     params = replicate_all_local_devices(params)
     optimizer_state = replicate_all_local_devices(optimizer_state)
