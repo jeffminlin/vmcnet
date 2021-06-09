@@ -32,9 +32,7 @@ def test_vmc_loop_newtons_x_squared():
         x,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_vmc_state(
-        dummy_data, x, None, key
-    )
+    ) = utils.distribute.distribute_vmc_state(dummy_data, x, None, key)
 
     nburn = 0
     nepochs = 10
@@ -66,7 +64,7 @@ def test_vmc_loop_newtons_x_squared():
         new_x = x - dmodel / ddmodel
         return new_x, optimizer_state, None
 
-    min_x, _, _ = train.vmc.vmc_loop(
+    min_x, _, _, _ = train.vmc.vmc_loop(
         x,
         optimizer_state,
         dummy_data,

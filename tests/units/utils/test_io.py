@@ -5,7 +5,7 @@ import numpy as np
 import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
 
-from ..test_utils import make_dummy_data_params_and_key, assert_pytree_equal
+from tests.test_utils import make_dummy_data_params_and_key, assert_pytree_equal
 
 
 def test_save_and_reload_vmc_state(tmp_path):

@@ -5,7 +5,7 @@ import numpy as np
 
 import vmcnet.physics as physics
 
-from ..test_utils import make_dummy_log_f, make_dummy_x
+from tests.test_utils import make_dummy_log_f, make_dummy_x
 
 
 def test_laplacian_psi_over_psi():

@@ -7,7 +7,7 @@ import numpy as np
 
 import vmcnet.mcmc.position_amplitude_core as pacore
 
-from ..test_utils import make_dummy_data_params_and_key, dummy_model_apply
+from tests.test_utils import make_dummy_data_params_and_key, dummy_model_apply
 
 
 def test_gaussian_proposal_with_nonzero_step_width():

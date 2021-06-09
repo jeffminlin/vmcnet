@@ -178,7 +178,7 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
     pmapped: bool = True,
-) -> Tuple[P, S, D]:
+) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -242,8 +242,8 @@ def vmc_loop(
             steps. Defaults to True.
 
     Returns:
-        A tuple of (trained parameters, final optimizer state, final data). These are
-        the same structure as (params, optimizer_state, initial_data).
+        A tuple of (trained parameters, final optimizer state, final data, final key).
+        These are the same structure as (params, optimizer_state, initial_data, key).
     """
     (
         checkpoint_dir,
@@ -303,4 +303,4 @@ def vmc_loop(
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
-    return params, optimizer_state, data
+    return params, optimizer_state, data, key
