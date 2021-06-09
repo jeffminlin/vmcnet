@@ -128,7 +128,9 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
     perm_output = two_elec_layer.apply(params, perm_input_2e)
 
     assert output.shape == (nchains, nelec_total, nelec_total, ndense)
-    np.testing.assert_allclose(output[:, permutation][..., permutation, :], perm_output)
+    np.testing.assert_allclose(
+        output[:, permutation][..., permutation, :], perm_output, atol=1e-6
+    )
 
 
 def test_split_dense_shape():
