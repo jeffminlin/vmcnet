@@ -125,12 +125,11 @@ def distribute_vmc_state_from_checkpoint(
     optimizer_state: S,
     key: jnp.ndarray,
 ) -> Tuple[D, P, S, jnp.ndarray]:
-    """Split data, replicate params and opt state, and split PRNG key to all devices.
+    """Distribute vmc state that was reloaded from a saved checkpoint.
 
-    Intended for use on data, params, optimizer, and key that have been reloaded from
-    a checkpoint. Data and key is saved independently for each device, so on reload
-    we simply broadcast it back to the devices. Params and optimizer state are
-    replicated.
+    Data and key are saved independently for each device, so on reload
+    we simply broadcast them back to the devices. Params and optimizer state are saved
+    as a single copy, so on reload we replicate them to all devices.
     """
     data = broadcast_all_local_devices(data)
     params = replicate_all_local_devices(params)
