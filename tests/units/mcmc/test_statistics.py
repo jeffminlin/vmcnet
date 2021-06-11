@@ -1,5 +1,8 @@
 """Test routines for computing statistics related to MCMC time series."""
-import numpy.random as random
+
+import jax
+import jax.numpy as jnp
+import jax.random as random
 import numpy as np
 import vmcnet.mcmc.statistics as statistics
 
@@ -11,7 +14,7 @@ def _get_sample_size():
 def test_constant_samples_no_variance():
     """Test that samples from a constant distribution produce 0 variance."""
     (nsamples, nchains) = _get_sample_size()
-    constant_samples = np.ones((nsamples, nchains))
+    constant_samples = jnp.ones((nsamples, nchains))
 
     var_estimate = statistics.multi_chain_variance_estimate(constant_samples)
 
@@ -21,7 +24,8 @@ def test_constant_samples_no_variance():
 def test_independent_samples():
     """Test statistics on a chain with independent samples."""
     (nsamples, nchains) = _get_sample_size()
-    independent_samples = random.randn(nsamples, nchains)
+    key = random.PRNGKey(0)
+    independent_samples = random.normal(key, (nsamples, nchains))
 
     autocorr_curve = statistics.multi_chain_autocorr(independent_samples)
     tau = statistics.tau(autocorr_curve)
@@ -40,18 +44,16 @@ def _construct_correlated_samples(nsamples, nchains, decay_factor):
     Each sample is constructed by multiplying the previous sample by a constant decay
     factor and then adding a new independent gaussian sample.
     """
-    independent_samples = random.randn(nsamples, nchains)
-    correlated_samples = independent_samples
+    key = random.PRNGKey(0)
+    independent_samples = random.normal(key, (nsamples, nchains))
 
-    def get_correlated_sample(prev_corr_sample, curr_ind_sample):
-        return prev_corr_sample * decay_factor + curr_ind_sample
+    def make_next_samples(prev_corr_samples, curr_ind_samples):
+        new_samples = prev_corr_samples * decay_factor + curr_ind_samples
+        return new_samples, new_samples
 
-    for chain in range(nchains):
-        for i in range(1, len(correlated_samples)):
-            correlated_samples[i][chain] = get_correlated_sample(
-                correlated_samples[i - 1][chain], independent_samples[i][chain]
-            )
-
+    _, correlated_samples = jax.lax.scan(
+        make_next_samples, independent_samples[0], independent_samples
+    )
     return correlated_samples
 
 
@@ -66,7 +68,7 @@ def test_correlated_samples():
 
     # Test beginning of autocorrelation curve against a decaying exponential.
     nautocorr_to_check = 100
-    expected_autocorr = decay_factor ** np.arange(nautocorr_to_check)
+    expected_autocorr = decay_factor ** jnp.arange(nautocorr_to_check)
     np.testing.assert_allclose(
         autocorr_curve[0:nautocorr_to_check], expected_autocorr, atol=1e-1
     ),
