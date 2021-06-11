@@ -34,30 +34,41 @@ def test_independent_samples():
     np.testing.assert_allclose(tau, 1, 1e-1)
 
 
+def _construct_correlated_samples(nsamples, nchains, decay_factor):
+    """Construct chains of simple correlated samples.
+
+    Each sample is constructed by multiplying the previous sample by a constant decay
+    factor and then adding a new independent gaussian sample.
+    """
+    independent_samples = random.randn(nsamples, nchains)
+    correlated_samples = independent_samples
+
+    def get_correlated_sample(prev_corr_sample, curr_ind_sample):
+        return prev_corr_sample * decay_factor + curr_ind_sample
+
+    for chain in range(nchains):
+        for i in range(1, len(correlated_samples)):
+            correlated_samples[i][chain] = get_correlated_sample(
+                correlated_samples[i - 1][chain], independent_samples[i][chain]
+            )
+
+    return correlated_samples
+
+
 def test_correlated_samples():
-    """Test statistics on a chain with exponentially decaying autocorrelation."""
+    """Test statistics on sample chains with exponentially decaying autocorrelation."""
     (nsamples, nchains) = _get_sample_size()
     decay_factor = 0.9
-    independent_samples = random.randn(nsamples, nchains)
-    correlated_samples = np.ones_like(independent_samples)
-    # Construct simple correlated chains where each sample is constructed by multiplying
-    # The previous sample by a decay factor and then adding a new independent sample.
-    for chain in range(nchains):
-        correlated_samples[0][chain] = independent_samples[0][chain]
-        for i in range(1, len(correlated_samples)):
-            correlated_samples[i][chain] = (
-                correlated_samples[i - 1][chain] * decay_factor
-                + independent_samples[i][chain]
-            )
+    correlated_samples = _construct_correlated_samples(nsamples, nchains, decay_factor)
 
     autocorr_curve = statistics.multi_chain_autocorr(correlated_samples)
     tau = statistics.tau(autocorr_curve)
 
     # Test beginning of autocorrelation curve against a decaying exponential.
-    autocorr_to_check = 100
-    expected_autocorr_head = decay_factor ** np.arange(autocorr_to_check)
+    nautocorr_to_check = 100
+    expected_autocorr = decay_factor ** np.arange(nautocorr_to_check)
     np.testing.assert_allclose(
-        autocorr_curve[0:autocorr_to_check], expected_autocorr_head, atol=1e-1
+        autocorr_curve[0:nautocorr_to_check], expected_autocorr, atol=1e-1
     ),
     # Test autocorrelation time against the infinite sum of the decaying exponential.
     infinite_exponential_sum = 1 / (1 - decay_factor)
