@@ -3,12 +3,14 @@ import numpy.random as random
 import numpy as np
 import vmcnet.mcmc.statistics as statistics
 
-nsamples = 100000
-nchains = 5
+
+def _get_sample_size():
+    return (100000, 5)
 
 
 def test_constant_samples_no_variance():
     """Test that samples from a constant distribution produce 0 variance."""
+    (nsamples, nchains) = _get_sample_size()
     constant_samples = np.ones((nsamples, nchains))
 
     var_estimate = statistics.multi_chain_variance_estimate(constant_samples)
@@ -18,6 +20,7 @@ def test_constant_samples_no_variance():
 
 def test_independent_samples():
     """Test statistics on a chain with independent samples."""
+    (nsamples, nchains) = _get_sample_size()
     independent_samples = random.randn(nsamples, nchains)
 
     autocorr_curve = statistics.multi_chain_autocorr(independent_samples)
@@ -33,6 +36,7 @@ def test_independent_samples():
 
 def test_correlated_samples():
     """Test statistics on a chain with exponentially decaying autocorrelation."""
+    (nsamples, nchains) = _get_sample_size()
     decay_factor = 0.9
     independent_samples = random.randn(nsamples, nchains)
     correlated_samples = np.ones_like(independent_samples)
