@@ -370,6 +370,12 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
             float(metrics["variance_noclip"])
         )
 
+    param_str = ""
+    if "param_l1" in metrics:
+        param_str = param_str + ", l1 norm of params: {:.5e}".format(
+            float(metrics["param_l1"])
+        )
+
     info_out = ", ".join([epoch_str, energy_str, variance_str, accept_ratio_str])
-    info_out = info_out + checkpoint_str
+    info_out = info_out + param_str + checkpoint_str
     logging.info(info_out)
