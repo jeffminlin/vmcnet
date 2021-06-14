@@ -11,8 +11,13 @@ from vmcnet.models.construct import Activation
 from vmcnet.models.weights import WeightInitializer, zeros
 
 
-def _split_mean(splits, x, axis=-2, keepdims=True):
-    """Split an array and then take the mean over an axis in each of the splits."""
+def _split_mean(
+    x: jnp.ndarray,
+    splits: Union[int, Sequence[int]],
+    axis: int = -2,
+    keepdims: bool = True,
+) -> List[jnp.ndarray]:
+    """Split x on an axis and take the mean over that axis in each of the splits."""
     split_x = jnp.split(x, splits, axis=axis)
     split_x_mean = jax.tree_map(
         functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
@@ -20,8 +25,11 @@ def _split_mean(splits, x, axis=-2, keepdims=True):
     return split_x_mean
 
 
-def _rolled_concat(arrays, n, axis=-1):
-    """Concatenate a list of arrays starting from the nth and wrapping back around."""
+def _rolled_concat(arrays: List[jnp.ndarray], n: int, axis: int = -1) -> jnp.ndarray:
+    """Concatenate a list of arrays starting from the nth and wrapping back around.
+
+    The input list of arrays must all have the same shapes, except for along `axis`.
+    """
     return jnp.concatenate(arrays[n:] + arrays[:n], axis=axis)
 
 
@@ -31,11 +39,11 @@ def _tree_sum(tree1, tree2):
 
 
 def _tree_prod(tree1, tree2):
-    """Leaf-wise produdct of two pytrees with the same structure."""
+    """Leaf-wise product of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
-def _valid_skip(x, y):
+def _valid_skip(x: jnp.ndarray, y: jnp.ndarray) -> bool:
     return x.shape[-1] == y.shape[-1]
 
 
@@ -251,7 +259,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         concat_2e = []
         for spin in range(len(split_2e)):
             split_arrays = _split_mean(
-                self.spin_split, split_2e[spin], axis=-2, keepdims=False
+                split_2e[spin], self.spin_split, axis=-2, keepdims=False
             )  # [spin1: [spin2: (..., nelec[spin1], d)]]
             if self.cyclic_spins:
                 concat_arrays = _rolled_concat(split_arrays, spin)
@@ -269,7 +277,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
 
-        split_1e_means = _split_mean(self.spin_split, in_1e, axis=-2, keepdims=True)
+        split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
         dense_mixed_split = self._compute_transformed_1e_means(split_1e_means)
         dense_out = _tree_sum(dense_unmixed_split, dense_mixed_split)
 
