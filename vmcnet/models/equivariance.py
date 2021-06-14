@@ -1,15 +1,14 @@
 """Permutation equivariant functions."""
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 import flax
 import jax
 import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
+from vmcnet.models.construct import Activation
 from vmcnet.models.weights import WeightInitializer, zeros
-
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
 def _split_mean(splits, x, axis=-2, keepdims=True):
