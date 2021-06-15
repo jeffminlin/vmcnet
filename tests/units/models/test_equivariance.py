@@ -1,4 +1,5 @@
 """Test equivariant model parts."""
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -157,6 +158,4 @@ def test_split_dense_shape():
     outputs, _ = split_dense_layer.init_with_output(subkey, inputs)
 
     for i, output in enumerate(outputs):
-        assert output.shape[0] == 8
-        assert output.shape[1] == nspins[i]
-        assert output.shape[2] == ndense[i]
+        chex.assert_shape(output, (nchains, nspins[i], ndense[i]))
