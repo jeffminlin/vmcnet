@@ -296,6 +296,7 @@ def vmc_loop(
             nchains,
             running_energy_and_variance,
             checkpoint_metric,
+            pmapped,
             logdir=logdir,
             variance_scale=checkpoint_variance_scale,
             checkpoint_every=checkpoint_every,

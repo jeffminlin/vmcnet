@@ -30,17 +30,23 @@ def save_vmc_state(
     params,
     optimizer_state,
     key,
+    pmapped: bool = True,
 ):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
+        params = params.unfreeze()
+        if pmapped:
+            params = get_first(params)
+            optimizer_state = get_first(optimizer_state)
+
         np.savez(
             file_handle,
             e=epoch,
             d=data,
             # Params and opt_state are always replicated, so only save one copy.
             # Params must also be converted from a frozen_dict to a dict.
-            p=get_first(params.unfreeze()),
-            o=get_first(optimizer_state),
+            p=params,
+            o=optimizer_state,
             k=key,
         )
 
