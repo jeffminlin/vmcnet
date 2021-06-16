@@ -7,16 +7,16 @@ import vmcnet.utils as utils
 
 D = TypeVar("D")  # represents MCMC data
 P = TypeVar("P")  # Represents model parameters
-O = TypeVar("O")  # represents optimizer state
+S = TypeVar("S")  # represents optimizer state
 
 
 def create_grad_energy_update_param_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,
-    optimizer_apply: Callable[[P, P, O], Tuple[P, O]],
+    optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
     get_position_fn: Callable[[D], jnp.ndarray],
-) -> Callable[[D, P, O], Tuple[P, O, Dict]]:
+) -> Callable[[D, P, S], Tuple[P, S, Dict]]:
     """Create the `update_param_fn` based on the gradient of the local energy.
 
     See :func:`~vmcnet.train.vmc.make_training_step` for its usage.

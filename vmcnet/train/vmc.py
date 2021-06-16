@@ -11,7 +11,7 @@ import vmcnet.utils as utils
 # and wave function amplitudes, or other auxilliary MCMC data
 D = TypeVar("D")
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
-O = TypeVar("O")  # represents optimizer state
+S = TypeVar("S")  # represents optimizer state
 
 
 def walk_data(
@@ -105,9 +105,9 @@ def make_burning_step(
 def make_training_step(
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    update_param_fn: Callable[[D, P, S], Tuple[P, S, Dict]],
     pmapped: bool = True,
-) -> Callable[[D, P, O, jnp.ndarray], Tuple[jnp.float32, D, P, O, Dict, jnp.ndarray]]:
+) -> Callable[[D, P, S, jnp.ndarray], Tuple[jnp.float32, D, P, S, Dict, jnp.ndarray]]:
     """Factory to create a training step.
 
     This provides the functionality to optionally apply jax.pmap to a single training
@@ -163,14 +163,14 @@ def make_training_step(
 
 def vmc_loop(
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     initial_data: D,
     nchains: int,
     nburn: int,
     nepochs: int,
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, O], Tuple[P, O, Dict]],
+    update_param_fn: Callable[[D, P, S], Tuple[P, S, Dict]],
     key: jnp.ndarray,
     logdir: str = None,
     checkpoint_every: int = None,
@@ -178,7 +178,7 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
     pmapped: bool = True,
-) -> Tuple[P, O, D]:
+) -> Tuple[P, S, D]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a

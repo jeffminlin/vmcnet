@@ -9,7 +9,7 @@ from jax import core
 T = TypeVar("T")  # representing an arbitrary pytree
 D = TypeVar("D")  # represents a pytree or pytree-like object containing MCMC data
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
-O = TypeVar("O")  # represents optimizer state
+S = TypeVar("S")  # represents optimizer state
 
 # axis name to pmap over
 PMAP_AXIS_NAME = "pmap_axis"
@@ -91,10 +91,10 @@ def distribute_data(data):
 def distribute_data_params_optstate_and_key(
     data: D,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     key: jnp.ndarray,
     distribute_data_fn: Callable[[D], D] = distribute_data,
-) -> Tuple[D, P, O, jnp.ndarray]:
+) -> Tuple[D, P, S, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
     Args:
