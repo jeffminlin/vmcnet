@@ -225,7 +225,8 @@ class FermiNetOneElectronLayer(flax.linen.Module):
 
     def setup(self):
         """Setup Dense layers."""
-        # workaround MyPy's typing error for callable attribute
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
 
         self._unmixed_dense = flax.linen.Dense(
@@ -411,7 +412,8 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
 
     def setup(self):
         """Setup Dense layer."""
-        # workaround MyPy's typing error for callable attribute
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
         self._dense = flax.linen.Dense(
             self.ndense,
