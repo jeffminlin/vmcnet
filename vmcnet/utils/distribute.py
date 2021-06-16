@@ -60,7 +60,11 @@ def get_first(obj: T) -> T:
 
 
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
-mean_all_local_devices = lambda x: pmean_if_pmap(jnp.mean(x))
+
+
+def mean_all_local_devices(x):
+    """Compute mean over all local devices if distributed, otherwise the usual mean."""
+    return pmean_if_pmap(jnp.mean(x))
 
 
 def reshape_data_leaves_for_distribution(data_leaf):

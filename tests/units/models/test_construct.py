@@ -34,3 +34,35 @@ def test_compose_negative_with_three_body_antisymmetry():
     output = model.apply({}, x)
 
     np.testing.assert_allclose(output, jnp.array([2 * 16 * -2, 2 * 54 * 20]))
+
+
+def test_ferminet_can_be_constructed():
+    """Make sure basic construction of the FermiNet does not raise exceptions."""
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    ion_pos = jax.random.normal(subkey, (5, 3))
+
+    key, subkey = jax.random.split(key)
+    init_pos = jax.random.normal(subkey, shape=(20, 6, 3))
+
+    log_psi = models.construct.SingleDeterminantFermiNet(
+        (2,),
+        ((64, 8), (64, 8), (32, 8), (32, 4), (12,), (14, 3), (13,)),
+        models.weights.get_kernel_initializer("orthogonal"),
+        models.weights.get_kernel_initializer("xavier_normal"),
+        models.weights.get_kernel_initializer("glorot_uniform"),
+        models.weights.get_kernel_initializer("kaiming_uniform"),
+        models.weights.get_kernel_initializer("he_normal"),
+        models.weights.get_kernel_initializer("lecun_normal"),
+        models.weights.get_kernel_initializer("ones"),
+        models.weights.get_bias_initializer("zeros"),
+        models.weights.get_bias_initializer("normal"),
+        models.weights.get_bias_initializer("uniform"),
+        jnp.tanh,
+        ion_pos=ion_pos,
+    )
+
+    key, subkey = jax.random.split(key)
+    params = log_psi.init(subkey, init_pos)
+    log_psi.apply(params, init_pos)

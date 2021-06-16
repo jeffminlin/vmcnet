@@ -87,9 +87,9 @@ def make_burning_step(
         Callable: function with signature
             (data, params, key) -> (data, key),
         with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original (data, params, key) buffers are deleted in the pmapped version via
-        the `donate_argumns` argument so that XLA is potentially more memory-efficient
-        on the GPU. See :func:`jax.pmap`.
+        the original (data, key) buffers are deleted in the pmapped version via the
+        `donate_argnums` argument so that XLA is potentially more memory-efficient on
+        the GPU. See :func:`jax.pmap`.
     """
 
     def burning_step(data, params, key):
@@ -99,7 +99,7 @@ def make_burning_step(
     if not pmapped:
         return burning_step
 
-    return utils.distribute.pmap(burning_step, donate_argnums=(0, 1, 2))
+    return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
 
 
 def make_training_step(
@@ -139,10 +139,9 @@ def make_training_step(
             (data, params, optimizer_state, key)
                 -> (accept_ratio, data, params, optmizer_state, metrics, key),
         with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original (data, params, optimizer_state, key) buffers are deleted in the
-        pmapped version using the `donate_argnums` flag so that XLA is potentially more
-        memory-efficient on the GPU.
-        See :func:`jax.pmap`.
+        the original data and key buffers are deleted in the pmapped version using the
+        `donate_argnums` flag so that XLA is potentially more memory-efficient on the
+        GPU. See :func:`jax.pmap`.
     """
     nsteps_per_param_update = max(nsteps_per_param_update, 1)
 
@@ -159,7 +158,7 @@ def make_training_step(
     if not pmapped:
         return training_step
 
-    return utils.distribute.pmap(training_step, donate_argnums=(0, 1, 2, 3))
+    return utils.distribute.pmap(training_step, donate_argnums=(0, 3))
 
 
 def vmc_loop(
@@ -295,7 +294,7 @@ def vmc_loop(
             checkpoint_metric,
             logdir=logdir,
             variance_scale=checkpoint_variance_scale,
-            checkpoint_every=None,
+            checkpoint_every=checkpoint_every,
             checkpoint_dir=checkpoint_dir,
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)

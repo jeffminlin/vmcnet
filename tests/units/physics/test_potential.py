@@ -69,3 +69,19 @@ def test_electron_electron_coulomb_potential():
     actual_out = potential_energy_fn(None, elec_pos)
 
     np.testing.assert_allclose(actual_out, desired_out)
+
+
+def test_ion_ion_coulomb_potential():
+    """Test value/shape for an ion-ion potential."""
+    ion_pos, ion_charges = _get_test_ions()
+
+    # desired output is
+    # Z_1 * Z_2 / ||R_1 - R_2|| + Z_1 * Z_3 / ||R_1 - R_3|| + Z_2 * Z_3 / ||R_2 - R_3||
+    desired_out = (2.0 / 4.0) + (3.0 / jnp.sqrt(37.0)) + (6.0 / jnp.sqrt(5.0))
+
+    potential_energy_fn = physics.potential.create_ion_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+    actual_out = potential_energy_fn(None, None)
+
+    np.testing.assert_allclose(actual_out, desired_out)

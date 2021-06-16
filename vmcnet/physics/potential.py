@@ -108,3 +108,34 @@ def create_electron_electron_coulomb_potential(
         )
 
     return potential_fn
+
+
+def create_ion_ion_coulomb_potential(
+    ion_locations: jnp.ndarray, ion_charges: jnp.ndarray
+) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+    """Computes the total coulomb potential repulsion between stationary ions.
+
+    Args:
+        ion_locations (jnp.ndarray): an (n, d) array of ion positions, where n is the
+            number of ion positions and d is the dimension of the space they live in
+        ion_charges (jnp.ndarray): an (n,) array of ion charges, in units of one
+            elementary charge (the charge of one electron)
+
+    Returns:
+        Callable: function which computes the potential energy due to the attraction
+        between electrons and ion. Has the signature
+        (params, electron_positions of shape (..., n_elec, d))
+        -> array of potential energies of shape electron_positions.shape[:-2]
+    """
+    ion_ion_displacements = _compute_displacements(ion_locations, ion_locations)
+    ion_ion_distances = _compute_soft_norm(ion_ion_displacements)
+    charge_charge_prods = jnp.expand_dims(ion_charges, axis=-1) * ion_charges
+    constant_potential = jnp.sum(
+        jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
+    )
+
+    def potential_fn(params, x):
+        del params, x
+        return constant_potential
+
+    return potential_fn

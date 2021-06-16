@@ -52,10 +52,12 @@ class RunningMetric:
 
         self_sum = history_length * self.avg
         self_sum += new_value
+        history_length += 1
 
         if history_length >= self.nhistory_max:
             oldest_value = self.history.popleft()
             self_sum -= oldest_value
+            history_length -= 1
 
         self.avg = self_sum / history_length
 
@@ -170,8 +172,8 @@ def save_metrics_and_handle_checkpoints(
         data,
         metrics,
         logdir,
-        checkpoint_str,
         checkpoint_dir,
+        checkpoint_str,
         checkpoint_every,
     )
 
@@ -307,7 +309,8 @@ def save_metrics_and_regular_checkpoint(
                 params,
                 optimizer_state,
             )
-        checkpoint_str = checkpoint_str + ", regular ckpt saved"
+            checkpoint_str = checkpoint_str + ", regular ckpt saved"
+
     return checkpoint_str
 
 
@@ -329,8 +332,8 @@ def initialize_checkpointing_metrics(
         logging.info("Saving to " + logdir)
         os.makedirs(logdir, exist_ok=True)
         if checkpoint_every is not None:
-            checkpointdir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
-            os.makedirs(os.path.join(logdir, checkpointdir), exist_ok=False)
+            checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
+            os.makedirs(os.path.join(logdir, checkpoint_dir), exist_ok=False)
 
     checkpoint_metric = jnp.inf
     running_energy_and_variance = RunningEnergyVariance(

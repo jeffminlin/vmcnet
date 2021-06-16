@@ -116,6 +116,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
         return gaussian_envelopes * hermite_polys
 
     def __call__(self, xs):
+        """Compute the harmonic oscillator orbitals on each leaf of xs."""
         return jax.tree_map(self._single_leaf_call, xs)
 
 
@@ -136,7 +137,10 @@ def make_harmonic_oscillator_spin_half_model(
         flax.linen.Module: spin-1/2 wavefunction for the quantum harmonic oscillator,
         with one trainable parameter (the model omega)
     """
-    split_spin_fn = lambda x: jnp.split(x, [nspin_first], axis=-2)
+
+    def split_spin_fn(x):
+        return jnp.split(x, [nspin_first], axis=-2)
+
     orbitals = HarmonicOscillatorOrbitals(model_omega_init)
     logdet_fn = models.antisymmetry.logdet_product
 
