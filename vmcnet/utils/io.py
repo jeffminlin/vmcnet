@@ -34,6 +34,7 @@ def save_vmc_state(
 ):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
+
         params = params.unfreeze()
         if pmapped:
             params = get_first(params)
@@ -56,14 +57,14 @@ def reload_vmc_state(directory: str, name: str):
     with open_or_create(directory, name, "rb") as file_handle:
         # np.savez wraps non-array objects in arrays for storage, so call
         # tolist() on such objects to get them back to their original type.
-        npz_file = np.load(file_handle, allow_pickle=True)
-        epoch = npz_file["e"].tolist()
-        data = npz_file["d"].tolist()
-        # Params are stored by flax as a frozen dict, so mimic that behavior here.
-        params = frozen_dict.freeze(npz_file["p"].tolist())
-        optimizer_state = npz_file["o"].tolist()
-        key = npz_file["k"]
-        return (epoch, data, params, optimizer_state, key)
+        with np.load(file_handle, allow_pickle=True) as npz_data:
+            epoch = npz_data["e"].tolist()
+            data = npz_data["d"].tolist()
+            # Params are stored by flax as a frozen dict, so mimic that behavior here.
+            params = frozen_dict.freeze(npz_data["p"].tolist())
+            optimizer_state = npz_data["o"].tolist()
+            key = npz_data["k"]
+            return (epoch, data, params, optimizer_state, key)
 
 
 def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):
