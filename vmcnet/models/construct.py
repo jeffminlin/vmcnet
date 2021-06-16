@@ -188,7 +188,17 @@ class SingleDeterminantFermiNet(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
-        """Compose FermiNet backflow -> orbitals -> log determinant product."""
+        """Compose FermiNet backflow -> orbitals -> log determinant product.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
         nelec_total = elec_pos.shape[-2]
         norbitals_per_spin = _get_nelec_per_spin(self.spin_split, nelec_total)
         stream_1e, r_ei = FermiNetBackflow(

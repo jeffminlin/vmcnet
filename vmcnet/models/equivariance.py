@@ -362,6 +362,15 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         Finally, for each spin, we add the three parts, each equivariant or symmetric,
         to get a final equivariant linear transformation of the inputs, to which a
         non-linearity is then applied and a skip connection optionally added.
+
+        Args:
+            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
+            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+                Defaults to None.
+
+        Returns:
+            jnp.ndarray of shape (..., n_total, self.ndense), the output one-electron
+            stream
         """
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
@@ -467,7 +476,18 @@ class FermiNetResidualBlock(flax.linen.Module):
     def __call__(
         self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
-        """Apply the one-electron layer and optionally the two-electron layer."""
+        """Apply the one-electron layer and optionally the two-electron layer.
+
+        Args:
+            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
+            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+                Defaults to None.
+
+        Returns:
+            (jnp.ndarray, optional jnp.ndarray): tuple of (out_1e, out_2e) where out_1e
+            is the output from the one-electron layer and out_2e is the output of the
+            two-electron stream
+        """
         out_1e = self._one_electron_layer(in_1e, in_2e)
 
         out_2e = in_2e
@@ -519,7 +539,18 @@ class FermiNetBackflow(flax.linen.Module):
     def __call__(
         self, elec_pos: jnp.ndarray
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
-        """Create input streams and iteratively apply residual blocks."""
+        """Create input streams and iteratively apply residual blocks.
+
+        Args:
+            elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+
+        Returns:
+            (jnp.ndarray, optional jnp.ndarray): tuple of (stream_1e, r_ei) where
+            stream_1e is the output of the one-electron stream after applying
+            self.residual_blocks to the initial input streams, and r_ei is the
+            electron-ion displacements (..., nelec, nion, d). r_ei is None if
+            self.ion_pos is None.
+        """
         stream_1e, stream_2e, r_ei = compute_input_streams(
             elec_pos,
             self.ion_pos,
@@ -589,7 +620,17 @@ class SplitDense(flax.linen.Module):
         ]
 
     def __call__(self, x: jnp.ndarray) -> List[jnp.ndarray]:
-        """Split the input and apply a dense layer to each split."""
+        """Split the input and apply a dense layer to each split.
+
+        Args:
+            x (jnp.ndarray): array of shape (..., n, d)
+
+        Returns:
+            [(..., n[i], self.ndense_per_spin[i])]: list of length nspins, where nspins
+            is the number of splits created by jnp.split(x, self.spin_split, axis=-2),
+            and the ith entry of the output is the ith split transformed by a dense
+            layer with self.ndense_per_spin[i] nodes.
+        """
         x_split = jnp.split(x, self.spin_split, axis=-2)
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
@@ -710,7 +751,21 @@ class FermiNetOrbitalLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
-        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes."""
+        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
+
+        Args:
+            x (jnp.ndarray): array of shape (..., nelec, d)
+            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+
+        Returns:
+            [(..., nelec[i], self.norbitals_per_spin[i])]: list of FermiNet orbital
+            matrices computed from an output stream x and the electron-ion displacements
+            r_ei. Here n[i] is the number of particles in the ith split. The exponential
+            envelopes are computed only when r_ei is not None (so, when connected to
+            FermiNetBackflow, when ion locations are specified). To output square
+            matrices, say for composing with the determinant anti-symmetry,
+            nelec[i] should be equal to self.norbitals_per_spin[i].
+        """
         orbs = SplitDense(
             self.spin_split,
             self.norbitals_per_spin,
