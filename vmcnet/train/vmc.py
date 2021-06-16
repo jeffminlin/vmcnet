@@ -158,7 +158,7 @@ def make_training_step(
     if not pmapped:
         return training_step
 
-    return utils.distribute.pmap(training_step, donate_argnums=(0, 3))
+    return utils.distribute.pmap(training_step, donate_argnums=(0, 1, 2, 3))
 
 
 def vmc_loop(
@@ -264,13 +264,6 @@ def vmc_loop(
         data, key = burning_step(data, params, key)
 
     for epoch in range(nepochs):
-        # for checkpointing; want to save the state that resulted in the best metrics,
-        # not the state one step later.
-        old_params = params
-        old_optimizer_state = optimizer_state
-        old_data = data
-        old_key = key
-
         accept_ratio, data, params, optimizer_state, metrics, key = training_step(
             data, params, optimizer_state, key
         )
@@ -288,10 +281,10 @@ def vmc_loop(
             checkpoint_str,
         ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
             epoch,
-            old_params,
-            old_optimizer_state,
-            old_data,
-            old_key,
+            params,
+            optimizer_state,
+            data,
+            key,
             metrics,
             nchains,
             running_energy_and_variance,

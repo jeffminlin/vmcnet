@@ -126,7 +126,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
     # Run 13 iterations, and checkpoint on the 10th to test reloading. Limit number
     # of reproduced iterations to 3 because with longer runs, nondeterminism in the
     # parallel operations yields numerical errors even with the same starting point.
-    nepochs = 13
+    nepochs = 14
     checkpoint_every = 10
 
     # Initialize model and chains of walkers
@@ -182,7 +182,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
         key,
         nchains,
         0,
-        nepochs - epoch,
+        nepochs - epoch - 1,
         nsteps_per_param_update,
         std_move,
         optimizer_state,
