@@ -16,7 +16,7 @@ M = TypeVar("M")
 
 
 class PositionAmplitudeWalkerData(TypedDict):
-    """NamedTuple of walker data holding just positions and amplitudes.
+    """TypedDict of walker data holding just positions and amplitudes.
 
     Holding both particle position and wavefn amplitude in the same named
     tuple allows us to simultaneously mask over both in the acceptance function.
@@ -34,7 +34,7 @@ class PositionAmplitudeWalkerData(TypedDict):
 
 
 class PositionAmplitudeData(TypedDict):
-    """NamedTuple of data holding positions, amplitudes, and optional metadata.
+    """TypedDict of data holding positions, amplitudes, and optional metadata.
 
     Holding both particle position and wavefn amplitude in the data can be advantageous
     to avoid recalculating amplitudes in some routines, e.g. acceptance probabilities.

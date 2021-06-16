@@ -5,7 +5,7 @@ import numpy as np
 import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
 
-from tests.test_utils import make_dummy_data_params_and_key, assert_pytree_equal
+from tests.test_utils import make_dummy_data_params_and_key, assert_pytree_allclose
 
 
 def test_save_and_reload_vmc_state(tmp_path):
@@ -44,7 +44,7 @@ def test_save_and_reload_vmc_state(tmp_path):
 
     # Verify that restored data is same as original data
     np.testing.assert_equal(restored_epoch, epoch)
-    assert_pytree_equal(restored_data, data)
-    assert_pytree_equal(restored_params, params)
-    assert_pytree_equal(restored_opt_state, opt_state)
+    assert_pytree_allclose(restored_data, data)
+    assert_pytree_allclose(restored_params, params)
+    assert_pytree_allclose(restored_opt_state, opt_state)
     np.testing.assert_allclose(restored_key, key)

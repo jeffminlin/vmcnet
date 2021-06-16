@@ -36,7 +36,7 @@ class MoveMetadata(TypedDict):
 
 
 class DynamicWidthPositionAmplitudeData(TypedDict):
-    """NamedTuple holding positions and wavefunction amplitudes, plus MoveMetadata."""
+    """TypedDict holding positions and wavefunction amplitudes, plus MoveMetadata."""
 
     walker_data: PositionAmplitudeWalkerData
     move_metadata: MoveMetadata

@@ -18,7 +18,7 @@ P = TypeVar("P")
 
 
 class SimplePositionAmplitudeData(TypedDict):
-    """NamedTuple of positions, amplitudes, and nothing else."""
+    """TypedDict of positions, amplitudes, and nothing else."""
 
     walker_data: PositionAmplitudeWalkerData
     move_metadata: None

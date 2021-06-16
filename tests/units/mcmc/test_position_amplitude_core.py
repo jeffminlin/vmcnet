@@ -66,7 +66,7 @@ def test_update_position_amplitude():
     updated_metadata_value = 4
 
     update_position_amplitude = pacore.make_position_amplitude_update(
-        lambda old_val, _2: updated_metadata_value
+        lambda old_val, _: updated_metadata_value
     )
     updated_data = update_position_amplitude(data, proposed_data, move_mask)
 

@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import vmcnet.examples.harmonic_oscillator as qho
-from tests.test_utils import assert_pytree_equal
+from tests.test_utils import assert_pytree_allclose
 from vmcnet.mcmc.simple_position_amplitude import (
     make_simple_position_amplitude_data,
 )
@@ -109,7 +109,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
     """Test that we can reproduce behavior by reloading vmc state from a checkpoint."""
     # Checkpoint directory info
     log_subdir = "logs"
-    log_dir = str(tmp_path / log_subdir)
+    log_dir = os.path.join(tmp_path, log_subdir)
     checkpoint_dir = "checkpoints"
 
     # Problem parameters
@@ -190,4 +190,4 @@ def test_reload_reproduces_results(caplog, tmp_path):
         local_energy_fn,
         pmap=False,
     )
-    assert_pytree_equal(first_run_final_state, reload_final_state)
+    assert_pytree_allclose(first_run_final_state, reload_final_state)
