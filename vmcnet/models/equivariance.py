@@ -155,6 +155,9 @@ def compute_electron_electron(
     """
     input_2e = _compute_displacements(elec_pos, elec_pos)
     if include_ee_norm:
+        # Avoid computing norm(x - x) along the diagonal, since autograd will be
+        # unhappy about differentiating through the norm function evaluated at 0.
+        # Instead compute 0 * norm(x - x + 1) along the diagonal.
         n = elec_pos.shape[-2]
         eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
         r_ee_diag_ones = input_2e + eye_n
