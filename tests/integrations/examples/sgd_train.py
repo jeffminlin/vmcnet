@@ -27,7 +27,7 @@ def sgd_vmc_loop_with_logging(
     optimizer_state,
     log_psi_model,
     local_energy_fn,
-    pmap=True,
+    should_distribute_data=True,
     logdir=None,
     checkpoint_every=None,
     checkpoint_dir=None,
@@ -52,7 +52,7 @@ def sgd_vmc_loop_with_logging(
     )
 
     # Distribute everything via jax.pmap
-    if pmap:
+    if should_distribute_data:
         (data, params, optimizer_state, key,) = utils.distribute.distribute_vmc_state(
             data, params, optimizer_state, key, distribute_position_amplitude_data
         )

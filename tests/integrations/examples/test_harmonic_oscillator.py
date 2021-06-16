@@ -188,6 +188,6 @@ def test_reload_reproduces_results(caplog, tmp_path):
         optimizer_state,
         log_psi_model,
         local_energy_fn,
-        pmap=False,
+        should_distribute_data=False,  # data has already been distributed
     )
     assert_pytree_allclose(first_run_final_state, reload_final_state)
