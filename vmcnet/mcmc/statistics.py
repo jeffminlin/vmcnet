@@ -43,32 +43,12 @@ def per_chain_autocorr_fast(
     return G
 
 
-def multi_chain_variance_estimate(samples: jnp.ndarray) -> jnp.ndarray:
-    """Compute a multi-chain variance estimate from M chains.
-
-    See Stan Reference Manual, Version 2.27, Section 16.3: "Notation for samples,
-    chains, and draws."
-    https://mc-stan.org/docs/2_27/reference-manual
-
-    Args:
-        samples (jnp.ndarray): samples of shape (N, M) where N is num-samples-per-chain
-            and M is num-chains.
-
-    Returns:
-        (jnp.ndarray): a single estimate of the overall variance, packaged as an array.
-
-    """
-    between_chain_term = jnp.var(jnp.mean(samples, axis=0), ddof=1)
-    within_chain_term = jnp.mean(jnp.var(samples, axis=0, ddof=0))
-    return within_chain_term + between_chain_term
-
-
 def multi_chain_autocorr(
     samples: jnp.ndarray, cutoff: Optional[int] = None
 ) -> jnp.ndarray:
     """Calculate multi-chain autocorrelation curve with cutoff.
 
-    See Stan Reference Manual, Version 2.27, Section 16.4: "Effective Sample Size."
+    See Stan Reference Manual, Version 2.27, Section 16.3-16-4
     https://mc-stan.org/docs/2_27/reference-manual]
 
     Args:
@@ -80,14 +60,17 @@ def multi_chain_autocorr(
         jnp.ndarray: combined autcorrelation curve using data from all chains,
         of length C, where C = min(N, cutoff)
     """
+    N = len(samples)
+
     per_chain_autocorr = per_chain_autocorr_fast(samples, cutoff)
     per_chain_var = jnp.var(samples, axis=0, ddof=1)
     autocorrelation_term = jnp.mean(per_chain_var * per_chain_autocorr, axis=1)
 
-    within_chain_var = jnp.mean(per_chain_var)
-    overall_var_estimate = multi_chain_variance_estimate(samples)
+    between_chain_term = jnp.var(jnp.mean(samples, axis=0), ddof=1)
+    within_chain_term = jnp.mean(per_chain_var)
+    overall_var_estimate = within_chain_term * (N - 1) / N + between_chain_term
 
-    return 1 - (within_chain_var - autocorrelation_term) / overall_var_estimate
+    return 1 - (within_chain_term - autocorrelation_term) / overall_var_estimate
 
 
 def tau(autocorr_curve: jnp.ndarray) -> jnp.ndarray:
