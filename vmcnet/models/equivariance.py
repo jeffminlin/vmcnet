@@ -751,7 +751,10 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         distances = jnp.linalg.norm(conv_out, axis=-1)
         inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
         lin_comb_nion = Dense(
-            1, kernel_init=self.kernel_initializer_envelope_ion, use_bias=False
+            1,
+            kernel_init=self.kernel_initializer_envelope_ion,
+            use_bias=False,
+            register_kfac=False,
         )(inv_exp_distances)
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
