@@ -8,7 +8,7 @@ import numpy as np
 import vmcnet.train as train
 import vmcnet.utils as utils
 
-from ..utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
+from tests.test_utils import make_dummy_data_params_and_key, make_dummy_metropolis_fn
 
 
 def _make_different_pmappable_data(data):
@@ -66,9 +66,7 @@ def test_vmc_loop_logging(caplog):
                 params,
                 optimizer_state,
                 key,
-            ) = utils.distribute.distribute_data_params_optstate_and_key(
-                data, params, None, key
-            )
+            ) = utils.distribute.distribute_vmc_state(data, params, None, key)
 
         with caplog.at_level(logging.INFO):
             train.vmc.vmc_loop(
@@ -109,7 +107,7 @@ def test_vmc_loop_number_of_updates():
         params,
         optimizer_state,
         key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(data, params, 0, key)
+    ) = utils.distribute.distribute_vmc_state(data, params, 0, key)
 
     nburn = 5
     nepochs = 17  # eventual number of parameter updates
@@ -120,7 +118,7 @@ def test_vmc_loop_number_of_updates():
         optimizer_state += 1
         return params, optimizer_state, None, key
 
-    _, new_optimizer_state, new_data = train.vmc.vmc_loop(
+    _, new_optimizer_state, new_data, _ = train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,

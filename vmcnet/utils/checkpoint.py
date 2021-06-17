@@ -4,14 +4,13 @@ Running queues of energy and variance histories are tracked, along with their av
 Unlike many of the other routines in this package, these are not pure functions, as they
 modify the RunningMetrics inside RunningEnergyVariance.
 """
-from collections import deque
-from dataclasses import dataclass, field
 import logging
 import os
+from collections import deque
+from dataclasses import dataclass, field
 from typing import Dict, NamedTuple, Tuple, TypeVar
 
 import jax.numpy as jnp
-
 import vmcnet.utils.io as io
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
@@ -107,6 +106,7 @@ def save_metrics_and_handle_checkpoints(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -170,6 +170,7 @@ def save_metrics_and_handle_checkpoints(
         params,
         optimizer_state,
         data,
+        key,
         metrics,
         logdir,
         checkpoint_dir,
@@ -182,6 +183,7 @@ def save_metrics_and_handle_checkpoints(
         params,
         optimizer_state,
         data,
+        key,
         metrics,
         nchains,
         running_energy_and_variance,
@@ -199,6 +201,7 @@ def track_and_save_best_checkpoint(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -247,7 +250,15 @@ def track_and_save_best_checkpoint(
         energy.avg, variance.avg, nchains * len(energy.history), variance_scale
     )
     if error_adjusted_running_avg < checkpoint_metric:
-        io.save_params(logdir, "checkpoint.npz", epoch, data, params, optimizer_state)
+        io.save_vmc_state(
+            logdir,
+            "checkpoint.npz",
+            epoch,
+            data,
+            params,
+            optimizer_state,
+            key,
+        )
         checkpoint_str = checkpoint_str + ", best weights saved"
     return checkpoint_str, error_adjusted_running_avg
 
@@ -257,6 +268,7 @@ def save_metrics_and_regular_checkpoint(
     params: P,
     optimizer_state: S,
     data: D,
+    key: jnp.ndarray,
     metrics: Dict,
     logdir: str,
     checkpoint_dir: str,
@@ -301,13 +313,14 @@ def save_metrics_and_regular_checkpoint(
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
-            io.save_params(
+            io.save_vmc_state(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
                 epoch,
                 data,
                 params,
                 optimizer_state,
+                key,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 

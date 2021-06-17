@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import vmcnet.mcmc as mcmc
 
-from ..utils import (
+from tests.test_utils import (
     make_dummy_data_params_and_key,
     make_dummy_metropolis_fn,
 )

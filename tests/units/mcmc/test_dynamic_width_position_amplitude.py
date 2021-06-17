@@ -92,16 +92,18 @@ def test_update_move_metadata_fn():
     update_metadata_fn = dwpa.make_update_move_metadata_fn(
         nmoves_per_update, multiplicative_adjustment
     )
-    metadata = dwpa.MoveMetadata(original_std_move, 0.0, 0)
+    metadata = dwpa.MoveMetadata(
+        std_move=original_std_move, move_acceptance_sum=0.0, moves_since_update=0
+    )
 
     # Expect no change on first four updates, then multiply by average acceptance
     for i in range(0, 4):
         metadata = update_metadata_fn(metadata, move_masks[i])
-        np.testing.assert_allclose(metadata.moves_since_update, i + 1)
-        np.testing.assert_allclose(metadata.move_acceptance_sum, accept_sums[i])
-        np.testing.assert_allclose(metadata.std_move, original_std_move)
+        np.testing.assert_allclose(metadata["moves_since_update"], i + 1)
+        np.testing.assert_allclose(metadata["move_acceptance_sum"], accept_sums[i])
+        np.testing.assert_allclose(metadata["std_move"], original_std_move)
 
     metadata = update_metadata_fn(metadata, move_masks[4])
-    np.testing.assert_allclose(metadata.moves_since_update, 0)
-    np.testing.assert_allclose(metadata.move_acceptance_sum, 0)
-    np.testing.assert_allclose(metadata.std_move, std_move_after_update)
+    np.testing.assert_allclose(metadata["moves_since_update"], 0)
+    np.testing.assert_allclose(metadata["move_acceptance_sum"], 0)
+    np.testing.assert_allclose(metadata["std_move"], std_move_after_update)

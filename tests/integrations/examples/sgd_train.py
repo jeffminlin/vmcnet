@@ -24,9 +24,13 @@ def sgd_vmc_loop_with_logging(
     nepochs,
     nsteps_per_param_update,
     std_move,
-    learning_rate,
+    optimizer_state,
     log_psi_model,
     local_energy_fn,
+    should_distribute_data=True,
+    logdir=None,
+    checkpoint_every=None,
+    checkpoint_dir=None,
 ):
     """Run a VMC test with a very simple SGD optimizer and given model."""
     # Setup metropolis step
@@ -48,18 +52,14 @@ def sgd_vmc_loop_with_logging(
     )
 
     # Distribute everything via jax.pmap
-    (
-        data,
-        params,
-        optimizer_state,
-        key,
-    ) = utils.distribute.distribute_data_params_optstate_and_key(
-        data, params, learning_rate, key, distribute_position_amplitude_data
-    )
+    if should_distribute_data:
+        (data, params, optimizer_state, key,) = utils.distribute.distribute_vmc_state(
+            data, params, optimizer_state, key, distribute_position_amplitude_data
+        )
 
     # Train!
     with caplog.at_level(logging.INFO):
-        params, _, _ = train.vmc.vmc_loop(
+        params, optimizer_state, data, key = train.vmc.vmc_loop(
             params,
             optimizer_state,
             data,
@@ -70,5 +70,8 @@ def sgd_vmc_loop_with_logging(
             metrop_step_fn,
             update_param_fn,
             key,
+            logdir,
+            checkpoint_every,
+            checkpoint_dir,
         )
-    return params
+        return data, params, optimizer_state, key

@@ -1,12 +1,17 @@
 """Integration tests for the quantum harmonic oscillator."""
 
+import os
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import vmcnet.examples.harmonic_oscillator as qho
+from tests.test_utils import assert_pytree_allclose
 from vmcnet.mcmc.simple_position_amplitude import (
     make_simple_position_amplitude_data,
 )
+from vmcnet.utils.distribute import distribute_vmc_state_from_checkpoint
+from vmcnet.utils.io import reload_vmc_state
 
 from .sgd_train import sgd_vmc_loop_with_logging
 
@@ -79,7 +84,7 @@ def test_harmonic_oscillator_vmc(caplog):
         spring_constant, log_psi_model.apply
     )
 
-    params = sgd_vmc_loop_with_logging(
+    _, params, _, _ = sgd_vmc_loop_with_logging(
         caplog,
         data,
         params,
@@ -98,3 +103,91 @@ def test_harmonic_oscillator_vmc(caplog):
     np.testing.assert_allclose(
         jax.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
     )
+
+
+def test_reload_reproduces_results(caplog, tmp_path):
+    """Test that we can reproduce behavior by reloading vmc state from a checkpoint."""
+    # Checkpoint directory info
+    log_subdir = "logs"
+    log_dir = os.path.join(tmp_path, log_subdir)
+    checkpoint_dir = "checkpoints"
+
+    # Problem parameters
+    model_omega = 2.5
+    spring_constant = 1.5
+
+    # Training hyperparameters
+    nchains = 100 * jax.local_device_count()
+    nburn = 100
+    nsteps_per_param_update = 5
+    std_move = 0.25
+    learning_rate = 1e-4
+
+    # Run 13 iterations, and checkpoint on the 10th to test reloading. Limit number
+    # of reproduced iterations to 3 because with longer runs, nondeterminism in the
+    # parallel operations yields numerical errors even with the same starting point.
+    nepochs = 14
+    checkpoint_every = 10
+
+    # Initialize model and chains of walkers
+    (
+        log_psi_model,
+        params,
+        random_particle_positions,
+        amplitudes,
+        key,
+    ) = _make_initial_params_and_data(model_omega, nchains)
+    data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
+
+    # Local energy function
+    local_energy_fn = qho.make_harmonic_oscillator_local_energy(
+        spring_constant, log_psi_model.apply
+    )
+
+    # Run first 13 iterations, from scratch, saving a checkpoint at epoch 10
+    first_run_final_state = sgd_vmc_loop_with_logging(
+        caplog,
+        data,
+        params,
+        key,
+        nchains,
+        nburn,
+        nepochs,
+        nsteps_per_param_update,
+        std_move,
+        learning_rate,
+        log_psi_model,
+        local_energy_fn,
+        True,
+        log_dir,
+        checkpoint_every,
+        checkpoint_dir,
+    )
+
+    # Reload model state from 10th epoch checkpoint
+    checkpoint_dir = os.path.join(log_dir, checkpoint_dir)
+    checkpoint_file = "10.npz"
+    (epoch, data, params, optimizer_state, key) = reload_vmc_state(
+        checkpoint_dir, checkpoint_file
+    )
+    (data, params, optimizer_state, key) = distribute_vmc_state_from_checkpoint(
+        data, params, optimizer_state, key
+    )
+
+    # Rerun last few epochs and test that results are the same
+    reload_final_state = sgd_vmc_loop_with_logging(
+        caplog,
+        data,
+        params,
+        key,
+        nchains,
+        0,
+        nepochs - epoch - 1,
+        nsteps_per_param_update,
+        std_move,
+        optimizer_state,
+        log_psi_model,
+        local_energy_fn,
+        should_distribute_data=False,  # data has already been distributed
+    )
+    assert_pytree_allclose(first_run_final_state, reload_final_state)
