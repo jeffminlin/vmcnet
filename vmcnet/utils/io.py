@@ -1,7 +1,10 @@
 """Input/output utilities."""
 import os
 
+import flax.core.frozen_dict as frozen_dict
 import numpy as np
+
+from .distribute import get_first, is_distributed
 
 
 def open_or_create(path, filename, option):
@@ -19,16 +22,55 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_params(directory, name, epoch, data, params, optimizer_state):
+def save_vmc_state(
+    directory: str,
+    name: str,
+    epoch: int,
+    data,
+    params,
+    optimizer_state,
+    key,
+):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
+        params = params.unfreeze()
+        if is_distributed(params):
+            params = get_first(params)
+            optimizer_state = get_first(optimizer_state)
+
         np.savez(
             file_handle,
-            epoch=epoch,
-            data=data._asdict(),
-            params=params,
-            optimizer_state=optimizer_state,
+            e=epoch,
+            d=data,
+            # Params and opt_state are always replicated, so only save one copy.
+            # Params must also be converted from a frozen_dict to a dict.
+            p=params,
+            o=optimizer_state,
+            k=key,
         )
+
+
+def reload_vmc_state(directory: str, name: str):
+    """Reload a VMC state from a saved checkpoint."""
+    with open_or_create(directory, name, "rb") as file_handle:
+        # np.savez wraps non-array objects in arrays for storage, so call
+        # tolist() on such objects to get them back to their original type.
+        with np.load(file_handle, allow_pickle=True) as npz_data:
+            epoch = npz_data["e"].tolist()
+
+            data: np.ndarray = npz_data["d"]
+            # Detect whether the data was originally an object, in which case it should
+            # have dtype object, or an array, in which case it should have dtype
+            # something else. This WILL BREAK if you use data that is an array of dtype
+            # object.
+            if data.dtype == np.dtype("object"):
+                data = data.tolist()
+
+            # Params are stored by flax as a frozen dict, so mimic that behavior here.
+            params = frozen_dict.freeze(npz_data["p"].tolist())
+            optimizer_state = npz_data["o"].tolist()
+            key = npz_data["k"]
+            return (epoch, data, params, optimizer_state, key)
 
 
 def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):

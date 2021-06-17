@@ -39,7 +39,7 @@ def test_hydrogen_like_vmc(caplog):
         log_psi_model.apply, nuclear_charge, d=ndim
     )
 
-    params = sgd_vmc_loop_with_logging(
+    _, params, _, _ = sgd_vmc_loop_with_logging(
         caplog,
         data,
         params,

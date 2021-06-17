@@ -1,7 +1,7 @@
 """Test kinetic energy functions."""
 import vmcnet.physics as physics
 
-from ..utils import make_dummy_log_f, make_dummy_x
+from tests.test_utils import make_dummy_log_f, make_dummy_x
 
 
 def test_kinetic_energy_shape():

@@ -158,7 +158,7 @@ def make_training_step(
     if not pmapped:
         return training_step
 
-    return utils.distribute.pmap(training_step, donate_argnums=(0, 3))
+    return utils.distribute.pmap(training_step, donate_argnums=(0, 1, 2, 3))
 
 
 def vmc_loop(
@@ -178,7 +178,7 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
     pmapped: bool = True,
-) -> Tuple[P, S, D]:
+) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -242,8 +242,8 @@ def vmc_loop(
             steps. Defaults to True.
 
     Returns:
-        A tuple of (trained parameters, final optimizer state, final data). These are
-        the same structure as (params, optimizer_state, initial_data).
+        A tuple of (trained parameters, final optimizer state, final data, final key).
+        These are the same structure as (params, optimizer_state, initial_data, key).
     """
     (
         checkpoint_dir,
@@ -264,10 +264,6 @@ def vmc_loop(
         data, key = burning_step(data, params, key)
 
     for epoch in range(nepochs):
-        # for checkpointing; want to save the state that resulted in the best metrics,
-        # not the state one step later
-        old_params = params
-        old_optimizer_state = optimizer_state
         accept_ratio, data, params, optimizer_state, metrics, key = training_step(
             data, params, optimizer_state, key
         )
@@ -285,9 +281,10 @@ def vmc_loop(
             checkpoint_str,
         ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
             epoch,
-            old_params,
-            old_optimizer_state,
+            params,
+            optimizer_state,
             data,
+            key,
             metrics,
             nchains,
             running_energy_and_variance,
@@ -299,4 +296,4 @@ def vmc_loop(
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
-    return params, optimizer_state, data
+    return params, optimizer_state, data, key

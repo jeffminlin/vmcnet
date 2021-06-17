@@ -3,6 +3,7 @@ import functools
 from typing import Callable, Tuple, TypeVar
 
 import jax
+import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
@@ -81,19 +82,19 @@ def reshape_data_leaves_for_distribution(data_leaf):
     return data
 
 
-def distribute_data(data):
-    """Split data to all devices. The first axis must be divisible by ndevices."""
+def default_distribute_data(data):
+    """Split all data to all devices. The first axis must be divisible by ndevices."""
     data = jax.tree_map(reshape_data_leaves_for_distribution, data)
     data = broadcast_all_local_devices(data)
     return data
 
 
-def distribute_data_params_optstate_and_key(
+def distribute_vmc_state(
     data: D,
     params: P,
     optimizer_state: S,
     key: jnp.ndarray,
-    distribute_data_fn: Callable[[D], D] = distribute_data,
+    distribute_data_fn: Callable[[D], D] = default_distribute_data,
 ) -> Tuple[D, P, S, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
@@ -117,3 +118,28 @@ def distribute_data_params_optstate_and_key(
     sharded_key = make_different_rng_key_on_all_devices(key)
 
     return data, params, optimizer_state, sharded_key
+
+
+def distribute_vmc_state_from_checkpoint(
+    data: D,
+    params: P,
+    optimizer_state: S,
+    key: jnp.ndarray,
+) -> Tuple[D, P, S, jnp.ndarray]:
+    """Distribute vmc state that was reloaded from a saved checkpoint.
+
+    Data and key are saved independently for each device, so on reload
+    we simply broadcast them back to the devices. Params and optimizer state are saved
+    as a single copy, so on reload we replicate them to all devices.
+    """
+    data = broadcast_all_local_devices(data)
+    params = replicate_all_local_devices(params)
+    optimizer_state = replicate_all_local_devices(optimizer_state)
+    key = broadcast_all_local_devices(key)
+
+    return data, params, optimizer_state, key
+
+
+def is_distributed(data) -> bool:
+    """Tests whether given data has been distributed using pmap."""
+    return isinstance(jax.tree_leaves(data)[0], pxla.ShardedDeviceArray)
