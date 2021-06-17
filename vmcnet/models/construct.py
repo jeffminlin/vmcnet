@@ -232,7 +232,7 @@ class FermiNet(flax.linen.Module):
         orbitals = [
             FermiNetOrbitalLayer(
                 spin_split=self.spin_split,
-                norbitals=norbitals_per_spin,
+                norbitals_per_spin=norbitals_per_spin,
                 kernel_initializer_linear=self.kernel_initializer_orbital_linear,
                 kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
                 kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,

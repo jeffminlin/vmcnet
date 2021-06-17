@@ -46,9 +46,10 @@ def test_ferminet_can_be_constructed():
     key, subkey = jax.random.split(key)
     init_pos = jax.random.normal(subkey, shape=(20, 6, 3))
 
-    log_psi = models.construct.SingleDeterminantFermiNet(
+    log_psi = models.construct.FermiNet(
         (2,),
         ((64, 8), (64, 8), (32, 8), (32, 4), (12,), (14, 3), (13,)),
+        3,
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("xavier_normal"),
         models.weights.get_kernel_initializer("glorot_uniform"),
