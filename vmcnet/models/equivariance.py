@@ -8,9 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.models.weights import WeightInitializer, zeros
-from vmcnet.models.core import Dense
-
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
+from vmcnet.models.core import Activation, Dense
 
 
 def _split_mean(

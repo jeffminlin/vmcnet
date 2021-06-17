@@ -1,4 +1,5 @@
 """Core model building parts."""
+from typing import Callable
 import flax
 import jax.numpy as jnp
 
@@ -8,6 +9,8 @@ from vmcnet.models.weights import (
     get_kernel_initializer,
     get_bias_initializer,
 )
+
+Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
 class Dense(flax.linen.Module):
