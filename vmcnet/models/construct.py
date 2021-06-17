@@ -1,6 +1,5 @@
 """Combine pieces to form full models."""
 from typing import Callable, List, Optional, Sequence, Tuple, Union
-from vmcnet.models.jastrow import IsotropicAtomicExpDecay
 
 import flax
 import jax
@@ -19,6 +18,7 @@ from vmcnet.models.equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
+from vmcnet.models.jastrow import IsotropicAtomicExpDecay
 from vmcnet.models.weights import WeightInitializer
 
 
@@ -65,7 +65,7 @@ def _log_sum_exp(signs: jnp.ndarray, vals: jnp.ndarray, axis: int = 0) -> jnp.nd
     return jnp.log(jnp.abs(sum_terms_divided_by_max)) + jnp.squeeze(max_val, axis=axis)
 
 
-class SingleDeterminantFermiNet(flax.linen.Module):
+class FermiNet(flax.linen.Module):
     """Single determinant FermiNet model. Multiple dets to be added.
 
     Attributes:
