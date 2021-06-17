@@ -111,7 +111,6 @@ def save_metrics_and_handle_checkpoints(
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
     checkpoint_metric: jnp.float32,
-    pmapped: bool,
     logdir: str = None,
     variance_scale: float = 10.0,
     checkpoint_every: int = None,
@@ -176,7 +175,6 @@ def save_metrics_and_handle_checkpoints(
         logdir,
         checkpoint_dir,
         checkpoint_str,
-        pmapped,
         checkpoint_every,
     )
 
@@ -193,7 +191,6 @@ def save_metrics_and_handle_checkpoints(
         logdir,
         variance_scale,
         checkpoint_str,
-        pmapped,
     )
 
     return jnp.minimum(error_adjusted_running_avg, checkpoint_metric), checkpoint_str
@@ -212,7 +209,6 @@ def track_and_save_best_checkpoint(
     logdir: str,
     variance_scale: float,
     checkpoint_str: str,
-    pmapped: bool,
 ) -> Tuple[str, jnp.float32]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
 
@@ -255,7 +251,13 @@ def track_and_save_best_checkpoint(
     )
     if error_adjusted_running_avg < checkpoint_metric:
         io.save_vmc_state(
-            logdir, "checkpoint.npz", epoch, data, params, optimizer_state, key, pmapped
+            logdir,
+            "checkpoint.npz",
+            epoch,
+            data,
+            params,
+            optimizer_state,
+            key,
         )
         checkpoint_str = checkpoint_str + ", best weights saved"
     return checkpoint_str, error_adjusted_running_avg
@@ -271,7 +273,6 @@ def save_metrics_and_regular_checkpoint(
     logdir: str,
     checkpoint_dir: str,
     checkpoint_str: str,
-    pmapped: bool,
     checkpoint_every: int = None,
 ) -> str:
     """Save current metrics to file, and save model state regularly.
@@ -320,7 +321,6 @@ def save_metrics_and_regular_checkpoint(
                 params,
                 optimizer_state,
                 key,
-                pmapped,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 

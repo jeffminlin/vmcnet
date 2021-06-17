@@ -3,6 +3,7 @@ import functools
 from typing import Callable, Tuple, TypeVar
 
 import jax
+import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
@@ -137,3 +138,8 @@ def distribute_vmc_state_from_checkpoint(
     key = broadcast_all_local_devices(key)
 
     return data, params, optimizer_state, key
+
+
+def is_distributed(data) -> bool:
+    """Tests whether given data has been distributed using pmap."""
+    return isinstance(jax.tree_leaves(data)[0], pxla.ShardedDeviceArray)

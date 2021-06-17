@@ -25,7 +25,7 @@ def test_pmapped_save_and_reload_vmc_state(tmp_path):
     )
 
     # Save the vmc state to file, then reload it and redistribute it
-    io.save_vmc_state(directory, file_name, epoch, data, params, opt_state, key, True)
+    io.save_vmc_state(directory, file_name, epoch, data, params, opt_state, key)
     (
         restored_epoch,
         restored_data,
@@ -64,7 +64,7 @@ def test_non_pmapped_save_and_reload_vmc_state(tmp_path):
     opt_state = {"momentum": 2.0}
 
     # Save the vmc state to file, then reload it and redistribute it
-    io.save_vmc_state(directory, file_name, epoch, data, params, opt_state, key, False)
+    io.save_vmc_state(directory, file_name, epoch, data, params, opt_state, key)
     (
         restored_epoch,
         restored_data,
@@ -79,3 +79,30 @@ def test_non_pmapped_save_and_reload_vmc_state(tmp_path):
     assert_pytree_allclose(restored_params, params)
     assert_pytree_allclose(restored_opt_state, opt_state)
     np.testing.assert_allclose(restored_key, key)
+
+
+def test_array_data_save_and_reload_vmc_state(tmp_path):
+    """Test round-trip of vmc state to and from disk, without pmapping."""
+    # Set up log directory within pytest tmp_dir
+    subdir = "logs"
+    directory = tmp_path / subdir
+    file_name = "checkpoint_file.npz"
+
+    # Create dummy vmc state and distribute it across fake devices
+    epoch = 0
+    # This data is a simple ndarray, NOT a dict
+    (data, params, key) = make_dummy_data_params_and_key()
+    opt_state = {"momentum": 2.0}
+
+    # Save the vmc state to file, then reload it and redistribute it
+    io.save_vmc_state(directory, file_name, epoch, data, params, opt_state, key)
+    (
+        restored_epoch,
+        restored_data,
+        restored_params,
+        restored_opt_state,
+        restored_key,
+    ) = io.reload_vmc_state(directory, file_name)
+
+    # Verify that restored data is same as original data
+    assert_pytree_allclose(restored_data, data)

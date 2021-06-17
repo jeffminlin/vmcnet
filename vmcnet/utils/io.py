@@ -4,7 +4,7 @@ import os
 import flax.core.frozen_dict as frozen_dict
 import numpy as np
 
-from .distribute import get_first
+from .distribute import get_first, is_distributed
 
 
 def open_or_create(path, filename, option):
@@ -30,13 +30,11 @@ def save_vmc_state(
     params,
     optimizer_state,
     key,
-    pmapped: bool = True,
 ):
     """Save a VMC state."""
     with open_or_create(directory, name, "wb") as file_handle:
-
         params = params.unfreeze()
-        if pmapped:
+        if is_distributed(params):
             params = get_first(params)
             optimizer_state = get_first(optimizer_state)
 
@@ -59,7 +57,15 @@ def reload_vmc_state(directory: str, name: str):
         # tolist() on such objects to get them back to their original type.
         with np.load(file_handle, allow_pickle=True) as npz_data:
             epoch = npz_data["e"].tolist()
-            data = npz_data["d"].tolist()
+
+            data: np.ndarray = npz_data["d"]
+            # Detect whether the data was originally an object, in which case it should
+            # have dtype object, or an array, in which case it should have dtype
+            # something else. This WILL BREAK if you use data that is an array of dtype
+            # object.
+            if data.dtype == np.dtype("object"):
+                data = data.tolist()
+
             # Params are stored by flax as a frozen dict, so mimic that behavior here.
             params = frozen_dict.freeze(npz_data["p"].tolist())
             optimizer_state = npz_data["o"].tolist()
