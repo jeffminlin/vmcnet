@@ -2,13 +2,10 @@
 import functools
 import itertools
 from typing import Callable, Tuple
-from vmcnet.models.weights import WeightInitializer
 
 import flax
 import jax
 import jax.numpy as jnp
-
-from vmcnet.models.core import SimpleResNet
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
@@ -105,13 +102,8 @@ class ParallelPermutations(flax.linen.Module):
         return jnp.take(x, self.permutation_list, axis=-2), self.signs
 
 
-class SplitBruteForceAntisymmetrizedResNet(flax.linen.Module):
-    ndense: int
-    nlayers: int
-    activation_fn: Activation
-    kernel_initializer: WeightInitializer
-    bias_initializer: WeightInitializer
-    use_bias: bool = True
+class SplitBruteForceAntisymmetrize(flax.linen.Module):
+    fn_to_antisymmetrize: Callable
     logabs: bool = True
 
     def _single_leaf_call(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -123,15 +115,7 @@ class SplitBruteForceAntisymmetrizedResNet(flax.linen.Module):
         signs = jnp.expand_dims(signs, axis=-1)  # (n!, 1)
 
         # perms_out has shape (..., n!, 1)
-        perms_out = SimpleResNet(
-            self.ndense,
-            1,
-            self.nlayers,
-            activation_fn=self.activation_fn,
-            kernel_init=self.kernel_initializer,
-            bias_init=self.bias_initializer,
-            use_bias=self.use_bias,
-        )(x_perm)
+        perms_out = self.fn_to_antisymmetrize(x_perm)
         signed_perms_out = signs * perms_out
 
         return jnp.sum(signed_perms_out, axis=(-1, -2))
@@ -146,13 +130,8 @@ class SplitBruteForceAntisymmetrizedResNet(flax.linen.Module):
         return _reduce_sum_over_leaves(log_antisyms)
 
 
-class ComposedBruteForceAntisymmetrizedResNet(flax.linen.Module):
-    ndense: int
-    nlayers: int
-    activation_fn: Activation
-    kernel_initializer: WeightInitializer
-    bias_initializer: WeightInitializer
-    use_bias: bool = True
+class ComposedBruteForceAntisymmetrize(flax.linen.Module):
+    fn_to_antisymmetrize: Callable
     logabs: bool = True
 
     def _get_single_leaf_perm(self, x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -164,24 +143,26 @@ class ComposedBruteForceAntisymmetrizedResNet(flax.linen.Module):
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
         perms_and_signs_leaves, _ = jax.tree_flatten(perms_and_signs, _istupleofarrays)
         nspins = len(perms_and_signs_leaves)
-        nfactorials = [leaf[0].shape[-3] for leaf in perms_and_signs_leaves]
+        nperms_per_spin = [leaf[0].shape[-3] for leaf in perms_and_signs_leaves]
 
         broadcasted_perms = []
         reshaped_signs = []
         for i, (perm, sign) in enumerate(perms_and_signs_leaves):
-            # desired sign shapes are [i: (1, ..., n_i!, ..., 1, 1,)], with k + 1 dims,
-            # where k = nspins
-            first_k_shape = (1,) * i + sign.shape[0:1] + (1,) * (nspins - i - 1)
-            reshape_sign_shape = first_k_shape + (1,)
-            sign = jnp.reshape(sign, reshape_sign_shape)
+            ith_factorial = (1,) * i + sign.shape[0:1] + (1,) * (nspins - i - 1)
+
+            # desired sign[i] shape is (1, ..., n_i!, ..., 1, 1), with nspins + 1 dims
+            sign_shape = ith_factorial + (1,)
+            sign = jnp.reshape(sign, sign_shape)
             reshaped_signs.append(sign)
 
-            # desired broadcasted x shapes are [i: (..., n_1!, ..., n_k!, n_i, d)],
+            # desired broadcasted x_i shape is [i: (..., n_1!, ..., n_k!, n_i, d)],
             # where k = nspins, and x_i = (..., n_i, d). This is achieved by:
             # 1) reshape to (..., 1, ..., n_i!,... 1, n_i, d), then
             # 2) broadcast to (..., n_1!, ..., n_k!, n_i, d)
-            reshape_x_shape = perm.shape[:-3] + first_k_shape + perm.shape[-2:]
-            broadcast_x_shape = perm.shape[:-3] + tuple(nfactorials) + perm.shape[-2:]
+            reshape_x_shape = perm.shape[:-3] + ith_factorial + perm.shape[-2:]
+            broadcast_x_shape = (
+                perm.shape[:-3] + tuple(nperms_per_spin) + perm.shape[-2:]
+            )
             perm = jnp.reshape(perm, reshape_x_shape)
             perm = jnp.broadcast_to(perm, broadcast_x_shape)
             broadcasted_perms.append(perm)
@@ -191,15 +172,7 @@ class ComposedBruteForceAntisymmetrizedResNet(flax.linen.Module):
         concat_perms = jnp.reshape(concat_perms, concat_perms.shape[:-2] + (-1,))
 
         # all_perms_out has shape (..., n_1!, ..., n_k!, 1)
-        all_perms_out = SimpleResNet(
-            self.ndense,
-            1,
-            self.nlayers,
-            activation_fn=self.activation_fn,
-            kernel_init=self.kernel_initializer,
-            bias_init=self.bias_initializer,
-            use_bias=self.use_bias,
-        )(concat_perms)
+        all_perms_out = self.fn_to_antisymmetrize(concat_perms)
         signed_perms_out = _reduce_prod_over_leaves([all_perms_out, reshaped_signs])
 
         antisymmetrized_out = jnp.sum(

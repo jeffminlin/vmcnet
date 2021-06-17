@@ -7,10 +7,10 @@ import jax.numpy as jnp
 
 from vmcnet.models.antisymmetry import (
     slogdet_product,
-    SplitBruteForceAntisymmetrizedResNet,
-    ComposedBruteForceAntisymmetrizedResNet,
+    SplitBruteForceAntisymmetrize,
+    ComposedBruteForceAntisymmetrize,
 )
-from vmcnet.models.core import Activation
+from vmcnet.models.core import Activation, SimpleResNet
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -294,13 +294,15 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             cyclic_spins=self.cyclic_spins,
         )(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        antisymmetric_part = SplitBruteForceAntisymmetrizedResNet(
-            self.ndense_resnet,
-            self.nlayers_resnet,
-            self.activation_fn_resnet,
-            self.kernel_initializer_resnet,
-            self.bias_initializer_resnet,
-            use_bias=self.resnet_use_bias,
+        antisymmetric_part = SplitBruteForceAntisymmetrize(
+            SimpleResNet(
+                self.ndense_resnet,
+                self.nlayers_resnet,
+                self.activation_fn_resnet,
+                self.kernel_initializer_resnet,
+                self.bias_initializer_resnet,
+                use_bias=self.resnet_use_bias,
+            )
         )(split_spins)
         jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
 
@@ -353,13 +355,15 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             cyclic_spins=self.cyclic_spins,
         )(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        antisymmetric_part = ComposedBruteForceAntisymmetrizedResNet(
-            self.ndense_resnet,
-            self.nlayers_resnet,
-            self.activation_fn_resnet,
-            self.kernel_initializer_resnet,
-            self.bias_initializer_resnet,
-            use_bias=self.resnet_use_bias,
+        antisymmetric_part = ComposedBruteForceAntisymmetrize(
+            SimpleResNet(
+                self.ndense_resnet,
+                self.nlayers_resnet,
+                self.activation_fn_resnet,
+                self.kernel_initializer_resnet,
+                self.bias_initializer_resnet,
+                use_bias=self.resnet_use_bias,
+            )
         )(split_spins)
         jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
 
