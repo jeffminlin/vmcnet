@@ -36,7 +36,7 @@ def per_chain_autocorr_fast(
     fvi = jnp.fft.fft(centered_samples, n=(2 * N), axis=0)
     G = jnp.real(jnp.fft.ifft(fvi * jnp.conjugate(fvi), axis=0))[:cutoff]
     # Divide (i)th term by (n-i) to account for the number of available samples.
-    normalization_factors = 1 / ((N - jnp.arange(cutoff)))
+    normalization_factors = N - jnp.arange(cutoff)
     G /= jnp.expand_dims(normalization_factors, -1)
     # Divide by C(0) to get the normalized autocorrelation curve.
     G /= G[:1]
