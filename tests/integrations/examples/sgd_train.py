@@ -2,6 +2,7 @@
 import logging
 
 import jax
+
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
