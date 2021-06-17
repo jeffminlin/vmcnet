@@ -39,13 +39,13 @@ class Dense(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        """Applies a linear transformation to the inputs along the last dimension.
+        """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
-            inputs: The nd-array to be transformed.
+            inputs (jnp.ndarray): The nd-array to be transformed.
 
         Returns:
-            The transformed input.
+            jnp.ndarray: The transformed input.
         """
         kernel = self.param(
             "kernel", self.kernel_init, (inputs.shape[-1], self.features)
