@@ -1,4 +1,5 @@
 """Test equivariant model parts."""
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -128,7 +129,9 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
     perm_output = two_elec_layer.apply(params, perm_input_2e)
 
     assert output.shape == (nchains, nelec_total, nelec_total, ndense)
-    np.testing.assert_allclose(output[:, permutation][..., permutation, :], perm_output)
+    np.testing.assert_allclose(
+        output[:, permutation][..., permutation, :], perm_output, atol=1e-6
+    )
 
 
 def test_split_dense_shape():
@@ -155,6 +158,4 @@ def test_split_dense_shape():
     outputs, _ = split_dense_layer.init_with_output(subkey, inputs)
 
     for i, output in enumerate(outputs):
-        assert output.shape[0] == 8
-        assert output.shape[1] == nspins[i]
-        assert output.shape[2] == ndense[i]
+        chex.assert_shape(output, (nchains, nspins[i], ndense[i]))

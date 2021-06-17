@@ -6,7 +6,13 @@ import flax
 import jax.numpy as jnp
 
 from vmcnet.models.antisymmetry import logdet_product
-from vmcnet.models.equivariance import FermiNetBackflow, FermiNetOrbitalLayer
+from vmcnet.models.equivariance import (
+    FermiNetBackflow,
+    FermiNetOneElectronLayer,
+    FermiNetOrbitalLayer,
+    FermiNetResidualBlock,
+    FermiNetTwoElectronLayer,
+)
 from vmcnet.models.weights import WeightInitializer
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
@@ -29,6 +35,21 @@ class ComposedModel(flax.linen.Module):
         for model in self.submodels:
             outputs = model(outputs)
         return outputs
+
+
+def _get_nelec_per_spin(
+    spin_split: Union[int, Sequence[int]], nelec_total: int
+) -> Tuple[int, ...]:
+    """From a spin_split and nelec_total, get the number of particles per spin.
+
+    If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then
+    spin_split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
+    equal. This function is the inverse of this operation.
+    """
+    if isinstance(spin_split, int):
+        return (nelec_total // spin_split,) * spin_split
+    else:
+        return tuple(jnp.diff(jnp.array(spin_split), prepend=0, append=nelec_total))
 
 
 class SingleDeterminantFermiNet(flax.linen.Module):
@@ -112,7 +133,7 @@ class SingleDeterminantFermiNet(flax.linen.Module):
     """
 
     spin_split: Union[int, Sequence[int]]
-    ndense_list: List[Tuple[int, int]]
+    ndense_list: List[Tuple[int, ...]]
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
     kernel_initializer_2e_1e_stream: WeightInitializer
@@ -134,36 +155,63 @@ class SingleDeterminantFermiNet(flax.linen.Module):
     skip_connection: bool = True
     cyclic_spins: bool = True
 
+    def setup(self):
+        """Setup residual blocks."""
+        residual_blocks = []
+        for ndense in self.ndense_list:
+            one_electron_layer = FermiNetOneElectronLayer(
+                self.spin_split,
+                ndense[0],
+                self.kernel_initializer_unmixed,
+                self.kernel_initializer_mixed,
+                self.kernel_initializer_2e_1e_stream,
+                self.bias_initializer_1e_stream,
+                self.activation_fn,
+                self.streams_use_bias,
+                self.skip_connection,
+                self.cyclic_spins,
+            )
+            two_electron_layer = None
+            if len(ndense) > 1:
+                two_electron_layer = FermiNetTwoElectronLayer(
+                    ndense[1],
+                    self.kernel_initializer_2e_2e_stream,
+                    self.bias_initializer_2e_stream,
+                    self.activation_fn,
+                    self.streams_use_bias,
+                    self.skip_connection,
+                )
+            residual_blocks.append(
+                FermiNetResidualBlock(one_electron_layer, two_electron_layer)
+            )
+
+        self._residual_blocks = residual_blocks
+
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
-        """Compose FermiNet backflow -> orbitals -> log determinant product."""
+        """Compose FermiNet backflow -> orbitals -> log determinant product.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
         nelec_total = elec_pos.shape[-2]
-        if isinstance(self.spin_split, Sequence):
-            nall_but_last = functools.reduce(lambda a, b: a + b, self.spin_split)
-            norbitals = tuple(self.spin_split) + (nelec_total - nall_but_last,)
-        else:
-            norbitals = (nelec_total // self.spin_split,) * self.spin_split
+        norbitals_per_spin = _get_nelec_per_spin(self.spin_split, nelec_total)
         stream_1e, r_ei = FermiNetBackflow(
-            spin_split=self.spin_split,
-            ndense_list=self.ndense_list,
-            kernel_initializer_unmixed=self.kernel_initializer_unmixed,
-            kernel_initializer_mixed=self.kernel_initializer_mixed,
-            kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
-            kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
-            bias_initializer_1e_stream=self.bias_initializer_1e_stream,
-            bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-            activation_fn=self.activation_fn,
+            self._residual_blocks,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
             include_ee_norm=self.include_ee_norm,
-            use_bias=self.streams_use_bias,
-            skip_connection=self.skip_connection,
-            cyclic_spins=self.cyclic_spins,
         )(elec_pos)
         orbitals = FermiNetOrbitalLayer(
             spin_split=self.spin_split,
-            norbitals=norbitals,
+            norbitals_per_spin=norbitals_per_spin,
             kernel_initializer_linear=self.kernel_initializer_orbital_linear,
             kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
             kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,

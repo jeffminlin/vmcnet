@@ -9,7 +9,7 @@ from jax import core
 T = TypeVar("T")  # representing an arbitrary pytree
 D = TypeVar("D")  # represents a pytree or pytree-like object containing MCMC data
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
-O = TypeVar("O")  # represents optimizer state
+S = TypeVar("S")  # represents optimizer state
 
 # axis name to pmap over
 PMAP_AXIS_NAME = "pmap_axis"
@@ -66,6 +66,7 @@ def mean_all_local_devices(x):
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
+
 p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 
 
@@ -93,10 +94,10 @@ def distribute_data(data):
 def distribute_data_params_optstate_and_key(
     data: D,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     key: jnp.ndarray,
     distribute_data_fn: Callable[[D], D] = distribute_data,
-) -> Tuple[D, P, O, jnp.ndarray]:
+) -> Tuple[D, P, S, jnp.ndarray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
     Args:

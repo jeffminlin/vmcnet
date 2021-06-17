@@ -18,7 +18,7 @@ import vmcnet.utils.io as io
 # and wave function amplitudes, or other auxilliary MCMC data
 D = TypeVar("D")
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
-O = TypeVar("O")  # represents optimizer state
+S = TypeVar("S")  # represents optimizer state
 
 
 @dataclass
@@ -105,7 +105,7 @@ def get_checkpoint_metric(
 def save_metrics_and_handle_checkpoints(
     epoch: int,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     data: D,
     metrics: Dict,
     nchains: int,
@@ -197,7 +197,7 @@ def save_metrics_and_handle_checkpoints(
 def track_and_save_best_checkpoint(
     epoch: int,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     data: D,
     metrics: Dict,
     nchains: int,
@@ -255,7 +255,7 @@ def track_and_save_best_checkpoint(
 def save_metrics_and_regular_checkpoint(
     epoch: int,
     params: P,
-    optimizer_state: O,
+    optimizer_state: S,
     data: D,
     metrics: Dict,
     logdir: str,

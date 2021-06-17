@@ -13,8 +13,13 @@ from vmcnet.models.core import Dense
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
-def _split_mean(splits, x, axis=-2, keepdims=True):
-    """Split an array and then take the mean over an axis in each of the splits."""
+def _split_mean(
+    x: jnp.ndarray,
+    splits: Union[int, Sequence[int]],
+    axis: int = -2,
+    keepdims: bool = True,
+) -> List[jnp.ndarray]:
+    """Split x on an axis and take the mean over that axis in each of the splits."""
     split_x = jnp.split(x, splits, axis=axis)
     split_x_mean = jax.tree_map(
         functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
@@ -22,8 +27,11 @@ def _split_mean(splits, x, axis=-2, keepdims=True):
     return split_x_mean
 
 
-def _rolled_concat(arrays, n, axis=-1):
-    """Concatenate a list of arrays starting from the nth and wrapping back around."""
+def _rolled_concat(arrays: List[jnp.ndarray], n: int, axis: int = -1) -> jnp.ndarray:
+    """Concatenate a list of arrays starting from the nth and wrapping back around.
+
+    The input list of arrays must all have the same shapes, except for along `axis`.
+    """
     return jnp.concatenate(arrays[n:] + arrays[:n], axis=axis)
 
 
@@ -33,11 +41,11 @@ def _tree_sum(tree1, tree2):
 
 
 def _tree_prod(tree1, tree2):
-    """Leaf-wise produdct of two pytrees with the same structure."""
+    """Leaf-wise product of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
-def _valid_skip(x, y):
+def _valid_skip(x: jnp.ndarray, y: jnp.ndarray) -> bool:
     return x.shape[-1] == y.shape[-1]
 
 
@@ -123,10 +131,11 @@ def compute_electron_ion(
     input_1e = elec_pos
     if ion_pos is not None:
         r_ei = _compute_displacements(input_1e, ion_pos)
+        input_1e = r_ei
         if include_ei_norm:
-            r_ei_norm = jnp.linalg.norm(r_ei, axis=-1, keepdims=True)
-            r_ei_with_norm = jnp.concatenate([r_ei, r_ei_norm], axis=-1)
-        input_1e = jnp.reshape(r_ei_with_norm, r_ei_with_norm.shape[:-2] + (-1,))
+            input_norm = jnp.linalg.norm(input_1e, axis=-1, keepdims=True)
+            input_with_norm = jnp.concatenate([input_1e, input_norm], axis=-1)
+            input_1e = jnp.reshape(input_with_norm, input_with_norm.shape[:-2] + (-1,))
     return input_1e, r_ei
 
 
@@ -147,6 +156,9 @@ def compute_electron_electron(
     """
     input_2e = _compute_displacements(elec_pos, elec_pos)
     if include_ee_norm:
+        # Avoid computing norm(x - x) along the diagonal, since autograd will be
+        # unhappy about differentiating through the norm function evaluated at 0.
+        # Instead compute 0 * norm(x - x + 1) along the diagonal.
         n = elec_pos.shape[-2]
         eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
         r_ee_diag_ones = input_2e + eye_n
@@ -214,7 +226,8 @@ class FermiNetOneElectronLayer(flax.linen.Module):
 
     def setup(self):
         """Setup Dense layers."""
-        # workaround MyPy's typing error for callable attribute
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
 
         self._unmixed_dense = Dense(
@@ -231,48 +244,144 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         )
 
     def _compute_transformed_1e_means(self, split_means):
-        """Apply a dense layer to the concatenated averages of the 1e stream."""
+        """Apply a dense layer to the concatenated averages of the 1e stream.
+
+        The mixing of the one-electron part of the one-electron stream takes the form
+
+        [i: (..., n[i], d)]
+            -> average along particle dim to get [i: (..., 1, d)]
+            -> concatenate all averages for each spin to get [i: (..., 1, d * nspins)]
+            -> apply the same linear transformation for all i to get [i: (..., 1, d')]
+
+        This function does the last two steps.
+
+        There is a choice about how to do the concatenation step. For all spins the
+        concatenation can be exactly the same, say [(1, 2, 3), (1, 2, 3), (1, 2, 3)],
+        which is the approach in the original FermiNet paper, or different, for which
+        there may be many possibilities. Here, if self.cyclic_spins is True, then the
+        concatenation done is [(1, 2, 3), (2, 3, 1), (3, 1, 2)], which obeys
+        an equivariance with respect to cyclic permutations.
+
+        When there are just two spins, this cyclic equivariance is the same has complete
+        permutation equivariance (since the cyclic group of order 2 is group isomorphic
+        to the permutation group of order 2, a single flip). For more than 2 spins, it's
+        not clear if either approach is better from a theoretical standpoint, as both
+        impose an ordering.
+        """
+        nspins = len(split_means)
         if self.cyclic_spins:
-            split_concat = [
-                _rolled_concat(split_means, idx) for idx in range(len(split_means))
-            ]
+            # re-concatenate the averages but as [i: [i, ..., n, 1, ..., i-1]] along
+            # the last dimension
+            split_concat = [_rolled_concat(split_means, idx) for idx in range(nspins)]
+
+            # concatenate on axis=-2 so a single dense layer can be batch applied to
+            # every concatenation
             all_spins = jnp.concatenate(split_concat, axis=-2)
             dense_mixed = self._mixed_dense(all_spins)
+
+            # split the results of the batch applied dense layer back into the spins
             dense_mixed_split = jnp.split(dense_mixed, len(split_concat), axis=-2)
         else:
             split_concat = jnp.concatenate(split_means, axis=-1)
             dense_mixed = self._mixed_dense(split_concat)
-            dense_mixed_split = [dense_mixed, dense_mixed]
+            dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
     def _compute_transformed_2e_means(self, in_2e):
-        """Apply a dense layer to the concatenated averages of the 2e stream."""
-        # [spin: (..., nelec[spin], nelec_total, d)]
+        """Apply a dense layer to the concatenated averages of the 2e stream.
+
+        The mixing of the two-electron part of the one-electron stream takes the form
+
+        (..., n_total, n_total, d)
+            -> split along a particle axis to get [i: (..., n[i], n_total, d)]
+            -> for each i, do a split and average over the other particle axis (but
+                don't keep the averaged axis) to get [i: [j: (..., n[i], d)]]
+            -> for each i, concatenate the splits to get [i: (..., n[i], d * nspins)]
+            -> apply the same linear transformation for all i to get
+                [i: (..., n[i], d')]
+
+        As in the mixing of the one-electron part, the concatenation step comes with a
+        choice of what order in which to concatenate the averages. Here if
+        self.cyclic_spins is True, the ith spin is concatenated so that the j=i average
+        is first in the concatenation and the other spins follow cyclically, which is
+        invariant under cyclic permutations of the spin. If self.cyclic_spins is False,
+        all spins are concatenated in the same order, the spin order induced from the
+        particle ordering and the specified spin split.
+        """
+        # split to get [i: (..., n[i], n_total, d)]
         split_2e = jnp.split(in_2e, self.spin_split, axis=-3)
 
+        # for each i, do a split and average along axis=-2, then concatenate
         concat_2e = []
         for spin in range(len(split_2e)):
             split_arrays = _split_mean(
-                self.spin_split, split_2e[spin], axis=-2, keepdims=False
-            )  # [spin1: [spin2: (..., nelec[spin1], d)]]
+                split_2e[spin], self.spin_split, axis=-2, keepdims=False
+            )  # [j: (..., n[i], d)]
             if self.cyclic_spins:
+                # for the ith spin, concatenate as [i, ..., n, 1, ..., i-1] along the
+                # last axis
                 concat_arrays = _rolled_concat(split_arrays, spin)
             else:
+                # otherwise, for all i, concatenate the averages over [1, ..., n] in
+                # that order
                 concat_arrays = jnp.concatenate(split_arrays, axis=-1)
-            # concat_arrays is [spin: (..., nelec[spin1], d * nspins)]
-            concat_2e.append(concat_arrays)
+            concat_2e.append(concat_arrays)  # [i: (..., n[i], d * nspins)]
 
+        # reconcatenate along the split axis to batch apply the same dense layer for all
+        # i, then split over the spins again before returning
         all_spins = jnp.concatenate(concat_2e, axis=-2)
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
     def __call__(self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None) -> jnp.ndarray:
-        """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output."""
+        """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
+
+        This implementation breaks the one-electron stream into three parts:
+            1) the unmixed one-particle part, which is a linear transformation applied
+                in parallel for each particle to the inputs
+            2) the mixed one-particle part, which is a linear transformation applied to
+                the averages of the inputs (concatenated over spin)
+            3) the two-particle part, which is a linear transformation applied in
+                parallel for each particle to the average of the input interactions
+                between that particle and all the other particles.
+
+        For 1), we take `in_1e` of shape (..., n_total, d_1e), batch apply a linear
+        transformation to get (..., n_total, d'), and split over the spins i to get
+        [i: (..., n[i], d')].
+
+        For 2), we split `in_1e` over the spins along the particle axis to get
+        [i: (..., n[i], d_1e)], average over each spin to get [i: (..., 1, d_1e)],
+        concatenate all averages for each spin to get [i: (..., 1, d_1e * nspins)], and
+        apply a linear transformation to get [i: (..., 1, d')].
+
+        For 3) we split in_2e of shape (..., n_total, n_total, d_2e) over the spins
+        along a particle axis to get [i: (..., n[i], n_total, d_2e)], average over the
+        other particle axis to get [i: [j: (..., n[i], d_2e)]], concatenate the averages
+        for each spin to get [i: (..., n[i], d_2e * nspins)], and apply a linear
+        transformation to get [i: (..., n[i], d')].
+
+        Finally, for each spin, we add the three parts, each equivariant or symmetric,
+        to get a final equivariant linear transformation of the inputs, to which a
+        non-linearity is then applied and a skip connection optionally added.
+
+        Args:
+            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
+            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+                Defaults to None.
+
+        Returns:
+            jnp.ndarray of shape (..., n_total, self.ndense), the output one-electron
+            stream
+        """
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
 
-        split_1e_means = _split_mean(self.spin_split, in_1e, axis=-2, keepdims=True)
+        split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
         dense_mixed_split = self._compute_transformed_1e_means(split_1e_means)
+
+        # adds the unmixed [i: (..., n[i], d')] to the mixed [i: (..., 1, d')] to get
+        # an equivariant function. Without the two-electron mixing, this is a spinful
+        # version of DeepSet's Lemma 3: https://arxiv.org/pdf/1703.06114.pdf
         dense_out = _tree_sum(dense_unmixed_split, dense_mixed_split)
 
         if in_2e is not None:
@@ -313,7 +422,8 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
 
     def setup(self):
         """Setup Dense layer."""
-        # workaround MyPy's typing error for callable attribute
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
         self._dense = Dense(
             self.ndense,
@@ -323,7 +433,13 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Apply a Dense layer in parallel to all electron pairs."""
+        """Apply a Dense layer in parallel to all electron pairs.
+
+        The expected use-case of this is to batch apply a dense layer to an input x of
+        shape (..., n_total, n_total, d), getting an output of shape
+        (..., n_total, n_total, d'), and optionally adding a skip connection. The
+        function itself is just a standard residual network layer.
+        """
         dense_out = self._dense(x)
         nonlinear_out = self._activation_fn(dense_out)
 
@@ -339,99 +455,45 @@ class FermiNetResidualBlock(flax.linen.Module):
     Combines the one-electron and two-electron streams.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
-            or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        ndense_1e (int): number of dense nodes in the one-electron stream part
-        ndense_2e (int): number of dense nodes in the two-electron stream part
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        activation_fn (Activation): activation function in the electron streams. Has
-            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        use_bias (bool, optional): whether to add a bias term in the electron streams.
-            Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
-        advance_2e (bool, optional): whether to apply the FermiNetTwoElectronLayer to
-            the two-electron stream, or to return it untransformed. Defaults to False.
+        one_electron_layer (Callable): function which takes in a previous one-electron
+            stream output and two-electron stream output and mixes/transforms them to
+            create a new one-electron stream output. Has the signature:
+            (array of shape (..., n, d_1e), optional array of shape (..., n, n, d_2e))
+            -> array of shape (..., n, d_1e')
+        two_electron_layer (Callable): function which takes in a previous two-electron
+            stream output and batch applies a Dense layer along the last axis. Has the
+            signature:
+            array of shape (..., n, n, d_2e) -> array of shape (..., n, n, d_2e')
     """
 
-    spin_split: Union[int, Sequence[int]]
-    ndense_1e: int
-    ndense_2e: int
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
-    activation_fn: Activation
-    use_bias: bool = True
-    skip_connection: bool = True
-    cyclic_spins: bool = False
-    advance_2e: bool = True
+    one_electron_layer: Callable[[jnp.ndarray, Optional[jnp.ndarray]], jnp.ndarray]
+    two_electron_layer: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None
 
-    @flax.linen.compact
+    def setup(self):
+        """Setup called one- and two- electron layers."""
+        self._one_electron_layer = self.one_electron_layer
+        self._two_electron_layer = self.two_electron_layer
+
     def __call__(
         self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
-        """Apply the one-electron layer and optionally the two-electron layer."""
-        out_1e = FermiNetOneElectronLayer(
-            self.spin_split,
-            self.ndense_1e,
-            self.kernel_initializer_unmixed,
-            self.kernel_initializer_mixed,
-            self.kernel_initializer_2e_1e_stream,
-            self.bias_initializer_1e_stream,
-            self.activation_fn,
-            use_bias=self.use_bias,
-            skip_connection=self.skip_connection,
-            cyclic_spins=self.cyclic_spins,
-        )(in_1e, in_2e)
+        """Apply the one-electron layer and optionally the two-electron layer.
 
-        if not self.advance_2e or in_2e is None:
-            return out_1e, in_2e
+        Args:
+            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
+            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+                Defaults to None.
 
-        out_2e = FermiNetTwoElectronLayer(
-            self.ndense_2e,
-            self.kernel_initializer_2e_2e_stream,
-            self.bias_initializer_2e_stream,
-            self.activation_fn,
-            use_bias=self.use_bias,
-            skip_connection=self.skip_connection,
-        )(in_2e)
+        Returns:
+            (jnp.ndarray, optional jnp.ndarray): tuple of (out_1e, out_2e) where out_1e
+            is the output from the one-electron layer and out_2e is the output of the
+            two-electron stream
+        """
+        out_1e = self._one_electron_layer(in_1e, in_2e)
+
+        out_2e = in_2e
+        if self.two_electron_layer is not None and in_2e is not None:
+            out_2e = self._two_electron_layer(in_2e)
 
         return out_1e, out_2e
 
@@ -443,76 +505,53 @@ class FermiNetBackflow(flax.linen.Module):
     two-electron streams.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
-            or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        ndense_list: (list of (int, int)): number of dense nodes in each of the
-            residual blocks, (ndense_1e, ndense_2e). The length of this list determines
-            the number of residual blocks which are composed on top of the input streams
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        activation_fn (Activation): activation function in the electron streams. Has
-            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        use_bias (bool, optional): whether to add a bias term in the electron streams.
-            Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
+        residual_blocks (Sequence): sequence of callable residual blocks which apply
+            the one- and two- electron layers. Each residual block has the signature
+            (in_1e, optional in_2e) -> (out_1e, optional out_2e), where
+                in_1e has shape (..., n, d_1e)
+                out_1e has shape (..., n, d_1e')
+                in_2e has shape (..., n, n, d_2e)
+                out_2d has shape (..., n, n, d_2e')
+        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
+            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
+        include_2e_stream (bool, optional): whether to include pairwise electron
+            displacements/distances in the input. Defaults to True.
+        include_ei_norm (bool, optional): whether to include electron-ion distances in
+            the one-electron input. Defaults to True.
+        include_ee_norm (bool, optional): whether to include electron-electron distances
+            in the two-electron input. Defaults to True.
     """
 
-    spin_split: Union[int, Sequence[int]]
-    ndense_list: List[Tuple[int, int]]
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
-    activation_fn: Activation
+    residual_blocks: Sequence[
+        Callable[
+            [jnp.ndarray, Optional[jnp.ndarray]],
+            Tuple[jnp.ndarray, Optional[jnp.ndarray]],
+        ]
+    ]
     ion_pos: Optional[jnp.ndarray] = None
     include_2e_stream: bool = True
     include_ei_norm: bool = True
     include_ee_norm: bool = True
-    use_bias: bool = True
-    skip_connection: bool = True
-    cyclic_spins: bool = True
 
-    @flax.linen.compact
+    def setup(self):
+        """Setup called residual blocks."""
+        self._residual_block_list = [block for block in self.residual_blocks]
+
     def __call__(
         self, elec_pos: jnp.ndarray
     ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
-        """Iterate through self.ndense_list, applying a corresponding residual block."""
+        """Create input streams and iteratively apply residual blocks.
+
+        Args:
+            elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+
+        Returns:
+            (jnp.ndarray, optional jnp.ndarray): tuple of (stream_1e, r_ei) where
+            stream_1e is the output of the one-electron stream after applying
+            self.residual_blocks to the initial input streams, and r_ei is the
+            electron-ion displacements (..., nelec, nion, d). r_ei is None if
+            self.ion_pos is None.
+        """
         stream_1e, stream_2e, r_ei = compute_input_streams(
             elec_pos,
             self.ion_pos,
@@ -521,26 +560,8 @@ class FermiNetBackflow(flax.linen.Module):
             include_ee_norm=self.include_ee_norm,
         )
 
-        for layer, features in enumerate(self.ndense_list):
-            advance_2e = True
-            if layer == len(self.ndense_list) - 1:
-                advance_2e = False
-            stream_1e, stream_2e = FermiNetResidualBlock(
-                spin_split=self.spin_split,
-                ndense_1e=features[0],
-                ndense_2e=features[1],
-                kernel_initializer_unmixed=self.kernel_initializer_unmixed,
-                kernel_initializer_mixed=self.kernel_initializer_mixed,
-                kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
-                kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
-                bias_initializer_1e_stream=self.bias_initializer_1e_stream,
-                bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-                activation_fn=self.activation_fn,
-                use_bias=self.use_bias,
-                skip_connection=self.skip_connection,
-                cyclic_spins=self.cyclic_spins,
-                advance_2e=advance_2e,
-            )(stream_1e, stream_2e)
+        for block in self._residual_block_list:
+            stream_1e, stream_2e = block(stream_1e, stream_2e)
 
         return stream_1e, r_ei
 
@@ -558,10 +579,10 @@ class SplitDense(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense (Sequence[int]): sequence of integers specifying the number of dense
-            nodes in the unique dense layer applied to each split of the input. This
-            determines the output shapes for each split, i.e. the outputs are shaped
-            (..., split_size[i], ndense[i])
+        ndense_per_spin (Sequence[int]): sequence of integers specifying the number of
+            dense nodes in the unique dense layer applied to each split of the input.
+            This determines the output shapes for each split, i.e. the outputs are
+            shaped (..., split_size[i], ndense[i])
         kernel_initializer (WeightInitializer): kernel initializer. Has signature
             (key, shape, dtype) -> jnp.ndarray
         bias_initializer (WeightInitializer): bias initializer. Has signature
@@ -585,16 +606,16 @@ class SplitDense(flax.linen.Module):
         else:
             nspins = len(self.spin_split) + 1
 
-        if len(self.ndense) != nspins:
+        if len(self.ndense_per_spin) != nspins:
             raise ValueError(
                 "Incorrect number of dense output shapes specified for number of "
                 "spins, should be one shape per spin: shapes {} specified for the "
-                "given spin_split {}".format(self.ndense, self.spin_split)
+                "given spin_split {}".format(self.ndense_per_spin, self.spin_split)
             )
 
         self._dense_layers = [
             Dense(
-                self.ndense[i],
+                self.ndense_per_spin[i],
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
@@ -604,7 +625,17 @@ class SplitDense(flax.linen.Module):
         ]
 
     def __call__(self, x: jnp.ndarray) -> List[jnp.ndarray]:
-        """Split the input and apply a dense layer to each split."""
+        """Split the input and apply a dense layer to each split.
+
+        Args:
+            x (jnp.ndarray): array of shape (..., n, d)
+
+        Returns:
+            [(..., n[i], self.ndense_per_spin[i])]: list of length nspins, where nspins
+            is the number of splits created by jnp.split(x, self.spin_split, axis=-2),
+            and the ith entry of the output is the ith split transformed by a dense
+            layer with self.ndense_per_spin[i] nodes.
+        """
         x_split = jnp.split(x, self.spin_split, axis=-2)
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
@@ -646,7 +677,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     """
 
     spin_split: Union[int, Sequence[int]]
-    norbitals: Sequence[int]
+    norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -654,34 +685,18 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     use_bias: bool = True
     isotropic_decay: bool = False
 
-    def _compute_exponential_envelopes(
-        self, x: jnp.ndarray, norbitals: int, isotropic: bool = False
-    ) -> jnp.ndarray:
-        """Pick a type of exp envelope and multiply by the linear part element-wise."""
-        # x is (..., nelec, nion, d)
-        if isotropic:
-            conv_out = self._isotropy(x, norbitals)
-        else:
-            conv_out = self._anisotropy(x, norbitals)
-        # conv_out has shape (..., nelec, norbitals, nion, d)
-        distances = jnp.linalg.norm(conv_out, axis=-1)
-        inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
-        lin_comb_nion = Dense(
-            1,
-            kernel_init=self.kernel_initializer_envelope_ion,
-            use_bias=False,
-            register_kfac=False,
-        )(inv_exp_distances)
-        return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
-
-    def _isotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
+    def _isotropy_on_leaf(self, r_ei_leaf: jnp.ndarray, norbitals: int) -> jnp.ndarray:
         """Isotropic scaling of the electron-ion displacements."""
-        nion = x.shape[-2]
-        # x_nion is (..., nelec, d, nion)
-        x_nion = jnp.swapaxes(x, axis1=-1, axis2=-2)
+        nion = r_ei_leaf.shape[-2]
+
+        # swap axes around and inject an axis to go from
+        # r_ei_leaf: (..., nelec, nion, d) -> x_nion: (..., nelec, d, nion, 1)
+        x_nion = jnp.swapaxes(r_ei_leaf, axis1=-1, axis2=-2)
         x_nion = jnp.expand_dims(x_nion, axis=-1)
-        # split_out has shape [(... nelec, d, 1, norbitals)] * nion,
-        # this applies nion parallel maps which go 1 -> norbitals
+
+        # split x_nion along the ion axis and apply nion parallel maps 1 -> norbitals
+        # along the last axis, resulting in
+        # [i: (..., nelec, d, 1, norbitals)], where i is the ion index
         split_out = SplitDense(
             nion,
             (norbitals,) * nion,
@@ -690,52 +705,89 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             use_bias=False,
             register_kfac=False,
         )(x_nion)
-        # concat_out is (..., nelec, d, nion, norbitals)
+
+        # concatenate over the ion axis, then swap axes to get
+        # an output of shape (..., nelec, norbitals, nion, d)
         concat_out = jnp.concatenate(split_out, axis=-2)
         return jnp.swapaxes(concat_out, axis1=-1, axis2=-3)
 
-    def _anisotropy(self, x: jnp.ndarray, norbitals: int) -> jnp.ndarray:
+    def _anisotropy_on_leaf(
+        self, r_ei_leaf: jnp.ndarray, norbitals: int
+    ) -> jnp.ndarray:
         """Anisotropic scaling of the electron-ion displacements."""
-        batch_shapes = x.shape[:-2]
-        nion = x.shape[-2]
-        d = x.shape[-1]
-        # split_out has shape [(... nelec, 1, d * norbitals)] * nion,
-        # this applies nion parallel maps which go d -> d * norbitals
+        batch_shapes = r_ei_leaf.shape[:-2]
+        nion = r_ei_leaf.shape[-2]
+        d = r_ei_leaf.shape[-1]
+
+        # split x along the ion axis and apply nion parallel maps d -> d * norbitals
+        # along the last axis, resulting in [i: (..., nelec, 1, d * norbitals)]
         split_out = SplitDense(
             nion,
             (d * norbitals,) * nion,
             self.kernel_initializer_envelope_dim,
             zeros,
             use_bias=False,
-        )(x)
+        )(r_ei_leaf)
 
-        concat_out = jnp.concatenate(split_out, axis=-2)  # (..., nion, d * norbitals)
+        # concatenate over the ion axis, then reshape the last axis to separate out the
+        # norbitals dxd transformations and swap axes around to return
+        # (..., nelec, norbitals, nion, d)
+        concat_out = jnp.concatenate(split_out, axis=-2)
         out = jnp.reshape(concat_out, batch_shapes + (nion, d, norbitals))
-        out = jnp.swapaxes(out, axis1=-1, axis2=-3)  # (..., norbitals, d, nion)
-        out = jnp.swapaxes(out, axis1=-1, axis2=-2)  # (..., norbitals, nion, d)
+        out = jnp.swapaxes(out, axis1=-1, axis2=-3)
+        out = jnp.swapaxes(out, axis1=-1, axis2=-2)
 
         return out
 
+    def _compute_exponential_envelopes_on_leaf(
+        self, r_ei_leaf: jnp.ndarray, norbitals: int, isotropic: bool = False
+    ) -> jnp.ndarray:
+        """Pick a type of exp envelope and multiply by the linear part element-wise."""
+        if isotropic:
+            conv_out = self._isotropy_on_leaf(r_ei_leaf, norbitals)
+        else:
+            conv_out = self._anisotropy_on_leaf(r_ei_leaf, norbitals)
+        # conv_out has shape (..., nelec, norbitals, nion, d)
+        distances = jnp.linalg.norm(conv_out, axis=-1)
+        inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
+        lin_comb_nion = Dense(
+            1, kernel_init=self.kernel_initializer_envelope_ion, use_bias=False
+        )(inv_exp_distances)
+        return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
+
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
-        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes."""
-        # orbs has shapes [(..., nelec[spin], norbitals[spin])]
+        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
+
+        Args:
+            x (jnp.ndarray): array of shape (..., nelec, d)
+            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+
+        Returns:
+            [(..., nelec[i], self.norbitals_per_spin[i])]: list of FermiNet orbital
+            matrices computed from an output stream x and the electron-ion displacements
+            r_ei. Here n[i] is the number of particles in the ith split. The exponential
+            envelopes are computed only when r_ei is not None (so, when connected to
+            FermiNetBackflow, when ion locations are specified). To output square
+            matrices, say for composing with the determinant anti-symmetry,
+            nelec[i] should be equal to self.norbitals_per_spin[i].
+        """
         orbs = SplitDense(
             self.spin_split,
-            self.norbitals,
+            self.norbitals_per_spin,
             self.kernel_initializer_linear,
             self.bias_initializer_linear,
             use_bias=self.use_bias,
         )(x)
         if r_ei is not None:
             r_ei_split = jnp.split(r_ei, self.spin_split, axis=-3)
-            # exp_envelopes has shapes [(..., nelec[spin], norbitals[spin])]
             exp_envelopes = jax.tree_map(
                 functools.partial(
-                    self._compute_exponential_envelopes, isotropic=self.isotropic_decay
+                    self._compute_exponential_envelopes_on_leaf,
+                    isotropic=self.isotropic_decay,
                 ),
                 r_ei_split,
-                list(self.norbitals),
+                list(self.norbitals_per_spin),
             )
             orbs = _tree_prod(orbs, exp_envelopes)
         return orbs
