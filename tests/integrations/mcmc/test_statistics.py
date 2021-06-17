@@ -8,17 +8,7 @@ import vmcnet.mcmc.statistics as statistics
 
 
 def _get_sample_size():
-    return (100000, 5)
-
-
-def test_constant_samples_no_variance():
-    """Test that samples from a constant distribution produce 0 variance."""
-    (nsamples, nchains) = _get_sample_size()
-    constant_samples = jnp.ones((nsamples, nchains))
-
-    var_estimate = statistics.multi_chain_variance_estimate(constant_samples)
-
-    np.testing.assert_allclose(var_estimate, 0)
+    return (1000000, 5)
 
 
 def test_independent_samples():
@@ -32,10 +22,10 @@ def test_independent_samples():
 
     # Autocorrelation curve should return sample variance at first index and
     # 0 everywhere else, due to independence of samples.
-    np.testing.assert_allclose(autocorr_curve[0], 1, atol=1e-1)
-    np.testing.assert_allclose(autocorr_curve[1:], 0, atol=1e-1)
+    np.testing.assert_allclose(autocorr_curve[0], 1, 1e-2)
+    np.testing.assert_allclose(autocorr_curve[1:100], 0, atol=1e-2)
     # Autocorrelation time should be 1 as each sample is independent.
-    np.testing.assert_allclose(tau, 1, 1e-1)
+    np.testing.assert_allclose(tau, 1, 1e-2)
 
 
 def _construct_correlated_samples(nsamples, nchains, decay_factor):
@@ -70,9 +60,10 @@ def test_correlated_samples():
     nautocorr_to_check = 100
     expected_autocorr = decay_factor ** jnp.arange(nautocorr_to_check)
     np.testing.assert_allclose(
-        autocorr_curve[0:nautocorr_to_check], expected_autocorr, atol=1e-1
+        autocorr_curve[0:nautocorr_to_check], expected_autocorr, atol=1e-2
     ),
     # Test autocorrelation time against the infinite sum of the decaying exponential.
     infinite_exponential_sum = 1 / (1 - decay_factor)
     expected_tau = -1 + 2 * infinite_exponential_sum
-    np.testing.assert_allclose(tau, expected_tau, atol=1.0)
+    # This is a somewhat noisier estimate which requires a higher tolerance
+    np.testing.assert_allclose(tau, expected_tau, 5e-2)
