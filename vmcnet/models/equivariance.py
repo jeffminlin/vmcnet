@@ -593,7 +593,7 @@ class SplitDense(flax.linen.Module):
     """
 
     spin_split: Union[int, Sequence[int]]
-    ndense: Sequence[int]
+    ndense_per_spin: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
