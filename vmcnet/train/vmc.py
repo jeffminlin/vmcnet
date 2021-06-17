@@ -105,7 +105,7 @@ def make_burning_step(
 def make_training_step(
     nsteps_per_param_update: int,
     metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, O, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     apply_walker_pmap: bool = True,
     apply_param_update_pmap: bool = True,
 ) -> Callable[[D, P, S, jnp.ndarray], Tuple[jnp.float32, D, P, S, Dict, jnp.ndarray]]:
