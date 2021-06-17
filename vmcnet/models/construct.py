@@ -1,5 +1,4 @@
 """Combine pieces to form full models."""
-import functools
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import flax
