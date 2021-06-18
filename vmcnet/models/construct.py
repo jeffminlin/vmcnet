@@ -65,6 +65,51 @@ def _log_sum_exp(signs: jnp.ndarray, vals: jnp.ndarray, axis: int = 0) -> jnp.nd
     return jnp.log(jnp.abs(sum_terms_divided_by_max)) + jnp.squeeze(max_val, axis=axis)
 
 
+def _get_residual_blocks_for_ferminet_backflow(
+    spin_split: Union[int, Sequence[int]],
+    ndense_list: List[Tuple[int, ...]],
+    kernel_initializer_unmixed: WeightInitializer,
+    kernel_initializer_mixed: WeightInitializer,
+    kernel_initializer_2e_1e_stream: WeightInitializer,
+    kernel_initializer_2e_2e_stream: WeightInitializer,
+    bias_initializer_1e_stream: WeightInitializer,
+    bias_initializer_2e_stream: WeightInitializer,
+    activation_fn: Activation,
+    use_bias: bool = True,
+    skip_connection: bool = True,
+    cyclic_spins: bool = True,
+) -> List[FermiNetResidualBlock]:
+    """Construct a list of FermiNet residual blocks composed by FermiNetBackflow."""
+    residual_blocks = []
+    for ndense in ndense_list:
+        one_electron_layer = FermiNetOneElectronLayer(
+            spin_split,
+            ndense[0],
+            kernel_initializer_unmixed,
+            kernel_initializer_mixed,
+            kernel_initializer_2e_1e_stream,
+            bias_initializer_1e_stream,
+            activation_fn,
+            use_bias,
+            skip_connection,
+            cyclic_spins,
+        )
+        two_electron_layer = None
+        if len(ndense) > 1:
+            two_electron_layer = FermiNetTwoElectronLayer(
+                ndense[1],
+                kernel_initializer_2e_2e_stream,
+                bias_initializer_2e_stream,
+                activation_fn,
+                use_bias,
+                skip_connection,
+            )
+        residual_blocks.append(
+            FermiNetResidualBlock(one_electron_layer, two_electron_layer)
+        )
+    return residual_blocks
+
+
 class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
@@ -177,35 +222,20 @@ class FermiNet(flax.linen.Module):
 
     def setup(self):
         """Setup residual blocks."""
-        residual_blocks = []
-        for ndense in self.ndense_list:
-            one_electron_layer = FermiNetOneElectronLayer(
-                self.spin_split,
-                ndense[0],
-                self.kernel_initializer_unmixed,
-                self.kernel_initializer_mixed,
-                self.kernel_initializer_2e_1e_stream,
-                self.bias_initializer_1e_stream,
-                self.activation_fn,
-                self.streams_use_bias,
-                self.skip_connection,
-                self.cyclic_spins,
-            )
-            two_electron_layer = None
-            if len(ndense) > 1:
-                two_electron_layer = FermiNetTwoElectronLayer(
-                    ndense[1],
-                    self.kernel_initializer_2e_2e_stream,
-                    self.bias_initializer_2e_stream,
-                    self.activation_fn,
-                    self.streams_use_bias,
-                    self.skip_connection,
-                )
-            residual_blocks.append(
-                FermiNetResidualBlock(one_electron_layer, two_electron_layer)
-            )
-
-        self._residual_blocks = residual_blocks
+        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+            self.spin_split,
+            self.ndense_list,
+            self.kernel_initializer_unmixed,
+            self.kernel_initializer_mixed,
+            self.kernel_initializer_2e_1e_stream,
+            self.kernel_initializer_2e_2e_stream,
+            self.bias_initializer_1e_stream,
+            self.bias_initializer_2e_stream,
+            self.activation_fn,
+            self.streams_use_bias,
+            self.skip_connection,
+            self.cyclic_spins,
+        )
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -225,7 +255,7 @@ class FermiNet(flax.linen.Module):
         nelec_total = elec_pos.shape[-2]
         norbitals_per_spin = _get_nelec_per_spin(self.spin_split, nelec_total)
         stream_1e, r_ei = FermiNetBackflow(
-            self._residual_blocks,
+            self.residual_blocks,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
@@ -357,6 +387,23 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     skip_connection: bool = True
     cyclic_spins: bool = True
 
+    def setup(self):
+        """Setup residual blocks."""
+        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+            self.spin_split,
+            self.ndense_list,
+            self.kernel_initializer_unmixed,
+            self.kernel_initializer_mixed,
+            self.kernel_initializer_2e_1e_stream,
+            self.kernel_initializer_2e_2e_stream,
+            self.bias_initializer_1e_stream,
+            self.bias_initializer_2e_stream,
+            self.activation_fn_backflow,
+            self.streams_use_bias,
+            self.skip_connection,
+            self.cyclic_spins,
+        )
+
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
         """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
@@ -373,28 +420,18 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         stream_1e, r_ei = FermiNetBackflow(
-            spin_split=self.spin_split,
-            ndense_list=self.ndense_list,
-            kernel_initializer_unmixed=self.kernel_initializer_unmixed,
-            kernel_initializer_mixed=self.kernel_initializer_mixed,
-            kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
-            kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
-            bias_initializer_1e_stream=self.bias_initializer_1e_stream,
-            bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-            activation_fn=self.activation_fn_backflow,
+            self.residual_blocks,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
             include_ee_norm=self.include_ee_norm,
-            use_bias=self.streams_use_bias,
-            skip_connection=self.skip_connection,
-            cyclic_spins=self.cyclic_spins,
         )(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
             [
                 SimpleResNet(
                     self.ndense_resnet,
+                    1,
                     self.nlayers_resnet,
                     self.activation_fn_resnet,
                     self.kernel_initializer_resnet,
@@ -518,6 +555,23 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     skip_connection: bool = True
     cyclic_spins: bool = True
 
+    def setup(self):
+        """Setup residual blocks."""
+        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+            self.spin_split,
+            self.ndense_list,
+            self.kernel_initializer_unmixed,
+            self.kernel_initializer_mixed,
+            self.kernel_initializer_2e_1e_stream,
+            self.kernel_initializer_2e_2e_stream,
+            self.bias_initializer_1e_stream,
+            self.bias_initializer_2e_stream,
+            self.activation_fn_backflow,
+            self.streams_use_bias,
+            self.skip_connection,
+            self.cyclic_spins,
+        )
+
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
         """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
@@ -534,27 +588,17 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         stream_1e, r_ei = FermiNetBackflow(
-            spin_split=self.spin_split,
-            ndense_list=self.ndense_list,
-            kernel_initializer_unmixed=self.kernel_initializer_unmixed,
-            kernel_initializer_mixed=self.kernel_initializer_mixed,
-            kernel_initializer_2e_1e_stream=self.kernel_initializer_2e_1e_stream,
-            kernel_initializer_2e_2e_stream=self.kernel_initializer_2e_2e_stream,
-            bias_initializer_1e_stream=self.bias_initializer_1e_stream,
-            bias_initializer_2e_stream=self.bias_initializer_2e_stream,
-            activation_fn=self.activation_fn_backflow,
+            self.residual_blocks,
             ion_pos=self.ion_pos,
             include_2e_stream=self.include_2e_stream,
             include_ei_norm=self.include_ei_norm,
             include_ee_norm=self.include_ee_norm,
-            use_bias=self.streams_use_bias,
-            skip_connection=self.skip_connection,
-            cyclic_spins=self.cyclic_spins,
         )(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = ComposedBruteForceAntisymmetrize(
             SimpleResNet(
                 self.ndense_resnet,
+                1,
                 self.nlayers_resnet,
                 self.activation_fn_resnet,
                 self.kernel_initializer_resnet,
