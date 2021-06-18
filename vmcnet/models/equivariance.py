@@ -681,7 +681,9 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     def setup(self):
-        # workaround MyPy's typing error for callable attribute
+        """Setup envelope kernel initializers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
