@@ -48,7 +48,8 @@ def _get_nelec_per_spin(
     if isinstance(spin_split, int):
         return (nelec_total // spin_split,) * spin_split
     else:
-        return tuple(jnp.diff(jnp.array(spin_split), prepend=0, append=nelec_total))
+        spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
+        return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
 
 
 class SingleDeterminantFermiNet(flax.linen.Module):
