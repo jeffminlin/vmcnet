@@ -65,4 +65,4 @@ def test_ferminet_can_be_constructed():
 
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos)
-    log_psi.apply(params, init_pos)
+    jax.jit(log_psi.apply)(params, init_pos)
