@@ -209,7 +209,7 @@ class FermiNet(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
-        """Compose FermiNet backflow -> orbitals -> log determinant product.
+        """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
             elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
@@ -217,7 +217,9 @@ class FermiNet(flax.linen.Module):
         Returns:
             jnp.ndarray: FermiNet output; logarithm of the absolute value of a
             anti-symmetric function of elec_pos, where the anti-symmetry is with respect
-            to the second-to-last axis of elec_pos. If the inputs have shape
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         nelec_total = elec_pos.shape[-2]
@@ -249,6 +251,88 @@ class FermiNet(flax.linen.Module):
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
+    """Model with FermiNet backflow and a product of brute-force antisym. ResNets.
+
+    A simple isotropic exponential decay is added to ensure square-integrability (and
+    because this is asymptotically correct for molecules).
+
+    Attributes:
+        spin_split (int or Sequence[int]): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        ndense_list: (list of (int, ...)): number of dense nodes in each of the
+            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
+            determines the number of residual blocks which are composed on top of the
+            input streams. If ndense_2e is specified, then then a dense layer is applied
+            to the two-electron stream with an optional skip connection, otherwise
+            the two-electron stream is mixed into the one-electron stream but no
+            transformation is done.
+        ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
+            ResNet
+        nlayers_resnet (int): number of layers in each antisymmetrized ResNet
+        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
+            unmixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the previous one-electron stream output. Has
+            signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
+            mixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the average of the previous one-electron
+            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
+            two-electron part of the one-electron stream. This initializes the part of
+            the dense kernel which multiplies the average of the previous two-electron
+            stream which is mixed into the one-electron stream. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_resnet (WeightInitializer): kernel initializer for
+            the dense layers in the antisymmetrized ResNets. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
+            decay rates in the exponential decay Jastrow factor. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
+            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_resnet (WeightInitializer): bias initializer for the
+            dense layers in the antisymmetrized ResNets. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        activation_fn_backflow (Activation): activation function in the electron
+            streams. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        activation_fn_resnet (Activation): activation function in the antisymmetrized
+            ResNets. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
+            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
+        include_2e_stream (bool, optional): whether to compute pairwise electron
+            displacements/distances. Defaults to True.
+        include_ei_norm (bool, optional): whether to include electron-ion distances in
+            the one-electron input. Defaults to True.
+        include_ee_norm (bool, optional): whether to include electron-electron distances
+            in the two-electron input. Defaults to True.
+        streams_use_bias (bool, optional): whether to add a bias term in the electron
+            streams. Defaults to True.
+        resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
+            of the antisymmetrized ResNets. Defaults to True.
+        skip_connection (bool, optional): whether to add residual skip connections
+            whenever the shapes of the input and outputs of the streams match. Defaults
+            to True.
+        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
+            stream should satisfy a cyclic equivariance structure, i.e. if there are
+            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
+            but before the linear transformation, cyclic equivariance means the inputs
+            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
+            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet backflow).
+            When there are only two spins (spin-1/2 case), then this is equivalent to
+            true spin equivariance. Defaults to False (original FermiNet backflow).
+    """
+
     spin_split: Union[int, Sequence[int]]
     ndense_list: List[Tuple[int, int]]
     ndense_resnet: int
@@ -275,6 +359,19 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: spinful antisymmetrized output; logarithm of the absolute value
+            of a anti-symmetric function of elec_pos, where the anti-symmetry is with
+            respect to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
         stream_1e, r_ei = FermiNetBackflow(
             spin_split=self.spin_split,
             ndense_list=self.ndense_list,
@@ -313,6 +410,90 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
 
 class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
+    """Model with FermiNet backflow and a single antisymmetrized ResNet.
+
+    The ResNet is antisymmetrized with respect to each spin split separately (i.e. the
+    antisymmetrization operators for each spin are composed and applied).
+
+    A simple isotropic exponential decay is added to ensure square-integrability (and
+    because this is asymptotically correct for molecules).
+
+    Attributes:
+        spin_split (int or Sequence[int]): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        ndense_list: (list of (int, ...)): number of dense nodes in each of the
+            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
+            determines the number of residual blocks which are composed on top of the
+            input streams. If ndense_2e is specified, then then a dense layer is applied
+            to the two-electron stream with an optional skip connection, otherwise
+            the two-electron stream is mixed into the one-electron stream but no
+            transformation is done.
+        ndense_resnet (int): number of dense nodes in each layer of the ResNet
+        nlayers_resnet (int): number of layers in each antisymmetrized ResNet
+        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
+            unmixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the previous one-electron stream output. Has
+            signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
+            mixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the average of the previous one-electron
+            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
+            two-electron part of the one-electron stream. This initializes the part of
+            the dense kernel which multiplies the average of the previous two-electron
+            stream which is mixed into the one-electron stream. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_resnet (WeightInitializer): kernel initializer for
+            the dense layers in the antisymmetrized ResNet. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
+            decay rates in the exponential decay Jastrow factor. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
+            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_resnet (WeightInitializer): bias initializer for the
+            dense layers in the antisymmetrized ResNet. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        activation_fn_backflow (Activation): activation function in the electron
+            streams. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        activation_fn_resnet (Activation): activation function in the antisymmetrized
+            ResNet. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
+            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
+        include_2e_stream (bool, optional): whether to compute pairwise electron
+            displacements/distances. Defaults to True.
+        include_ei_norm (bool, optional): whether to include electron-ion distances in
+            the one-electron input. Defaults to True.
+        include_ee_norm (bool, optional): whether to include electron-electron distances
+            in the two-electron input. Defaults to True.
+        streams_use_bias (bool, optional): whether to add a bias term in the electron
+            streams. Defaults to True.
+        resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
+            of the antisymmetrized ResNet. Defaults to True.
+        skip_connection (bool, optional): whether to add residual skip connections
+            whenever the shapes of the input and outputs of the streams match. Defaults
+            to True.
+        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
+            stream should satisfy a cyclic equivariance structure, i.e. if there are
+            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
+            but before the linear transformation, cyclic equivariance means the inputs
+            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
+            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet backflow).
+            When there are only two spins (spin-1/2 case), then this is equivalent to
+            true spin equivariance. Defaults to False (original FermiNet backflow).
+    """
+
     spin_split: Union[int, Sequence[int]]
     ndense_list: List[Tuple[int, int]]
     ndense_resnet: int
@@ -339,6 +520,19 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: spinful antisymmetrized output; logarithm of the absolute value
+            of a anti-symmetric function of elec_pos, where the anti-symmetry is with
+            respect to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
         stream_1e, r_ei = FermiNetBackflow(
             spin_split=self.spin_split,
             ndense_list=self.ndense_list,

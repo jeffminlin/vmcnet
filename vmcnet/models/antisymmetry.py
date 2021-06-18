@@ -166,7 +166,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
 
 
 class ComposedBruteForceAntisymmetrize(flax.linen.Module):
-    """Antisymmetrize a function over the leaves of a pytree.
+    """Antisymmetrize a single function over the leaves of a pytree.
 
     For each leaf of a pytree, a given function of all the leaves is antisymmetrized
     over the second-to-last axis of each leaf. These brute-force antisymmetrization
