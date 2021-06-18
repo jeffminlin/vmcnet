@@ -95,7 +95,9 @@ class SimpleResNet(flax.linen.Module):
     use_bias: bool = True
 
     def setup(self):
-        # workaround MyPy's typing error for callable attribute
+        """Setup dense layers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
 
         self.inner_dense = [
@@ -115,6 +117,14 @@ class SimpleResNet(flax.linen.Module):
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Repeated application of (dense layer -> activation -> optional skip) block.
+
+        Args:
+            x (jnp.ndarray): an input array of shape (..., d)
+
+        Returns:
+            jnp.ndarray: array of shape (..., self.ndense_final)
+        """
         for dense_layer in self.inner_dense:
             prev_x = x
             x = dense_layer(prev_x)
