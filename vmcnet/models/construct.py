@@ -66,7 +66,7 @@ def _log_sum_exp(signs: jnp.ndarray, vals: jnp.ndarray, axis: int = 0) -> jnp.nd
 
 
 class FermiNet(flax.linen.Module):
-    """Single determinant FermiNet model. Multiple dets to be added.
+    """FermiNet/generalized Slater determinant model.
 
     Attributes:
         spin_split (int or Sequence[int]): number of spins to split the input equally,
@@ -295,14 +295,17 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         )(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
-            SimpleResNet(
-                self.ndense_resnet,
-                self.nlayers_resnet,
-                self.activation_fn_resnet,
-                self.kernel_initializer_resnet,
-                self.bias_initializer_resnet,
-                use_bias=self.resnet_use_bias,
-            )
+            [
+                SimpleResNet(
+                    self.ndense_resnet,
+                    self.nlayers_resnet,
+                    self.activation_fn_resnet,
+                    self.kernel_initializer_resnet,
+                    self.bias_initializer_resnet,
+                    use_bias=self.resnet_use_bias,
+                )
+                for _ in split_spins
+            ]
         )(split_spins)
         jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
 
