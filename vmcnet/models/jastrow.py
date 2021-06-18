@@ -85,7 +85,8 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
 
     Attributes:
         kernel_initializer (WeightInitializer): kernel initializer for the decay rates
-            a_j. This initializes a single decay rate number per ion.
+            a_j. This initializes a single decay rate number per ion. Has signature
+            (key, shape, dtype) -> jnp.ndarray
         logabs (bool, optional): whether to compute -sum_ij ||a_j * (elec_i - ion_j)||,
             when logabs is True, or exp of that expression when logabs is False.
             Defaults to True.
