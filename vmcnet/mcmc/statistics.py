@@ -49,7 +49,7 @@ def multi_chain_autocorr(
     """Calculate multi-chain autocorrelation curve with cutoff.
 
     See Stan Reference Manual, Version 2.27, Section 16.3-16-4
-    https://mc-stan.org/docs/2_27/reference-manual]
+    https://mc-stan.org/docs/2_27/reference-manual
 
     Args:
         samples (jnp.ndarray): samples of shape (N, M) where N is num-samples-per-chain
