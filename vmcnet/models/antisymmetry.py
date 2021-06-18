@@ -157,7 +157,14 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
             if self.logabs is False, where psi_i is the output from antisymmetrizing the
             ith function on the ith input.
         """
-        antisyms = jax.tree_map(self._single_leaf_call, self.fns_to_antisymmetrize, xs)
+        # Flatten the trees for fns_to_antisymmetrize and xs, because flax.linen.Module
+        # freezes all instances of lists to tuples, so this can cause treedef
+        # compatibility problems
+        antisyms = jax.tree_map(
+            self._single_leaf_call,
+            jax.tree_leaves(self.fns_to_antisymmetrize),
+            jax.tree_leaves(xs),
+        )
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
