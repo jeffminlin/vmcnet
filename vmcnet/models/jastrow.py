@@ -72,14 +72,47 @@ def _anisotropy_on_leaf(
 
 
 class IsotropicAtomicExpDecay(flax.linen.Module):
+    """Creates an isotropic exponential decay one-body Jastrow model.
+
+    The decay is centered at the coordinates of the nuclei, and the electron-nuclei
+    displacements are multiplied by trainable params before a sum and exp(-x). The decay
+    is isotropic and equal for all electrons, so it computes
+
+        exp(-sum_ij ||a_j * (elec_i - ion_j)||)
+
+    or the logarithm if logabs is True. The tensor a_j * (elec_i - ion_j) is computed
+    with a depthwise 2d convolution.
+
+    Attributes:
+        kernel_initializer (WeightInitializer): kernel initializer for the decay rates
+            a_j. This initializes a single decay rate number per ion.
+        logabs (bool, optional): whether to compute -sum_ij ||a_j * (elec_i - ion_j)||,
+            when logabs is True, or exp of that expression when logabs is False.
+            Defaults to True.
+    """
+
     kernel_initializer: WeightInitializer
     logabs: bool = True
 
     def setup(self):
+        """Setup the kernel initializer."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
         self._kernel_initializer = self.kernel_initializer
 
     @flax.linen.compact
     def __call__(self, r_ei: jnp.ndarray) -> jnp.ndarray:
+        """Transform electron-ion displacements into an exp decay one-body Jastrow.
+
+        Args:
+            r_ei (jnp.ndarray): electron-ion displacements of shape
+                (..., nelec, nion, d)
+
+        Returns:
+            jnp.ndarray: -sum_ij ||a_j * (elec_i - ion_j)||, when self.logabs is True,
+            or exp of that expression when self.logabs is False. If the input has shape
+            (batch_dims, nelec, nion, d), then the output has shape (batch_dims,)
+        """
         # scale_out has shape (..., nelec, 1, nion, d)
         scale_out = _isotropy_on_leaf(
             r_ei, 1, self._kernel_initializer, register_kfac=True
