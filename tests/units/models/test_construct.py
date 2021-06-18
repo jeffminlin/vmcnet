@@ -36,8 +36,7 @@ def test_compose_negative_with_three_body_antisymmetry():
     np.testing.assert_allclose(output, jnp.array([2 * 16 * -2, 2 * 54 * 20]))
 
 
-def test_ferminet_can_be_constructed():
-    """Make sure basic construction of the FermiNet does not raise exceptions."""
+def _get_initial_particles_and_ions():
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
 
@@ -46,24 +45,96 @@ def test_ferminet_can_be_constructed():
     key, subkey = jax.random.split(key)
     init_pos = jax.random.normal(subkey, shape=(20, 6, 3))
 
-    log_psi = models.construct.FermiNet(
-        (2,),
-        ((64, 8), (64, 8), (32, 8), (32, 4), (12,), (14, 3), (13,)),
-        3,
-        models.weights.get_kernel_initializer("orthogonal"),
-        models.weights.get_kernel_initializer("xavier_normal"),
-        models.weights.get_kernel_initializer("glorot_uniform"),
-        models.weights.get_kernel_initializer("kaiming_uniform"),
-        models.weights.get_kernel_initializer("he_normal"),
-        models.weights.get_kernel_initializer("lecun_normal"),
-        models.weights.get_kernel_initializer("ones"),
-        models.weights.get_bias_initializer("zeros"),
-        models.weights.get_bias_initializer("normal"),
-        models.weights.get_bias_initializer("uniform"),
-        jnp.tanh,
-        ion_pos=ion_pos,
-    )
+    spin_split = (2,)  # 2 up, 4 down
+    ndense_list = ((64, 8), (64, 8), (32, 8), (32, 4), (12,), (14, 3), (13,))
 
-    key, subkey = jax.random.split(key)
-    params = log_psi.init(subkey, init_pos)
-    jax.jit(log_psi.apply)(params, init_pos)
+    return key, ion_pos, init_pos, spin_split, ndense_list
+
+
+def test_ferminet_can_be_constructed():
+    """Make sure basic construction of the FermiNet does not raise exceptions."""
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+
+    for cyclic_spins in [True, False]:
+        log_psi = models.construct.FermiNet(
+            spin_split,
+            ndense_list,
+            3,
+            models.weights.get_kernel_initializer("orthogonal"),
+            models.weights.get_kernel_initializer("xavier_normal"),
+            models.weights.get_kernel_initializer("glorot_uniform"),
+            models.weights.get_kernel_initializer("kaiming_uniform"),
+            models.weights.get_kernel_initializer("he_normal"),
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_kernel_initializer("ones"),
+            models.weights.get_bias_initializer("zeros"),
+            models.weights.get_bias_initializer("normal"),
+            models.weights.get_bias_initializer("uniform"),
+            jnp.tanh,
+            ion_pos=ion_pos,
+            cyclic_spins=cyclic_spins,
+        )
+
+        key, subkey = jax.random.split(key)
+        params = log_psi.init(subkey, init_pos)
+        jax.jit(log_psi.apply)(params, init_pos)
+
+
+def test_split_antisymmetry_can_be_constructed():
+    """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+
+    for cyclic_spins in [True, False]:
+        log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
+            spin_split,
+            ndense_list,
+            32,
+            3,
+            models.weights.get_kernel_initializer("orthogonal"),
+            models.weights.get_kernel_initializer("xavier_normal"),
+            models.weights.get_kernel_initializer("kaiming_uniform"),
+            models.weights.get_kernel_initializer("he_normal"),
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_kernel_initializer("ones"),
+            models.weights.get_bias_initializer("zeros"),
+            models.weights.get_bias_initializer("normal"),
+            models.weights.get_bias_initializer("uniform"),
+            jnp.tanh,
+            jnp.tanh,
+            ion_pos=ion_pos,
+            cyclic_spins=cyclic_spins,
+        )
+
+        key, subkey = jax.random.split(key)
+        params = log_psi.init(subkey, init_pos)
+        jax.jit(log_psi.apply)(params, init_pos)
+
+
+def test_composed_antisymmetry_can_be_constructed():
+    """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+
+    for cyclic_spins in [True, False]:
+        log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
+            spin_split,
+            ndense_list,
+            32,
+            3,
+            models.weights.get_kernel_initializer("orthogonal"),
+            models.weights.get_kernel_initializer("xavier_normal"),
+            models.weights.get_kernel_initializer("kaiming_uniform"),
+            models.weights.get_kernel_initializer("he_normal"),
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_kernel_initializer("ones"),
+            models.weights.get_bias_initializer("zeros"),
+            models.weights.get_bias_initializer("normal"),
+            models.weights.get_bias_initializer("uniform"),
+            jnp.tanh,
+            jnp.tanh,
+            ion_pos=ion_pos,
+            cyclic_spins=cyclic_spins,
+        )
+
+        key, subkey = jax.random.split(key)
+        params = log_psi.init(subkey, init_pos)
+        jax.jit(log_psi.apply)(params, init_pos)
