@@ -1,8 +1,11 @@
 """Proposal and acceptance fns for Metropolis-Hastings Markov-Chain Monte Carlo."""
+import logging
 from typing import Callable, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
+
+import vmcnet.utils as utils
 
 # Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
@@ -57,6 +60,168 @@ def make_metropolis_step(
         return jnp.mean(accept_prob), new_data, key
 
     return metrop_step_fn
+
+
+def walk_data(
+    nsteps: int,
+    data: D,
+    params: P,
+    key: jnp.ndarray,
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+) -> Tuple[jnp.float32, D, jnp.ndarray]:
+    """Take multiple Metropolis-Hastings steps.
+
+    This function is roughly equivalent to:
+    ```
+    accept_sum = 0.0
+    for _ in range(nsteps):
+        accept_prob, data, key = metropolis_step_fn(data, params, key)
+        accept_sum += accept_prob
+    return accept_sum / nsteps, data, key
+    ```
+
+    but has better tracing/pmap behavior due to the use of jax.lax.scan instead of a
+    python for loop. See :func:`~vmcnet.train.vmc.take_metropolis_step`.
+
+    Args:
+        nsteps (int): number of steps to take
+        data (pytree-like): data to walk (update) with each step
+        params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
+            model params
+        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+            to proposal_fn and used to randomly accept proposals with probabilities
+            output by acceptance_fn
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
+
+    Returns:
+        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
+            new jax PRNG key split (possibly multiple times) from previous one
+    """
+
+    def step_fn(carry, x):
+        del x
+        accept_prob, data, key = metrop_step_fn(carry[1], params, carry[2])
+        return (carry[0] + accept_prob, data, key), None
+
+    out = jax.lax.scan(step_fn, (0.0, data, key), xs=None, length=nsteps)
+    accept_sum, data, key = out[0]
+    return accept_sum / nsteps, data, key
+
+
+def make_jitted_burning_step(
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    apply_pmap: bool = True,
+) -> Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]]:
+    """Factory to create a burning step, which is an optionally pmapped Metropolis step.
+
+    This provides the functionality to optionally apply jax.pmap to a single Metropolis
+    step. Only one step is traced so that the first burning step is traced but
+    subsequent steps are properly jit-compiled. The acceptance probabilities (which
+    typically don't mean much during burning) are thrown away.
+
+    For more about the Metropolis step itself, see
+    :func:`~vmcnet.mcmc.metropolis.make_metropolis_step`.
+
+    Args:
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept prob, new data, new key)
+        apply_pmap (bool, optional): whether to apply jax.pmap to the burning step. If
+            False, applies jax.jit. Defaults to True.
+
+    Returns:
+        Callable: function with signature
+            (data, params, key) -> (data, key),
+        with jax.pmap optionally applied if apply_pmap is True. Because it is totally
+        pure, the original (data, key) buffers are deleted in the pmapped version via
+        the `donate_argnums` argument so that XLA is potentially more memory-efficient
+        on the GPU. See :func:`jax.pmap`.
+    """
+
+    def burning_step(data, params, key):
+        _, data, key = metrop_step_fn(data, params, key)
+        return data, key
+
+    if not apply_pmap:
+        return jax.jit(burning_step)
+
+    return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
+
+
+def make_jitted_walker_fn(
+    nsteps: int,
+    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    apply_pmap: bool = True,
+) -> Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]:
+    """Factory to create a function which takes multiple Metropolis steps.
+
+    This provides the functionality to optionally apply jax.pmap to a jax.lax.scan loop
+    of multiple metropolis steps. A typical use case would be to run this function
+    between parameter updates in a VMC loop. An accumulated mean acceptance probability
+    statistic is returned from this walker function.
+
+    See :func:`~vmcnet.train.vmc.vmc_loop` for usage.
+
+    Args:
+        nsteps (int): number of metropolis steps to take in each call
+        metrop_step_fn (Callable): function which does a metropolis step. Has the
+            signature (data, params, key) -> (mean accept probl, new data, new key)
+        apply_pmap (bool, optional): whether to apply jax.pmap to the walker function.
+            If False, applies jax.jit. Defaults to True.
+
+    Returns:
+        Callable: funciton with signature
+            (params, data, key) -> (mean accept prob, new data, new key)
+        with jax.pmap optionally applied if pmapped is True, and jax.jit applied if
+        apply_pmap is False. Because it is totally pure, the original (data, key)
+        buffers are deleted in the pmapped version via the `donate_argnums` argument so
+        that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
+    """
+
+    def walker_fn(params, data, key):
+        accept_ratio, data, key = walk_data(nsteps, data, params, key, metrop_step_fn)
+        accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
+        return accept_ratio, data, key
+
+    if not apply_pmap:
+        return jax.jit(walker_fn)
+
+    pmapped_walker_fn = utils.distribute.pmap(walker_fn, donate_argnums=(1, 2))
+
+    def pmapped_walker_fn_with_single_accept_ratio(params, data, key):
+        accept_ratio, data, key = pmapped_walker_fn(params, data, key)
+        accept_ratio = utils.distribute.get_first(accept_ratio)
+        return accept_ratio, data, key
+
+    return pmapped_walker_fn_with_single_accept_ratio
+
+
+def burn_data(
+    burning_step: Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    nsteps_to_burn: int,
+    data: D,
+    params: P,
+    key: jnp.ndarray,
+) -> Tuple[D, jnp.ndarray]:
+    """Repeatedly apply a burning step.
+
+    Args:
+        metrop_step_fn (Callable): function which does a burning step. Has the
+            signature (data, params, key) -> (new data, new key)
+        nsteps_to_burn (int): number of times to call burning_step
+        data (pytree-like): initial data
+        params (pytree-like): parameters passed to the burning step
+        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+            to proposal_fn and used to randomly accept proposals with probabilities
+            output by acceptance_fn
+
+    Returns:
+        (pytree-like, jnp.ndarray): new data, new key
+    """
+    logging.info("Burning data for {} steps".format(nsteps_to_burn))
+    for _ in range(nsteps_to_burn):
+        data, key = burning_step(data, params, key)
+    return data, key
 
 
 def gaussian_proposal(

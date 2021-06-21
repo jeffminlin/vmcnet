@@ -3,6 +3,7 @@ import logging
 
 import jax
 
+import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
@@ -37,6 +38,11 @@ def sgd_vmc_loop_with_logging(
     # Setup metropolis step
     metrop_step_fn = make_simple_pos_amp_gaussian_step(log_psi_model.apply, std_move)
 
+    burning_step = mcmc.metropolis.make_jitted_burning_step(metrop_step_fn)
+    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+        nsteps_per_param_update, metrop_step_fn
+    )
+
     # Define parameter updates
     def sgd_apply(grad, params, learning_rate):
         return (
@@ -60,15 +66,14 @@ def sgd_vmc_loop_with_logging(
 
     # Train!
     with caplog.at_level(logging.INFO):
+        data, key = mcmc.metropolis.burn_data(burning_step, nburn, data, params, key)
         params, optimizer_state, data, key = train.vmc.vmc_loop(
             params,
             optimizer_state,
             data,
             nchains,
-            nburn,
             nepochs,
-            nsteps_per_param_update,
-            metrop_step_fn,
+            walker_fn,
             update_param_fn,
             key,
             logdir,

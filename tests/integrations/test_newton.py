@@ -34,7 +34,6 @@ def test_vmc_loop_newtons_x_squared():
         key,
     ) = utils.distribute.distribute_vmc_state(dummy_data, x, None, key)
 
-    nburn = 0
     nepochs = 10
     nsteps_per_param_update = 1
 
@@ -54,6 +53,9 @@ def test_vmc_loop_newtons_x_squared():
     metrop_step_fn = mcmc.metropolis.make_metropolis_step(
         proposal_fn, acceptance_fn, update_data_fn
     )
+    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+        nsteps_per_param_update, metrop_step_fn
+    )
 
     # do Newton's method, x <- x - f'(x) / f''(x)
     def update_param_fn(data, x, optimizer_state, key):
@@ -69,10 +71,8 @@ def test_vmc_loop_newtons_x_squared():
         optimizer_state,
         dummy_data,
         nchains,
-        nburn,
         nepochs,
-        nsteps_per_param_update,
-        metrop_step_fn,
+        walker_fn,
         update_param_fn,
         key,
     )
