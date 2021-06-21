@@ -3,6 +3,8 @@ from typing import Callable, Dict, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
+import kfac_ferminet_alpha
+from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
@@ -74,3 +76,45 @@ def create_grad_energy_update_param_fn(
         return params, optimizer_state, metrics, key
 
     return pmapped_update_param_fn_with_single_metrics
+
+
+def create_kfac_update_param_fn(
+    optimizer: kfac_ferminet_alpha.Optimizer,
+    damping: jnp.float32,
+    get_position_from_data: Callable[[D], jnp.ndarray],
+) -> Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
+    """Create momentum-less KFAC update step function.
+
+    Args:
+        optimizer (kfac_ferminet_alpha.Optimizer): instance of the Optimizer class from
+            kfac_ferminet_alpha
+        damping (jnp.float32): damping coefficient
+        get_position_from_data (Callable): function which gets the walker positions from
+            the data. Has signature data -> jnp.ndarray
+
+    Returns:
+        Callable: function which updates the parameters given the current data, params,
+        and optimizer state. The signature of this function is
+            (data, params, optimizer_state, key)
+            -> (new_params, new_optimizer_state, metrics, key)
+    """
+    momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
+    damping = kfac_utils.replicate_all_local_devices(jnp.asarray(damping))
+
+    def update_param_fn(data, params, optimizer_state, key):
+        key, subkey = utils.distribute.p_split(key)
+        params, optimizer_state, stats = optimizer.step(
+            params=params,
+            state=optimizer_state,
+            rng=subkey,
+            data_iterator=iter([get_position_from_data(data)]),
+            momentum=momentum,
+            damping=damping,
+        )
+        if optimizer.multi_device:
+            energy = utils.distribute.get_first(stats["loss"])
+            variance = utils.distribute.get_first(stats["aux"][0])
+        metrics = {"energy": energy, "variance": variance}
+        return params, optimizer_state, metrics, key
+
+    return update_param_fn

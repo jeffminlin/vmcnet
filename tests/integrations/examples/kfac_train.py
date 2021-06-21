@@ -1,13 +1,12 @@
 """KFAC integration test runner for examples."""
 import logging
 
-import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.physics as physics
+import vmcnet.updates as updates
 import vmcnet.utils as utils
 from vmcnet.mcmc.position_amplitude_core import (
     distribute_position_amplitude_data,
@@ -68,23 +67,10 @@ def kfac_vmc_loop_with_logging(
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
-    momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
-    damping = kfac_utils.replicate_all_local_devices(jnp.asarray(0.001))
 
-    def update_param_fn(data, params, optimizer_state, key):
-        key, subkey = utils.distribute.p_split(key)
-        params, optimizer_state, stats = optimizer.step(
-            params=params,
-            state=optimizer_state,
-            rng=subkey,
-            data_iterator=iter([get_position_from_data(data)]),
-            momentum=momentum,
-            damping=damping,
-        )
-        energy = utils.distribute.get_first(stats["loss"])
-        variance = utils.distribute.get_first(stats["aux"][0])
-        metrics = {"energy": energy, "variance": variance}
-        return params, optimizer_state, metrics, key
+    update_param_fn = updates.params.create_kfac_update_param_fn(
+        optimizer, 0.001, get_position_from_data
+    )
 
     # Distribute everything via jax.pmap
     if should_distribute_data:
