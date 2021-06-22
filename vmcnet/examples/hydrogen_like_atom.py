@@ -5,6 +5,7 @@ import flax
 import jax.numpy as jnp
 
 import vmcnet.physics as physics
+import vmcnet.models as models
 
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
 
@@ -38,7 +39,7 @@ class HydrogenLikeWavefunction(flax.linen.Module):
             jnp.ndarray: log of exponential decay wavefunction, with shape x.shape[:-2]
         """
         r = jnp.linalg.norm(x, axis=-1)
-        scaled_r = flax.linen.Dense(
+        scaled_r = models.core.Dense(
             1,
             kernel_init=lambda key, shape, **kwargs: jnp.array(
                 [[self.init_decay_rate]]

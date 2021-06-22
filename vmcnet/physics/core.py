@@ -3,6 +3,7 @@ from typing import Callable, Sequence, Tuple, TypeVar
 
 import jax
 import jax.numpy as jnp
+from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
 
@@ -151,7 +152,8 @@ def create_value_and_grad_energy_fn(
         energy, aux_data = compute_energy_data(params, positions)
         _, local_energies = aux_data
 
-        _, psi_tangents = jax.jvp(log_psi_apply, primals, tangents)
+        psi_primals, psi_tangents = jax.jvp(log_psi_apply, primals, tangents)
+        loss_functions.register_normal_predictive_distribution(psi_primals[:, None])
         primals_out = (energy, aux_data)
         tangents_out = (2.0 * jnp.dot(psi_tangents, local_energies - energy), aux_data)
         return primals_out, tangents_out

@@ -1,10 +1,11 @@
-"""Shared SGD integration test for examples."""
+"""KFAC integration test runner for examples."""
 import logging
 
-import jax
+import kfac_ferminet_alpha
 
 import vmcnet.mcmc as mcmc
 import vmcnet.train as train
+import vmcnet.physics as physics
 import vmcnet.updates as updates
 import vmcnet.utils as utils
 from vmcnet.mcmc.position_amplitude_core import (
@@ -16,7 +17,7 @@ from vmcnet.mcmc.simple_position_amplitude import (
 )
 
 
-def sgd_vmc_loop_with_logging(
+def kfac_vmc_loop_with_logging(
     caplog,
     data,
     params,
@@ -26,7 +27,7 @@ def sgd_vmc_loop_with_logging(
     nepochs,
     nsteps_per_param_update,
     std_move,
-    optimizer_state,
+    learning_rate,
     log_psi_model,
     local_energy_fn,
     should_distribute_data=True,
@@ -34,7 +35,7 @@ def sgd_vmc_loop_with_logging(
     checkpoint_every=None,
     checkpoint_dir=None,
 ):
-    """Run a VMC test with a very simple SGD optimizer and given model."""
+    """Run a VMC test with the KFAC optimizer and given model."""
     # Setup metropolis step
     metrop_step_fn = make_simple_pos_amp_gaussian_step(log_psi_model.apply, std_move)
 
@@ -44,25 +45,41 @@ def sgd_vmc_loop_with_logging(
     )
 
     # Define parameter updates
-    def sgd_apply(grad, params, learning_rate):
-        return (
-            jax.tree_map(lambda a, b: a - learning_rate * b, params, grad),
-            learning_rate,
-        )
+    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        log_psi_model.apply, local_energy_fn, nchains
+    )
 
-    update_param_fn = updates.params.create_grad_energy_update_param_fn(
-        log_psi_model.apply,
-        local_energy_fn,
-        nchains,
-        sgd_apply,
-        get_position_from_data,
+    def learning_rate_schedule(t):
+        return learning_rate
+
+    optimizer = kfac_ferminet_alpha.Optimizer(
+        energy_data_val_and_grad,
+        l2_reg=0.0,
+        norm_constraint=0.001,
+        value_func_has_aux=True,
+        learning_rate_schedule=learning_rate_schedule,
+        curvature_ema=0.95,
+        inverse_update_period=1,
+        min_damping=1e-4,
+        num_burnin_steps=0,
+        register_only_generic=False,
+        estimation_mode="fisher_exact",
+        multi_device=True,
+        pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+    )
+
+    update_param_fn = updates.params.create_kfac_update_param_fn(
+        optimizer, 0.001, get_position_from_data
     )
 
     # Distribute everything via jax.pmap
     if should_distribute_data:
-        (data, params, optimizer_state, key,) = utils.distribute.distribute_vmc_state(
-            data, params, optimizer_state, key, distribute_position_amplitude_data
+        (data, params, _, key,) = utils.distribute.distribute_vmc_state(
+            data, params, None, key, distribute_position_amplitude_data
         )
+
+    key, subkey = utils.distribute.p_split(key)
+    optimizer_state = optimizer.init(params, subkey, get_position_from_data(data))
 
     # Train!
     with caplog.at_level(logging.INFO):

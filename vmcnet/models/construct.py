@@ -5,6 +5,7 @@ import flax
 import jax.numpy as jnp
 
 from vmcnet.models.antisymmetry import logdet_product
+from vmcnet.models.core import Activation
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -13,8 +14,6 @@ from vmcnet.models.equivariance import (
     FermiNetTwoElectronLayer,
 )
 from vmcnet.models.weights import WeightInitializer
-
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
 class ComposedModel(flax.linen.Module):

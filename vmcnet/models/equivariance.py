@@ -8,8 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.models.weights import WeightInitializer, zeros
-
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
+from vmcnet.models.core import Activation, Dense
 
 
 def _split_mean(
@@ -229,16 +228,16 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
 
-        self._unmixed_dense = flax.linen.Dense(
+        self._unmixed_dense = Dense(
             self.ndense,
             kernel_init=self.kernel_initializer_unmixed,
             bias_init=self.bias_initializer,
             use_bias=self.use_bias,
         )
-        self._mixed_dense = flax.linen.Dense(
+        self._mixed_dense = Dense(
             self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
         )
-        self._dense_2e = flax.linen.Dense(
+        self._dense_2e = Dense(
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
@@ -424,7 +423,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._activation_fn = self.activation_fn
-        self._dense = flax.linen.Dense(
+        self._dense = Dense(
             self.ndense,
             kernel_init=self.kernel_initializer,
             bias_init=self.bias_initializer,
@@ -587,6 +586,8 @@ class SplitDense(flax.linen.Module):
         bias_initializer (WeightInitializer): bias initializer. Has signature
             (key, shape, dtype) -> jnp.ndarray
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
+        register_kfac (bool, optional): whether to register the dense computations with
+            KFAC. Defaults to True.
     """
 
     spin_split: Union[int, Sequence[int]]
@@ -594,6 +595,7 @@ class SplitDense(flax.linen.Module):
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
+    register_kfac: bool = True
 
     def setup(self):
         """Set up the dense layers for each split."""
@@ -610,11 +612,12 @@ class SplitDense(flax.linen.Module):
             )
 
         self._dense_layers = [
-            flax.linen.Dense(
+            Dense(
                 self.ndense_per_spin[i],
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
+                register_kfac=self.register_kfac,
             )
             for i in range(nspins)
         ]
@@ -698,6 +701,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             self.kernel_initializer_envelope_dim,
             zeros,
             use_bias=False,
+            register_kfac=False,
         )(x_nion)
 
         # concatenate over the ion axis, then swap axes to get
@@ -744,8 +748,11 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         # conv_out has shape (..., nelec, norbitals, nion, d)
         distances = jnp.linalg.norm(conv_out, axis=-1)
         inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
-        lin_comb_nion = flax.linen.Dense(
-            1, kernel_init=self.kernel_initializer_envelope_ion, use_bias=False
+        lin_comb_nion = Dense(
+            1,
+            kernel_init=self.kernel_initializer_envelope_ion,
+            use_bias=False,
+            register_kfac=False,
         )(inv_exp_distances)
         return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 

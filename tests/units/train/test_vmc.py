@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.utils as utils
 
@@ -15,25 +16,6 @@ def _make_different_pmappable_data(data):
     """Adding (0, 1, ..., ndevices - 1) to the data and concatenating."""
     ndevices = jax.local_device_count()
     return jnp.concatenate([data + i for i in range(ndevices)])
-
-
-def test_walk_data():
-    """Test a few Metropolis steps.
-
-    Test that taking a few Metropolis steps is equivalent to skipping to the end and
-    taking one big step. Specifically, with a single proposal fn which adds a constant
-    array at each step, test that taking a few steps is equivalent to adding that
-    multiple of the proposal array directly (where the moves are accepted).
-    """
-    nsteps = 6
-    data, params, key = make_dummy_data_params_and_key()
-    metrop_step_fn = make_dummy_metropolis_fn()
-    accept_prob, new_data, _ = train.vmc.walk_data(
-        nsteps, data, params, key, metrop_step_fn
-    )
-
-    np.testing.assert_allclose(accept_prob, 0.5)
-    np.testing.assert_allclose(new_data, jnp.array([nsteps, 0, 3 * nsteps, 0]))
 
 
 def test_vmc_loop_logging(caplog):
@@ -49,9 +31,9 @@ def test_vmc_loop_logging(caplog):
         "variance_noclip": np.pi,
     }
 
-    def update_param_fn(data, params, optimizer_state):
+    def update_param_fn(data, params, optimizer_state, key):
         del data
-        return params, optimizer_state, fixed_metrics
+        return params, optimizer_state, fixed_metrics, key
 
     for pmapped in [True, False]:
         caplog.clear()
@@ -68,19 +50,26 @@ def test_vmc_loop_logging(caplog):
                 key,
             ) = utils.distribute.distribute_vmc_state(data, params, None, key)
 
+        burning_step = mcmc.metropolis.make_jitted_burning_step(
+            metrop_step_fn, apply_pmap=pmapped
+        )
+        walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+            nsteps_per_param_update, metrop_step_fn, apply_pmap=pmapped
+        )
+
         with caplog.at_level(logging.INFO):
+            data, key = mcmc.metropolis.burn_data(
+                burning_step, nburn, data, params, key
+            )
             train.vmc.vmc_loop(
                 params,
                 optimizer_state,
                 data,
                 nchains,
-                nburn,
                 nepochs,
-                nsteps_per_param_update,
-                metrop_step_fn,
+                walker_fn,
                 update_param_fn,
                 key,
-                pmapped=pmapped,
             )
 
         # 1 line for burning, nepochs lines for training
@@ -112,20 +101,24 @@ def test_vmc_loop_number_of_updates():
     nepochs = 17  # eventual number of parameter updates
     nsteps_per_param_update = 2
 
-    def update_param_fn(data, params, optimizer_state):
+    burning_step = mcmc.metropolis.make_jitted_burning_step(metrop_step_fn)
+    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+        nsteps_per_param_update, metrop_step_fn
+    )
+
+    def update_param_fn(data, params, optimizer_state, key):
         del data
         optimizer_state += 1
-        return params, optimizer_state, None
+        return params, optimizer_state, None, key
 
+    data, key = mcmc.metropolis.burn_data(burning_step, nburn, data, params, key)
     _, new_optimizer_state, new_data, _ = train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,
         nchains,
-        nburn,
         nepochs,
-        nsteps_per_param_update,
-        metrop_step_fn,
+        walker_fn,
         update_param_fn,
         key,
     )

@@ -99,7 +99,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
     @flax.linen.compact
     def _single_leaf_call(self, x: jnp.ndarray) -> jnp.ndarray:
         # x and omega * x have shape (..., n, 1)
-        sqrt_omega_x = flax.linen.Dense(
+        sqrt_omega_x = models.core.Dense(
             1,
             kernel_init=lambda key, shape, **kwargs: jnp.array(
                 [[jnp.sqrt(self.omega_init)]]
