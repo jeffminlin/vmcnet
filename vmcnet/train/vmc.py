@@ -82,7 +82,15 @@ def vmc_loop(
     )
 
     for epoch in range(nepochs):
+        # Save state for checkpointing before calling the walk and update functions
+        # so that results can be reproduced exactly by reloading from a checkpoint.
+        old_params = params
+        old_state = optimizer_state
+        old_data = data
+        old_key = key
+
         accept_ratio, data, key = walker_fn(params, data, key)
+
         params, optimizer_state, metrics, key = update_param_fn(
             data, params, optimizer_state, key
         )
@@ -97,10 +105,10 @@ def vmc_loop(
             checkpoint_str,
         ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
             epoch,
-            params,
-            optimizer_state,
-            data,
-            key,
+            old_params,
+            old_state,
+            old_data,
+            old_key,
             metrics,
             nchains,
             running_energy_and_variance,
