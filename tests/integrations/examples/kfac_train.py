@@ -1,12 +1,12 @@
 """KFAC integration test runner for examples."""
 import logging
 
-import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import utils as kfac_utils
 
+import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.physics as physics
+import vmcnet.updates as updates
 import vmcnet.utils as utils
 from vmcnet.mcmc.position_amplitude_core import (
     distribute_position_amplitude_data,
@@ -39,6 +39,11 @@ def kfac_vmc_loop_with_logging(
     # Setup metropolis step
     metrop_step_fn = make_simple_pos_amp_gaussian_step(log_psi_model.apply, std_move)
 
+    burning_step = mcmc.metropolis.make_jitted_burning_step(metrop_step_fn)
+    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+        nsteps_per_param_update, metrop_step_fn
+    )
+
     # Define parameter updates
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_model.apply, local_energy_fn, nchains
@@ -62,23 +67,10 @@ def kfac_vmc_loop_with_logging(
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
-    momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
-    damping = kfac_utils.replicate_all_local_devices(jnp.asarray(0.001))
 
-    def update_param_fn(data, params, optimizer_state, key):
-        key, subkey = utils.distribute.p_split(key)
-        params, optimizer_state, stats = optimizer.step(
-            params=params,
-            state=optimizer_state,
-            rng=subkey,
-            data_iterator=iter([get_position_from_data(data)]),
-            momentum=momentum,
-            damping=damping,
-        )
-        energy = utils.distribute.get_first(stats["loss"])
-        variance = utils.distribute.get_first(stats["aux"][0])
-        metrics = {"energy": energy, "variance": variance}
-        return params, optimizer_state, metrics, key
+    update_param_fn = updates.params.create_kfac_update_param_fn(
+        optimizer, 0.001, get_position_from_data
+    )
 
     # Distribute everything via jax.pmap
     if should_distribute_data:
@@ -91,20 +83,18 @@ def kfac_vmc_loop_with_logging(
 
     # Train!
     with caplog.at_level(logging.INFO):
+        data, key = mcmc.metropolis.burn_data(burning_step, nburn, data, params, key)
         params, optimizer_state, data, key = train.vmc.vmc_loop(
             params,
             optimizer_state,
             data,
             nchains,
-            nburn,
             nepochs,
-            nsteps_per_param_update,
-            metrop_step_fn,
+            walker_fn,
             update_param_fn,
             key,
             logdir,
             checkpoint_every,
             checkpoint_dir,
-            apply_param_update_pmap=False,  # already pmapped
         )
         return data, params, optimizer_state, key

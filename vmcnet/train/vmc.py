@@ -1,8 +1,6 @@
 """Main VMC loop."""
-import logging
 from typing import Callable, Dict, Tuple, TypeVar
 
-import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
@@ -14,171 +12,13 @@ P = TypeVar("P")  # represents a pytree or pytree-like object containing model p
 S = TypeVar("S")  # represents optimizer state
 
 
-def walk_data(
-    nsteps: int,
-    data: D,
-    params: P,
-    key: jnp.ndarray,
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-) -> Tuple[jnp.float32, D, jnp.ndarray]:
-    """Take multiple Metropolis-Hastings steps.
-
-    This function is roughly equivalent to:
-    ```
-    accept_sum = 0.0
-    for _ in range(nsteps):
-        accept_prob, data, key = metropolis_step_fn(data, params, key)
-        accept_sum += accept_prob
-    return accept_sum / nsteps, data, key
-    ```
-
-    but has better tracing/pmap behavior due to the use of jax.lax.scan instead of a
-    python for loop. See :func:`~vmcnet.train.vmc.take_metropolis_step`.
-
-    Args:
-        nsteps (int): number of steps to take
-        data (pytree-like): data to walk (update) with each step
-        params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
-            model params
-        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
-            to proposal_fn and used to randomly accept proposals with probabilities
-            output by acceptance_fn
-        metrop_step_fn (Callable): function which does a metropolis step. Has the
-            signature (data, params, key) -> (mean accept prob, new data, new key)
-
-    Returns:
-        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
-            new jax PRNG key split (possibly multiple times) from previous one
-    """
-
-    def step_fn(carry, x):
-        del x
-        accept_prob, data, key = metrop_step_fn(carry[1], params, carry[2])
-        return (carry[0] + accept_prob, data, key), None
-
-    out = jax.lax.scan(step_fn, (0.0, data, key), xs=None, length=nsteps)
-    accept_sum, data, key = out[0]
-    return accept_sum / nsteps, data, key
-
-
-def make_burning_step(
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    apply_pmap: bool = True,
-) -> Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]]:
-    """Factory to create a burning step, which is an optionally pmapped Metropolis step.
-
-    This provides the functionality to optionally apply jax.pmap to a single Metropolis
-    step. Only one step is traced so that the first burning step is traced but
-    subsequent steps are properly jit-compiled. The acceptance probabilities (which
-    typically don't mean much during burning) are thrown away.
-
-    For more about the Metropolis step itself, see
-    :func:`~vmcnet.mcmc.metropolis.make_metropolis_step`
-    and to see it in use, see
-    :func:`~vmcnet.train.vmc.vmc_loop`.
-
-    Args:
-        metrop_step_fn (Callable): function which does a metropolis step. Has the
-            signature (data, params, key) -> (mean accept prob, new data, new key)
-        apply_pmap (bool, optional): whether to apply jax.pmap to the burning step.
-            Defaults to True.
-
-    Returns:
-        Callable: function with signature
-            (data, params, key) -> (data, key),
-        with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original (data, key) buffers are deleted in the pmapped version via the
-        `donate_argnums` argument so that XLA is potentially more memory-efficient on
-        the GPU. See :func:`jax.pmap`.
-    """
-
-    def burning_step(data, params, key):
-        _, data, key = metrop_step_fn(data, params, key)
-        return data, key
-
-    if not apply_pmap:
-        return burning_step
-
-    return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
-
-
-def make_training_step(
-    nsteps_per_param_update: int,
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
-    apply_walker_pmap: bool = True,
-    apply_param_update_pmap: bool = True,
-) -> Callable[[D, P, S, jnp.ndarray], Tuple[jnp.float32, D, P, S, Dict, jnp.ndarray]]:
-    """Factory to create a training step.
-
-    This provides the functionality to optionally apply jax.pmap to a single training
-    step. Only one step is traced so that the first training step is traced but
-    subsequent steps are properly jit-compiled.
-
-    The training step consists of two parts:
-        1) the walker, which updates the data `nsteps_per_param_update` times
-        2) the parameter updates, which occurs once per training step, and is the only
-        time `energy_fn` is evaluated during the training step.
-
-    See :func:`~vmcnet.train.vmc.vmc_loop`.
-
-    Args:
-        nsteps_per_param_update (int): number of steps to walk data before applying a
-            parameter update
-        metrop_step_fn (Callable): function which does a metropolis step. Has the
-            signature (data, params, key) -> (mean accept prob, new data, new key)
-        update_param_fn (Callable): function which updates the parameters. Has signature
-            (data, params, optimizer_state, key)
-                -> (new_params, optimizer_state, dict: metrics, key).
-            If metrics is not None, it is required to have the entries "energy" and
-            "variance" at a minimum.
-        apply_walker_pmap (bool, optional): whether to apply jax.pmap to the walker.
-            Defaults to True.
-        apply_param_update_pmap (bool, optional): whether to apply jax.pmap to the
-            parameter update funtion. Defaults to True.
-
-    Returns:
-        Callable: function with signature
-            (data, params, optimizer_state, key)
-                -> (accept_ratio, data, params, optmizer_state, metrics, key),
-        with jax.pmap optionally applied if pmapped is True. Because it is totally pure,
-        the original data and key buffers are deleted in the pmapped version using the
-        `donate_argnums` flag so that XLA is potentially more memory-efficient on the
-        GPU. See :func:`jax.pmap`.
-    """
-    nsteps_per_param_update = max(nsteps_per_param_update, 1)
-
-    def walker(params, data, key):
-        return walk_data(nsteps_per_param_update, data, params, key, metrop_step_fn)
-
-    if apply_walker_pmap:
-        walker = utils.distribute.pmap(walker, donate_argnums=(1, 2))
-
-    if apply_param_update_pmap:
-        update_param_fn = utils.distribute.pmap(
-            update_param_fn, donate_argnums=(1, 2, 3)
-        )
-
-    def training_step(data, params, optimizer_state, key):
-        accept_ratio, data, key = walker(params, data, key)
-        params, optimizer_state, metrics, key = update_param_fn(
-            data, params, optimizer_state, key
-        )
-        accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
-        return accept_ratio, data, params, optimizer_state, metrics, key
-
-    return training_step
-
-
 def vmc_loop(
     params: P,
     optimizer_state: S,
-    initial_data: D,
+    data: D,
     nchains: int,
-    nburn: int,
     nepochs: int,
-    nsteps_per_param_update: int,
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
     update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     key: jnp.ndarray,
     logdir: str = None,
@@ -186,46 +26,26 @@ def vmc_loop(
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
-    apply_walker_pmap: bool = True,
-    apply_param_update_pmap: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
     parameterized variational loss stochastically by sampling over a data distribution
     via Monte Carlo sampling. This function implements this idea at a high level, using
-    proposal and acceptance functions to sample the data distribution, and passing the
-    optimization step to a generic function `update_param_fn`.
-
-    As is custom in VMC, some number of burn-in steps are run before any training
-    occurs. Some data update steps are also taken in between each parameter update
-    during training. Theoretically, whether these are necessary or helpful is not
-    completely clear.
-
-    Practically, the burn-in steps usually lead to higher quality gradient steps once
-    the training starts, and seems to be a good idea whenever burning is much cheaper
-    than gradient/parameter update calculations. Likewise, inserting a number of
-    intermediate data-only update steps between parameter updates during training,
-    controlled by `nsteps_per_param_update`, seems to be a good idea in the same regime.
+    a walker_fn to sample the data distribution, and passing the optimization step to a
+    generic function `update_param_fn`.
 
     Args:
-        params (pytree-like): model parameters which are trained. If pmapped is True,
-            this should already be replicated over all devices.
-        optimizer_state (pytree-like): initial state of the optimizer. If pmapped is
-            True, this should contain state which has been sharded over all devices.
-        initial_data (pytree-like): initial data. If pmapped is True, this should
-            contain data which as been sharded over all devices.
+        params (pytree-like): model parameters which are trained
+        optimizer_state (pytree-like): initial state of the optimizer
+        data (pytree-like): initial data
         nchains (int): number of parallel MCMC chains being run. This can be difficult
             to infer from data, depending on the structure of data, whether data has
             been pmapped, etc.
-        nburn (int): number of data updates to do before training starts. All data
-            except for the final data after burning is thrown away.
         nepochs (int): number of parameter updates to do
-        nsteps_per_param_update (int): number of data updates to do between each
-            parameter update. All data except for the final data after
-            nsteps_per_param_update iterations is thrown away.
-        metrop_step_fn (Callable): function which does a metropolis step. Has the
-            signature (data, params, key) -> (mean accept prob, new data, new key)
+        walker_fn (Callable): function which does a number of walker steps between each
+            parameter update. Has the signature
+            (data, params, key) -> (mean accept prob, new data, new key)
         update_param_fn (Callable): function which updates the parameters. Has signature
             (data, params, optimizer_state, key)
                 -> (new_params, optimizer_state, dict: metrics, key).
@@ -248,10 +68,6 @@ def vmc_loop(
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
         nhistory_max (int, optional): How much history to keep in the running histories
             of the energy and variance. Defaults to 200.
-        apply_walker_pmap (bool, optional): whether to apply jax.pmap to the walker
-            steps during burning and training. Defaults to True.
-        apply_param_update_pmap (bool, optional): whether to apply jax.pmap to the
-            parameter update funtion during training. Defaults to True.
 
     Returns:
         A tuple of (trained parameters, final optimizer state, final data, final key).
@@ -264,35 +80,15 @@ def vmc_loop(
     ) = utils.checkpoint.initialize_checkpointing_metrics(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
-    data = initial_data
-
-    burning_step = make_burning_step(metrop_step_fn, apply_pmap=apply_walker_pmap)
-    training_step = make_training_step(
-        nsteps_per_param_update,
-        metrop_step_fn,
-        update_param_fn,
-        apply_walker_pmap=apply_walker_pmap,
-        apply_param_update_pmap=apply_param_update_pmap,
-    )
-
-    logging.info("Burning for " + str(nburn) + " steps")
-    for _ in range(nburn):
-        data, key = burning_step(data, params, key)
 
     for epoch in range(nepochs):
-        accept_ratio, data, params, optimizer_state, metrics, key = training_step(
+        accept_ratio, data, key = walker_fn(params, data, key)
+        params, optimizer_state, metrics, key = update_param_fn(
             data, params, optimizer_state, key
         )
+
         if metrics is None:  # don't checkpoint if no metrics to checkpoint
             continue
-
-        if apply_param_update_pmap:
-            # Assume all metrics have been collectively reduced to be the same on
-            # all devices
-            metrics = utils.distribute.get_first(metrics)
-
-        if apply_walker_pmap:
-            accept_ratio = utils.distribute.get_first(accept_ratio)
 
         metrics["accept_ratio"] = accept_ratio
 
