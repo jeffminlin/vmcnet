@@ -82,8 +82,11 @@ def vmc_loop(
     )
 
     for epoch in range(nepochs):
-        # Save state for checkpointing before calling the walk and update functions
-        # so that results can be reproduced exactly by reloading from a checkpoint.
+        # Save state for checkpointing at the start of the epoch for two reasons:
+        # 1. To save the model that generates the best energy and variance metrics,
+        # rather than the model one parameter UPDATE after the best metrics.
+        # 2. To ensure a fully consistent state can be reloading from a checkpoint, and
+        # the exact subsequent behavior can be reproduced (if run on same machine).
         old_params = params
         old_state = optimizer_state
         old_data = data
