@@ -7,8 +7,6 @@ import flax
 import jax
 import jax.numpy as jnp
 
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
-
 
 def _istupleofarrays(x) -> bool:
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
