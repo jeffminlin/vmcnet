@@ -36,7 +36,7 @@ def test_compose_negative_with_three_body_antisymmetry():
     np.testing.assert_allclose(output, jnp.array([2 * 16 * -2, 2 * 54 * 20]))
 
 
-def _get_initial_particles_and_ions():
+def _get_initial_pos_and_hyperparams():
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
 
@@ -53,7 +53,7 @@ def _get_initial_particles_and_ions():
 
 def test_ferminet_can_be_constructed():
     """Make sure basic construction of the FermiNet does not raise exceptions."""
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
         log_psi = models.construct.FermiNet(
@@ -82,7 +82,7 @@ def test_ferminet_can_be_constructed():
 
 def test_split_antisymmetry_can_be_constructed():
     """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
         log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
@@ -112,7 +112,7 @@ def test_split_antisymmetry_can_be_constructed():
 
 def test_composed_antisymmetry_can_be_constructed():
     """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_particles_and_ions()
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
         log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
