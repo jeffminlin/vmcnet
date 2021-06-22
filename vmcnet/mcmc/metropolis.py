@@ -287,7 +287,7 @@ def metropolis_symmetric_acceptance(
     log_prob_new = 2.0 * proposed_amplitude
     # avoid overflow if log_prob_new - log_prob_old is large
     return jnp.where(
-        jnp.logical_or(log_prob_new > log_prob_old, ~jnp.isfinite(log_prob_old)),
+        log_prob_new > log_prob_old,
         jnp.ones_like(log_prob_new),
         jnp.exp(log_prob_new - log_prob_old),
     )
