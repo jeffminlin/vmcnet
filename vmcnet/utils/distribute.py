@@ -67,15 +67,6 @@ def mean_all_local_devices(x):
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
-p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
-
-
-p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
-
-p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
-
-
-p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 
 p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 
