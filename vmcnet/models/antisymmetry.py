@@ -117,7 +117,9 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
     Attributes:
         fns_to_antisymmetrize (pytree): pytree of functions with the same tree structure
             as the input pytree, each of which is a Callable with signature
-            jnp.ndarray of shape (..., d) -> jnp.ndarray of shape (..., 1)
+            jnp.ndarray of shape (..., ninput_dim) -> jnp.ndarray of shape (..., 1).
+            On the ith leaf, ninput_dim = n[i] * d, where n[i] is the size of the
+            second-to-last axis of the input xs.
         logabs (bool, optional): whether to compute sum_i log(abs(psi_i)) if logabs is
             True, or prod_i psi_i if logabs is False, where psi_i is the output from
             antisymmetrizing the ith function on the ith input. Defaults to True.
@@ -181,8 +183,10 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
 
     Attributes:
         fn_to_antisymmetrize (Callable): Callable with signature
-            jnp.ndarray with shape (..., d) -> (..., 1). This is the function to be
-            antisymmetrized.
+            jnp.ndarray with shape (..., ninput_dim) -> (..., 1). This is the function
+            to be antisymmetrized. ninput_dim is equal to (n[1] + ... + n[k]) * d,
+            where n[i] is the size of the second-to-last axis of the ith leaf of the
+            input xs.
         logabs (bool, optional): whether to compute log(abs(psi)) if logabs is True, or
             psi if logabs is False, where psi is the output from antisymmetrizing
             self.fn_to_antisymmetrize. Defaults to True.
@@ -216,41 +220,48 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         """
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
         perms_and_signs_leaves, _ = jax.tree_flatten(perms_and_signs, _istupleofarrays)
-        nspins = len(perms_and_signs_leaves)
-        nperms_per_spin = [leaf[0].shape[-3] for leaf in perms_and_signs_leaves]
+        nleaves = len(perms_and_signs_leaves)
+        nperms_per_leaf = [leaf[0].shape[-3] for leaf in perms_and_signs_leaves]
 
         broadcasted_perms = []
         reshaped_signs = []
-        for i, (perm, sign) in enumerate(perms_and_signs_leaves):
-            ith_factorial = (1,) * i + sign.shape[0:1] + (1,) * (nspins - i - 1)
+        for i, (leaf_perms, leaf_signs) in enumerate(perms_and_signs_leaves):
+            ith_factorial = (1,) * i + leaf_signs.shape[0:1] + (1,) * (nleaves - i - 1)
 
             # desired sign[i] shape is (1, ..., n_i!, ..., 1, 1), with nspins + 1 dims
             sign_shape = ith_factorial + (1,)
-            sign = jnp.reshape(sign, sign_shape)
-            reshaped_signs.append(sign)
+            leaf_signs = jnp.reshape(leaf_signs, sign_shape)
+            reshaped_signs.append(leaf_signs)
 
             # desired broadcasted x_i shape is [i: (..., n_1!, ..., n_k!, n_i, d)],
             # where k = nspins, and x_i = (..., n_i, d). This is achieved by:
             # 1) reshape to (..., 1, ..., n_i!,... 1, n_i, d), then
             # 2) broadcast to (..., n_1!, ..., n_k!, n_i, d)
-            reshape_x_shape = perm.shape[:-3] + ith_factorial + perm.shape[-2:]
-            broadcast_x_shape = (
-                perm.shape[:-3] + tuple(nperms_per_spin) + perm.shape[-2:]
+            reshape_x_shape = (
+                leaf_perms.shape[:-3] + ith_factorial + leaf_perms.shape[-2:]
             )
-            perm = jnp.reshape(perm, reshape_x_shape)
-            perm = jnp.broadcast_to(perm, broadcast_x_shape)
-            broadcasted_perms.append(perm)
+            broadcast_x_shape = (
+                leaf_perms.shape[:-3] + tuple(nperms_per_leaf) + leaf_perms.shape[-2:]
+            )
+            leaf_perms = jnp.reshape(leaf_perms, reshape_x_shape)
+            leaf_perms = jnp.broadcast_to(leaf_perms, broadcast_x_shape)
+            broadcasted_perms.append(leaf_perms)
 
         # make input shape (..., n_1!, ..., n_k!, (n_1 + ... + n_k) * d)
         concat_perms = jnp.concatenate(broadcasted_perms, axis=-2)
         concat_perms = jnp.reshape(concat_perms, concat_perms.shape[:-2] + (-1,))
 
-        # all_perms_out has shape (..., n_1!, ..., n_k!, 1)
         all_perms_out = self._fn_to_antisymmetrize(concat_perms)
+
+        # all_perms_out has shape (..., n_1!, ..., n_k!, 1)
+        # Each leaf of reshaped_signs has k+1 axes, but all except the ith axis has size
+        # 1. The ith axis has size n_i!. Thus when the leaves of reshaped_signs are
+        # multiplied with all_perms_out, the product will broadcast each leaf and apply
+        # the signs along the correct axis of the output.
         signed_perms_out = _reduce_prod_over_leaves([all_perms_out, reshaped_signs])
 
         antisymmetrized_out = jnp.sum(
-            signed_perms_out, axis=tuple(-i for i in range(1, nspins + 2))
+            signed_perms_out, axis=tuple(-i for i in range(1, nleaves + 2))
         )
         if self.logabs:
             return jnp.log(jnp.abs(antisymmetrized_out))
