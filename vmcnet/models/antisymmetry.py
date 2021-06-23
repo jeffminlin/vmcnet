@@ -118,8 +118,8 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         fns_to_antisymmetrize (pytree): pytree of functions with the same tree structure
             as the input pytree, each of which is a Callable with signature
             jnp.ndarray of shape (..., ninput_dim) -> jnp.ndarray of shape (..., 1).
-            On the ith leaf, ninput_dim = n[i] * d, where n[i] is the size of the
-            second-to-last axis of the input xs.
+            On the ith leaf, ninput_dim = n[i] * d[i], where n[i] is the size of the
+            second-to-last axis and d[i] is the size of the last axis of the input xs.
         logabs (bool, optional): whether to compute sum_i log(abs(psi_i)) if logabs is
             True, or prod_i psi_i if logabs is False, where psi_i is the output from
             antisymmetrizing the ith function on the ith input. Defaults to True.
@@ -150,7 +150,8 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
 
         Args:
             xs (pytree): pytree of inputs with the same tree structure as that of
-                self.fns_to_antisymmetrize
+                self.fns_to_antisymmetrize. The ith leaf has shape (..., n[i], d[i]),
+                and the ith antisymmetrization happens with respect to n[i].
 
         Returns:
             jnp.ndarray: sum_i log(abs(psi_i)) if self.logabs is True, or prod_i psi_i
@@ -184,9 +185,10 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
     Attributes:
         fn_to_antisymmetrize (Callable): Callable with signature
             jnp.ndarray with shape (..., ninput_dim) -> (..., 1). This is the function
-            to be antisymmetrized. ninput_dim is equal to (n[1] + ... + n[k]) * d,
-            where n[i] is the size of the second-to-last axis of the ith leaf of the
-            input xs.
+            to be antisymmetrized. ninput_dim is equal to
+                n[1] * d[1] + ... + n[k] * d[k],
+            where n[i] is the size of the second-to-last axis and d[i] is the size of
+            the last axis of the ith leaf of the input xs.
         logabs (bool, optional): whether to compute log(abs(psi)) if logabs is True, or
             psi if logabs is False, where psi is the output from antisymmetrizing
             self.fn_to_antisymmetrize. Defaults to True.
@@ -211,7 +213,9 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
 
         Args:
             xs (pytree): a pytree of inputs, each which corresponds to a different set
-                of particles to antisymmetrize with respect to
+                of particles to antisymmetrize with respect to. The ith leaf has shape
+                (..., n[i], d[i]), and the antisymmetrization happens with respect to
+                n[i].
 
         Returns:
             jnp.ndarray: log(abs(psi)) if self.logabs is True, or psi if logabs is
@@ -233,10 +237,11 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             leaf_signs = jnp.reshape(leaf_signs, sign_shape)
             reshaped_signs.append(leaf_signs)
 
-            # desired broadcasted x_i shape is [i: (..., n_1!, ..., n_k!, n_i, d)],
-            # where k = nspins, and x_i = (..., n_i, d). This is achieved by:
-            # 1) reshape to (..., 1, ..., n_i!,... 1, n_i, d), then
-            # 2) broadcast to (..., n_1!, ..., n_k!, n_i, d)
+            # desired broadcasted x_i shape is [i: (..., n_1!, ..., n_k!, n_i * d_i)],
+            # where k = nleaves, and x_i = (..., n_i, d_i). This is achieved by:
+            # 1) reshape to (..., 1, ..., n_i!,... 1, n_i, d_i), then
+            # 2) broadcast to (..., n_1!, ..., n_k!, n_i, d_i)
+            # 3) flatten last axis to (..., n_1!, ..., n_k!, n_i * d_i)
             reshape_x_shape = (
                 leaf_perms.shape[:-3] + ith_factorial + leaf_perms.shape[-2:]
             )
@@ -245,11 +250,11 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             )
             leaf_perms = jnp.reshape(leaf_perms, reshape_x_shape)
             leaf_perms = jnp.broadcast_to(leaf_perms, broadcast_x_shape)
-            broadcasted_perms.append(leaf_perms)
+            flat_leaf_perms = jnp.reshape(leaf_perms, leaf_perms.shape[:-2] + (-1,))
+            broadcasted_perms.append(flat_leaf_perms)
 
-        # make input shape (..., n_1!, ..., n_k!, (n_1 + ... + n_k) * d)
-        concat_perms = jnp.concatenate(broadcasted_perms, axis=-2)
-        concat_perms = jnp.reshape(concat_perms, concat_perms.shape[:-2] + (-1,))
+        # make input shape (..., n_1!, ..., n_k!, n_1 * d_1 + ... + n_k * d_k)
+        concat_perms = jnp.concatenate(broadcasted_perms, axis=-1)
 
         all_perms_out = self._fn_to_antisymmetrize(concat_perms)
 
@@ -257,7 +262,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         # Each leaf of reshaped_signs has k+1 axes, but all except the ith axis has size
         # 1. The ith axis has size n_i!. Thus when the leaves of reshaped_signs are
         # multiplied with all_perms_out, the product will broadcast each leaf and apply
-        # the signs along the correct axis of the output.
+        # the signs along the correct (ith) axis of the output.
         signed_perms_out = _reduce_prod_over_leaves([all_perms_out, reshaped_signs])
 
         antisymmetrized_out = jnp.sum(
