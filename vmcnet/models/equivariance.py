@@ -10,6 +10,7 @@ from vmcnet.models.core import Activation, Dense, _valid_skip
 from vmcnet.models.jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from vmcnet.models.weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
+from vmcnet.utils.typing import PyTree
 
 
 def _split_mean(
@@ -34,12 +35,12 @@ def _rolled_concat(arrays: List[jnp.ndarray], n: int, axis: int = -1) -> jnp.nda
     return jnp.concatenate(arrays[n:] + arrays[:n], axis=axis)
 
 
-def _tree_sum(tree1, tree2):
+def _tree_sum(tree1: PyTree, tree2: PyTree) -> PyTree:
     """Leaf-wise sum of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a + b, tree1, tree2)
 
 
-def _tree_prod(tree1, tree2):
+def _tree_prod(tree1: PyTree, tree2: PyTree) -> PyTree:
     """Leaf-wise product of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
@@ -238,7 +239,9 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
-    def _compute_transformed_1e_means(self, split_means):
+    def _compute_transformed_1e_means(
+        self, split_means: List[jnp.ndarray]
+    ) -> List[jnp.ndarray]:
         """Apply a dense layer to the concatenated averages of the 1e stream.
 
         The mixing of the one-electron part of the one-electron stream takes the form
@@ -282,7 +285,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
-    def _compute_transformed_2e_means(self, in_2e):
+    def _compute_transformed_2e_means(self, in_2e: jnp.ndarray) -> List[jnp.ndarray]:
         """Apply a dense layer to the concatenated averages of the 2e stream.
 
         The mixing of the two-electron part of the one-electron stream takes the form

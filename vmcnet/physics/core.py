@@ -6,8 +6,9 @@ import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
+from vmcnet.utils.typing import PyTree
 
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
 
 
 def combine_local_energy_terms(
@@ -25,7 +26,7 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params, x):
+    def local_energy_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
             local_energy_sum += term(params, x)
@@ -131,7 +132,9 @@ def create_value_and_grad_energy_fn(
     """
 
     @jax.custom_jvp
-    def compute_energy_data(params, positions):
+    def compute_energy_data(
+        params: P, positions: jnp.ndarray
+    ) -> Tuple[jnp.float32, Tuple[jnp.float32, jnp.ndarray]]:
         local_energies = local_energy_fn(params, positions)
 
         # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA

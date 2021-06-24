@@ -6,8 +6,9 @@ import jax.numpy as jnp
 
 import vmcnet.physics as physics
 import vmcnet.models as models
+from vmcnet.utils.typing import PyTree
 
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
 
 
 class HydrogenLikeWavefunction(flax.linen.Module):

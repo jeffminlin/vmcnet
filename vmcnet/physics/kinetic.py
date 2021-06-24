@@ -5,8 +5,9 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.physics as physics
+from vmcnet.utils.typing import PyTree
 
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
 
 
 def create_continuous_kinetic_energy(
@@ -28,7 +29,7 @@ def create_continuous_kinetic_energy(
     """
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
-    def kinetic_energy_fn(params, x):
+    def kinetic_energy_fn(params: P, x: jnp.ndarray) -> jnp.float32:
         return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
 
     return jax.vmap(kinetic_energy_fn, in_axes=(None, 0), out_axes=0)

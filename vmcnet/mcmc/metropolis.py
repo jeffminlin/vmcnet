@@ -6,12 +6,13 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
+from vmcnet.utils.typing import PyTree
 
 # Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D")
+D = TypeVar("D", bound=PyTree)
 # Represents a pytree or pytree-like object containing model params
-P = TypeVar("P")
+P = TypeVar("P", bound=PyTree)
 
 
 def make_metropolis_step(
@@ -49,7 +50,9 @@ def make_metropolis_step(
         one)
     """
 
-    def metrop_step_fn(data, params, key):
+    def metrop_step_fn(
+        data: D, params: P, key: jnp.ndarray
+    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
         """Take a single metropolis step."""
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
@@ -138,7 +141,7 @@ def make_jitted_burning_step(
         on the GPU. See :func:`jax.pmap`.
     """
 
-    def burning_step(data, params, key):
+    def burning_step(data: D, params: P, key: jnp.ndarray) -> Tuple[D, jnp.ndarray]:
         _, data, key = metrop_step_fn(data, params, key)
         return data, key
 
@@ -178,7 +181,9 @@ def make_jitted_walker_fn(
         that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
     """
 
-    def walker_fn(params, data, key):
+    def walker_fn(
+        params: P, data: D, key: jnp.ndarray
+    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
         accept_ratio, data, key = walk_data(nsteps, data, params, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -188,7 +193,9 @@ def make_jitted_walker_fn(
 
     pmapped_walker_fn = utils.distribute.pmap(walker_fn, donate_argnums=(1, 2))
 
-    def pmapped_walker_fn_with_single_accept_ratio(params, data, key):
+    def pmapped_walker_fn_with_single_accept_ratio(
+        params: P, data: D, key: jnp.ndarray
+    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
         accept_ratio, data, key = pmapped_walker_fn(params, data, key)
         accept_ratio = utils.distribute.get_first(accept_ratio)
         return accept_ratio, data, key

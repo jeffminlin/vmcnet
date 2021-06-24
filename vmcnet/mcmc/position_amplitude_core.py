@@ -8,11 +8,12 @@ from vmcnet.utils.distribute import (
     replicate_all_local_devices,
     default_distribute_data,
 )
+from vmcnet.utils.typing import PyTree
 
 # Represents a pytree or pytree-like object containing model params
-P = TypeVar("P")
+P = TypeVar("P", bound=PyTree)
 # Represents metadata which is required to take a metropolis step.
-M = TypeVar("M")
+M = TypeVar("M", bound=PyTree)
 
 
 class PositionAmplitudeWalkerData(TypedDict):

@@ -10,9 +10,10 @@ from .position_amplitude_core import (
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
+from vmcnet.utils.typing import PyTree
 
-# Represents a pytree or pytree-like object containing model params
-P = TypeVar("P")
+# Represents a pytree containing model params
+P = TypeVar("P", bound=PyTree)
 
 
 class MoveMetadata(TypedDict):

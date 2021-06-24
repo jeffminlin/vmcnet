@@ -12,11 +12,12 @@ from typing import Dict, NamedTuple, Tuple, TypeVar
 
 import jax.numpy as jnp
 import vmcnet.utils.io as io
+from vmcnet.utils.typing import PyTree
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D")
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+D = TypeVar("D", bound=PyTree)
+P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
 S = TypeVar("S")  # represents optimizer state
 
 

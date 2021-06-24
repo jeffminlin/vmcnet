@@ -7,16 +7,18 @@ import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
-T = TypeVar("T")  # representing an arbitrary pytree
-D = TypeVar("D")  # represents a pytree or pytree-like object containing MCMC data
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+from vmcnet.utils.typing import PyTree
+
+T = TypeVar("T", bound=PyTree)  # representing an arbitrary pytree
+D = TypeVar("D", bound=PyTree)  # represents a pytree-like object containing MCMC data
+P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
 S = TypeVar("S")  # represents optimizer state
 
 # axis name to pmap over
 PMAP_AXIS_NAME = "pmap_axis"
 
 
-def wrap_if_pmap(p_func):
+def wrap_if_pmap(p_func: Callable) -> Callable:
     """Make a function run if in a pmapped context."""
 
     def p_func_if_pmap(obj, axis_name):
@@ -63,7 +65,7 @@ def get_first(obj: T) -> T:
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
 
 
-def mean_all_local_devices(x):
+def mean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
@@ -71,7 +73,7 @@ def mean_all_local_devices(x):
 p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
 
 
-def reshape_data_leaves_for_distribution(data_leaf):
+def reshape_data_leaves_for_distribution(data_leaf: jnp.ndarray) -> jnp.ndarray:
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
     num_devices = jax.local_device_count()
     nchains = data_leaf.shape[0]
@@ -85,7 +87,7 @@ def reshape_data_leaves_for_distribution(data_leaf):
     return data
 
 
-def default_distribute_data(data):
+def default_distribute_data(data: D) -> D:
     """Split all data to all devices. The first axis must be divisible by ndevices."""
     data = jax.tree_map(reshape_data_leaves_for_distribution, data)
     data = broadcast_all_local_devices(data)
@@ -143,6 +145,6 @@ def distribute_vmc_state_from_checkpoint(
     return data, params, optimizer_state, key
 
 
-def is_distributed(data) -> bool:
+def is_distributed(data: PyTree) -> bool:
     """Tests whether given data has been distributed using pmap."""
     return isinstance(jax.tree_leaves(data)[0], pxla.ShardedDeviceArray)

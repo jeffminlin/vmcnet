@@ -9,12 +9,13 @@ from .position_amplitude_core import (
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
+from vmcnet.utils.typing import PyTree
 
 # Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D")
+D = TypeVar("D", bound=PyTree)
 # Represents a pytree or pytree-like object containing model params
-P = TypeVar("P")
+P = TypeVar("P", bound=PyTree)
 
 
 class SimplePositionAmplitudeData(TypedDict):
