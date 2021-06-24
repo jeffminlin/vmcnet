@@ -13,6 +13,10 @@ from vmcnet.models.weights import (
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
+def _valid_skip(x, y):
+    return x.shape[-1] == y.shape[-1]
+
+
 class Dense(flax.linen.Module):
     """A linear transformation applied over the last dimension of the input.
 
@@ -60,3 +64,72 @@ class Dense(flax.linen.Module):
             return utils.kfac.register_batch_dense(y, inputs, kernel, bias)
         else:
             return y
+
+
+class SimpleResNet(flax.linen.Module):
+    """Simplest fully-connected ResNet.
+
+    Attributes:
+        ndense_inner (int): number of dense nodes in layers before the final layer.
+        ndense_outer (int): number of output features, i.e. the number of dense nodes in
+            the final Dense call.
+        nlayers (int): number of dense layers applied to the input, including the final
+            layer. If this is 0, the final dense layer will still be applied.
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrices of each layer. Defaults to orthogonal initialization.
+        bias_init (WeightInitializer, optional): initializer function for the bias.
+            Defaults to random normal initialization.
+        activation_fn (Activation): activation function between intermediate layers (is
+            not applied after the final dense layer). Has the signature
+            jnp.ndarray -> jnp.ndarray (shape is preserved)
+        use_bias (bool, optional): whether the dense layers should all have bias terms
+            or not. Defaults to True.
+    """
+
+    ndense_inner: int
+    ndense_final: int
+    nlayers: int
+    activation_fn: Activation
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    bias_init: WeightInitializer = get_bias_initializer("normal")
+    use_bias: bool = True
+
+    def setup(self):
+        """Setup dense layers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._activation_fn = self.activation_fn
+
+        self.inner_dense = [
+            Dense(
+                self.ndense_inner,
+                kernel_init=self.kernel_init,
+                bias_init=self.bias_init,
+                use_bias=self.use_bias,
+            )
+            for _ in range(self.nlayers - 1)
+        ]
+        self.final_dense = Dense(
+            self.ndense_final,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+            use_bias=False,
+        )
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Repeated application of (dense layer -> activation -> optional skip) block.
+
+        Args:
+            x (jnp.ndarray): an input array of shape (..., d)
+
+        Returns:
+            jnp.ndarray: array of shape (..., self.ndense_final)
+        """
+        for dense_layer in self.inner_dense:
+            prev_x = x
+            x = dense_layer(prev_x)
+            x = self._activation_fn(x)
+            if _valid_skip(prev_x, x):
+                x = x + prev_x
+
+        return self.final_dense(x)
