@@ -96,7 +96,13 @@ class CheckpointWriter:
             except queue.Empty:
                 continue
 
-    def initialize_checkpointing(self):
+        # Once the checkpointing is "done", still need to write any remaining items in
+        # the queue to disc.
+        while not self._queue.empty():
+            checkpoint_tuple = self._queue.get()
+            io.save_vmc_state(*checkpoint_tuple)
+
+    def initialize(self):
         """Initialize the CheckpointWriter by starting its internal thread."""
         self._checkpoint_thread.start()
 
@@ -123,7 +129,7 @@ class CheckpointWriter:
             )
         )
 
-    def stop_checkpointing(self):
+    def close_and_await(self):
         """Stop the thread by setting a flag, and return once it gets the message."""
         self._done = True
         self._checkpoint_thread.join()
@@ -156,7 +162,7 @@ def initialize_checkpointing(
     )
 
     checkpoint_writer = CheckpointWriter()
-    checkpoint_writer.initialize_checkpointing()
+    checkpoint_writer.initialize()
 
     return (
         checkpoint_dir,
