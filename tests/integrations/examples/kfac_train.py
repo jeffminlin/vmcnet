@@ -94,7 +94,7 @@ def kfac_vmc_loop_with_logging(
             update_param_fn,
             key,
             logdir,
-            checkpoint_every,
-            checkpoint_dir,
+            checkpoint_every=checkpoint_every,
+            checkpoint_dir=checkpoint_dir,
         )
         return data, params, optimizer_state, key

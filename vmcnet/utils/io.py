@@ -5,6 +5,7 @@ import flax.core.frozen_dict as frozen_dict
 import numpy as np
 
 from .distribute import get_first, is_distributed
+from .types import CheckpointData
 
 
 def open_or_create(path, filename, option):
@@ -22,26 +23,16 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_vmc_state(
-    directory: str,
-    name: str,
-    epoch: int,
-    data,
-    params,
-    optimizer_state,
-    key,
-):
+def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
     """Save a VMC state.
 
     Args:
-        directory (str): directory in which to write the checkpoint
-        name (str): filename for the checkpoint
-        epoch (int): epoch at which checkpoint is being saved
-        data (pytree or jnp.ndarray): walker data to save
-        params (pytree): model parameters to save
-        optimizer_state (pytree): optimizer state to save
-        key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
+      directory (str): directory in which to write the checkpoint
+      name (str): filename for the checkpoint
+      checkpoint_data (CheckpointData): data to save
     """
+    (epoch, data, params, optimizer_state, key) = checkpoint_data
+
     with open_or_create(directory, name, "wb") as file_handle:
         params = params.unfreeze()
         if is_distributed(params):
@@ -60,7 +51,7 @@ def save_vmc_state(
         )
 
 
-def reload_vmc_state(directory: str, name: str):
+def reload_vmc_state(directory: str, name: str) -> CheckpointData:
     """Reload a VMC state from a saved checkpoint."""
     with open_or_create(directory, name, "rb") as file_handle:
         # np.savez wraps non-array objects in arrays for storage, so call

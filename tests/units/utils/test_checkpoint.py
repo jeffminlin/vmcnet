@@ -17,6 +17,7 @@ def test_three_checkpoints(mocker):
     (_, params, key) = make_dummy_data_params_and_key()
     data = {"position": jnp.arange(jax.local_device_count() * 2)}
     opt_state = {"momentum": 2.0}
+    checkpoint_data = (epoch, data, params, opt_state, key)
 
     # Create checkpoint writer and mock out save_vmc_state method
     checkpoint_writer = checkpoint.CheckpointWriter()
@@ -24,20 +25,14 @@ def test_three_checkpoints(mocker):
 
     # Initialize checkpoint writer and save three checkpoints
     checkpoint_writer.initialize()
-    checkpoint_writer.save_checkpoint(
-        directory, file_name1, epoch, data, params, opt_state, key
-    )
-    checkpoint_writer.save_checkpoint(
-        directory, file_name2, epoch, data, params, opt_state, key
-    )
-    checkpoint_writer.save_checkpoint(
-        directory, file_name3, epoch, data, params, opt_state, key
-    )
+    checkpoint_writer.save_checkpoint(directory, file_name1, checkpoint_data)
+    checkpoint_writer.save_checkpoint(directory, file_name2, checkpoint_data)
+    checkpoint_writer.save_checkpoint(directory, file_name3, checkpoint_data)
     checkpoint_writer.close_and_await()
 
     expected_calls = [
-        mocker.call(directory, file_name1, epoch, data, params, opt_state, key),
-        mocker.call(directory, file_name2, epoch, data, params, opt_state, key),
-        mocker.call(directory, file_name3, epoch, data, params, opt_state, key),
+        mocker.call(directory, file_name1, checkpoint_data),
+        mocker.call(directory, file_name2, checkpoint_data),
+        mocker.call(directory, file_name3, checkpoint_data),
     ]
     assert save_vmc_stub.call_args_list == expected_calls

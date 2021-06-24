@@ -9,11 +9,13 @@ import os
 from collections import deque
 from dataclasses import dataclass, field
 import threading
-from typing import Dict, NamedTuple, Tuple, TypeVar
 import queue
+from typing import Dict, NamedTuple, Optional, Tuple, TypeVar
 
 import jax.numpy as jnp
 import vmcnet.utils.io as io
+
+from .types import CheckpointData
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
@@ -91,16 +93,16 @@ class CheckpointWriter:
                 # Timeout should be long enough to avoid using unnecessarily CPU cycles
                 # on this thread, but short enough that we don't mind waiting for the
                 # this to time out at the end of the training loop.
-                checkpoint_tuple = self._queue.get(timeout=0.5)
-                io.save_vmc_state(*checkpoint_tuple)
+                (directory, name, checkpoint_data) = self._queue.get(timeout=0.5)
+                io.save_vmc_state(directory, name, checkpoint_data)
             except queue.Empty:
                 continue
 
         # Once the checkpointing is "done", still need to write any remaining items in
         # the queue to disc.
         while not self._queue.empty():
-            checkpoint_tuple = self._queue.get()
-            io.save_vmc_state(*checkpoint_tuple)
+            (directory, name, checkpoint_data) = self._queue.get()
+            io.save_vmc_state(directory, name, checkpoint_data)
 
     def initialize(self):
         """Initialize the CheckpointWriter by starting its internal thread."""
@@ -110,11 +112,7 @@ class CheckpointWriter:
         self,
         directory: str,
         name: str,
-        epoch: int,
-        data: D,
-        params: P,
-        optimizer_state: S,
-        key: jnp.ndarray,
+        checkpoint_data: CheckpointData,
     ):
         """Queue up a checkpoint to be written to disc.
 
@@ -127,17 +125,7 @@ class CheckpointWriter:
             optimizer_state (pytree): optimizer state to save
             key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
         """
-        self._queue.put(
-            (
-                directory,
-                name,
-                epoch,
-                data,
-                params,
-                optimizer_state,
-                key,
-            )
-        )
+        self._queue.put((directory, name, checkpoint_data))
 
     def close_and_await(self):
         """Stop the thread by setting a flag, and return once it gets the message."""
@@ -226,11 +214,13 @@ def save_metrics_and_handle_checkpoints(
     running_energy_and_variance: RunningEnergyVariance,
     checkpoint_writer: CheckpointWriter,
     checkpoint_metric: jnp.float32,
+    best_checkpoint_every: int,
     logdir: str = None,
     variance_scale: float = 10.0,
     checkpoint_every: int = None,
+    best_checkpoint_data: Optional[CheckpointData] = None,
     checkpoint_dir: str = "checkpoints",
-) -> Tuple[jnp.float32, str]:
+) -> Tuple[jnp.float32, str, Optional[CheckpointData]]:
     """Checkpoint the current state of the VMC loop.
 
     There are two situations to checkpoint:
@@ -258,6 +248,14 @@ def save_metrics_and_handle_checkpoints(
             and variances
         checkpoint_metric (jnp.float32): current best error adjusted running average of
             the energy history
+        best_checkpoint_every (int): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
+            when the energy is on a downward trajectory (as we hope it often is!).
+            Defaults to 100.
         logdir (str, optional): name of parent log directory. If None, no checkpointing
             is done. Defaults to None.
         variance_scale (float, optional): scale of the variance term in the
@@ -267,18 +265,21 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
             None, checkpoints are only saved when the error-adjusted running avg of the
             energy improves. Defaults to None.
+        best_checkpoint_data (CheckpointData, optional): the data needed to save a
+            checkpoint for the best energy observed so far.
         checkpoint_dir (str, optional): name of subdirectory to save the regular
             checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
             Defaults to "checkpoints".
 
     Returns:
-        (jnp.float32, str): best error-adjusted energy average, and string indicating if
-        checkpointing has been done
+        (jnp.float32, str, CheckpointData): best error-adjusted energy average, then
+        string indicating if checkpointing has been done, then new best checkpoint data,
+        or None.
     """
     checkpoint_str = ""
     if logdir is None or metrics is None:
         # do nothing
-        return checkpoint_metric, checkpoint_str
+        return checkpoint_metric, checkpoint_str, best_checkpoint_data
 
     checkpoint_str = save_metrics_and_regular_checkpoint(
         epoch,
@@ -294,7 +295,11 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_every,
     )
 
-    checkpoint_str, error_adjusted_running_avg = track_and_save_best_checkpoint(
+    (
+        checkpoint_str,
+        error_adjusted_running_avg,
+        new_best_checkpoint_data,
+    ) = track_and_save_best_checkpoint(
         epoch,
         params,
         optimizer_state,
@@ -308,9 +313,15 @@ def save_metrics_and_handle_checkpoints(
         logdir,
         variance_scale,
         checkpoint_str,
+        best_checkpoint_every,
+        best_checkpoint_data,
     )
 
-    return jnp.minimum(error_adjusted_running_avg, checkpoint_metric), checkpoint_str
+    return (
+        jnp.minimum(error_adjusted_running_avg, checkpoint_metric),
+        checkpoint_str,
+        new_best_checkpoint_data,
+    )
 
 
 def track_and_save_best_checkpoint(
@@ -327,7 +338,9 @@ def track_and_save_best_checkpoint(
     logdir: str,
     variance_scale: float,
     checkpoint_str: str,
-) -> Tuple[str, jnp.float32]:
+    best_checkpoint_every: int,
+    best_checkpoint_data: Optional[CheckpointData],
+) -> Tuple[str, jnp.float32, Optional[CheckpointData]]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
 
     Args:
@@ -355,10 +368,21 @@ def track_and_save_best_checkpoint(
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`.
         checkpoint_str (str): string indicating whether checkpointing has previously
             occurred
+        best_checkpoint_every (int, optional): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
+            when the energy is on a downward trajectory (as we hope it often is!).
+            Defaults to 100.
+        best_checkpoint_data (CheckpointData, optional): the data needed to save a
+            checkpoint for the best energy observed so far.
 
     Returns:
-        (str, jnp.float32): previous checkpointing string with additional info if this
-        function did checkpointing, and best error-adjusted energy average
+        (str, jnp.float32, CheckpointData): previous checkpointing string with
+        additional info if this function did checkpointing, then best error-adjusted
+        energy average, then new best checkpoint data, or None.
     """
     energy, variance = running_energy_and_variance
 
@@ -367,10 +391,9 @@ def track_and_save_best_checkpoint(
     error_adjusted_running_avg = get_checkpoint_metric(
         energy.avg, variance.avg, nchains * len(energy.history), variance_scale
     )
+
     if error_adjusted_running_avg < checkpoint_metric:
-        checkpoint_writer.save_checkpoint(
-            logdir,
-            "checkpoint.npz",
+        best_checkpoint_data = (
             epoch,
             data,
             params,
@@ -378,8 +401,14 @@ def track_and_save_best_checkpoint(
             key,
         )
 
+    if (epoch + 1) % best_checkpoint_every == 0 and best_checkpoint_data is not None:
+        checkpoint_writer.save_checkpoint(
+            logdir, "checkpoint.npz", best_checkpoint_data
+        )
         checkpoint_str = checkpoint_str + ", best weights saved"
-    return checkpoint_str, error_adjusted_running_avg
+        best_checkpoint_data = None
+
+    return checkpoint_str, error_adjusted_running_avg, best_checkpoint_data
 
 
 def save_metrics_and_regular_checkpoint(
@@ -436,11 +465,13 @@ def save_metrics_and_regular_checkpoint(
             checkpoint_writer.save_checkpoint(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
-                epoch,
-                data,
-                params,
-                optimizer_state,
-                key,
+                (
+                    epoch,
+                    data,
+                    params,
+                    optimizer_state,
+                    key,
+                ),
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 

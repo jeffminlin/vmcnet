@@ -22,7 +22,8 @@ def vmc_loop(
     update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     key: jnp.ndarray,
     logdir: str = None,
-    checkpoint_every: int = None,
+    checkpoint_every: int = 1000,
+    best_checkpoint_every: int = 100,
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
@@ -58,7 +59,15 @@ def vmc_loop(
             is done. Defaults to None.
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
             None, checkpoints are only saved when the error-adjusted running avg of the
-            energy improves. Defaults to None.
+            energy improves. Defaults to 1000.
+        best_checkpoint_every (int, optional): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
+            when the energy is on a downward trajectory (as we hope it often is!).
+            Defaults to 100.
         checkpoint_dir (str, optional): name of subdirectory to save the regular
             checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
             Defaults to "checkpoints".
@@ -81,6 +90,8 @@ def vmc_loop(
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
+
+    best_checkpoint_data = None
 
     for epoch in range(nepochs):
         # Save state for checkpointing at the start of the epoch for two reasons:
@@ -107,6 +118,7 @@ def vmc_loop(
         (
             checkpoint_metric,
             checkpoint_str,
+            best_checkpoint_data,
         ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
             epoch,
             old_params,
@@ -118,9 +130,11 @@ def vmc_loop(
             running_energy_and_variance,
             checkpoint_writer,
             checkpoint_metric,
+            best_checkpoint_every,
             logdir=logdir,
             variance_scale=checkpoint_variance_scale,
             checkpoint_every=checkpoint_every,
+            best_checkpoint_data=best_checkpoint_data,
             checkpoint_dir=checkpoint_dir,
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
