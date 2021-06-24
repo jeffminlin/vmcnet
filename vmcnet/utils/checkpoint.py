@@ -23,6 +23,8 @@ D = TypeVar("D")
 P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
 S = TypeVar("S")  # represents optimizer state
 
+CHECKPOINT_FILE_NAME = "checkpoint.npz"
+
 
 @dataclass
 class RunningMetric:
@@ -403,7 +405,7 @@ def track_and_save_best_checkpoint(
 
     if (epoch + 1) % best_checkpoint_every == 0 and best_checkpoint_data is not None:
         checkpoint_writer.save_checkpoint(
-            logdir, "checkpoint.npz", best_checkpoint_data
+            logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
         )
         checkpoint_str = checkpoint_str + ", best weights saved"
         best_checkpoint_data = None
