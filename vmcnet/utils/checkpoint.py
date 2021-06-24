@@ -116,7 +116,17 @@ class CheckpointWriter:
         optimizer_state: S,
         key: jnp.ndarray,
     ):
-        """Queue up a checkpoint to be written to disc."""
+        """Queue up a checkpoint to be written to disc.
+
+        Args:
+            directory (str): directory in which to write the checkpoint
+            name (str): filename for the checkpoint
+            epoch (int): epoch at which checkpoint is being saved
+            data (pytree or jnp.ndarray): walker data to save
+            params (pytree): model parameters to save
+            optimizer_state (pytree): optimizer state to save
+            key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
+        """
         self._queue.put(
             (
                 directory,

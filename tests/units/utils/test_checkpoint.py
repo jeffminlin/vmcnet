@@ -4,8 +4,9 @@ import unittest.mock as mock
 
 import jax
 import jax.numpy as jnp
-import vmcnet.utils.checkpoint as checkpoint
+
 from tests.test_utils import make_dummy_data_params_and_key
+import vmcnet.utils.checkpoint as checkpoint
 
 
 def test_three_checkpoints(mocker):

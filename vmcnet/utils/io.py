@@ -31,7 +31,17 @@ def save_vmc_state(
     optimizer_state,
     key,
 ):
-    """Save a VMC state."""
+    """Save a VMC state.
+
+    Args:
+        directory (str): directory in which to write the checkpoint
+        name (str): filename for the checkpoint
+        epoch (int): epoch at which checkpoint is being saved
+        data (pytree or jnp.ndarray): walker data to save
+        params (pytree): model parameters to save
+        optimizer_state (pytree): optimizer state to save
+        key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
+    """
     with open_or_create(directory, name, "wb") as file_handle:
         params = params.unfreeze()
         if is_distributed(params):
