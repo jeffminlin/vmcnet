@@ -1,6 +1,6 @@
 """Proposal and acceptance fns for Metropolis-Hastings Markov-Chain Monte Carlo."""
 import logging
-from typing import Callable, Tuple, TypeVar
+from typing import Callable, Tuple, TypeVar, cast
 
 import jax
 import jax.numpy as jnp
@@ -57,7 +57,10 @@ def make_metropolis_step(
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
         accept_prob = acceptance_fn(params, data, proposed_data)
-        move_mask = jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob
+        move_mask = cast(
+            jnp.ndarray,
+            jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob,
+        )
         new_data = update_data_fn(data, proposed_data, move_mask)
 
         return jnp.mean(accept_prob), new_data, key

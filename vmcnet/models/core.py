@@ -1,19 +1,20 @@
 """Core model building parts."""
-from typing import Callable
+from typing import Callable, cast
+
 import flax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
-    get_kernel_initializer,
     get_bias_initializer,
+    get_kernel_initializer,
 )
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
-def _valid_skip(x, y):
+def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
 
 
@@ -130,6 +131,6 @@ class SimpleResNet(flax.linen.Module):
             x = dense_layer(prev_x)
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
-                x = x + prev_x
+                x = cast(jnp.ndarray, x + prev_x)
 
         return self.final_dense(x)

@@ -1,5 +1,5 @@
 """Core local energy and gradient construction routines."""
-from typing import Callable, Sequence, Tuple, TypeVar
+from typing import Callable, Sequence, Tuple, TypeVar, cast
 
 import jax
 import jax.numpy as jnp
@@ -29,7 +29,7 @@ def combine_local_energy_terms(
     def local_energy_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
-            local_energy_sum += term(params, x)
+            local_energy_sum = cast(jnp.ndarray, local_energy_sum + term(params, x))
         return local_energy_sum
 
     return local_energy_fn
