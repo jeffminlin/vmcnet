@@ -87,11 +87,10 @@ def vmc_loop(
         checkpoint_metric,
         running_energy_and_variance,
         checkpoint_writer,
+        best_checkpoint_data,
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
-
-    best_checkpoint_data = None
 
     for epoch in range(nepochs):
         # Save state for checkpointing at the start of the epoch for two reasons:

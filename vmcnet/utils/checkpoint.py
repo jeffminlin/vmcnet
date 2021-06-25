@@ -140,14 +140,17 @@ def initialize_checkpointing(
     nhistory_max: int,
     logdir: str = None,
     checkpoint_every: int = None,
-) -> Tuple[str, jnp.float32, RunningEnergyVariance, CheckpointWriter]:
+) -> Tuple[
+    str, jnp.float32, RunningEnergyVariance, CheckpointWriter, Optional[CheckpointData]
+]:
     """Initialize checkpointing objects.
 
     A suffix is added to the checkpointing directory if one with the same name already
     exists in the logdir.
 
     The checkpointing metric (error-adjusted running energy average) is initialized to
-    infinity, and empty arrays are initialized in running_energy_and_variance.
+    infinity, and empty arrays are initialized in running_energy_and_variance. The
+    CheckpointWriter is also created and best checkpoint data is initialized to None.
     """
     if logdir is not None:
         logging.info("Saving to " + logdir)
@@ -163,12 +166,14 @@ def initialize_checkpointing(
 
     checkpoint_writer = CheckpointWriter()
     checkpoint_writer.initialize()
+    best_checkpoint_data = None
 
     return (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
         checkpoint_writer,
+        best_checkpoint_data,
     )
 
 

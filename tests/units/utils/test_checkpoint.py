@@ -81,7 +81,7 @@ def test_save_best_checkpoint(mocker):
 
     best_checkpoint_data = None
     per_epoch_avg = [2, 1, 3, 2, 1, 0.5, 3, 2, 3]
-    # checkpoint_metric is running min of per_epoch_avg
+    # checkpoint_metric is running min of previous per_epoch_avgs
     checkpoint_metric = [jnp.inf, 2, 1, 1, 1, 1, 0.5, 0.5, 0.5]
 
     # Run 9 "epochs", substituting the mocked metrics in place of real ones
@@ -93,7 +93,7 @@ def test_save_best_checkpoint(mocker):
             best_checkpoint_data,
         ) = track_and_save_best(i, checkpoint_metric[i], best_checkpoint_data)
 
-    # Checkpoints should only be saved from epochs 1 and 6
+    # Checkpoints should only be saved from epochs 1 and 5
     expected_calls = [
         mock.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(1)),
         mock.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(5)),
