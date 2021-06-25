@@ -5,7 +5,7 @@ import flax.core.frozen_dict as frozen_dict
 import numpy as np
 
 from .distribute import get_first, is_distributed
-from .types import CheckpointData
+from .typing import CheckpointData
 
 
 def open_or_create(path, filename, option):

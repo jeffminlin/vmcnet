@@ -15,7 +15,7 @@ from typing import Dict, NamedTuple, Optional, Tuple, TypeVar
 import jax.numpy as jnp
 import vmcnet.utils.io as io
 
-from .types import CheckpointData
+from .typing import CheckpointData
 
 # represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
 # and wave function amplitudes, or other auxilliary MCMC data
