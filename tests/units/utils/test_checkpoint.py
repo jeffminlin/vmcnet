@@ -1,12 +1,9 @@
 """Testing io routines."""
 
-import unittest.mock as mock
-
 import jax
 import jax.numpy as jnp
-
-from tests.test_utils import make_dummy_data_params_and_key
 import vmcnet.utils.checkpoint as checkpoint
+from tests.test_utils import make_dummy_data_params_and_key
 
 
 def test_three_checkpoints(mocker):
@@ -39,8 +36,8 @@ def test_three_checkpoints(mocker):
     checkpoint_writer.close_and_await()
 
     expected_calls = [
-        mock.call(directory, file_name1, epoch, data, params, opt_state, key),
-        mock.call(directory, file_name2, epoch, data, params, opt_state, key),
-        mock.call(directory, file_name3, epoch, data, params, opt_state, key),
+        mocker.call(directory, file_name1, epoch, data, params, opt_state, key),
+        mocker.call(directory, file_name2, epoch, data, params, opt_state, key),
+        mocker.call(directory, file_name3, epoch, data, params, opt_state, key),
     ]
     assert save_vmc_stub.call_args_list == expected_calls
