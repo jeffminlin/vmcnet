@@ -138,5 +138,7 @@ def vmc_loop(
         )
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
-    checkpoint_writer.close_and_await()
+    utils.checkpoint.finish_checkpointing(
+        checkpoint_writer, best_checkpoint_data, logdir, checkpoint_dir
+    )
     return params, optimizer_state, data, key
