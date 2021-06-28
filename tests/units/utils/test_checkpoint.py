@@ -95,7 +95,7 @@ def test_save_best_checkpoint(mocker):
 
     # Checkpoints should only be saved from epochs 1 and 5
     expected_calls = [
-        mock.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(1)),
-        mock.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(5)),
+        mocker.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(1)),
+        mocker.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(5)),
     ]
     assert mock_save_checkpoint.call_args_list == expected_calls
