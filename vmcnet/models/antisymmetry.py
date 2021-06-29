@@ -81,16 +81,31 @@ def _get_lexicographic_signs(n: int) -> jnp.ndarray:
 
 
 def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Compute the (sign, log) of the cofactor terms of a square matrix.
+    """Compute a cofactor-based antiequivariance, returning results in slogabs form.
+
+    Input must be square in the last two dimensions, of shape (..., n, n). The last
+    dimension is assumed to be the particle dimension, and the second last is assumed
+    to be the orbital dimension. The output will be of shape (..., n), preserving the
+    particle dimension but getting rid of the orbital dimension.
+
+    The transformation applies to each square matrix separately. Given an nxn matrix M,
+    with cofactor matrix C, the output for that matrix will be a single vector of length
+    n, whose ith component is M_(1,i)*C_(1,i)*(-1)**i. This is a single term in the
+    cofactor expansion of the determinant of M. Thus, the sum of the returned vector
+    values will always be equal to the determinant of M.
+
+    This function implements an antiequivariant transformation, meaning that permuting
+    two particle indices in the input will result in the output having 1) the same two
+    particle indices permuted, and 2) ALL values multiplied by -1.
 
     Args:
-        x (jnp.ndarray): tensor which is square in the last two dimensions, i.e.
-            all leaves must have shape (..., n_leaf, n_leaf). The last dimension is
-            assumed to be the particle dimension, and the second last is assumed
-            to be the orbital dimension.
+        x (jnp.ndarray): a tensor of orbital matrices which is square in the last two
+        dimensions, thus of shape (..., n, n). The last dimension is the particle
+        dimension, and the second last is the orbital dimension.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): tuple of arrays, each of shape (..., n_leaf)
+        (jnp.ndarray, jnp.ndarray): tuple of arrays, each of shape (..., n). The first
+        is sign(result), and the second is log(abs(result)).
     """
     if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
         msg = "Argument to slog_cofactor_mapping() must have shape [..., n, n], got {}"
