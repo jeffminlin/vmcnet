@@ -43,6 +43,18 @@ def test_slogdet_product():
     np.testing.assert_allclose(log_prod, jnp.array([-jnp.inf, jnp.log(25)]))
 
 
+def test_slog_cofactor_antieq():
+    input = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    output_values = jnp.array([-3.0, 12.0, -9.0])
+    output_signs = jnp.sign(output_values)
+    output_logs = jnp.log(jnp.abs(output_values))
+
+    y = models.antisymmetry.slog_cofactor_antieq(input)
+
+    np.testing.assert_allclose(y[0], output_signs)
+    np.testing.assert_allclose(y[1], output_logs, rtol=1e-6)
+
+
 def test_lexicographic_order_of_perms():
     """Test getting all permutations and their signs for three things."""
     x = jnp.array([[1], [2], [3]])

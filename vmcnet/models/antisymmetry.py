@@ -76,6 +76,41 @@ def _get_lexicographic_signs(n: int) -> jnp.ndarray:
     return signs
 
 
+def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Compute the (sign, log) of the cofactor terms of a square matrix.
+
+    Args:
+        x (jnp.ndarray): tensor which is square in the last two dimensions, i.e.
+            all leaves must have shape (..., n_leaf, n_leaf). The last dimension is
+            assumed to be the particle dimension, and the second last is assumed
+            to be the orbital dimension.
+
+    Returns:
+        (jnp.ndarray, jnp.ndarray): tuple of arrays, each of shape (..., n_leaf)
+    """
+    if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
+        msg = "Argument to slog_cofactor_mapping() must have shape [..., n, n], got {}"
+        raise ValueError(msg.format(x.shape))
+    n = x.shape[-1]
+    cofactor_matrices = [
+        jnp.delete(jnp.delete(x, 0, axis=-2), i, axis=-1) for i in range(n)
+    ]
+    slog_cofactors = [jnp.linalg.slogdet(m) for m in cofactor_matrices]
+
+    first_orbitals = x[..., 0, :]
+    slog_first_orbital = (jnp.sign(first_orbitals), jnp.log(first_orbitals))
+    signs_and_logs = (
+        jnp.array(
+            [
+                slog_cofactors[i][0] * slog_first_orbital[0][i] * ((-1) ** i)
+                for i in range(n)
+            ]
+        ),
+        jnp.array([slog_cofactors[i][1] + slog_first_orbital[1][i] for i in range(n)]),
+    )
+    return signs_and_logs
+
+
 class ParallelPermutations(flax.linen.Module):
     """Get all perms along the 2nd-to-last axis, w/ perms stored as a constant.
 
