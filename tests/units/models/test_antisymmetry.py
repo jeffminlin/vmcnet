@@ -44,7 +44,7 @@ def test_slogdet_product():
 
 
 def test_slog_cofactor_antieq_with_batches():
-    base_input = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    base_input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     negative_input = -base_input
     doubled_input = base_input * 2
     input = jnp.stack([base_input, negative_input, doubled_input])
