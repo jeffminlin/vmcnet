@@ -8,6 +8,7 @@ from .utils import _get_elec_hyperparams, _get_input_streams_from_hyperparams
 
 
 def test_slog_cofactor_output_with_batches():
+    """Test slog_cofactor_antieq outputs correct value on simple inputs."""
     base_input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     negative_input = -base_input
     doubled_input = base_input * 2
@@ -26,6 +27,7 @@ def test_slog_cofactor_output_with_batches():
 
 
 def test_slog_cofactor_antiequivarance():
+    """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     permutation = (1, 0, 2)
     perm_input = input[permutation, :]
@@ -43,10 +45,10 @@ def test_slog_cofactor_antiequivarance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
-def test_orbital_cofactor_antieq_layer():
+def test_orbital_cofactor_layer_antiequivariance():
+    """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
     nchains, nelec_total, nion, d, permutation, spin_split = _get_elec_hyperparams()
 
-    nchains = 1
     (
         input_1e,
         _,
@@ -75,18 +77,17 @@ def test_orbital_cofactor_antieq_layer():
     output_signs, output_logs = orbital_cofactor_antieq.apply(
         params, input_1e, input_ei
     )
+    assert output_signs.shape == (nchains, nelec_total, d * (1 + nion))
+    assert output_logs.shape == (nchains, nelec_total, d * (1 + nion))
 
     perm_signs, perm_logs = orbital_cofactor_antieq.apply(
         params, perm_input_1e, perm_input_ei
     )
-
-    assert output_signs.shape == (nchains, nelec_total, d * (1 + nion))
-    assert output_logs.shape == (nchains, nelec_total, d * (1 + nion))
 
     # First spin permutation is odd; second spin permutation is even
     flips = jnp.reshape(jnp.array([-1, -1, -1, 1, 1, 1, 1]), (1, 7, 1))
     expected_perm_signs = output_signs[:, permutation, :] * flips
     expected_perm_logs = output_logs[:, permutation, :]
 
-    np.testing.assert_allclose(perm_signs, expected_perm_signs, atol=1e-5)
-    np.testing.assert_allclose(perm_logs, expected_perm_logs, atol=1e-5)
+    np.testing.assert_allclose(perm_signs, expected_perm_signs)
+    np.testing.assert_allclose(perm_logs, expected_perm_logs)

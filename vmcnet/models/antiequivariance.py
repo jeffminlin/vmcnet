@@ -1,5 +1,5 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Callable, Sequence, Tuple, Union
+from typing import Callable, Tuple
 
 import flax
 import jax.numpy as jnp
@@ -60,27 +60,56 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
 
 class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+    """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
+
+    Attributes:
+        ferminet_orbital_layer (callable): a FerminetOrbitalLayer instance. This will be
+        used to generate the orbital matrices to which the cofactor equivariance will
+        be applied. The orbital layer must generate square orbitals, i.e. norbitals must
+        equal nelec for each spin.
+    """
+
     ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+
+    def setup(self):
+        """Setup the orbital layer."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._ferminet_orbital_layer = self.ferminet_orbital_layer
 
     @flax.linen.compact
     def __call__(
         self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        # Orbital matrix at i is (..., nelec[i], nelec[i])
-        orbital_matrix_list = self.ferminet_orbital_layer(eq_inputs, r_ei)
+        """Calculate the orbitals and the cofactor-based antiequivariance.
 
-        # slog_cofactors at i is (..., nelec[i])
+        For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
+        and the cofactor matrix of the orbital matrix is C, the ith output will
+        be equal to y_i * M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is
+        handled separately in this same way.
+
+        Results are returned as a tuple of arrays, where the first is the sign of the
+        results and the second is the log of the absolute value of the results.
+
+        Args:
+            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d)
+            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+
+        Returns:
+            Tuple[jnp.ndarray, jnp.ndarray]: tuple of arrays of shape (..., nelec, d),
+            where the first is sign(results) and the second is log(abs(results))
+        """
+        # List of arrays, of shape [(..., nelec[i], nelec[i])]
+        orbital_matrix_list = self._ferminet_orbital_layer(eq_inputs, r_ei)
+        # List of arrays, of shape [(..., nelec[i])]
         slog_cofactors = [slog_cofactor_antieq(m) for m in orbital_matrix_list]
-
-        # cofactors results are (..., nelec)
+        # Concatenate signs and logs to to get arrays of shape (..., nelec)
         sign_cofactors = jnp.concatenate([slog[0] for slog in slog_cofactors], axis=-1)
         log_cofactors = jnp.concatenate([slog[1] for slog in slog_cofactors], axis=-1)
-
-        # eq_inputs is (..., nelec, d)
+        # Inputs are shape (..., nelec, d)
         sign_inputs = jnp.sign(eq_inputs)
         log_inputs = jnp.log(jnp.abs(eq_inputs))
-
+        # Expand dims of cofactor results to allow broadcasting to input shape
         sign_outputs = sign_inputs * jnp.expand_dims(sign_cofactors, -1)
         log_outputs = log_inputs + jnp.expand_dims(log_cofactors, -1)
-
         return (sign_outputs, log_outputs)
