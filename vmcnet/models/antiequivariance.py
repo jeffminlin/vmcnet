@@ -50,6 +50,8 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     ]
     # Stack on axis -3 to ensure shape (..., n) once slogdet removes the last two axes
     stacked_cofactor_matrices = jnp.stack(cofactor_matrices, axis=-3)
+
+    # TODO(ggoldsh): find a faster way to calculate these overlapping determinants.
     (cofactor_signs, cofactor_logs) = jnp.linalg.slogdet(stacked_cofactor_matrices)
 
     signs_and_logs = (
