@@ -138,10 +138,7 @@ def make_jitted_burning_step(
     Returns:
         Callable: function with signature
             (data, params, key) -> (data, key),
-        with jax.pmap optionally applied if apply_pmap is True. Because it is totally
-        pure, the original (data, key) buffers are deleted in the pmapped version via
-        the `donate_argnums` argument so that XLA is potentially more memory-efficient
-        on the GPU. See :func:`jax.pmap`.
+        with jax.pmap optionally applied if apply_pmap is True.
     """
 
     def burning_step(data: D, params: P, key: jnp.ndarray) -> Tuple[D, jnp.ndarray]:
@@ -151,7 +148,7 @@ def make_jitted_burning_step(
     if not apply_pmap:
         return jax.jit(burning_step)
 
-    return utils.distribute.pmap(burning_step, donate_argnums=(0, 2))
+    return utils.distribute.pmap(burning_step)
 
 
 def make_jitted_walker_fn(
@@ -179,9 +176,7 @@ def make_jitted_walker_fn(
         Callable: funciton with signature
             (params, data, key) -> (mean accept prob, new data, new key)
         with jax.pmap optionally applied if pmapped is True, and jax.jit applied if
-        apply_pmap is False. Because it is totally pure, the original (data, key)
-        buffers are deleted in the pmapped version via the `donate_argnums` argument so
-        that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
+        apply_pmap is False.
     """
 
     def walker_fn(
@@ -194,7 +189,7 @@ def make_jitted_walker_fn(
     if not apply_pmap:
         return jax.jit(walker_fn)
 
-    pmapped_walker_fn = utils.distribute.pmap(walker_fn, donate_argnums=(1, 2))
+    pmapped_walker_fn = utils.distribute.pmap(walker_fn)
 
     def pmapped_walker_fn_with_single_accept_ratio(
         params: P, data: D, key: jnp.ndarray

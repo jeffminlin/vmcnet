@@ -8,7 +8,9 @@ import logging
 import os
 from collections import deque
 from dataclasses import dataclass, field
+import threading
 from typing import Dict, NamedTuple, Tuple, TypeVar
+import queue
 
 import jax.numpy as jnp
 import vmcnet.utils.io as io
@@ -69,6 +71,118 @@ class RunningEnergyVariance(NamedTuple):
     variance: RunningMetric
 
 
+class CheckpointWriter:
+    """A simple asynchronous writer for saving checkpoints during training.
+
+    Spins up a thread for the file IO so that it does not block the main line of the
+    training procedure. While Python threads do not provide true parallelism of CPU
+    computations across cores, they do allow us to write to files and run Jax
+    computations simultaneously.
+    """
+
+    def __init__(self):
+        """Create a new CheckpointWriter."""
+        self._checkpoint_thread = threading.Thread(target=self._run_checkpoint_thread)
+        self._done = False
+        self._queue = queue.Queue()
+
+    def _run_checkpoint_thread(self):
+        while True and not self._done:
+            try:
+                # Timeout should be long enough to avoid using unnecessarily CPU cycles
+                # on this thread, but short enough that we don't mind waiting for the
+                # this to time out at the end of the training loop.
+                checkpoint_tuple = self._queue.get(timeout=0.5)
+                io.save_vmc_state(*checkpoint_tuple)
+            except queue.Empty:
+                continue
+
+        # Once the checkpointing is "done", still need to write any remaining items in
+        # the queue to disc.
+        while not self._queue.empty():
+            checkpoint_tuple = self._queue.get()
+            io.save_vmc_state(*checkpoint_tuple)
+
+    def initialize(self):
+        """Initialize the CheckpointWriter by starting its internal thread."""
+        self._checkpoint_thread.start()
+
+    def save_checkpoint(
+        self,
+        directory: str,
+        name: str,
+        epoch: int,
+        data: D,
+        params: P,
+        optimizer_state: S,
+        key: jnp.ndarray,
+    ):
+        """Queue up a checkpoint to be written to disc.
+
+        Args:
+            directory (str): directory in which to write the checkpoint
+            name (str): filename for the checkpoint
+            epoch (int): epoch at which checkpoint is being saved
+            data (pytree or jnp.ndarray): walker data to save
+            params (pytree): model parameters to save
+            optimizer_state (pytree): optimizer state to save
+            key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
+        """
+        self._queue.put(
+            (
+                directory,
+                name,
+                epoch,
+                data,
+                params,
+                optimizer_state,
+                key,
+            )
+        )
+
+    def close_and_await(self):
+        """Stop the thread by setting a flag, and return once it gets the message."""
+        self._done = True
+        self._checkpoint_thread.join()
+
+
+def initialize_checkpointing(
+    checkpoint_dir: str,
+    nhistory_max: int,
+    logdir: str = None,
+    checkpoint_every: int = None,
+) -> Tuple[str, jnp.float32, RunningEnergyVariance, CheckpointWriter]:
+    """Initialize checkpointing objects.
+
+    A suffix is added to the checkpointing directory if one with the same name already
+    exists in the logdir.
+
+    The checkpointing metric (error-adjusted running energy average) is initialized to
+    infinity, and empty arrays are initialized in running_energy_and_variance.
+    """
+    if logdir is not None:
+        logging.info("Saving to " + logdir)
+        os.makedirs(logdir, exist_ok=True)
+        if checkpoint_every is not None:
+            checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
+            os.makedirs(os.path.join(logdir, checkpoint_dir), exist_ok=False)
+
+    checkpoint_metric = jnp.inf
+    running_energy_and_variance = RunningEnergyVariance(
+        RunningMetric(nhistory_max), RunningMetric(nhistory_max)
+    )
+
+    checkpoint_writer = CheckpointWriter()
+    checkpoint_writer.initialize()
+
+    return (
+        checkpoint_dir,
+        checkpoint_metric,
+        running_energy_and_variance,
+        checkpoint_writer,
+    )
+
+
 def get_checkpoint_metric(
     energy_running_avg: jnp.float32,
     variance_running_avg: jnp.float32,
@@ -111,6 +225,7 @@ def save_metrics_and_handle_checkpoints(
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
+    checkpoint_writer: CheckpointWriter,
     checkpoint_metric: jnp.float32,
     logdir: str = None,
     variance_scale: float = 10.0,
@@ -174,6 +289,7 @@ def save_metrics_and_handle_checkpoints(
         key,
         metrics,
         logdir,
+        checkpoint_writer,
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
@@ -188,6 +304,7 @@ def save_metrics_and_handle_checkpoints(
         metrics,
         nchains,
         running_energy_and_variance,
+        checkpoint_writer,
         checkpoint_metric,
         logdir,
         variance_scale,
@@ -206,6 +323,7 @@ def track_and_save_best_checkpoint(
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
+    checkpoint_writer: CheckpointWriter,
     checkpoint_metric: jnp.float32,
     logdir: str,
     variance_scale: float,
@@ -251,7 +369,7 @@ def track_and_save_best_checkpoint(
         energy.avg, variance.avg, nchains * len(energy.history), variance_scale
     )
     if error_adjusted_running_avg < checkpoint_metric:
-        io.save_vmc_state(
+        checkpoint_writer.save_checkpoint(
             logdir,
             "checkpoint.npz",
             epoch,
@@ -260,6 +378,7 @@ def track_and_save_best_checkpoint(
             optimizer_state,
             key,
         )
+
         checkpoint_str = checkpoint_str + ", best weights saved"
     return checkpoint_str, error_adjusted_running_avg
 
@@ -272,6 +391,7 @@ def save_metrics_and_regular_checkpoint(
     key: jnp.ndarray,
     metrics: Dict,
     logdir: str,
+    checkpoint_writer: CheckpointWriter,
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
@@ -314,7 +434,7 @@ def save_metrics_and_regular_checkpoint(
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
-            io.save_vmc_state(
+            checkpoint_writer.save_checkpoint(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
                 epoch,
@@ -326,34 +446,6 @@ def save_metrics_and_regular_checkpoint(
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
     return checkpoint_str
-
-
-def initialize_checkpointing_metrics(
-    checkpoint_dir: str,
-    nhistory_max: int,
-    logdir: str = None,
-    checkpoint_every: int = None,
-) -> Tuple[str, jnp.float32, RunningEnergyVariance]:
-    """Initialize checkpointing objects.
-
-    A suffix is added to the checkpointing directory if one with the same name already
-    exists in the logdir.
-
-    The checkpointing metric (error-adjusted running energy average) is initialized to
-    infinity, and empty arrays are initialized in running_energy_and_variance.
-    """
-    if logdir is not None:
-        logging.info("Saving to " + logdir)
-        os.makedirs(logdir, exist_ok=True)
-        if checkpoint_every is not None:
-            checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
-            os.makedirs(os.path.join(logdir, checkpoint_dir), exist_ok=False)
-
-    checkpoint_metric = jnp.inf
-    running_energy_and_variance = RunningEnergyVariance(
-        RunningMetric(nhistory_max), RunningMetric(nhistory_max)
-    )
-    return checkpoint_dir, checkpoint_metric, running_energy_and_variance
 
 
 def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:

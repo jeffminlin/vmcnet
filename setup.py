@@ -9,7 +9,7 @@ REQUIRED_PACKAGES = [
     "numpy",
 ]
 
-EXTRA_PACKAGES = {"testing": ["black", "chex", "flake8", "pytest"]}
+EXTRA_PACKAGES = {"testing": ["black", "chex", "flake8", "pytest", "pytest-mock"]}
 
 setup(
     name="vmcnet",

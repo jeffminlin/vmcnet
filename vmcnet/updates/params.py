@@ -45,9 +45,7 @@ def create_grad_energy_update_param_fn(
             (data, params, optimizer_state, key)
             -> (new_params, new_optimizer_state, metrics, key)
         The function is pmapped if apply_pmap is True, and jitted if apply_pmap is
-        False. Because it is totally pure, the original (params, optimizer_state, key)
-        buffers are deleted in the pmapped version via the `donate_argnums` argument so
-        that XLA is potentially more memory-efficient on the GPU. See :func:`jax.pmap`.
+        False.
     """
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
