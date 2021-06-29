@@ -1,6 +1,7 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Tuple
+from typing import Callable, Sequence, Tuple, Union
 
+import flax
 import jax.numpy as jnp
 
 from .antisymmetry import _get_alternating_signs
@@ -56,3 +57,30 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         orbital_logs + cofactor_logs,
     )
     return signs_and_logs
+
+
+class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+    ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+
+    @flax.linen.compact
+    def __call__(
+        self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        # Orbital matrix at i is (..., nelec[i], nelec[i])
+        orbital_matrix_list = self.ferminet_orbital_layer(eq_inputs, r_ei)
+
+        # slog_cofactors at i is (..., nelec[i])
+        slog_cofactors = [slog_cofactor_antieq(m) for m in orbital_matrix_list]
+
+        # cofactors results are (..., nelec)
+        sign_cofactors = jnp.concatenate([slog[0] for slog in slog_cofactors], axis=-1)
+        log_cofactors = jnp.concatenate([slog[1] for slog in slog_cofactors], axis=-1)
+
+        # eq_inputs is (..., nelec, d)
+        sign_inputs = jnp.sign(eq_inputs)
+        log_inputs = jnp.log(jnp.abs(eq_inputs))
+
+        sign_outputs = sign_inputs * jnp.expand_dims(sign_cofactors, -1)
+        log_outputs = log_inputs + jnp.expand_dims(log_cofactors, -1)
+
+        return (sign_outputs, log_outputs)

@@ -1,9 +1,9 @@
 """Core model building parts."""
-from typing import Callable, cast
+
+from typing import Callable, Sequence, Set, Tuple, Union
 
 import flax
 import jax.numpy as jnp
-
 import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
@@ -16,6 +16,22 @@ Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
+
+
+def get_nelec_per_spin(
+    spin_split: Union[int, Sequence[int]], nelec_total: int
+) -> Tuple[int, ...]:
+    """From a spin_split and nelec_total, get the number of particles per spin.
+
+    If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then
+    spin_split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
+    equal. This function is the inverse of this operation.
+    """
+    if isinstance(spin_split, int):
+        return (nelec_total // spin_split,) * spin_split
+    else:
+        spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
+        return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
 
 
 class Dense(flax.linen.Module):
