@@ -4,7 +4,8 @@ import jax
 import vmcnet.models as models
 
 
-def _get_elec_hyperparams():
+def get_elec_hyperparams():
+    """Get hyperparameters for electron data."""
     nchains = 25
     nelec_total = 7
     nion = 3
@@ -15,7 +16,8 @@ def _get_elec_hyperparams():
     return nchains, nelec_total, nion, d, permutation, spin_split
 
 
-def _get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation):
+def get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation):
+    """Get electron input data given several hyperparameters."""
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
     elec_pos = jax.random.normal(subkey, (nchains, nelec_total, d))

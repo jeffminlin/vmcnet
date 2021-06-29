@@ -4,26 +4,28 @@ import numpy as np
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
 
-from .utils import _get_elec_hyperparams, _get_input_streams_from_hyperparams
+from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
 
 def test_slog_cofactor_output_with_batches():
     """Test slog_cofactor_antieq outputs correct value on simple inputs."""
-    base_input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
-    negative_input = -base_input
-    doubled_input = base_input * 2
-    input = jnp.stack([base_input, negative_input, doubled_input])
+    input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
+    negative_input = -input
+    doubled_input = input * 2
+    full_input = jnp.stack([input, negative_input, doubled_input])
 
-    base_output = jnp.array([-3.0, 12.0, -9.0])
-    base_signs = jnp.sign(base_output)
-    base_logs = jnp.log(jnp.abs(base_output))
-    output_signs = jnp.stack([base_signs, -base_signs, base_signs])
-    output_logs = jnp.stack([base_logs, base_logs, base_logs + jnp.log(8)])
+    expected_out = jnp.array([-3, 12, -9])
+    expected_signs = jnp.sign(expected_out)
+    expected_logs = jnp.log(jnp.abs(expected_out))
+    full_expected_signs = jnp.stack([expected_signs, -expected_signs, expected_signs])
+    full_expected_logs = jnp.stack(
+        [expected_logs, expected_logs, expected_logs + jnp.log(8)]
+    )
 
-    y = antieq.slog_cofactor_antieq(input)
+    y = antieq.slog_cofactor_antieq(full_input)
 
-    np.testing.assert_allclose(y[0], output_signs)
-    np.testing.assert_allclose(y[1], output_logs, rtol=1e-6)
+    np.testing.assert_allclose(y[0], full_expected_signs)
+    np.testing.assert_allclose(y[1], full_expected_logs, rtol=1e-6)
 
 
 def test_slog_cofactor_antiequivarance():
@@ -36,7 +38,7 @@ def test_slog_cofactor_antiequivarance():
     perm_signs, perm_logs = antieq.slog_cofactor_antieq(perm_input)
 
     # Fancy indexing like output_signs[permutation] doesn't work on single
-    # dimensional arrays, thinking the elements of permutation are intended for
+    # dimensional arrays, as jax thinks the elements of permutation are intended for
     # different array axes. Hence, use jnp.take.
     expected_perm_signs = -jnp.take(output_signs, permutation)
     expected_perm_logs = jnp.take(output_logs, permutation)
@@ -47,8 +49,7 @@ def test_slog_cofactor_antiequivarance():
 
 def test_orbital_cofactor_layer_antiequivariance():
     """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
-    nchains, nelec_total, nion, d, permutation, spin_split = _get_elec_hyperparams()
-
+    nchains, nelec_total, nion, d, permutation, spin_split = get_elec_hyperparams()
     (
         input_1e,
         _,
@@ -57,7 +58,7 @@ def test_orbital_cofactor_layer_antiequivariance():
         _,
         perm_input_ei,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
     bias_initializer = models.weights.get_bias_initializer("normal")

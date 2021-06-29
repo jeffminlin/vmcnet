@@ -3,10 +3,11 @@ import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
+
 import vmcnet.models as models
 import vmcnet.physics as physics
 
-from .utils import _get_elec_hyperparams, _get_input_streams_from_hyperparams
+from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
 
 def test_electron_electron_add_norm():
@@ -32,7 +33,7 @@ def test_electron_electron_add_norm():
 
 def test_ferminet_one_electron_layer_shape_and_equivariance():
     """Test the equivariance of the one-electron layer in the FermiNet."""
-    nchains, nelec_total, nion, d, permutation, spin_split = _get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, spin_split = get_elec_hyperparams()
 
     (
         input_1e,
@@ -42,7 +43,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
         perm_input_2e,
         _,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     ndense = 10
     kernel_initializer_unmixed = models.weights.get_kernel_initializer("orthogonal")
@@ -77,7 +78,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
 
 def test_ferminet_two_electron_layer_shape_and_equivariance():
     """Test that the two-electron stream is doubly equivariant."""
-    nchains, nelec_total, nion, d, permutation, _ = _get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, _ = get_elec_hyperparams()
 
     (
         _,
@@ -87,7 +88,7 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
         perm_input_2e,
         _,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     ndense = 11
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")

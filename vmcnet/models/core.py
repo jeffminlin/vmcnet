@@ -3,6 +3,7 @@
 from typing import Callable, Sequence, Set, Tuple, Union
 
 import flax
+import jax
 import jax.numpy as jnp
 import vmcnet.utils as utils
 from vmcnet.models.weights import (
@@ -14,8 +15,9 @@ from vmcnet.models.weights import (
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
-def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
-    return x.shape[-1] == y.shape[-1]
+def get_alternating_signs(n: int) -> jnp.ndarray:
+    """Return alternating series of 1 and -1, of length n."""
+    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
 
 def get_nelec_per_spin(
@@ -32,6 +34,10 @@ def get_nelec_per_spin(
     else:
         spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
         return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
+
+
+def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
+    return x.shape[-1] == y.shape[-1]
 
 
 class Dense(flax.linen.Module):

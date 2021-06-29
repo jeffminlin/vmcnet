@@ -4,7 +4,7 @@ from typing import Callable, Tuple
 import flax
 import jax.numpy as jnp
 
-from .antisymmetry import _get_alternating_signs
+from .core import get_alternating_signs
 
 
 def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -35,11 +35,11 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         is sign(result), and the second is log(abs(result)).
     """
     if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
-        msg = "Argument to slog_cofactor_antieq() must have shape [..., n, n], got {}"
+        msg = "Argument to slog_cofactor_antieq() must have shape (..., n, n), got {}"
         raise ValueError(msg.format(x.shape))
 
     # Calculate M_(0,i) by selecting orbital index 0
-    first_orbital_vals = x[..., :, 0]
+    first_orbital_vals = x[..., 0]
     orbital_signs = jnp.sign(first_orbital_vals)
     orbital_logs = jnp.log(jnp.abs(first_orbital_vals))
 
@@ -53,7 +53,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
     (cofactor_signs, cofactor_logs) = jnp.linalg.slogdet(stacked_cofactor_matrices)
 
     signs_and_logs = (
-        orbital_signs * cofactor_signs * _get_alternating_signs(n),
+        orbital_signs * cofactor_signs * get_alternating_signs(n),
         orbital_logs + cofactor_logs,
     )
     return signs_and_logs
@@ -92,23 +92,29 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         results and the second is the log of the absolute value of the results.
 
         Args:
-            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d)
-            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
+                contain values that are equivariant with respect to the particle
+                positions.
+            r_ei (jnp.ndarray, optional): array of shape (..., nelec, nion, d)
+                representing electron-ion displacements, which if present will be used
+                as an extra input to the orbital layer.
 
         Returns:
             Tuple[jnp.ndarray, jnp.ndarray]: tuple of arrays of shape (..., nelec, d),
             where the first is sign(results) and the second is log(abs(results))
         """
-        # List of arrays, of shape [(..., nelec[i], nelec[i])]
+        # Calculate orbital matrices as list of shape [(..., nelec[i], nelec[i])]
         orbital_matrix_list = self._ferminet_orbital_layer(eq_inputs, r_ei)
-        # List of arrays, of shape [(..., nelec[i])]
+        # Calculate slog cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
         slog_cofactors = [slog_cofactor_antieq(m) for m in orbital_matrix_list]
-        # Concatenate signs and logs to to get arrays of shape (..., nelec)
+        # Concatenate signs and logs to get arrays of shape (..., nelec)
         sign_cofactors = jnp.concatenate([slog[0] for slog in slog_cofactors], axis=-1)
         log_cofactors = jnp.concatenate([slog[1] for slog in slog_cofactors], axis=-1)
-        # Inputs are shape (..., nelec, d)
+
+        # Calculate signs and logs of inputs to get arrays of shape (..., nelec, d)
         sign_inputs = jnp.sign(eq_inputs)
         log_inputs = jnp.log(jnp.abs(eq_inputs))
+
         # Expand dims of cofactor results to allow broadcasting to input shape
         sign_outputs = sign_inputs * jnp.expand_dims(sign_cofactors, -1)
         log_outputs = log_inputs + jnp.expand_dims(log_cofactors, -1)

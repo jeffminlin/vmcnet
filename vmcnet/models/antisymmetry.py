@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import PyTree
+from .core import get_alternating_signs
 
 
 def _istupleofarrays(x: Any) -> bool:
@@ -74,7 +75,7 @@ def _get_lexicographic_signs(n: int) -> jnp.ndarray:
     signs = jnp.ones(1)
 
     for i in range(2, n + 1):
-        alternating_signs = _get_alternating_signs(i)
+        alternating_signs = get_alternating_signs(i)
         signs = jnp.concatenate([sign * signs for sign in alternating_signs])
 
     return signs
