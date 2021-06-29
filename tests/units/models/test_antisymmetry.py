@@ -43,11 +43,17 @@ def test_slogdet_product():
     np.testing.assert_allclose(log_prod, jnp.array([-jnp.inf, jnp.log(25)]))
 
 
-def test_slog_cofactor_antieq():
-    input = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    output_values = jnp.array([-3.0, 12.0, -9.0])
-    output_signs = jnp.sign(output_values)
-    output_logs = jnp.log(jnp.abs(output_values))
+def test_slog_cofactor_antieq_with_batches():
+    base_input = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    negative_input = -base_input
+    doubled_input = base_input * 2
+    input = jnp.stack([base_input, negative_input, doubled_input])
+
+    base_output = jnp.array([-3.0, 12.0, -9.0])
+    base_signs = jnp.sign(base_output)
+    base_logs = jnp.log(jnp.abs(base_output))
+    output_signs = jnp.stack([base_signs, -base_signs, base_signs])
+    output_logs = jnp.stack([base_logs, base_logs, base_logs + jnp.log(8)])
 
     y = models.antisymmetry.slog_cofactor_antieq(input)
 

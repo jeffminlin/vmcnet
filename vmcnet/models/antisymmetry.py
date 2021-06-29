@@ -22,6 +22,10 @@ def _reduce_prod_over_leaves(xs: PyTree) -> jnp.ndarray:
     return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
 
 
+def _get_alternating_signs(n: int) -> jnp.ndarray:
+    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+
+
 def slogdet_product(xs: PyTree) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Compute the (sign, log) of the product of determinants of the leaves of a pytree.
 
@@ -70,7 +74,7 @@ def _get_lexicographic_signs(n: int) -> jnp.ndarray:
     signs = jnp.ones(1)
 
     for i in range(2, n + 1):
-        alternating_signs = jax.ops.index_update(jnp.ones(i), jax.ops.index[1::2], -1.0)
+        alternating_signs = _get_alternating_signs(i)
         signs = jnp.concatenate([sign * signs for sign in alternating_signs])
 
     return signs
@@ -92,21 +96,18 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         msg = "Argument to slog_cofactor_mapping() must have shape [..., n, n], got {}"
         raise ValueError(msg.format(x.shape))
     n = x.shape[-1]
+
     cofactor_matrices = [
         jnp.delete(jnp.delete(x, 0, axis=-2), i, axis=-1) for i in range(n)
     ]
-    slog_cofactors = [jnp.linalg.slogdet(m) for m in cofactor_matrices]
+    stacked_cofactor_matrices = jnp.stack(cofactor_matrices, axis=-3)
+    (cofactor_signs, cofactor_logs) = jnp.linalg.slogdet(stacked_cofactor_matrices)
 
-    first_orbitals = x[..., 0, :]
-    slog_first_orbital = (jnp.sign(first_orbitals), jnp.log(first_orbitals))
+    first_orbital_vals = x[..., 0, :]
+
     signs_and_logs = (
-        jnp.array(
-            [
-                slog_cofactors[i][0] * slog_first_orbital[0][i] * ((-1) ** i)
-                for i in range(n)
-            ]
-        ),
-        jnp.array([slog_cofactors[i][1] + slog_first_orbital[1][i] for i in range(n)]),
+        cofactor_signs * jnp.sign(first_orbital_vals) * _get_alternating_signs(n),
+        cofactor_logs + jnp.log(jnp.abs(first_orbital_vals)),
     )
     return signs_and_logs
 
