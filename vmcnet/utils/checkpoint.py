@@ -181,17 +181,11 @@ def finish_checkpointing(
     checkpoint_writer: CheckpointWriter,
     best_checkpoint_data: CheckpointData = None,
     logdir: str = None,
-    checkpoint_dir: str = None,
 ):
     """Save any final checkpoint data and close and await the CheckpointWriter."""
-    if (
-        logdir is not None
-        and checkpoint_dir is not None
-        and best_checkpoint_data is not None
-    ):
-        directory = os.path.join(logdir, checkpoint_dir)
+    if logdir is not None and best_checkpoint_data is not None:
         checkpoint_writer.save_checkpoint(
-            directory, CHECKPOINT_FILE_NAME, best_checkpoint_data
+            logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
         )
     checkpoint_writer.close_and_await()
 
