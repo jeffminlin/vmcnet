@@ -90,7 +90,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
     The transformation applies to each square matrix separately. Given an nxn matrix M,
     with cofactor matrix C, the output for that matrix will be a single vector of length
-    n, whose ith component is M_(1,i)*C_(1,i)*(-1)**i. This is a single term in the
+    n, whose ith component is M_(0,i)*C_(0,i)*(-1)**i. This is a single term in the
     cofactor expansion of the determinant of M. Thus, the sum of the returned vector
     values will always be equal to the determinant of M.
 
@@ -108,21 +108,26 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         is sign(result), and the second is log(abs(result)).
     """
     if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
-        msg = "Argument to slog_cofactor_mapping() must have shape [..., n, n], got {}"
+        msg = "Argument to slog_cofactor_antieq() must have shape [..., n, n], got {}"
         raise ValueError(msg.format(x.shape))
-    n = x.shape[-1]
 
+    # Calculate M_(0,i) by selecting orbital index 0
+    first_orbital_vals = x[..., 0, :]
+    orbital_signs = jnp.sign(first_orbital_vals)
+    orbital_logs = jnp.log(jnp.abs(first_orbital_vals))
+
+    n = x.shape[-1]
+    # Calculate C_(0,i) by deleting the first orbital and ith particle indices
     cofactor_matrices = [
         jnp.delete(jnp.delete(x, 0, axis=-2), i, axis=-1) for i in range(n)
     ]
+    # Stack on axis -3 to ensure shape (..., n) once slogdet removes the last two axes
     stacked_cofactor_matrices = jnp.stack(cofactor_matrices, axis=-3)
     (cofactor_signs, cofactor_logs) = jnp.linalg.slogdet(stacked_cofactor_matrices)
 
-    first_orbital_vals = x[..., 0, :]
-
     signs_and_logs = (
-        cofactor_signs * jnp.sign(first_orbital_vals) * _get_alternating_signs(n),
-        cofactor_logs + jnp.log(jnp.abs(first_orbital_vals)),
+        orbital_signs * cofactor_signs * _get_alternating_signs(n),
+        orbital_logs + cofactor_logs,
     )
     return signs_and_logs
 
