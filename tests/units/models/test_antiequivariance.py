@@ -44,14 +44,18 @@ def test_slog_cofactor_antiequivarance():
 
 
 def test_orbital_cofactor_antieq_layer():
-    nchains, nelec_total, d, permutation, spin_split = _get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, spin_split = _get_elec_hyperparams()
+
+    nchains = 1
     (
         input_1e,
-        input_2e,
+        _,
+        input_ei,
         perm_input_1e,
-        perm_input_2e,
+        _,
+        perm_input_ei,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, d, permutation)
+    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
     bias_initializer = models.weights.get_bias_initializer("normal")
@@ -66,13 +70,18 @@ def test_orbital_cofactor_antieq_layer():
         bias_initializer,
     )
     orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(orbital_layer)
-    params = orbital_cofactor_antieq.init(key, input_1e)
+    params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
 
-    output_signs, output_logs = orbital_cofactor_antieq.apply(params, input_1e)
-    assert output_signs.shape == (nchains, nelec_total, d)
-    assert output_logs.shape == (nchains, nelec_total, d)
+    output_signs, output_logs = orbital_cofactor_antieq.apply(
+        params, input_1e, input_ei
+    )
 
-    perm_signs, perm_logs = orbital_cofactor_antieq.apply(params, perm_input_1e)
+    perm_signs, perm_logs = orbital_cofactor_antieq.apply(
+        params, perm_input_1e, perm_input_ei
+    )
+
+    assert output_signs.shape == (nchains, nelec_total, d * (1 + nion))
+    assert output_logs.shape == (nchains, nelec_total, d * (1 + nion))
 
     # First spin permutation is odd; second spin permutation is even
     flips = jnp.reshape(jnp.array([-1, -1, -1, 1, 1, 1, 1]), (1, 7, 1))
