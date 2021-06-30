@@ -1,5 +1,5 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Callable, Tuple
+from typing import Callable, List, Tuple
 
 import flax
 import jax.numpy as jnp
@@ -35,7 +35,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         is sign(result), and the second is log(abs(result)).
     """
     if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
-        msg = "Argument to slog_cofactor_antieq() must have shape (..., n, n), got {}"
+        msg = "Calculating cofactors requires shape (..., n, n), got {}"
         raise ValueError(msg.format(x.shape))
 
     # Calculate M_(0,i) by selecting orbital index 0
@@ -71,7 +71,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         equal nelec for each spin.
     """
 
-    ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+    ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], List[jnp.ndarray]]
 
     def setup(self):
         """Setup the orbital layer."""
