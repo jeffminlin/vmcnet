@@ -1,9 +1,17 @@
-"""Type definitions that can be reused across the VMCNet codebase."""
+"""Type definitions that can be reused across the VMCNet codebase.
+
+Because type-checking with numpy/jax numpy can be tricky and does not always agree with
+type-checkers, this package uses types for static type-checking when possible, but
+otherwise they are intended for documentation and clarity.
+"""
 from typing import Any, Tuple, TypeVar
 
 import jax.numpy as jnp
 
 
+# Currently using PyTree = Any just to improve readability in the code.
+# A pytree is a "tree-like structure built out of container-like Python objects": see
+# https://jax.readthedocs.io/en/latest/pytrees.html
 PyTree = Any
 
 # TypeVar for an arbitrary PyTree
