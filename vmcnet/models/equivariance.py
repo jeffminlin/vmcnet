@@ -6,9 +6,9 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.models.core import Activation, Dense, _valid_skip
-from vmcnet.models.jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
-from vmcnet.models.weights import WeightInitializer
+from .core import Activation, Dense, _valid_skip
+from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
+from .weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.typing import PyTree
 
@@ -651,9 +651,9 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        norbitals (Sequence[int]): sequence of integers specifying the number of
-            orbitals to create for each spin. This determines the output shapes for each
-            split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
+        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each spin. This determines the output shapes for
+            each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the

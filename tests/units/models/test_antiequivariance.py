@@ -71,21 +71,15 @@ def test_orbital_cofactor_layer_antiequivariance():
 
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
     bias_initializer = models.weights.get_bias_initializer("normal")
-    norbitals = models.core.get_nelec_per_spin(spin_split, nelec_total)
 
-    orbital_layer = models.equivariance.FermiNetOrbitalLayer(
+    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
         spin_split,
-        norbitals,
         kernel_initializer,
         kernel_initializer,
         kernel_initializer,
         bias_initializer,
     )
-    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
-        spin_split, orbital_layer
-    )
     params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
-
     output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
 
     nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)

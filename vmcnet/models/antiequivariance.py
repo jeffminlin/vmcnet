@@ -1,11 +1,13 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Callable, List, Sequence, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import flax
 import jax
 import jax.numpy as jnp
 
-from .core import get_alternating_signs, is_tuple_of_arrays
+from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
+from .equivariance import FermiNetOrbitalLayer
+from .weights import WeightInitializer
 
 
 def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -75,20 +77,33 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ferminet_orbital_layer (callable): a FerminetOrbitalLayer instance. This will be
-        used to generate the orbital matrices to which the cofactor equivariance will
-        be applied. The orbital layer must generate square orbitals, i.e. norbitals must
-        equal nelec for each spin.
+        kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
+            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
+            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
+            this initializes a single decay rate number per ion and orbital. If
+            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
+            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
+            linear combination over the ions of exponential envelopes. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_linear (WeightInitializer): bias initializer for the linear
+            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+        use_bias (bool, optional): whether to add a bias term to the linear part of the
+            orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should be
+            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
+            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
+            exp(-||a(r - R||)) for a number a.
     """
 
     spin_split: Union[int, Sequence[int]]
-    ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], List[jnp.ndarray]]
-
-    def setup(self):
-        """Setup the orbital layer."""
-        # workaround MyPy's typing error for callable attribute, see
-        # https://github.com/python/mypy/issues/708
-        self._ferminet_orbital_layer = self.ferminet_orbital_layer
+    orbital_kernel_initializer_linear: WeightInitializer
+    orbital_kernel_initializer_envelope_dim: WeightInitializer
+    orbital_kernel_initializer_envelope_ion: WeightInitializer
+    orbital_bias_initializer_linear: WeightInitializer
+    orbital_use_bias: bool = True
+    orbital_isotropic_decay: bool = False
 
     @flax.linen.compact
     def __call__(
@@ -117,8 +132,21 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
              element is a tuples of arrays of shape (..., nelec, d), where the first
              array in the tuple is sign(results) and the second is log(abs(results)).
         """
+        nelec_total = eq_inputs.shape[-2]
+        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        ferminet_orbital_layer = FermiNetOrbitalLayer(
+            self.spin_split,
+            nelec_per_spin,
+            self.orbital_kernel_initializer_linear,
+            self.orbital_kernel_initializer_envelope_dim,
+            self.orbital_kernel_initializer_envelope_ion,
+            self.orbital_bias_initializer_linear,
+            self.orbital_use_bias,
+            self.orbital_isotropic_decay,
+        )
+
         # Calculate orbital matrices as list of shape [(..., nelec[i], nelec[i])]
-        orbital_matrix_list = self._ferminet_orbital_layer(eq_inputs, r_ei)
+        orbital_matrix_list = ferminet_orbital_layer(eq_inputs, r_ei)
         # Calculate slog cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
         slog_cofactors = jax.tree_map(slog_cofactor_antieq, orbital_matrix_list)
         # Expand arrays to (..., nelec[i], 1)] to allow broadcasting to input shape
