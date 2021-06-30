@@ -1,10 +1,11 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Callable, List, Tuple
+from typing import Callable, List, Sequence, Tuple, Union
 
 import flax
+import jax
 import jax.numpy as jnp
 
-from .core import get_alternating_signs
+from .core import get_alternating_signs, is_tuple_of_arrays
 
 
 def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -65,12 +66,22 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
+         spin_split (int or Sequence[int]): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
         ferminet_orbital_layer (callable): a FerminetOrbitalLayer instance. This will be
         used to generate the orbital matrices to which the cofactor equivariance will
         be applied. The orbital layer must generate square orbitals, i.e. norbitals must
         equal nelec for each spin.
     """
 
+    spin_split: Union[int, Sequence[int]]
     ferminet_orbital_layer: Callable[[jnp.ndarray, jnp.ndarray], List[jnp.ndarray]]
 
     def setup(self):
@@ -82,7 +93,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     @flax.linen.compact
     def __call__(
         self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> List[Tuple[jnp.ndarray, jnp.ndarray]]:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
@@ -102,22 +113,28 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
                 as an extra input to the orbital layer.
 
         Returns:
-            Tuple[jnp.ndarray, jnp.ndarray]: tuple of arrays of shape (..., nelec, d),
-            where the first is sign(results) and the second is log(abs(results))
+            (List[Tuple[jnp.ndarray, jnp.ndarray]]): per-spin list where each list
+             element is a tuples of arrays of shape (..., nelec, d), where the first
+             array in the tuple is sign(results) and the second is log(abs(results)).
         """
         # Calculate orbital matrices as list of shape [(..., nelec[i], nelec[i])]
         orbital_matrix_list = self._ferminet_orbital_layer(eq_inputs, r_ei)
         # Calculate slog cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
-        slog_cofactors = [slog_cofactor_antieq(m) for m in orbital_matrix_list]
-        # Concatenate signs and logs to get arrays of shape (..., nelec)
-        sign_cofactors = jnp.concatenate([slog[0] for slog in slog_cofactors], axis=-1)
-        log_cofactors = jnp.concatenate([slog[1] for slog in slog_cofactors], axis=-1)
+        slog_cofactors = jax.tree_map(slog_cofactor_antieq, orbital_matrix_list)
+        # Expand arrays to (..., nelec[i], 1)] to allow broadcasting to input shape
+        expanded_cofactors = jax.tree_map(
+            lambda c: jnp.expand_dims(c, -1), slog_cofactors
+        )
 
-        # Calculate signs and logs of inputs to get arrays of shape (..., nelec, d)
-        sign_inputs = jnp.sign(eq_inputs)
-        log_inputs = jnp.log(jnp.abs(eq_inputs))
+        # Calculate signs and logs and split results each to shape [(..., nelec[i], d)]
+        sign_inputs = jnp.split(jnp.sign(eq_inputs), self.spin_split, axis=-2)
+        log_inputs = jnp.split(jnp.log(jnp.abs(eq_inputs)), self.spin_split, axis=-2)
 
-        # Expand dims of cofactor results to allow broadcasting to input shape
-        sign_outputs = sign_inputs * jnp.expand_dims(sign_cofactors, -1)
-        log_outputs = log_inputs + jnp.expand_dims(log_cofactors, -1)
-        return (sign_outputs, log_outputs)
+        # Combine signs and logs into shape [((..., nelec[i], d), (..., nelec[i], d))]
+        return jax.tree_multimap(
+            lambda si, li, c: (si * c[0], li + c[1]),
+            sign_inputs,
+            log_inputs,
+            expanded_cofactors,
+            is_leaf=is_tuple_of_arrays,
+        )

@@ -1,18 +1,14 @@
 """Antisymmetry parts to compose into a model."""
 import functools
 import itertools
-from typing import Any, Callable, Tuple
+from typing import Callable, Tuple
 
 import flax
 import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import PyTree
-from .core import get_alternating_signs
-
-
-def _istupleofarrays(x: Any) -> bool:
-    return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
+from .core import get_alternating_signs, is_tuple_of_arrays
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> jnp.ndarray:
@@ -42,7 +38,7 @@ def slogdet_product(xs: PyTree) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     slogdets = jax.tree_map(jnp.linalg.slogdet, xs)
 
-    slogdet_leaves, _ = jax.tree_flatten(slogdets, _istupleofarrays)
+    slogdet_leaves, _ = jax.tree_flatten(slogdets, is_tuple_of_arrays)
     sign_prod, log_prod = functools.reduce(
         lambda a, b: (a[0] * b[0], a[1] + b[1]), slogdet_leaves
     )
@@ -230,7 +226,9 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             self.fn_to_antisymmetrize on all leaves of xs.
         """
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
-        perms_and_signs_leaves, _ = jax.tree_flatten(perms_and_signs, _istupleofarrays)
+        perms_and_signs_leaves, _ = jax.tree_flatten(
+            perms_and_signs, is_tuple_of_arrays
+        )
         nleaves = len(perms_and_signs_leaves)
         nperms_per_leaf = [leaf[0].shape[-3] for leaf in perms_and_signs_leaves]
 

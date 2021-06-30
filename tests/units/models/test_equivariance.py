@@ -33,7 +33,7 @@ def test_electron_electron_add_norm():
 
 def test_ferminet_one_electron_layer_shape_and_equivariance():
     """Test the equivariance of the one-electron layer in the FermiNet."""
-    nchains, nelec_total, nion, d, permutation, spin_split = get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, spin_split, _ = get_elec_hyperparams()
 
     (
         input_1e,
@@ -78,7 +78,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
 
 def test_ferminet_two_electron_layer_shape_and_equivariance():
     """Test that the two-electron stream is doubly equivariant."""
-    nchains, nelec_total, nion, d, permutation, _ = get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, _, _ = get_elec_hyperparams()
 
     (
         _,

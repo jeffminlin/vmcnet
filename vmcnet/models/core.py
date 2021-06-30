@@ -1,6 +1,6 @@
 """Core model building parts."""
 
-from typing import Callable, Sequence, Set, Tuple, Union
+from typing import cast, Callable, Sequence, Tuple, Union
 
 import flax
 import jax
@@ -11,8 +11,14 @@ from vmcnet.models.weights import (
     get_bias_initializer,
     get_kernel_initializer,
 )
+from vmcnet.utils.typing import PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
+
+
+def is_tuple_of_arrays(x: PyTree) -> bool:
+    """Returns True if x is a tuple of jnp.ndarray objects."""
+    return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
 
 
 def get_alternating_signs(n: int) -> jnp.ndarray:

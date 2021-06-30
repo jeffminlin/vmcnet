@@ -11,9 +11,10 @@ def get_elec_hyperparams():
     nion = 3
     d = 3
     permutation = (1, 0, 2, 5, 6, 3, 4)
-
     spin_split = (3,)
-    return nchains, nelec_total, nion, d, permutation, spin_split
+    split_perm = [(1, 0, 2), (2, 3, 0, 1)]
+
+    return nchains, nelec_total, nion, d, permutation, spin_split, split_perm
 
 
 def get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation):

@@ -1,4 +1,5 @@
 """Test model antiequivariances."""
+import chex
 import jax.numpy as jnp
 import numpy as np
 import vmcnet.models as models
@@ -49,7 +50,15 @@ def test_slog_cofactor_antiequivarance():
 
 def test_orbital_cofactor_layer_antiequivariance():
     """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
-    nchains, nelec_total, nion, d, permutation, spin_split = get_elec_hyperparams()
+    (
+        nchains,
+        nelec_total,
+        nion,
+        d,
+        permutation,
+        spin_split,
+        split_perm,
+    ) = get_elec_hyperparams()
     (
         input_1e,
         _,
@@ -72,23 +81,27 @@ def test_orbital_cofactor_layer_antiequivariance():
         kernel_initializer,
         bias_initializer,
     )
-    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(orbital_layer)
+    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
+        spin_split, orbital_layer
+    )
     params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
 
-    output_signs, output_logs = orbital_cofactor_antieq.apply(
-        params, input_1e, input_ei
-    )
-    assert output_signs.shape == (nchains, nelec_total, d * (1 + nion))
-    assert output_logs.shape == (nchains, nelec_total, d * (1 + nion))
+    output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
 
-    perm_signs, perm_logs = orbital_cofactor_antieq.apply(
-        params, perm_input_1e, perm_input_ei
-    )
+    nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
+    nspins = len(nelec_per_spin)
+    assert len(output) == nspins
+    for i in range(nspins):
+        assert len(output[i]) == 2
+        chex.assert_shape(output[i][0], (nchains, nelec_per_spin[i], d * (1 + nion)))
 
-    # First spin permutation is odd; second spin permutation is even
-    flips = jnp.reshape(jnp.array([-1, -1, -1, 1, 1, 1, 1]), (1, 7, 1))
-    expected_perm_signs = output_signs[:, permutation, :] * flips
-    expected_perm_logs = output_logs[:, permutation, :]
+    perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
 
-    np.testing.assert_allclose(perm_signs, expected_perm_signs)
-    np.testing.assert_allclose(perm_logs, expected_perm_logs)
+    flips = [-1, 1]  # First spin permutation is odd; second is even
+    for i in range(nspins):
+        signs, logs = output[i]
+        perm_signs, perm_logs = perm_output[i]
+        expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
+        expected_perm_logs = logs[:, split_perm[i], :]
+        np.testing.assert_allclose(perm_signs, expected_perm_signs)
+        np.testing.assert_allclose(perm_logs, expected_perm_logs)
