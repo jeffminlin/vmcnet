@@ -1,14 +1,12 @@
 """Core local energy and gradient construction routines."""
-from typing import Callable, Sequence, Tuple, TypeVar, cast
+from typing import Callable, Sequence, Tuple, cast
 
 import jax
 import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import PyTree
-
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
+from vmcnet.utils.typing import P
 
 
 def combine_local_energy_terms(

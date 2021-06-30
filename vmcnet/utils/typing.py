@@ -13,6 +13,9 @@ T = TypeVar("T", bound=PyTree)
 # and wave function amplitudes, or other auxilliary MCMC data
 D = TypeVar("D", bound=PyTree)
 
+# TypeVar for MCMC metadata which is required to take a metropolis step.
+M = TypeVar("M", bound=PyTree)
+
 # TypeVar for a pytree containing model params
 P = TypeVar("P", bound=PyTree)
 

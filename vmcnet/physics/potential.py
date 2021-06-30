@@ -1,11 +1,9 @@
 """Potential energy terms."""
-from typing import Callable, TypeVar
+from typing import Callable
 
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import PyTree
-
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
+from vmcnet.utils.typing import P
 
 
 def _compute_displacements(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:

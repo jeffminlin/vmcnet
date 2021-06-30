@@ -1,13 +1,11 @@
 """Kinetic energy terms."""
-from typing import Callable, TypeVar, Union
+from typing import Callable, Union
 
 import jax
 import jax.numpy as jnp
 
 import vmcnet.physics as physics
-from vmcnet.utils.typing import PyTree
-
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
+from vmcnet.utils.typing import P
 
 
 def create_continuous_kinetic_energy(

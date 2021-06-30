@@ -1,5 +1,5 @@
 """Harmonic oscillator model."""
-from typing import Callable, TypeVar
+from typing import Callable
 
 import flax
 import jax
@@ -7,9 +7,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import PyTree
-
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
+from vmcnet.utils.typing import P
 
 
 def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:

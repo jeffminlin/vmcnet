@@ -1,19 +1,15 @@
 """Shared routines for position amplitude metropolis data."""
-from typing import Any, Callable, Optional, Tuple, TypeVar, TypedDict
+from typing import Any, Callable, Optional, Tuple, TypedDict
 
 import jax
 import jax.numpy as jnp
+
 import vmcnet.mcmc.metropolis as metropolis
 from vmcnet.utils.distribute import (
     replicate_all_local_devices,
     default_distribute_data,
 )
-from vmcnet.utils.typing import PyTree
-
-# Represents a pytree or pytree-like object containing model params
-P = TypeVar("P", bound=PyTree)
-# Represents metadata which is required to take a metropolis step.
-M = TypeVar("M", bound=PyTree)
+from vmcnet.utils.typing import P, M
 
 
 class PositionAmplitudeWalkerData(TypedDict):
