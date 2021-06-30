@@ -10,19 +10,13 @@ from collections import deque
 from dataclasses import dataclass, field
 import threading
 import queue
-from typing import Dict, NamedTuple, Optional, Tuple, TypeVar
+from typing import Dict, NamedTuple, Optional, Tuple
 
 import jax.numpy as jnp
 import vmcnet.utils.io as io
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import D, P, S
 
 from .typing import CheckpointData
-
-# represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
-# and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D", bound=PyTree)
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
-S = TypeVar("S")  # represents optimizer state
 
 CHECKPOINT_FILE_NAME = "checkpoint.npz"
 
@@ -239,9 +233,9 @@ def save_metrics_and_handle_checkpoints(
     logdir: str = None,
     variance_scale: float = 10.0,
     checkpoint_every: int = None,
-    best_checkpoint_data: Optional[CheckpointData] = None,
+    best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
-) -> Tuple[jnp.float32, str, Optional[CheckpointData]]:
+) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
     """Checkpoint the current state of the VMC loop.
 
     There are two situations to checkpoint:
@@ -360,8 +354,8 @@ def track_and_save_best_checkpoint(
     variance_scale: float,
     checkpoint_str: str,
     best_checkpoint_every: int,
-    best_checkpoint_data: Optional[CheckpointData],
-) -> Tuple[str, jnp.float32, Optional[CheckpointData]]:
+    best_checkpoint_data: Optional[CheckpointData[D, P, S]],
+) -> Tuple[str, jnp.float32, Optional[CheckpointData[D, P, S]]]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
 
     Args:

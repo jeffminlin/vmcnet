@@ -1,18 +1,12 @@
 """Proposal and acceptance fns for Metropolis-Hastings Markov-Chain Monte Carlo."""
 import logging
-from typing import Callable, Tuple, TypeVar, cast
+from typing import Callable, Tuple, cast
 
 import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import PyTree
-
-# Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
-# and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D", bound=PyTree)
-# Represents a pytree or pytree-like object containing model params
-P = TypeVar("P", bound=PyTree)
+from vmcnet.utils.typing import D, P
 
 
 def make_metropolis_step(

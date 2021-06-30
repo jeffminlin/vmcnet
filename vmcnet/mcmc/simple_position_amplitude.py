@@ -1,6 +1,6 @@
 """Helper functions for position amplitude data with fixed-width gaussian steps."""
 
-from typing import Callable, TypeVar, TypedDict
+from typing import Callable, TypedDict
 
 import jax.numpy as jnp
 
@@ -9,13 +9,7 @@ from .position_amplitude_core import (
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
-from vmcnet.utils.typing import PyTree
-
-# Represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
-# and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D", bound=PyTree)
-# Represents a pytree or pytree-like object containing model params
-P = TypeVar("P", bound=PyTree)
+from vmcnet.utils.typing import P
 
 
 class SimplePositionAmplitudeData(TypedDict):

@@ -1,16 +1,10 @@
 """Main VMC loop."""
-from typing import Callable, Dict, Tuple, TypeVar
+from typing import Callable, Dict, Tuple
 
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import PyTree
-
-# represents a pytree or pytree-like object containing MCMC data, e.g. walker positions
-# and wave function amplitudes, or other auxilliary MCMC data
-D = TypeVar("D", bound=PyTree)
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
-S = TypeVar("S")  # represents optimizer state
+from vmcnet.utils.typing import D, P, S
 
 
 def vmc_loop(

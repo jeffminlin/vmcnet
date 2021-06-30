@@ -1,18 +1,14 @@
 """Helper functions for distributing computation to multiple devices."""
 import functools
-from typing import Callable, Tuple, TypeVar
+from typing import Callable, Tuple
 
 import jax
 import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import D, P, PyTree, S, T
 
-T = TypeVar("T", bound=PyTree)  # representing an arbitrary pytree
-D = TypeVar("D", bound=PyTree)  # represents a pytree-like object containing MCMC data
-P = TypeVar("P", bound=PyTree)  # represents a pytree containing model params
-S = TypeVar("S")  # represents optimizer state
 
 # axis name to pmap over
 PMAP_AXIS_NAME = "pmap_axis"
