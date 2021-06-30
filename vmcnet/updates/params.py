@@ -1,5 +1,5 @@
 """Routines which handle model parameter updating."""
-from typing import Callable, Dict, Tuple, TypeVar
+from typing import Callable, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -8,10 +8,7 @@ from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-
-D = TypeVar("D")  # represents MCMC data
-P = TypeVar("P")  # Represents model parameters
-S = TypeVar("S")  # represents optimizer state
+from vmcnet.utils.typing import D, P, S
 
 
 def create_grad_energy_update_param_fn(

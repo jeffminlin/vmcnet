@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.mcmc as mcmc
+from vmcnet.utils.typing import PyTree
 
 
 def make_dummy_log_f():
@@ -66,6 +67,6 @@ def dummy_model_apply(params, x):
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
 
 
-def assert_pytree_allclose(pytree1, pytree2):
+def assert_pytree_allclose(pytree1: PyTree, pytree2: PyTree):
     """Use jax.tree_map to assert equality at all leaves of two pytrees."""
     jax.tree_map(lambda l1, l2: np.testing.assert_allclose(l1, l2), pytree1, pytree2)

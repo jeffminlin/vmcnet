@@ -1,5 +1,5 @@
 """Harmonic oscillator model."""
-from typing import Callable, TypeVar
+from typing import Callable
 
 import flax
 import jax
@@ -7,8 +7,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+from vmcnet.utils.typing import P
 
 
 def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:
@@ -185,7 +184,7 @@ def make_harmonic_oscillator_local_energy(
     """
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
 
-    def potential_fn(params, x):
+    def potential_fn(params: P, x: jnp.ndarray):
         del params
         return harmonic_oscillator_potential(omega, x)
 

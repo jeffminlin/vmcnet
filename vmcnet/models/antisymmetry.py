@@ -7,20 +7,22 @@ import flax
 import jax
 import jax.numpy as jnp
 
+from vmcnet.utils.typing import PyTree
 
-def _istupleofarrays(x) -> bool:
+
+def _istupleofarrays(x: Any) -> bool:
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
 
 
-def _reduce_sum_over_leaves(xs) -> jnp.ndarray:
+def _reduce_sum_over_leaves(xs: PyTree) -> jnp.ndarray:
     return functools.reduce(lambda a, b: a + b, jax.tree_leaves(xs))
 
 
-def _reduce_prod_over_leaves(xs) -> jnp.ndarray:
+def _reduce_prod_over_leaves(xs: PyTree) -> jnp.ndarray:
     return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
 
 
-def slogdet_product(xs) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def slogdet_product(xs: PyTree) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Compute the (sign, log) of the product of determinants of the leaves of a pytree.
 
     Args:
@@ -42,7 +44,7 @@ def slogdet_product(xs) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return sign_prod, log_prod
 
 
-def logdet_product(xs) -> jnp.ndarray:
+def logdet_product(xs: PyTree) -> jnp.ndarray:
     """Compute the log|prod_x det(x)| of the leaves x of a pytree (throwing away sign).
 
     Because we don't need to carry sign, the logic can be made slightly simpler and
@@ -125,7 +127,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
             antisymmetrizing the ith function on the ith input. Defaults to True.
     """
 
-    fns_to_antisymmetrize: Any  # pytree of Callables with the same treedef as input
+    fns_to_antisymmetrize: PyTree  # pytree of Callables with the same treedef as input
     logabs: bool = True
 
     def _single_leaf_call(
@@ -145,7 +147,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         return jnp.sum(signed_perms_out, axis=(-1, -2))
 
     @flax.linen.compact
-    def __call__(self, xs) -> jnp.ndarray:
+    def __call__(self, xs: PyTree) -> jnp.ndarray:
         """Antisymmetrize the leaves of self.fns_to_antisymmetrize on the leaves of xs.
 
         Args:
@@ -208,7 +210,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
-    def __call__(self, xs) -> jnp.ndarray:
+    def __call__(self, xs: PyTree) -> jnp.ndarray:
         """Antisymmetrize self.fn_to_antisymmetrize over the leaves of xs.
 
         Args:

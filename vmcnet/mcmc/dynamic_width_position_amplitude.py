@@ -1,18 +1,16 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
-from typing import Callable, TypeVar, TypedDict
+from typing import Callable, TypedDict
 
 import jax
 import jax.numpy as jnp
-from vmcnet.utils.distribute import mean_all_local_devices
 
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
-
-# Represents a pytree or pytree-like object containing model params
-P = TypeVar("P")
+from vmcnet.utils.distribute import mean_all_local_devices
+from vmcnet.utils.typing import P
 
 
 class MoveMetadata(TypedDict):

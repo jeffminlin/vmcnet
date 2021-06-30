@@ -1,9 +1,9 @@
 """Potential energy terms."""
-from typing import Callable, TypeVar
+from typing import Callable
 
 import jax.numpy as jnp
 
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+from vmcnet.utils.typing import P
 
 
 def _compute_displacements(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
@@ -66,7 +66,7 @@ def create_electron_ion_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params, x):
+    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         del params
         electron_ion_displacements = _compute_displacements(x, ion_locations)
         electron_ion_distances = _compute_soft_norm(
@@ -97,7 +97,7 @@ def create_electron_electron_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params, x):
+    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         del params
         electron_electron_displacements = _compute_displacements(x, x)
         electron_electron_distances = _compute_soft_norm(
@@ -134,7 +134,7 @@ def create_ion_ion_coulomb_potential(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )
 
-    def potential_fn(params, x):
+    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         del params, x
         return constant_potential
 

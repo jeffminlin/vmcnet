@@ -1,13 +1,12 @@
 """Exactly solvable single-electron hydrogen-like atom."""
-from typing import Callable, TypeVar, Union
+from typing import Callable, Union
 
 import flax
 import jax.numpy as jnp
 
 import vmcnet.physics as physics
 import vmcnet.models as models
-
-P = TypeVar("P")  # represents a pytree or pytree-like object containing model params
+from vmcnet.utils.typing import P
 
 
 class HydrogenLikeWavefunction(flax.linen.Module):
