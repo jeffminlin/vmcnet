@@ -10,7 +10,7 @@ from vmcnet.models.antisymmetry import (
     SplitBruteForceAntisymmetrize,
     ComposedBruteForceAntisymmetrize,
 )
-from vmcnet.models.core import Activation, SimpleResNet, _log_linear_exp
+from vmcnet.models.core import Activation, SimpleResNet, log_linear_exp
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -269,7 +269,7 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
         signs, log_dets = slogdet_product(orbitals)
-        _, log_psi = _log_linear_exp(signs, log_dets, axis=0)
+        _, log_psi = log_linear_exp(signs, log_dets, axis=0)
         return jnp.squeeze(log_psi, axis=0)
 
 

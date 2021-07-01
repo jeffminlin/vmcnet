@@ -1,5 +1,5 @@
 """Core model building parts."""
-from typing import Callable, Optional, cast
+from typing import Callable, Optional, Tuple, cast
 
 import flax
 import jax
@@ -15,12 +15,12 @@ from vmcnet.models.weights import (
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
-def _log_linear_exp(
+def log_linear_exp(
     signs: jnp.ndarray,
     vals: jnp.ndarray,
     weights: Optional[jnp.ndarray] = None,
     axis: int = 0,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Stably compute log(abs(sum_i(sign_i * exp(vals_i)))) along an axis.
 
     Args:
@@ -40,18 +40,22 @@ def _log_linear_exp(
     max_val = jnp.max(vals, axis=axis, keepdims=True)
     terms_divided_by_max = signs * jnp.exp(vals - max_val)
     if weights is not None:
-        batch_dims = terms_divided_by_max.shape[:axis]
-        weights = jnp.reshape(weights, batch_dims + weights.shape)
         if axis < 0:
             axis = terms_divided_by_max.ndim + axis
         transformed_divided_by_max = jax.lax.dot_general(
-            weights, terms_divided_by_max, (((0,), (axis,)), (batch_dims, batch_dims))
+            weights,
+            terms_divided_by_max,
+            (((0,), (axis,)), ((), ())),
         )
+        transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, 0, axis)
     else:
         transformed_divided_by_max = jnp.sum(
             terms_divided_by_max, axis=axis, keepdims=True
         )
-    return jnp.log(jnp.abs(transformed_divided_by_max)) + max_val
+
+    signs = jnp.sign(transformed_divided_by_max)
+    vals = jnp.log(jnp.abs(transformed_divided_by_max)) + max_val
+    return signs, vals
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
