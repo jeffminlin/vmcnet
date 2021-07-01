@@ -32,17 +32,14 @@ def test_slog_cofactor_output_with_batches():
 def test_slog_cofactor_antiequivarance():
     """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
-    permutation = (1, 0, 2)
+    permutation = jnp.array([1, 0, 2])
     perm_input = input[permutation, :]
 
     output_signs, output_logs = antieq.slog_cofactor_antieq(input)
     perm_signs, perm_logs = antieq.slog_cofactor_antieq(perm_input)
 
-    # Fancy indexing like output_signs[permutation] doesn't work on single
-    # dimensional arrays, as jax thinks the elements of permutation are intended for
-    # different array axes. Hence, use jnp.take.
-    expected_perm_signs = -jnp.take(output_signs, permutation)
-    expected_perm_logs = jnp.take(output_logs, permutation)
+    expected_perm_signs = -output_signs[permutation]
+    expected_perm_logs = output_logs[permutation]
 
     np.testing.assert_allclose(perm_signs, expected_perm_signs)
     np.testing.assert_allclose(perm_logs, expected_perm_logs)

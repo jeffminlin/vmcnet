@@ -19,10 +19,6 @@ def _reduce_prod_over_leaves(xs: PyTree) -> jnp.ndarray:
     return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
 
 
-def _get_alternating_signs(n: int) -> jnp.ndarray:
-    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
-
-
 def slogdet_product(xs: PyTree) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Compute the (sign, log) of the product of determinants of the leaves of a pytree.
 

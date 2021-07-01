@@ -159,7 +159,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         log_inputs = jnp.split(jnp.log(jnp.abs(eq_inputs)), self.spin_split, axis=-2)
 
         # Combine signs and logs into shape [((..., nelec[i], d), (..., nelec[i], d))]
-        return jax.tree_multimap(
+        return jax.tree_map(
             lambda si, li, c: (si * c[0], li + c[1]),
             sign_inputs,
             log_inputs,
