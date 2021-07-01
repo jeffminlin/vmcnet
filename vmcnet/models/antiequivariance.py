@@ -1,6 +1,5 @@
 """Antiequivariant parts to compose into a model."""
-import functools
-from typing import Callable, Sequence, Union
+from typing import Sequence, Union
 
 import flax
 import jax
@@ -8,9 +7,8 @@ import jax.numpy as jnp
 
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import FermiNetOrbitalLayer
-from .weights import WeightInitializer
 from vmcnet.utils.typing import SLArray, SpinSplitSLArray
-from vmcnet.utils.slog_helpers import slog_multiply, slog_sum
+from .weights import WeightInitializer
 
 
 def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
@@ -169,81 +167,3 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             expanded_cofactors,
             is_leaf=is_tuple_of_arrays,
         )
-
-
-def get_odd_symmetry_signs(nelec_per_spin: Sequence[int]):
-    """Gets odd symmetry signs."""
-    nspins = len(nelec_per_spin)
-
-    powers_per_spin = jnp.concatenate(
-        [jnp.ones(nelec_per_spin[i], dtype=int) * 2 ** i for i in range(nspins)]
-    )
-    binary_ints = jnp.arange(2 ** nspins)
-    combined_signs = (-1) ** jnp.sign(
-        jnp.expand_dims(powers_per_spin, 0) & jnp.expand_dims(binary_ints, -1)
-    )
-    return combined_signs
-
-
-def get_odd_signs_one_spin(i_spin: int, nspins: int) -> jnp.ndarray:
-    """Gots odd signs for one spin."""
-    nsyms = 2 ** nspins
-    sym_ints = jnp.arange(nsyms)
-    return (-1) ** jnp.sign((2 ** i_spin) & sym_ints)
-
-
-def get_all_odd_signs(nspins: int) -> jnp.ndarray:
-    """Gets odd signs."""
-    nsyms = 2 ** nspins
-    sym_ints = jnp.expand_dims(jnp.arange(nsyms), axis=-1)
-    i_spins = jnp.expand_dims(jnp.arange(nspins), axis=0)
-    signs_per_spin = (-1) ** jnp.sign((2 ** i_spins) & sym_ints)
-    return jnp.product(signs_per_spin, axis=-1)
-
-
-# x leaves are shape (..., nelec[i], d),
-# output leaves are shape (..., 2**nspins, nelec[i], d)
-def get_odd_symmetries_one_spin(x: SLArray, i_spin: int, nspins: int) -> SLArray:
-    """Generates odd symmetries of single spin part of slog array."""
-    nsyms = 2 ** nspins
-    sym_signs = get_odd_signs_one_spin(i_spin, nspins)
-    sym_signs = jnp.reshape(sym_signs, (nsyms, 1, 1))
-    sym_logs = jnp.zeros((nsyms, 1, 1))
-
-    x = jax.tree_map(lambda a: jnp.expand_dims(a, -3), x)
-
-    return slog_multiply(x, (sym_signs, sym_logs))
-
-
-# x is shape [((..., nelec[i], d),(..., nelec[i], d))]
-# output is shape [((..., 2**nspins, nelec[i], d),(..., 2**nspins, nelec[i], d))]
-def get_all_odd_symmetries(x: SpinSplitSLArray) -> SpinSplitSLArray:
-    """Generates odd symmetries of spin-split slog array."""
-    nspins = len(x)
-    i_spin_list = [i for i in range(nspins)]
-    get_odd_symmetries = functools.partial(get_odd_symmetries_one_spin, nspins=nspins)
-    return jax.tree_multimap(
-        get_odd_symmetries, x, i_spin_list, is_leaf=is_tuple_of_arrays
-    )
-
-
-# f is SpinSplitArray
-def make_fn_odd(
-    fn: Callable[[SpinSplitSLArray], SLArray]
-) -> Callable[[SpinSplitSLArray], SLArray]:
-    """Make a fn odd."""
-    # x leaves are shape (..., nelec[i], d)
-    def odd_fn(x: SpinSplitSLArray):
-        nspins = len(x)
-        # symmetries leaves are shape (..., 2**nspins, nelec[i], d)
-        symmetries = get_all_odd_symmetries(x)
-        # All results are shape (..., 2**nspins, d')
-        all_results = fn(symmetries)
-        odd_signs = jnp.expand_dims(get_all_odd_signs(nspins), axis=-1)
-        signed_results = (all_results[0] * odd_signs, all_results[1])
-
-        # Collapsed results are shape (..., d')
-        collapsed_results = slog_sum(signed_results, axis=-2)
-        return collapsed_results
-
-    return odd_fn

@@ -1,5 +1,4 @@
 """Helper functions for dealing with structured values."""
-from typing import Sequence
 
 import jax.numpy as jnp
 

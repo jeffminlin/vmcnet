@@ -1,0 +1,158 @@
+"""Test model antiequivariances."""
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+from tests.test_utils import assert_pytree_allclose
+import vmcnet.models.odd_symmetry as odd_sym
+from vmcnet.utils.slog_helpers import (
+    array_to_slog,
+    array_from_slog,
+)
+from vmcnet.utils.typing import SLArray, SpinSplitSLArray
+
+
+def test_get_odd_symmetries_one_spin():
+    """Test odd symmetry generation for a single spin."""
+    nspins = 3
+    signs = jnp.array([[[1, 1], [1, -1]], [[-1, 1], [1, 1]]])
+    logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
+
+    # Test for ispin=0, sign should alternate at each index
+    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+        (signs, logs), 0, nspins, axis=-3
+    )
+    expected_signs = jnp.stack(
+        [signs, -signs, signs, -signs, signs, -signs, signs, -signs],
+        axis=-3,
+    )
+    expected_logs = jnp.stack([logs, logs, logs, logs, logs, logs, logs, logs], axis=-3)
+    np.testing.assert_allclose(sym_signs, expected_signs)
+    np.testing.assert_allclose(sym_logs, expected_logs)
+
+    # Test for ispin=1, sign should alternate every two indices
+    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+        (signs, logs), 1, nspins, axis=-3
+    )
+    expected_signs = jnp.stack(
+        [signs, signs, -signs, -signs, signs, signs, -signs, -signs],
+        axis=-3,
+    )
+    np.testing.assert_allclose(sym_signs, expected_signs)
+    np.testing.assert_allclose(sym_logs, expected_logs)
+
+    # Test for ispin=3, sign should alternate every four indices
+    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+        (signs, logs), 2, nspins, axis=-3
+    )
+    expected_signs = jnp.stack(
+        [signs, signs, signs, signs, -signs, -signs, -signs, -signs],
+        axis=-3,
+    )
+    np.testing.assert_allclose(sym_signs, expected_signs)
+    np.testing.assert_allclose(sym_logs, expected_logs)
+
+
+def test_get_all_odd_symmetries():
+    """Test odd symmetry generation for multiple spins."""
+    spin1_signs = jnp.array([[[1, 1], [1, -1]], [[-1, 1], [1, 1]]])
+    spin2_signs = jnp.array([[[1, -1], [-1, -1], [1, 1]], [[-1, 1], [-1, 1], [1, -1]]])
+    spin1_logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
+    spin2_logs = jnp.array(
+        [[[-2.9, 2.0], [1.2, 0.8], [0.3, 0.2]], [[0.3, -0.2], [-10, 0], [-11, -1]]]
+    )
+    inputs = [(spin1_signs, spin1_logs), (spin2_signs, spin2_logs)]
+
+    # Test for ispin=0, sign should alternate at each index
+    syms = odd_sym.get_all_odd_symmetries(inputs)
+    expected_syms = [
+        (
+            jnp.stack([spin1_signs, -spin1_signs, spin1_signs, -spin1_signs], axis=-3),
+            jnp.stack([spin1_logs, spin1_logs, spin1_logs, spin1_logs], axis=-3),
+        ),
+        (
+            jnp.stack([spin2_signs, spin2_signs, -spin2_signs, -spin2_signs], axis=-3),
+            jnp.stack([spin2_logs, spin2_logs, spin2_logs, spin2_logs], axis=-3),
+        ),
+    ]
+    assert_pytree_allclose(syms, expected_syms)
+
+
+def test_make_fn_odd_one_spin():
+    """Test making a function of one spin odd."""
+    nbatch = 5
+    nelec = 3
+    d = 2
+    dhidden = 4
+    dout = 3
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    inputs = jax.random.normal(key, (nbatch, nelec, d))
+    neg_inputs = -inputs
+    weights1 = jax.random.normal(subkey, (nelec * d, dhidden))
+    weights2 = jax.random.normal(subkey, (dhidden, dout))
+    slog_inputs = [array_to_slog(inputs)]  # one spin block only
+    neg_slog_inputs = [array_to_slog(neg_inputs)]
+
+    def fn(x: SpinSplitSLArray) -> SLArray:
+        (signs, logs) = x[0]
+
+        values = signs * jnp.exp(logs)
+        values = values.reshape((values.shape[0], values.shape[1], nelec * d))
+        output = jnp.matmul(values, weights1)
+        output = jnp.tanh(output)
+        output = jnp.matmul(output, weights2)
+        output = jnp.tanh(output)
+        return array_to_slog(output)
+
+    odd_fn = odd_sym.make_fn_odd(fn)
+    result = odd_fn(slog_inputs)
+    neg_result = odd_fn(neg_slog_inputs)
+
+    np.testing.assert_allclose(neg_result[0], -result[0])
+    np.testing.assert_allclose(neg_result[1], result[1])
+
+
+def test_make_fn_odd_multi_spin():
+    """Test making a function of multiple spins odd with respect to each."""
+    nbatch = 5
+    nelec_per_spin = (2, 3, 4)
+    nelec_total = 9
+    d = 2
+    dhidden = 4
+    dout = 3
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    inputs = [jax.random.normal(key, (nbatch, n, d)) for n in nelec_per_spin]
+    flip_sign_inputs = [inputs[0], -inputs[1], inputs[2]]
+    same_sign_inputs = [inputs[0], -inputs[1], -inputs[2]]
+
+    weights1 = jax.random.normal(subkey, (nelec_total * d, dhidden))
+    weights2 = jax.random.normal(subkey, (dhidden, dout))
+    slog_inputs = [array_to_slog(x) for x in inputs]  # one spin block only
+    flip_slog_inputs = [array_to_slog(x) for x in flip_sign_inputs]
+    same_slog_inputs = [array_to_slog(x) for x in same_sign_inputs]
+
+    def fn(x: SpinSplitSLArray) -> SLArray:
+        all_signs = jnp.concatenate([s[0] for s in x], axis=-2)
+        all_logs = jnp.concatenate([s[1] for s in x], axis=-2)
+        all_vals = array_from_slog((all_signs, all_logs))
+        all_vals = jnp.reshape(
+            all_vals, (all_vals.shape[0], all_vals.shape[1], nelec_total * d)
+        )
+        output = jnp.matmul(all_vals, weights1)
+        output = jnp.tanh(output)
+        output = jnp.matmul(output, weights2)
+        output = jnp.tanh(output)
+        return array_to_slog(output)
+
+    odd_fn = odd_sym.make_fn_odd(fn)
+    result = odd_fn(slog_inputs)
+    flip_sign_result = odd_fn(flip_slog_inputs)
+    same_sign_result = odd_fn(same_slog_inputs)
+
+    expected_neg_result = (-result[0], result[1])
+    assert_pytree_allclose(flip_sign_result, expected_neg_result, rtol=1e-5)
+    assert_pytree_allclose(result, same_sign_result, rtol=1e-5)
