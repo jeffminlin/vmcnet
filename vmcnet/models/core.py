@@ -21,7 +21,20 @@ def log_linear_exp(
     weights: Optional[jnp.ndarray] = None,
     axis: int = 0,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Stably compute log(abs(sum_i(sign_i * exp(vals_i)))) along an axis.
+    """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)).
+
+    In order to avoid overflow when computing
+
+        log(abs(sum_i(sign_i * w_ij * exp(vals_i)))),
+
+    the largest exp(val_i) is divided out from all the values and added back in after
+    the outer log, i.e.
+
+        log(abs(sum_i(sign_i * w_ij * exp(vals_i - max)))) + max.
+
+    This trick also avoids the underflow issue of when all vals are small enough that
+    exp(val_i) is approximately 0 for all i. The output in this case is just the maximum
+    value.
 
     Args:
         signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
@@ -31,11 +44,12 @@ def log_linear_exp(
         weights (jnp.ndarray, optional): weights of a linear transformation to apply to
             the given axis, with shape (d, d'). If not provided, a simple sum is taken
             along this axis, equivalent to (d, 1) weights equal to 1. Defaults to None.
-        axis (int, optional): axis along which to take the sum. Defaults to 0.
+        axis (int, optional): axis along which to take the sum and max. Defaults to 0.
 
     Returns:
-        jnp.ndarray: outputs with shape (..., d', ...), where d' = 1 if weights is None,
-        and d' = weights.shape[1] otherwise.
+        (jnp.ndarray, jnp.ndarray): sign of linear combination, log of linear
+        combination. Both outputs have shape (..., d', ...), where d' = 1 if weights is
+        None, and d' = weights.shape[1] otherwise.
     """
     max_val = jnp.max(vals, axis=axis, keepdims=True)
     terms_divided_by_max = signs * jnp.exp(vals - max_val)
@@ -60,9 +74,6 @@ def log_linear_exp(
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
-
-
-flax.linen.DenseGeneral
 
 
 class Dense(flax.linen.Module):
