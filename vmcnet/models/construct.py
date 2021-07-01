@@ -6,11 +6,16 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.models.antisymmetry import (
-    slogdet_product,
-    SplitBruteForceAntisymmetrize,
     ComposedBruteForceAntisymmetrize,
+    SplitBruteForceAntisymmetrize,
+    slogdet_product,
 )
-from vmcnet.models.core import Activation, SimpleResNet, log_linear_exp
+from vmcnet.models.core import (
+    Activation,
+    SimpleResNet,
+    get_nelec_per_spin,
+    log_linear_exp,
+)
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -39,22 +44,6 @@ class ComposedModel(flax.linen.Module):
         for model in self.submodels:
             outputs = model(outputs)
         return outputs
-
-
-def _get_nelec_per_spin(
-    spin_split: Union[int, Sequence[int]], nelec_total: int
-) -> Tuple[int, ...]:
-    """From a spin_split and nelec_total, get the number of particles per spin.
-
-    If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then
-    spin_split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
-    equal. This function is the inverse of this operation.
-    """
-    if isinstance(spin_split, int):
-        return (nelec_total // spin_split,) * spin_split
-    else:
-        spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
-        return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
 
 
 def _get_residual_blocks_for_ferminet_backflow(
@@ -245,7 +234,7 @@ class FermiNet(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         nelec_total = elec_pos.shape[-2]
-        norbitals_per_spin = _get_nelec_per_spin(self.spin_split, nelec_total)
+        norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
         stream_1e, r_ei = FermiNetBackflow(
             self.residual_blocks,
             ion_pos=self.ion_pos,

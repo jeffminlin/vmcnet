@@ -7,34 +7,7 @@ import numpy as np
 import vmcnet.models as models
 import vmcnet.physics as physics
 
-
-def _get_elec_hyperparams():
-    nchains = 25
-    nelec_total = 7
-    d = 3
-    permutation = (1, 0, 2, 5, 6, 3, 4)
-
-    spin_split = (3,)
-    return nchains, nelec_total, d, permutation, spin_split
-
-
-def _get_input_streams_from_hyperparams(nchains, nelec_total, d, permutation):
-    key = jax.random.PRNGKey(0)
-    key, subkey = jax.random.split(key)
-    elec_pos = jax.random.normal(subkey, (nchains, nelec_total, d))
-    permuted_elec_pos = elec_pos[:, permutation, :]
-
-    input_1e, input_2e, _ = models.equivariance.compute_input_streams(elec_pos)
-    perm_input_1e, perm_input_2e, _ = models.equivariance.compute_input_streams(
-        permuted_elec_pos
-    )
-    return (
-        input_1e,
-        input_2e,
-        perm_input_1e,
-        perm_input_2e,
-        key,
-    )
+from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
 
 def test_electron_electron_add_norm():
@@ -60,15 +33,17 @@ def test_electron_electron_add_norm():
 
 def test_ferminet_one_electron_layer_shape_and_equivariance():
     """Test the equivariance of the one-electron layer in the FermiNet."""
-    nchains, nelec_total, d, permutation, spin_split = _get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, spin_split, _ = get_elec_hyperparams()
 
     (
         input_1e,
         input_2e,
+        _,
         perm_input_1e,
         perm_input_2e,
+        _,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, d, permutation)
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     ndense = 10
     kernel_initializer_unmixed = models.weights.get_kernel_initializer("orthogonal")
@@ -103,15 +78,17 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
 
 def test_ferminet_two_electron_layer_shape_and_equivariance():
     """Test that the two-electron stream is doubly equivariant."""
-    nchains, nelec_total, d, permutation, _ = _get_elec_hyperparams()
+    nchains, nelec_total, nion, d, permutation, _, _ = get_elec_hyperparams()
 
     (
         _,
         input_2e,
         _,
+        _,
         perm_input_2e,
+        _,
         key,
-    ) = _get_input_streams_from_hyperparams(nchains, nelec_total, d, permutation)
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     ndense = 11
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
