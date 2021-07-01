@@ -77,22 +77,24 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
-            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
-            this initializes a single decay rate number per ion and orbital. If
-            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
-            linear combination over the ions of exponential envelopes. Has signature
+        orbital_kernel_initializer_linear (WeightInitializer): kernel initializer for
+            the linear  part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_linear (WeightInitializer): bias initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
-        use_bias (bool, optional): whether to add a bias term to the linear part of the
-            orbitals. Defaults to True.
-        isotropic_decay (bool, optional): whether the decay for each ion should be
-            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
+        orbital_kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
+            for the decay rate in the exponential envelopes. If `isotropic_decay` is
+            True, then this initializes a single decay rate number per ion and orbital.
+            If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
+            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+        orbital_kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
+            for the linear combination over the ions of exponential envelopes. Has
+            signature (key, shape, dtype) -> jnp.ndarray
+        orbital_bias_initializer_linear (WeightInitializer): bias initializer for the
+            linear part of the orbitals. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        orbital_use_bias (bool, optional): whether to add a bias term to the linear part
+            of the orbitals. Defaults to True.
+        orbital_isotropic_decay (bool, optional): whether the decay for each ion should
+            be anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
     """
@@ -116,9 +118,6 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         be equal to y_i * M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is
         handled separately in this same way.
 
-        Results are returned as a tuple of arrays, where the first is the sign of the
-        results and the second is the log of the absolute value of the results.
-
         Args:
             eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
                 contain values that are equivariant with respect to the particle
@@ -129,8 +128,9 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
 
         Returns:
             (List[Tuple[jnp.ndarray, jnp.ndarray]]): per-spin list where each list
-             element is a tuples of arrays of shape (..., nelec, d), where the first
-             array in the tuple is sign(results) and the second is log(abs(results)).
+             entry is a tuple of two arrays each of shape (..., nelec, d). The first
+             array in the tuple contains the sign of the results and the second contains
+             the logs of the absolute values of the results for the given spin.
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)

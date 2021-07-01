@@ -50,6 +50,7 @@ def test_slog_cofactor_antiequivarance():
 
 def test_orbital_cofactor_layer_antiequivariance():
     """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
+    # Generate example hyperparams and input streams
     (
         nchains,
         nelec_total,
@@ -69,9 +70,9 @@ def test_orbital_cofactor_layer_antiequivariance():
         key,
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
+    # Set up antiequivariant layer
     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
     bias_initializer = models.weights.get_bias_initializer("normal")
-
     orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
         spin_split,
         kernel_initializer,
@@ -80,17 +81,25 @@ def test_orbital_cofactor_layer_antiequivariance():
         bias_initializer,
     )
     params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
-    output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
 
+    # Evaluate layer on original and permuted inputs
+    output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
+    perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
+
+    # Verify output shape and verify all signs values are  +-1
     nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
     nspins = len(nelec_per_spin)
     assert len(output) == nspins
     for i in range(nspins):
         assert len(output[i]) == 2
-        chex.assert_shape(output[i][0], (nchains, nelec_per_spin[i], d * (1 + nion)))
+        d_input_1e = input_1e.shape[-1]
+        np.testing.assert_allclose(
+            jnp.abs(output[i][0]),
+            jnp.ones((nchains, nelec_per_spin[i], d_input_1e)),
+        )
+        chex.assert_shape(output[i][1], (nchains, nelec_per_spin[i], d_input_1e))
 
-    perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
-
+    # Verify that permutation has generated appropriate antiequivariant transformation
     flips = [-1, 1]  # First spin permutation is odd; second is even
     for i in range(nspins):
         signs, logs = output[i]
