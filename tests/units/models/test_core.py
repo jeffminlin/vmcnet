@@ -1,5 +1,6 @@
 """Test core model building parts."""
 import chex
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -45,3 +46,21 @@ def test_log_linear_exp_no_underflow():
     # the output should be sign_out=1.0, log_out=log|exp(-1234.5) + tinier stuff|
     np.testing.assert_allclose(sign_out, 1.0)
     np.testing.assert_allclose(log_out, -1234.5)
+
+
+def test_dense_in_regular_and_log_domain_match():
+    """Test that LogDomainDense does the same thing as Dense in the log domain."""
+    nfeatures = 4
+    dense_layer = models.core.Dense(nfeatures)
+    logdomaindense_layer = models.core.LogDomainDense(nfeatures)
+
+    x = jnp.array([0.2, 3.0, 4.2, -2.3, 7.4, -3.0])  # random vector
+
+    key = jax.random.PRNGKey(0)
+    out, params = dense_layer.init_with_output(key, x)
+    sign_out, log_abs_out = logdomaindense_layer.apply(
+        params, jnp.sign(x), jnp.log(jnp.abs(x))
+    )
+
+    np.testing.assert_allclose(sign_out, jnp.sign(out))
+    np.testing.assert_allclose(log_abs_out, jnp.log(jnp.abs(out)), rtol=1e-6)

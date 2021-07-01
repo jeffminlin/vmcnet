@@ -2,7 +2,6 @@
 from typing import Callable, Optional, Tuple, cast
 
 import flax
-import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
@@ -20,8 +19,9 @@ def log_linear_exp(
     vals: jnp.ndarray,
     weights: Optional[jnp.ndarray] = None,
     axis: int = 0,
+    register_kfac: bool = True,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)).
+    """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)) + b_j.
 
     In order to avoid overflow when computing
 
@@ -33,8 +33,7 @@ def log_linear_exp(
         log(abs(sum_i(sign_i * w_ij * exp(vals_i - max)))) + max.
 
     This trick also avoids the underflow issue of when all vals are small enough that
-    exp(val_i) is approximately 0 for all i. The output in this case is just the maximum
-    value.
+    exp(val_i) is approximately 0 for all i.
 
     Args:
         signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
@@ -43,8 +42,10 @@ def log_linear_exp(
             the size of the given axis
         weights (jnp.ndarray, optional): weights of a linear transformation to apply to
             the given axis, with shape (d, d'). If not provided, a simple sum is taken
-            along this axis, equivalent to (d, 1) weights equal to 1. Defaults to None.
+            instead, equivalent to (d, 1) weights equal to 1. Defaults to None.
         axis (int, optional): axis along which to take the sum and max. Defaults to 0.
+        register_kfac (bool, optional): if weights are not None, whether to register the
+            linear part of the computation with KFAC. Defaults to True.
 
     Returns:
         (jnp.ndarray, jnp.ndarray): sign of linear combination, log of linear
@@ -54,14 +55,16 @@ def log_linear_exp(
     max_val = jnp.max(vals, axis=axis, keepdims=True)
     terms_divided_by_max = signs * jnp.exp(vals - max_val)
     if weights is not None:
-        if axis < 0:
-            axis = terms_divided_by_max.ndim + axis
-        transformed_divided_by_max = jax.lax.dot_general(
-            weights,
-            terms_divided_by_max,
-            (((0,), (axis,)), ((), ())),
-        )
-        transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, 0, axis)
+        # swap axis and -1 to conform to jnp.dot and register_batch_dense api
+        terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)
+        transformed_divided_by_max = jnp.dot(terms_divided_by_max, weights)
+        if register_kfac:
+            transformed_divided_by_max = utils.kfac.register_batch_dense(
+                transformed_divided_by_max, terms_divided_by_max, weights, None
+            )
+
+        # swap axis and -1 back after the contraction and registration
+        transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, axis, -1)
     else:
         transformed_divided_by_max = jnp.sum(
             terms_divided_by_max, axis=axis, keepdims=True
@@ -123,6 +126,68 @@ class Dense(flax.linen.Module):
             return utils.kfac.register_batch_dense(y, inputs, kernel, bias)
         else:
             return y
+
+
+class LogDomainDense(flax.linen.Module):
+    """A linear transformation applied on the last axis of the input, in the log domain.
+
+    If the inputs are (sign(x), log(abs(x))), the outputs are
+    (sign(Wx + b), log(abs(Wx + b))).
+
+    Attributes:
+        features (int): the number of output features.
+        use_bias (bool, optional): whether to add a bias to the output. Defaults to
+            True.
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrix. Defaults to orthogonal initialization.
+        bias_init (WeightInitializer, optional): initializer function for the bias.
+            Defaults to random normal initialization.
+        register_kfac (bool, optional): whether to register the computation with KFAC.
+            Defaults to True.
+    """
+
+    features: int
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    bias_init: WeightInitializer = get_bias_initializer("normal")
+    use_bias: bool = True
+    register_kfac: bool = True
+
+    @flax.linen.compact
+    def __call__(
+        self, sign_x: jnp.ndarray, log_abs_x: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Applies a linear transformation with optional bias along the last dimension.
+
+        Args:
+            inputs (jnp.ndarray): The nd-array to be transformed.
+
+        Returns:
+            jnp.ndarray: The transformed input.
+        """
+        kernel = self.param(
+            "kernel", self.kernel_init, (log_abs_x.shape[-1], self.features)
+        )
+
+        if self.use_bias:
+            bias = self.param("bias", self.bias_init, (self.features,))
+            extended_kernel = jnp.concatenate(
+                [kernel, jnp.expand_dims(bias, 0)], axis=0
+            )
+
+            sign_x = jnp.concatenate([sign_x, jnp.ones_like(sign_x[..., 0:1])], axis=-1)
+            log_abs_x = jnp.concatenate(
+                [log_abs_x, jnp.zeros_like(log_abs_x[..., 0:1])], axis=-1
+            )
+        else:
+            extended_kernel = kernel
+
+        return log_linear_exp(
+            sign_x,
+            log_abs_x,
+            extended_kernel,
+            axis=-1,
+            register_kfac=self.register_kfac,
+        )
 
 
 class SimpleResNet(flax.linen.Module):
