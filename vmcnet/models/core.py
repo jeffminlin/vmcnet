@@ -1,17 +1,45 @@
 """Core model building parts."""
-from typing import Callable, cast
+
+from typing import cast, Callable, Sequence, Tuple, Union
 
 import flax
+import jax
 import jax.numpy as jnp
-
 import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
     get_bias_initializer,
     get_kernel_initializer,
 )
+from vmcnet.utils.typing import PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
+
+
+def is_tuple_of_arrays(x: PyTree) -> bool:
+    """Returns True if x is a tuple of jnp.ndarray objects."""
+    return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
+
+
+def get_alternating_signs(n: int) -> jnp.ndarray:
+    """Return alternating series of 1 and -1, of length n."""
+    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+
+
+def get_nelec_per_spin(
+    spin_split: Union[int, Sequence[int]], nelec_total: int
+) -> Tuple[int, ...]:
+    """From a spin_split and nelec_total, get the number of particles per spin.
+
+    If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then
+    spin_split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
+    equal. This function is the inverse of this operation.
+    """
+    if isinstance(spin_split, int):
+        return (nelec_total // spin_split,) * spin_split
+    else:
+        spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
+        return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
