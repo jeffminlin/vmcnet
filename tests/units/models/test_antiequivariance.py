@@ -5,7 +5,12 @@ import jax.numpy as jnp
 import numpy as np
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
-from vmcnet.utils.typing import SLArray, SpinSplitArray, SpinSplitSLArray
+from vmcnet.utils.typing import SLArray, SpinSplitSLArray
+from vmcnet.utils.slog_helpers import (
+    array_to_slog,
+    array_from_slog,
+    slog_sum,
+)
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 from tests.test_utils import assert_pytree_allclose
@@ -48,70 +53,70 @@ def test_slog_cofactor_antiequivarance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
-#
-# def test_orbital_cofactor_layer_antiequivariance():
-#     """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
-#     # Generate example hyperparams and input streams
-#     (
-#         nchains,
-#         nelec_total,
-#         nion,
-#         d,
-#         permutation,
-#         spin_split,
-#         split_perm,
-#     ) = get_elec_hyperparams()
-#     (
-#         input_1e,
-#         _,
-#         input_ei,
-#         perm_input_1e,
-#         _,
-#         perm_input_ei,
-#         key,
-#     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
-#
-#     # Set up antiequivariant layer
-#     kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
-#     bias_initializer = models.weights.get_bias_initializer("normal")
-#     orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
-#         spin_split,
-#         kernel_initializer,
-#         kernel_initializer,
-#         kernel_initializer,
-#         bias_initializer,
-#     )
-#     params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
-#
-#     # Evaluate layer on original and permuted inputs
-#     output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
-#     perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
-#
-#     # Verify output shape and verify all signs values are  +-1
-#     nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
-#     nspins = len(nelec_per_spin)
-#     assert len(output) == nspins
-#     for i in range(nspins):
-#         assert len(output[i]) == 2
-#         d_input_1e = input_1e.shape[-1]
-#         np.testing.assert_allclose(
-#             jnp.abs(output[i][0]),
-#             jnp.ones((nchains, nelec_per_spin[i], d_input_1e)),
-#         )
-#         chex.assert_shape(output[i][1], (nchains, nelec_per_spin[i], d_input_1e))
-#
-#     # Verify that permutation has generated appropriate antiequivariant transformation
-#     flips = [-1, 1]  # First spin permutation is odd; second is even
-#     for i in range(nspins):
-#         signs, logs = output[i]
-#         perm_signs, perm_logs = perm_output[i]
-#         expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
-#         expected_perm_logs = logs[:, split_perm[i], :]
-#         np.testing.assert_allclose(perm_signs, expected_perm_signs)
-#         np.testing.assert_allclose(perm_logs, expected_perm_logs)
+def test_orbital_cofactor_layer_antiequivariance():
+    """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
+    # Generate example hyperparams and input streams
+    (
+        nchains,
+        nelec_total,
+        nion,
+        d,
+        permutation,
+        spin_split,
+        split_perm,
+    ) = get_elec_hyperparams()
+    (
+        input_1e,
+        _,
+        input_ei,
+        perm_input_1e,
+        _,
+        perm_input_ei,
+        key,
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+
+    # Set up antiequivariant layer
+    kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
+    bias_initializer = models.weights.get_bias_initializer("normal")
+    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
+        spin_split,
+        kernel_initializer,
+        kernel_initializer,
+        kernel_initializer,
+        bias_initializer,
+    )
+    params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
+
+    # Evaluate layer on original and permuted inputs
+    output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
+    perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
+
+    # Verify output shape and verify all signs values are  +-1
+    nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
+    nspins = len(nelec_per_spin)
+    assert len(output) == nspins
+    for i in range(nspins):
+        assert len(output[i]) == 2
+        d_input_1e = input_1e.shape[-1]
+        np.testing.assert_allclose(
+            jnp.abs(output[i][0]),
+            jnp.ones((nchains, nelec_per_spin[i], d_input_1e)),
+        )
+        chex.assert_shape(output[i][1], (nchains, nelec_per_spin[i], d_input_1e))
+
+    # Verify that permutation has generated appropriate antiequivariant transformation
+    flips = [-1, 1]  # First spin permutation is odd; second is even
+    for i in range(nspins):
+        signs, logs = output[i]
+        perm_signs, perm_logs = perm_output[i]
+        expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
+        expected_perm_logs = logs[:, split_perm[i], :]
+        np.testing.assert_allclose(perm_signs, expected_perm_signs)
+        np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
 def test_get_odd_symmetries_one_spin():
+    """Test odd symmetry generation for a single spin."""
     nspins = 3
     signs = jnp.array([[[1, 1], [1, -1]], [[-1, 1], [1, 1]]])
     logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
@@ -146,6 +151,7 @@ def test_get_odd_symmetries_one_spin():
 
 
 def test_get_all_odd_symmetries():
+    """Test odd symmetry generation for multiple spins."""
     spin1_signs = jnp.array([[[1, 1], [1, -1]], [[-1, 1], [1, 1]]])
     spin2_signs = jnp.array([[[1, -1], [-1, -1], [1, 1]], [[-1, 1], [-1, 1], [1, -1]]])
     spin1_logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
@@ -170,16 +176,18 @@ def test_get_all_odd_symmetries():
 
 
 def test_sum_sl_array():
+    """Test sum_sl_array helper function."""
     vals = jnp.array([[-1, -2, -3, 6], [1, 2, 3, 4], [0.3, 0.4, 6, -2]])
     expected_sums = jnp.array([0, 10, 4.7])
-    sl_vals = antieq.get_sl_values(vals)
-    expected_sl_sums = antieq.get_sl_values(expected_sums)
+    sl_vals = array_to_slog(vals)
+    expected_sl_sums = array_to_slog(expected_sums)
 
-    sl_sums = antieq.sum_sl_array(sl_vals, axis=-1)
+    sl_sums = slog_sum(sl_vals, axis=-1)
     np.testing.assert_allclose(sl_sums, expected_sl_sums)
 
 
 def test_make_fn_odd_one_spin():
+    """Test making a function of one spin odd."""
     nbatch = 5
     nelec = 3
     d = 2
@@ -192,8 +200,8 @@ def test_make_fn_odd_one_spin():
     neg_inputs = -inputs
     weights1 = jax.random.normal(subkey, (nelec * d, dhidden))
     weights2 = jax.random.normal(subkey, (dhidden, dout))
-    slog_inputs = [antieq.get_sl_values(inputs)]  # one spin block only
-    neg_slog_inputs = [antieq.get_sl_values(neg_inputs)]
+    slog_inputs = [array_to_slog(inputs)]  # one spin block only
+    neg_slog_inputs = [array_to_slog(neg_inputs)]
 
     def fn(x: SpinSplitSLArray) -> SLArray:
         (signs, logs) = x[0]
@@ -204,7 +212,7 @@ def test_make_fn_odd_one_spin():
         output = jnp.tanh(output)
         output = jnp.matmul(output, weights2)
         output = jnp.tanh(output)
-        return antieq.get_sl_values(output)
+        return array_to_slog(output)
 
     odd_fn = antieq.make_fn_odd(fn)
     result = odd_fn(slog_inputs)
@@ -215,6 +223,7 @@ def test_make_fn_odd_one_spin():
 
 
 def test_make_fn_odd_multi_spin():
+    """Test making a function of multiple spins odd with respect to each."""
     nbatch = 5
     nelec_per_spin = (2, 3, 4)
     nelec_total = 9
@@ -237,15 +246,15 @@ def test_make_fn_odd_multi_spin():
     def fn(x: SpinSplitSLArray) -> SLArray:
         all_signs = jnp.concatenate([s[0] for s in x], axis=-2)
         all_logs = jnp.concatenate([s[1] for s in x], axis=-2)
-        all_vals = antieq.get_vals_from_sl((all_signs, all_logs))
-        all_vals = all_vals.reshape(
-            (all_vals.shape[0], all_vals.shape[1], nelec_total * d)
+        all_vals = array_from_slog((all_signs, all_logs))
+        all_vals = jnp.reshape(
+            all_vals, (all_vals.shape[0], all_vals.shape[1], nelec_total * d)
         )
         output = jnp.matmul(all_vals, weights1)
         output = jnp.tanh(output)
         output = jnp.matmul(output, weights2)
         output = jnp.tanh(output)
-        return antieq.get_sl_values(output)
+        return array_to_slog(output)
 
     odd_fn = antieq.make_fn_odd(fn)
     result = odd_fn(slog_inputs)
