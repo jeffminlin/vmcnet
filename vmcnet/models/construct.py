@@ -10,7 +10,7 @@ from vmcnet.models.antisymmetry import (
     SplitBruteForceAntisymmetrize,
     ComposedBruteForceAntisymmetrize,
 )
-from vmcnet.models.core import Activation, SimpleResNet
+from vmcnet.models.core import Activation, SimpleResNet, _log_linear_exp
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -55,14 +55,6 @@ def _get_nelec_per_spin(
     else:
         spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
         return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
-
-
-def _log_sum_exp(signs: jnp.ndarray, vals: jnp.ndarray, axis: int = 0) -> jnp.ndarray:
-    """Stably compute log(abs(sum_i(sign_i * exp(vals_i)))) along an axis."""
-    max_val = jnp.max(vals, axis=axis, keepdims=True)
-    terms_divided_by_max = signs * jnp.exp(vals - max_val)
-    sum_terms_divided_by_max = jnp.sum(terms_divided_by_max, axis=axis)
-    return jnp.log(jnp.abs(sum_terms_divided_by_max)) + jnp.squeeze(max_val, axis=axis)
 
 
 def _get_residual_blocks_for_ferminet_backflow(
@@ -277,7 +269,8 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
         signs, log_dets = slogdet_product(orbitals)
-        return _log_sum_exp(signs, log_dets, axis=0)
+        _, log_psi = _log_linear_exp(signs, log_dets, axis=0)
+        return jnp.squeeze(log_psi, axis=0)
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

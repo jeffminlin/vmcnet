@@ -1,7 +1,8 @@
 """Core model building parts."""
-from typing import Callable, cast
+from typing import Callable, Optional, cast
 
 import flax
+import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
@@ -14,8 +15,50 @@ from vmcnet.models.weights import (
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
 
+def _log_linear_exp(
+    signs: jnp.ndarray,
+    vals: jnp.ndarray,
+    weights: Optional[jnp.ndarray] = None,
+    axis: int = 0,
+) -> jnp.ndarray:
+    """Stably compute log(abs(sum_i(sign_i * exp(vals_i)))) along an axis.
+
+    Args:
+        signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
+            where d is the size of the given axis
+        vals (jnp.ndarray): array of log|abs(x)| with shape (..., d, ...), where d is
+            the size of the given axis
+        weights (jnp.ndarray, optional): weights of a linear transformation to apply to
+            the given axis, with shape (d, d'). If not provided, a simple sum is taken
+            along this axis, equivalent to (d, 1) weights equal to 1. Defaults to None.
+        axis (int, optional): axis along which to take the sum. Defaults to 0.
+
+    Returns:
+        jnp.ndarray: outputs with shape (..., d', ...), where d' = 1 if weights is None,
+        and d' = weights.shape[1] otherwise.
+    """
+    max_val = jnp.max(vals, axis=axis, keepdims=True)
+    terms_divided_by_max = signs * jnp.exp(vals - max_val)
+    if weights is not None:
+        batch_dims = terms_divided_by_max.shape[:axis]
+        weights = jnp.reshape(weights, batch_dims + weights.shape)
+        if axis < 0:
+            axis = terms_divided_by_max.ndim + axis
+        transformed_divided_by_max = jax.lax.dot_general(
+            weights, terms_divided_by_max, (((0,), (axis,)), (batch_dims, batch_dims))
+        )
+    else:
+        transformed_divided_by_max = jnp.sum(
+            terms_divided_by_max, axis=axis, keepdims=True
+        )
+    return jnp.log(jnp.abs(transformed_divided_by_max)) + max_val
+
+
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
+
+
+flax.linen.DenseGeneral
 
 
 class Dense(flax.linen.Module):
