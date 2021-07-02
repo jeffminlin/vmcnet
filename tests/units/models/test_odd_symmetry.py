@@ -135,4 +135,4 @@ def test_make_fn_odd():
 
     expected_neg_result = (-result[0], result[1])
     assert_pytree_allclose(flip_sign_result, expected_neg_result, rtol=1e-5)
-    assert_pytree_allclose(result, same_sign_result, rtol=1e-5)
+    assert_pytree_allclose(same_sign_result, result, rtol=1e-5)

@@ -11,7 +11,7 @@ from vmcnet.models.weights import (
     get_bias_initializer,
     get_kernel_initializer,
 )
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import SLArray, PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 
@@ -22,7 +22,7 @@ def log_linear_exp(
     weights: Optional[jnp.ndarray] = None,
     axis: int = 0,
     register_kfac: bool = True,
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+) -> SLArray:
     """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)) + b_j.
 
     In order to avoid overflow when computing
@@ -50,7 +50,7 @@ def log_linear_exp(
             linear part of the computation with KFAC. Defaults to True.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): sign of linear combination, log of linear
+        (SLArray): sign of linear combination, log of linear
         combination. Both outputs have shape (..., d', ...), where d' = 1 if weights is
         None, and d' = weights.shape[1] otherwise.
     """
@@ -180,17 +180,16 @@ class LogDomainDense(flax.linen.Module):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(
-        self, sign_x: jnp.ndarray, log_abs_x: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, x: SLArray) -> SLArray:
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
-            inputs (jnp.ndarray): The nd-array to be transformed.
+            x (SLArray): The nd-array in slog form to be transformed.
 
         Returns:
-            jnp.ndarray: The transformed input.
+            SLArray: The transformed input, in slog form.
         """
+        sign_x, log_abs_x = x
         input_dim = log_abs_x.shape[-1]
 
         if self.use_bias:

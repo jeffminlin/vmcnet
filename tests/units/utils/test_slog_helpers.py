@@ -2,7 +2,6 @@
 from typing import Tuple
 
 import jax.numpy as jnp
-import numpy as np
 
 import vmcnet.utils.slog_helpers as helpers
 from tests.test_utils import assert_pytree_allclose
@@ -41,15 +40,3 @@ def test_slog_multiply():
     product = helpers.slog_multiply(slog1, slog2)
 
     assert_pytree_allclose(product, expected_product)
-
-
-def test_slog_sum():
-    """Test summing along an axis in an slog array."""
-    vals = jnp.array([[-1, -2, -3, 6], [1, 2, 3, 4], [0.3, 0.4, 6, -2]])
-    sl_vals = helpers.array_to_slog(vals)
-    expected_sums = jnp.array([0, 10, 4.7])
-    expected_sl_sums = helpers.array_to_slog(expected_sums)
-
-    sl_sums = helpers.slog_sum(sl_vals, axis=-1)
-
-    np.testing.assert_allclose(sl_sums, expected_sl_sums)

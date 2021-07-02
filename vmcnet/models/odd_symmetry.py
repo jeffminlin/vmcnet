@@ -5,9 +5,9 @@ from typing import Callable, Tuple
 import jax
 import jax.numpy as jnp
 
-from .core import is_tuple_of_arrays
+from .core import is_tuple_of_arrays, log_linear_exp
 from vmcnet.utils.typing import SLArray, SpinSplitSLArray
-from vmcnet.utils.slog_helpers import slog_multiply, slog_sum
+from vmcnet.utils.slog_helpers import slog_multiply
 
 
 def get_odd_symmetries_one_spin(
@@ -67,7 +67,8 @@ def get_all_odd_symmetries(
     (s_1, s_2, -s_3), (-s_1, s_2, -s_3), (s_1, -s_2, -s_3), (-s_1, -s_2, -s_3).
 
     Also returns the associated overall sign of each symmetry, as a single 1D array. For
-    this example, that would be [1, -1, -1, 1, -1, 1, 1, -1].
+    this example, that would be [1, -1, -1, 1, -1, 1, 1, -1]. This is calculated by
+    multiplying together the individual-spin sign arrays for each spin.
 
     Args:
         x (SpinSplitSLArray): the original data, as a spin-split slog array.
@@ -126,9 +127,8 @@ def make_fn_odd(
             each spin taken as a whole.
     """
 
+    # x is a SpinSplitSLArray with leaves of shape (..., nelec[i], d)
     def odd_fn(x: SpinSplitSLArray):
-        # x is a SpinSplitSLArray with leaves of shape (..., nelec[i], d)
-
         # symmetries leaves are of shape (..., 2**nspins, nelec[i], d)
         # signs is single array of shape (2**nspins)
         symmetries, signs = get_all_odd_symmetries(x, axis=-3)
@@ -138,6 +138,6 @@ def make_fn_odd(
         signed_results = (all_results[0] * shaped_signs, all_results[1])
 
         # Return final results collapsed to shape (..., d')
-        return slog_sum(signed_results, axis=-2)
+        return log_linear_exp(signed_results[0], signed_results[1], axis=-2)
 
     return odd_fn

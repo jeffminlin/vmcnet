@@ -1,4 +1,4 @@
-"""Helper functions for dealing with structured values."""
+"""Helper functions for dealing with (sign, logabs) data."""
 
 import jax.numpy as jnp
 
@@ -63,26 +63,3 @@ def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     (sx, lx) = x
     (sy, ly) = y
     return (sx * sy, lx + ly)
-
-
-# TODO (ggoldsh): once Jeffmin's PR $22 is merged, can merge this with the more general
-# log_linear_exp fn implemented there.
-def slog_sum(x: SLArray, axis: int = 0) -> SLArray:
-    """Computes the sum of the input array along the given axis, in slog form.
-
-    This operation is equivalent to converting the data from slog form to a normal
-    array, calling jnp.sum() on the converted data, and then converting the data back
-    to slog form. However, the calculation implemented here is more stable.
-
-    Args:
-        x (SLArray): the input data, in slog form.
-        axis (int): the axis along which to sum.
-    """
-    (signs, logs) = x
-    max_val = jnp.max(logs, axis=axis, keepdims=True)
-    terms_divided_by_max = signs * jnp.exp(logs - max_val)
-    sum_terms_divided_by_max = jnp.sum(terms_divided_by_max, axis=axis)
-    return (
-        jnp.sign(sum_terms_divided_by_max),
-        jnp.log(jnp.abs(sum_terms_divided_by_max)) + jnp.squeeze(max_val, axis=axis),
-    )
