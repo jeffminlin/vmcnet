@@ -1,10 +1,10 @@
 """Core model building parts."""
-
-from typing import cast, Callable, Sequence, Tuple, Union
+from typing import Callable, Optional, Sequence, Tuple, Union, cast
 
 import flax
 import jax
 import jax.numpy as jnp
+
 import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
@@ -14,6 +14,67 @@ from vmcnet.models.weights import (
 from vmcnet.utils.typing import PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
+
+
+def log_linear_exp(
+    signs: jnp.ndarray,
+    vals: jnp.ndarray,
+    weights: Optional[jnp.ndarray] = None,
+    axis: int = 0,
+    register_kfac: bool = True,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)) + b_j.
+
+    In order to avoid overflow when computing
+
+        log(abs(sum_i(sign_i * w_ij * exp(vals_i)))),
+
+    the largest exp(val_i) is divided out from all the values and added back in after
+    the outer log, i.e.
+
+        log(abs(sum_i(sign_i * w_ij * exp(vals_i - max)))) + max.
+
+    This trick also avoids the underflow issue of when all vals are small enough that
+    exp(val_i) is approximately 0 for all i.
+
+    Args:
+        signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
+            where d is the size of the given axis
+        vals (jnp.ndarray): array of log|abs(x)| with shape (..., d, ...), where d is
+            the size of the given axis
+        weights (jnp.ndarray, optional): weights of a linear transformation to apply to
+            the given axis, with shape (d, d'). If not provided, a simple sum is taken
+            instead, equivalent to (d, 1) weights equal to 1. Defaults to None.
+        axis (int, optional): axis along which to take the sum and max. Defaults to 0.
+        register_kfac (bool, optional): if weights are not None, whether to register the
+            linear part of the computation with KFAC. Defaults to True.
+
+    Returns:
+        (jnp.ndarray, jnp.ndarray): sign of linear combination, log of linear
+        combination. Both outputs have shape (..., d', ...), where d' = 1 if weights is
+        None, and d' = weights.shape[1] otherwise.
+    """
+    max_val = jnp.max(vals, axis=axis, keepdims=True)
+    terms_divided_by_max = signs * jnp.exp(vals - max_val)
+    if weights is not None:
+        # swap axis and -1 to conform to jnp.dot and register_batch_dense api
+        terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)
+        transformed_divided_by_max = jnp.dot(terms_divided_by_max, weights)
+        if register_kfac:
+            transformed_divided_by_max = utils.kfac.register_batch_dense(
+                transformed_divided_by_max, terms_divided_by_max, weights, None
+            )
+
+        # swap axis and -1 back after the contraction and registration
+        transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, axis, -1)
+    else:
+        transformed_divided_by_max = jnp.sum(
+            terms_divided_by_max, axis=axis, keepdims=True
+        )
+
+    signs = jnp.sign(transformed_divided_by_max)
+    vals = jnp.log(jnp.abs(transformed_divided_by_max)) + max_val
+    return signs, vals
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:
@@ -54,12 +115,12 @@ class Dense(flax.linen.Module):
 
     Attributes:
         features (int): the number of output features.
-        use_bias (bool, optional): whether to add a bias to the output. Defaults to
-            True.
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrix. Defaults to orthogonal initialization.
         bias_init (WeightInitializer, optional): initializer function for the bias.
             Defaults to random normal initialization.
+        use_bias (bool, optional): whether to add a bias to the output. Defaults to
+            True.
         register_kfac (bool, optional): whether to register the computation with KFAC.
             Defaults to True.
     """
@@ -93,6 +154,61 @@ class Dense(flax.linen.Module):
             return utils.kfac.register_batch_dense(y, inputs, kernel, bias)
         else:
             return y
+
+
+class LogDomainDense(flax.linen.Module):
+    """A linear transformation applied on the last axis of the input, in the log domain.
+
+    If the inputs are (sign(x), log(abs(x))), the outputs are
+    (sign(Wx + b), log(abs(Wx + b))).
+
+    The bias is implemented by extending the inputs with a vector of ones.
+
+    Attributes:
+        features (int): the number of output features.
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrix. Defaults to orthogonal initialization.
+        use_bias (bool, optional): whether to add a bias to the output. Defaults to
+            True.
+        register_kfac (bool, optional): whether to register the computation with KFAC.
+            Defaults to True.
+    """
+
+    features: int
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    use_bias: bool = True
+    register_kfac: bool = True
+
+    @flax.linen.compact
+    def __call__(
+        self, sign_x: jnp.ndarray, log_abs_x: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Applies a linear transformation with optional bias along the last dimension.
+
+        Args:
+            inputs (jnp.ndarray): The nd-array to be transformed.
+
+        Returns:
+            jnp.ndarray: The transformed input.
+        """
+        input_dim = log_abs_x.shape[-1]
+
+        if self.use_bias:
+            input_dim += 1
+            sign_x = jnp.concatenate([sign_x, jnp.ones_like(sign_x[..., 0:1])], axis=-1)
+            log_abs_x = jnp.concatenate(
+                [log_abs_x, jnp.zeros_like(log_abs_x[..., 0:1])], axis=-1
+            )
+
+        kernel = self.param("kernel", self.kernel_init, (input_dim, self.features))
+
+        return log_linear_exp(
+            sign_x,
+            log_abs_x,
+            kernel,
+            axis=-1,
+            register_kfac=self.register_kfac,
+        )
 
 
 class SimpleResNet(flax.linen.Module):
