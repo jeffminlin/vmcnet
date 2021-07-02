@@ -1,10 +1,13 @@
-"""Shared pieces for unit tests."""
+"""Shared pieces for the test suite."""
+from typing import Tuple
+
 import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.mcmc as mcmc
+import vmcnet.models as models
 from vmcnet.utils.typing import PyTree
 
 
@@ -65,6 +68,30 @@ def make_dummy_metropolis_fn():
 def dummy_model_apply(params, x):
     """Model eval that outputs indices of the flattened x in the shape of x."""
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
+
+
+def init_dense_and_logdomaindense_with_same_params(
+    key: jnp.ndarray,
+    batch: jnp.ndarray,
+    dense_layer: models.core.Dense,
+    logdomaindense_layer: models.core.LogDomainDense,
+) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
+    """Initialize Dense and LogDomainDense layers with the same parameters."""
+    dense_params = dense_layer.init(key, batch)
+    logdomaindense_params = logdomaindense_layer.init(
+        key, jnp.sign(batch), jnp.log(jnp.abs(batch))
+    )
+
+    # Concatenate dense kernel and bias
+    dense_bias = dense_params["params"]["bias"]
+    dense_kernel = dense_params["params"]["kernel"]
+    concat_dense = jnp.concatenate(
+        [dense_kernel, jnp.expand_dims(dense_bias, 0)], axis=0
+    )
+
+    # Replace the LogDomainDense kernel with concatenated dense kernel
+    logdomaindense_params = jax.tree_map(lambda _: concat_dense, logdomaindense_params)
+    return dense_params, logdomaindense_params
 
 
 def assert_pytree_allclose(

@@ -1,10 +1,18 @@
 """Test core model building parts."""
+from typing import Tuple
+
 import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.models as models
+
+from tests.test_utils import init_dense_and_logdomaindense_with_same_params
+
+
+def _get_sign_and_log_abs(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    return jnp.sign(x), jnp.log(jnp.abs(x))
 
 
 def test_log_linear_exp_shape():
@@ -48,6 +56,25 @@ def test_log_linear_exp_no_underflow():
     np.testing.assert_allclose(log_out, -1234.5)
 
 
+def test_log_linear_equals_log_linear_exp_log():
+    """Test that log-linear-exp of sign(x), log|x| is just log-linear."""
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+    x = jax.random.normal(subkey, (9, 5))
+    sign_x, log_abs_x = _get_sign_and_log_abs(x)
+
+    key, subkey = jax.random.split(key)
+    kernel = jax.random.normal(subkey, (5, 7))
+
+    sign_linear_out, log_linear_out = _get_sign_and_log_abs(jnp.dot(x, kernel))
+    sign_linear_exp_log_out, log_linear_exp_log_out = models.core.log_linear_exp(
+        sign_x, log_abs_x, kernel, axis=-1
+    )
+
+    np.testing.assert_allclose(sign_linear_exp_log_out, sign_linear_out)
+    np.testing.assert_allclose(log_linear_exp_log_out, log_linear_out, rtol=1e-5)
+
+
 def test_dense_in_regular_and_log_domain_match():
     """Test that LogDomainDense does the same thing as Dense in the log domain."""
     nfeatures = 4
@@ -55,11 +82,18 @@ def test_dense_in_regular_and_log_domain_match():
     logdomaindense_layer = models.core.LogDomainDense(nfeatures)
 
     x = jnp.array([0.2, 3.0, 4.2, -2.3, 7.4, -3.0])  # random vector
+    sign_x, log_abs_x = _get_sign_and_log_abs(x)
 
     key = jax.random.PRNGKey(0)
-    out, params = dense_layer.init_with_output(key, x)
+    (
+        dense_params,
+        logdomaindense_params,
+    ) = init_dense_and_logdomaindense_with_same_params(
+        key, x, dense_layer, logdomaindense_layer
+    )
+    out = dense_layer.apply(dense_params, x)
     sign_out, log_abs_out = logdomaindense_layer.apply(
-        params, jnp.sign(x), jnp.log(jnp.abs(x))
+        logdomaindense_params, sign_x, log_abs_x
     )
 
     np.testing.assert_allclose(sign_out, jnp.sign(out))
