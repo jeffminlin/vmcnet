@@ -9,9 +9,6 @@ from .core import is_tuple_of_arrays
 from vmcnet.utils.typing import SLArray, SpinSplitSLArray
 from vmcnet.utils.slog_helpers import slog_multiply, slog_sum
 
-## TODO (ggoldsh): should axis/nspins be a parameter for these so we don't generate the lists
-# of symmetries over and over again? How to even test that?
-
 
 def get_odd_symmetries_one_spin(
     x: SLArray, i_spin: int, nspins: int, axis: int = 0
