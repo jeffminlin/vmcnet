@@ -7,7 +7,10 @@ from kfac_ferminet_alpha import utils as kfac_utils
 import vmcnet.models as models
 import vmcnet.utils as utils
 
-from tests.test_utils import assert_pytree_allclose
+from tests.test_utils import (
+    assert_pytree_allclose,
+    init_dense_and_logdomaindense_with_same_params,
+)
 
 
 def _make_optimizer_from_loss_and_grad(loss_and_grad):
@@ -26,6 +29,55 @@ def _make_optimizer_from_loss_and_grad(loss_and_grad):
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
+
+
+@jax.pmap
+def _data_iterator(key):
+    return jax.random.uniform(key, (20, 1))
+
+
+def _train(nsteps, loss_and_grad, model_params, batch, key, logdomain=False):
+    """Train a model with KFAC and return params and loss for all steps."""
+    # Distribute
+    model_params = utils.distribute.replicate_all_local_devices(model_params)
+    batch = utils.distribute.default_distribute_data(batch)
+    key = utils.distribute.make_different_rng_key_on_all_devices(key)
+
+    # Make two kfac optimizers, both with the same keys and random inputs
+    optimizer = _make_optimizer_from_loss_and_grad(loss_and_grad)
+
+    key, subkey = utils.distribute.p_split(key)
+    optimizer_state = optimizer.init(model_params, subkey, batch)
+
+    # Train, checking that the outputs of the two optimizer steps are the same for each
+    # iteration
+    momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
+    damping = kfac_utils.replicate_all_local_devices(jnp.asarray(0.001))
+
+    training_results = []
+    for _ in range(nsteps):
+        key, subkey1 = utils.distribute.p_split(key)
+        key, subkey2 = utils.distribute.p_split(key)
+        new_params, new_optimizer_state, stats = optimizer.step(
+            params=model_params,
+            state=optimizer_state,
+            rng=subkey1,
+            data_iterator=iter([_data_iterator(subkey2)]),
+            momentum=momentum,
+            damping=damping,
+        )
+        loss = utils.distribute.get_first(stats["loss"])
+        if logdomain:
+            bias = new_params["params"]["kernel"][..., -1, :]
+            kernel = new_params["params"]["kernel"][..., :-1, :]
+        else:
+            bias = new_params["params"]["bias"]
+            kernel = new_params["params"]["kernel"]
+        model_params, optimizer_state = new_params, new_optimizer_state
+
+        training_results.append((kernel, bias, loss))
+
+    return training_results
 
 
 def test_log_domain_dense_kfac_matches_dense_kfac():
@@ -58,10 +110,8 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
         kfac_ferminet_alpha.register_squared_error_loss(prediction, target)
         return utils.distribute.mean_all_local_devices(jnp.square(prediction - target))
 
-    losses_and_grads = [
-        jax.value_and_grad(loss, argnums=0)
-        for loss in (dense_loss, logdomaindense_loss)
-    ]
+    dense_loss_and_grad = jax.value_and_grad(dense_loss, argnums=0)
+    logdomaindense_loss_and_grad = jax.value_and_grad(logdomaindense_loss, argnums=0)
 
     # Initialize one set of initial params and an arbitrary initial batch
     key = jax.random.PRNGKey(0)
@@ -69,74 +119,26 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
     batch = jax.random.uniform(subkey, (20 * jax.local_device_count(), 1))
 
     key, subkey = jax.random.split(key)
-    dense_params = dense_layer.init(subkey, batch)
-
-    # Get concatenated dense kernel
-    dense_bias = dense_params["params"]["bias"]
-    dense_kernel = dense_params["params"]["kernel"]
-    concat_dense = jnp.concatenate(
-        [dense_kernel, jnp.expand_dims(dense_bias, 0)], axis=0
+    (
+        dense_params,
+        logdomaindense_params,
+    ) = init_dense_and_logdomaindense_with_same_params(
+        subkey, batch, dense_layer, logdomaindense_layer
     )
 
-    # Init logdomaindense params and replace the kernel with concatenated dense kernel
-    logdomaindense_params = logdomaindense_layer.init(
-        subkey, jnp.sign(batch), jnp.log(jnp.abs(batch))
-    )
-    logdomaindense_params = jax.tree_map(lambda _: concat_dense, logdomaindense_params)
-
-    params = [dense_params, logdomaindense_params]
-
-    # Distribute
-    params = [
-        utils.distribute.replicate_all_local_devices(model_params)
-        for model_params in params
-    ]
-    batch = utils.distribute.default_distribute_data(batch)
-    key = utils.distribute.make_different_rng_key_on_all_devices(key)
-
-    # Make two kfac optimizers, both with the same keys and random inputs
-    optimizers = [
-        _make_optimizer_from_loss_and_grad(loss_and_grad)
-        for loss_and_grad in losses_and_grads
-    ]
-
-    key, subkey = utils.distribute.p_split(key)
-    optimizer_states = [
-        optimizer.init(params[i], subkey, batch)
-        for i, optimizer in enumerate(optimizers)
-    ]
-
-    # Train, checking that the outputs of the two optimizer steps are the same for each
-    # iteration
     nsteps = 6
-    momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
-    damping = kfac_utils.replicate_all_local_devices(jnp.asarray(0.001))
 
-    @jax.pmap
-    def data_iterator(key):
-        return jax.random.uniform(key, (20, 1))
+    key, subkey = jax.random.split(key)
+    dense_results = _train(
+        nsteps, dense_loss_and_grad, dense_params, batch, subkey, logdomain=False
+    )
+    logdomaindense_results = _train(
+        nsteps,
+        logdomaindense_loss_and_grad,
+        logdomaindense_params,
+        batch,
+        subkey,
+        logdomain=True,
+    )
 
-    for _ in range(nsteps):
-        step_results = []
-        key, subkey1 = utils.distribute.p_split(key)
-        key, subkey2 = utils.distribute.p_split(key)
-        for i, optimizer in enumerate(optimizers):
-            new_params, new_optimizer_state, stats = optimizer.step(
-                params=params[i],
-                state=optimizer_states[i],
-                rng=subkey1,
-                data_iterator=iter([data_iterator(subkey2)]),
-                momentum=momentum,
-                damping=damping,
-            )
-            loss = utils.distribute.get_first(stats["loss"])
-            if i == 0:
-                bias = new_params["params"]["bias"]
-                kernel = new_params["params"]["kernel"]
-            elif i == 1:
-                bias = new_params["params"]["kernel"][..., -1, :]
-                kernel = new_params["params"]["kernel"][..., :-1, :]
-            step_results.append((kernel, bias, loss))
-            params[i], optimizer_states[i] = new_params, new_optimizer_state
-
-        assert_pytree_allclose(step_results[0], step_results[1], rtol=1e-6)
+    assert_pytree_allclose(dense_results, logdomaindense_results, rtol=1e-6)
