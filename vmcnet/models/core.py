@@ -115,12 +115,12 @@ class Dense(flax.linen.Module):
 
     Attributes:
         features (int): the number of output features.
-        use_bias (bool, optional): whether to add a bias to the output. Defaults to
-            True.
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrix. Defaults to orthogonal initialization.
         bias_init (WeightInitializer, optional): initializer function for the bias.
             Defaults to random normal initialization.
+        use_bias (bool, optional): whether to add a bias to the output. Defaults to
+            True.
         register_kfac (bool, optional): whether to register the computation with KFAC.
             Defaults to True.
     """
@@ -162,21 +162,20 @@ class LogDomainDense(flax.linen.Module):
     If the inputs are (sign(x), log(abs(x))), the outputs are
     (sign(Wx + b), log(abs(Wx + b))).
 
+    The bias is implemented by extending the inputs with a vector of ones.
+
     Attributes:
         features (int): the number of output features.
-        use_bias (bool, optional): whether to add a bias to the output. Defaults to
-            True.
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrix. Defaults to orthogonal initialization.
-        bias_init (WeightInitializer, optional): initializer function for the bias.
-            Defaults to random normal initialization.
+        use_bias (bool, optional): whether to add a bias to the output. Defaults to
+            True.
         register_kfac (bool, optional): whether to register the computation with KFAC.
             Defaults to True.
     """
 
     features: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
-    bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
     register_kfac: bool = True
 
@@ -192,27 +191,21 @@ class LogDomainDense(flax.linen.Module):
         Returns:
             jnp.ndarray: The transformed input.
         """
-        kernel = self.param(
-            "kernel", self.kernel_init, (log_abs_x.shape[-1], self.features)
-        )
+        input_dim = log_abs_x.shape[-1]
 
         if self.use_bias:
-            bias = self.param("bias", self.bias_init, (self.features,))
-            extended_kernel = jnp.concatenate(
-                [kernel, jnp.expand_dims(bias, 0)], axis=0
-            )
-
+            input_dim += 1
             sign_x = jnp.concatenate([sign_x, jnp.ones_like(sign_x[..., 0:1])], axis=-1)
             log_abs_x = jnp.concatenate(
                 [log_abs_x, jnp.zeros_like(log_abs_x[..., 0:1])], axis=-1
             )
-        else:
-            extended_kernel = kernel
+
+        kernel = self.param("kernel", self.kernel_init, (input_dim, self.features))
 
         return log_linear_exp(
             sign_x,
             log_abs_x,
-            extended_kernel,
+            kernel,
             axis=-1,
             register_kfac=self.register_kfac,
         )

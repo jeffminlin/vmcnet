@@ -67,6 +67,18 @@ def dummy_model_apply(params, x):
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
 
 
-def assert_pytree_allclose(pytree1: PyTree, pytree2: PyTree):
+def assert_pytree_allclose(
+    pytree1: PyTree,
+    pytree2: PyTree,
+    rtol: float = 1e-7,
+    atol: float = 0.0,
+    verbose: bool = True,
+):
     """Use jax.tree_map to assert equality at all leaves of two pytrees."""
-    jax.tree_map(lambda l1, l2: np.testing.assert_allclose(l1, l2), pytree1, pytree2)
+    jax.tree_map(
+        lambda l1, l2: np.testing.assert_allclose(
+            l1, l2, rtol=rtol, atol=atol, verbose=verbose
+        ),
+        pytree1,
+        pytree2,
+    )
