@@ -6,17 +6,19 @@ modify the RunningMetrics inside RunningEnergyVariance.
 """
 import logging
 import os
+import queue
+import threading
+from abc import abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
-import threading
-import queue
-from typing import Dict, NamedTuple, Optional, Tuple
+from typing import Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 
 import jax.numpy as jnp
-import vmcnet.utils.io as io
-from vmcnet.utils.typing import D, P, S
 
-from .typing import CheckpointData
+import vmcnet.utils.io as io
+from vmcnet.utils.typing import CheckpointData, D, P, S
+
+T = TypeVar("T")
 
 CHECKPOINT_FILE_NAME = "checkpoint.npz"
 
@@ -69,8 +71,8 @@ class RunningEnergyVariance(NamedTuple):
     variance: RunningMetric
 
 
-class CheckpointWriter:
-    """A simple asynchronous writer for saving checkpoints during training.
+class ThreadedWriter(Generic[T]):
+    """A simple asynchronous writer to handle file io during training.
 
     Spins up a thread for the file IO so that it does not block the main line of the
     training procedure. While Python threads do not provide true parallelism of CPU
@@ -79,55 +81,84 @@ class CheckpointWriter:
     """
 
     def __init__(self):
-        """Create a new CheckpointWriter."""
-        self._checkpoint_thread = threading.Thread(target=self._run_checkpoint_thread)
+        """Create a new ThreadedWriter."""
+        self._thread = threading.Thread(target=self._run_thread)
         self._done = False
         self._queue = queue.Queue()
 
-    def _run_checkpoint_thread(self):
+    @abstractmethod
+    def write_out_data(self, directory: str, name: str, data_to_save: T):
+        """Abstract method which saves a piece of data pulled from the queue.
+
+        Args:
+            directory (str): directory in which to write the checkpoint
+            name (str): filename for the checkpoint
+            data_to_save (Any): data to save
+        """
+        pass
+
+    def _run_thread(self):
         while True and not self._done:
             try:
                 # Timeout should be long enough to avoid using unnecessarily CPU cycles
                 # on this thread, but short enough that we don't mind waiting for the
                 # this to time out at the end of the training loop.
-                (directory, name, checkpoint_data) = self._queue.get(timeout=0.5)
-                io.save_vmc_state(directory, name, checkpoint_data)
+                (directory, name, data_to_save) = self._queue.get(timeout=0.5)
+                self.write_out_data(directory, name, data_to_save)
             except queue.Empty:
                 continue
 
         # Once the checkpointing is "done", still need to write any remaining items in
         # the queue to disc.
         while not self._queue.empty():
-            (directory, name, checkpoint_data) = self._queue.get()
-            io.save_vmc_state(directory, name, checkpoint_data)
+            (directory, name, data_to_save) = self._queue.get()
+            self.write_out_data(directory, name, data_to_save)
 
     def initialize(self):
-        """Initialize the CheckpointWriter by starting its internal thread."""
-        self._checkpoint_thread.start()
+        """Initialize the ThreadedWriter by starting its internal thread."""
+        self._thread.start()
 
-    def save_checkpoint(
-        self,
-        directory: str,
-        name: str,
-        checkpoint_data: CheckpointData,
-    ):
-        """Queue up a checkpoint to be written to disc.
-
-        Args:
-            directory (str): directory in which to write the checkpoint
-            name (str): filename for the checkpoint
-            epoch (int): epoch at which checkpoint is being saved
-            data (pytree or jnp.ndarray): walker data to save
-            params (pytree): model parameters to save
-            optimizer_state (pytree): optimizer state to save
-            key (jnp.ndarray): RNG key, used to reproduce exact behavior from checkpoint
-        """
-        self._queue.put((directory, name, checkpoint_data))
+    def save_data(self, directory: str, name: str, data_to_save: T):
+        """Queue up data to be written to disc."""
+        self._queue.put((directory, name, data_to_save))
 
     def close_and_await(self):
         """Stop the thread by setting a flag, and return once it gets the message."""
         self._done = True
-        self._checkpoint_thread.join()
+        self._thread.join()
+
+
+class CheckpointWriter(ThreadedWriter[CheckpointData]):
+    """A ThreadedWriter for saving checkpoints during training."""
+
+    def write_out_data(
+        self, directory: str, name: str, checkpoint_data: CheckpointData
+    ):
+        """Save checkpoint data.
+
+        Args:
+            directory (str): directory in which to write the checkpoint
+            name (str): filename for the checkpoint
+
+            data_to_save (CheckpointData): checkpoint data which contains:
+                epoch (int): epoch at which checkpoint is being saved
+                data (pytree or jnp.ndarray): walker data to save
+                params (pytree): model parameters to save
+                optimizer_state (pytree): optimizer state to save
+                key (jnp.ndarray): RNG key, used to reproduce exact behavior from
+                    checkpoint
+        """
+        io.save_vmc_state(directory, name, checkpoint_data)
+
+
+class MetricsWriter(ThreadedWriter[Dict]):
+    """A ThreadedWriter for saving metrics during training."""
+
+    def write_out_data(self, directory: str, name: str, metrics: Dict):
+        """Save metrics to individual text files."""
+        del name  # unused, each metric gets its own file
+        for metric, metric_val in metrics.items():
+            io.append_metric_to_file(metric_val, directory, metric)
 
 
 def initialize_checkpointing(
@@ -136,7 +167,12 @@ def initialize_checkpointing(
     logdir: str = None,
     checkpoint_every: int = None,
 ) -> Tuple[
-    str, jnp.float32, RunningEnergyVariance, CheckpointWriter, Optional[CheckpointData]
+    str,
+    jnp.float32,
+    RunningEnergyVariance,
+    CheckpointWriter,
+    MetricsWriter,
+    Optional[CheckpointData],
 ]:
     """Initialize checkpointing objects.
 
@@ -163,26 +199,30 @@ def initialize_checkpointing(
     checkpoint_writer.initialize()
     best_checkpoint_data = None
 
+    metrics_writer = MetricsWriter()
+    metrics_writer.initialize()
+
     return (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
         checkpoint_writer,
+        metrics_writer,
         best_checkpoint_data,
     )
 
 
 def finish_checkpointing(
     checkpoint_writer: CheckpointWriter,
+    metrics_writer: MetricsWriter,
     best_checkpoint_data: CheckpointData = None,
     logdir: str = None,
 ):
     """Save any final checkpoint data and close and await the CheckpointWriter."""
     if logdir is not None and best_checkpoint_data is not None:
-        checkpoint_writer.save_checkpoint(
-            logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
-        )
+        checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
     checkpoint_writer.close_and_await()
+    metrics_writer.close_and_await()
 
 
 def get_checkpoint_metric(
@@ -228,6 +268,7 @@ def save_metrics_and_handle_checkpoints(
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
     checkpoint_writer: CheckpointWriter,
+    metrics_writer: MetricsWriter,
     checkpoint_metric: jnp.float32,
     best_checkpoint_every: int,
     logdir: str = None,
@@ -305,6 +346,7 @@ def save_metrics_and_handle_checkpoints(
         metrics,
         logdir,
         checkpoint_writer,
+        metrics_writer,
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
@@ -417,9 +459,7 @@ def track_and_save_best_checkpoint(
         )
 
     if (epoch + 1) % best_checkpoint_every == 0 and best_checkpoint_data is not None:
-        checkpoint_writer.save_checkpoint(
-            logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
-        )
+        checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
         checkpoint_str = checkpoint_str + ", best weights saved"
         best_checkpoint_data = None
 
@@ -435,6 +475,7 @@ def save_metrics_and_regular_checkpoint(
     metrics: Dict,
     logdir: str,
     checkpoint_writer: CheckpointWriter,
+    metrics_writer: MetricsWriter,
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
@@ -469,15 +510,11 @@ def save_metrics_and_regular_checkpoint(
         str: previous checkpointing string, with additional info if this function
         did checkpointing
     """
-    # TODO(Jeffmin): do something more efficient than writing separately to disk for
-    # every metric, maybe something like pandas? Also maybe shouldn't be every epoch.
-    # Might be better to switch to something like TensorBoard -- need to do research
-    for metric, metric_val in metrics.items():
-        io.append_metric_to_file(metric_val, logdir, metric)
+    metrics_writer.save_data(logdir, "", metrics)
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
-            checkpoint_writer.save_checkpoint(
+            checkpoint_writer.save_data(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
                 (

@@ -82,6 +82,7 @@ def vmc_loop(
         checkpoint_metric,
         running_energy_and_variance,
         checkpoint_writer,
+        metrics_writer,
         best_checkpoint_data,
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
@@ -123,6 +124,7 @@ def vmc_loop(
             nchains,
             running_energy_and_variance,
             checkpoint_writer,
+            metrics_writer,
             checkpoint_metric,
             best_checkpoint_every,
             logdir=logdir,
@@ -134,6 +136,6 @@ def vmc_loop(
         utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
     utils.checkpoint.finish_checkpointing(
-        checkpoint_writer, best_checkpoint_data, logdir
+        checkpoint_writer, metrics_writer, best_checkpoint_data, logdir
     )
     return params, optimizer_state, data, key

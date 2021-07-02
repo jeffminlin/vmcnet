@@ -25,9 +25,9 @@ def test_three_checkpoints(mocker):
 
     # Initialize checkpoint writer and save three checkpoints
     checkpoint_writer.initialize()
-    checkpoint_writer.save_checkpoint(directory, file_name1, checkpoint_data)
-    checkpoint_writer.save_checkpoint(directory, file_name2, checkpoint_data)
-    checkpoint_writer.save_checkpoint(directory, file_name3, checkpoint_data)
+    checkpoint_writer.save_data(directory, file_name1, checkpoint_data)
+    checkpoint_writer.save_data(directory, file_name2, checkpoint_data)
+    checkpoint_writer.save_data(directory, file_name3, checkpoint_data)
     checkpoint_writer.close_and_await()
 
     expected_calls = [
@@ -54,7 +54,7 @@ def test_save_best_checkpoint(mocker):
 
     # Create checkpoint writer and mock out metrics and checkpointing
     checkpoint_writer = checkpoint.CheckpointWriter()
-    mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_checkpoint")
+    mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_data")
     mock_get_metrics = mocker.patch("vmcnet.utils.checkpoint.get_checkpoint_metric")
 
     # Pull out simple helper function since only epoch, best_metric, and
