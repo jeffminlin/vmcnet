@@ -43,14 +43,13 @@ def _train(nsteps, loss_and_grad, model_params, batch, key, logdomain=False):
     batch = utils.distribute.default_distribute_data(batch)
     key = utils.distribute.make_different_rng_key_on_all_devices(key)
 
-    # Make two kfac optimizers, both with the same keys and random inputs
+    # Make a KFAC optimizer
     optimizer = _make_optimizer_from_loss_and_grad(loss_and_grad)
 
     key, subkey = utils.distribute.p_split(key)
     optimizer_state = optimizer.init(model_params, subkey, batch)
 
-    # Train, checking that the outputs of the two optimizer steps are the same for each
-    # iteration
+    # Train and record results for all steps
     momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
     damping = kfac_utils.replicate_all_local_devices(jnp.asarray(0.001))
 
