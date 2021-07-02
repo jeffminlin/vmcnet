@@ -38,6 +38,11 @@ S = TypeVar("S", bound=PyTree)
 #  5. The RNG key
 CheckpointData = Tuple[int, D, P, S, jnp.ndarray]
 
+# Data with one jnp array per spin
 SpinSplitArray = List[jnp.ndarray]
+
+# Data in (sign, logabs) form
 SLArray = Tuple[jnp.ndarray, jnp.ndarray]
+
+# Per-spin data in (sign, logabs) form
 SpinSplitSLArray = List[SLArray]

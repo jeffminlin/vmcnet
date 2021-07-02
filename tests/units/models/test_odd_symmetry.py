@@ -8,6 +8,7 @@ import vmcnet.models.odd_symmetry as odd_sym
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_from_slog,
+    spin_split_array_to_slog,
 )
 from vmcnet.utils.typing import SLArray, SpinSplitSLArray
 
@@ -64,7 +65,7 @@ def test_get_all_odd_symmetries():
     inputs = [(spin1_signs, spin1_logs), (spin2_signs, spin2_logs)]
 
     # Test for ispin=0, sign should alternate at each index
-    syms = odd_sym.get_all_odd_symmetries(inputs)
+    syms = odd_sym.get_all_odd_symmetries(inputs, axis=-3)
     expected_syms = [
         (
             jnp.stack([spin1_signs, -spin1_signs, spin1_signs, -spin1_signs], axis=-3),
@@ -78,62 +79,26 @@ def test_get_all_odd_symmetries():
     assert_pytree_allclose(syms, expected_syms)
 
 
-def test_make_fn_odd_one_spin():
-    """Test making a function of one spin odd."""
-    nbatch = 5
-    nelec = 3
-    d = 2
-    dhidden = 4
-    dout = 3
-    key = jax.random.PRNGKey(0)
-    key, subkey = jax.random.split(key)
-
-    inputs = jax.random.normal(key, (nbatch, nelec, d))
-    neg_inputs = -inputs
-    weights1 = jax.random.normal(subkey, (nelec * d, dhidden))
-    weights2 = jax.random.normal(subkey, (dhidden, dout))
-    slog_inputs = [array_to_slog(inputs)]  # one spin block only
-    neg_slog_inputs = [array_to_slog(neg_inputs)]
-
-    def fn(x: SpinSplitSLArray) -> SLArray:
-        (signs, logs) = x[0]
-
-        values = signs * jnp.exp(logs)
-        values = values.reshape((values.shape[0], values.shape[1], nelec * d))
-        output = jnp.matmul(values, weights1)
-        output = jnp.tanh(output)
-        output = jnp.matmul(output, weights2)
-        output = jnp.tanh(output)
-        return array_to_slog(output)
-
-    odd_fn = odd_sym.make_fn_odd(fn)
-    result = odd_fn(slog_inputs)
-    neg_result = odd_fn(neg_slog_inputs)
-
-    np.testing.assert_allclose(neg_result[0], -result[0])
-    np.testing.assert_allclose(neg_result[1], result[1])
-
-
-def test_make_fn_odd_multi_spin():
-    """Test making a function of multiple spins odd with respect to each."""
+def test_make_fn_odd():
+    """Test making a function of multiple spins odd with respect to each spin."""
     nbatch = 5
     nelec_per_spin = (2, 3, 4)
     nelec_total = 9
     d = 2
-    dhidden = 4
-    dout = 3
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
 
     inputs = [jax.random.normal(key, (nbatch, n, d)) for n in nelec_per_spin]
     flip_sign_inputs = [inputs[0], -inputs[1], inputs[2]]
     same_sign_inputs = [inputs[0], -inputs[1], -inputs[2]]
+    slog_inputs = spin_split_array_to_slog(inputs)
+    flip_slog_inputs = spin_split_array_to_slog(flip_sign_inputs)
+    same_slog_inputs = spin_split_array_to_slog(same_sign_inputs)
 
+    dhidden = 4
+    dout = 3
     weights1 = jax.random.normal(subkey, (nelec_total * d, dhidden))
     weights2 = jax.random.normal(subkey, (dhidden, dout))
-    slog_inputs = [array_to_slog(x) for x in inputs]  # one spin block only
-    flip_slog_inputs = [array_to_slog(x) for x in flip_sign_inputs]
-    same_slog_inputs = [array_to_slog(x) for x in same_sign_inputs]
 
     def fn(x: SpinSplitSLArray) -> SLArray:
         all_signs = jnp.concatenate([s[0] for s in x], axis=-2)
