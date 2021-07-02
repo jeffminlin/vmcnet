@@ -3,8 +3,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tests.test_utils import assert_pytree_allclose
 import vmcnet.models.odd_symmetry as odd_sym
+from tests.test_utils import assert_pytree_allclose
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_from_slog,
@@ -20,38 +20,50 @@ def test_get_odd_symmetries_one_spin():
     logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
 
     # Test for ispin=0, sign should alternate at each index
-    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+    syms, sym_signs = odd_sym.get_odd_symmetries_one_spin(
         (signs, logs), 0, nspins, axis=-3
     )
-    expected_signs = jnp.stack(
-        [signs, -signs, signs, -signs, signs, -signs, signs, -signs],
-        axis=-3,
-    )
     expected_logs = jnp.stack([logs, logs, logs, logs, logs, logs, logs, logs], axis=-3)
-    np.testing.assert_allclose(sym_signs, expected_signs)
-    np.testing.assert_allclose(sym_logs, expected_logs)
+    expected_syms = (
+        jnp.stack(
+            [signs, -signs, signs, -signs, signs, -signs, signs, -signs],
+            axis=-3,
+        ),
+        expected_logs,
+    )
+    expected_sym_signs = jnp.array([1, -1, 1, -1, 1, -1, 1, -1])
+    assert_pytree_allclose(syms, expected_syms)
+    np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
     # Test for ispin=1, sign should alternate every two indices
-    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+    syms, sym_signs = odd_sym.get_odd_symmetries_one_spin(
         (signs, logs), 1, nspins, axis=-3
     )
-    expected_signs = jnp.stack(
-        [signs, signs, -signs, -signs, signs, signs, -signs, -signs],
-        axis=-3,
+    expected_syms = (
+        jnp.stack(
+            [signs, signs, -signs, -signs, signs, signs, -signs, -signs],
+            axis=-3,
+        ),
+        expected_logs,
     )
-    np.testing.assert_allclose(sym_signs, expected_signs)
-    np.testing.assert_allclose(sym_logs, expected_logs)
+    expected_sym_signs = jnp.array([1, 1, -1, -1, 1, 1, -1, -1])
+    assert_pytree_allclose(syms, expected_syms)
+    np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
     # Test for ispin=3, sign should alternate every four indices
-    (sym_signs, sym_logs) = odd_sym.get_odd_symmetries_one_spin(
+    syms, sym_signs = odd_sym.get_odd_symmetries_one_spin(
         (signs, logs), 2, nspins, axis=-3
     )
-    expected_signs = jnp.stack(
-        [signs, signs, signs, signs, -signs, -signs, -signs, -signs],
-        axis=-3,
+    expected_syms = (
+        jnp.stack(
+            [signs, signs, signs, signs, -signs, -signs, -signs, -signs],
+            axis=-3,
+        ),
+        expected_logs,
     )
-    np.testing.assert_allclose(sym_signs, expected_signs)
-    np.testing.assert_allclose(sym_logs, expected_logs)
+    expected_sym_signs = jnp.array([1, 1, 1, 1, -1, -1, -1, -1])
+    assert_pytree_allclose(syms, expected_syms)
+    np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
 
 def test_get_all_odd_symmetries():
@@ -64,8 +76,8 @@ def test_get_all_odd_symmetries():
     )
     inputs = [(spin1_signs, spin1_logs), (spin2_signs, spin2_logs)]
 
-    # Test for ispin=0, sign should alternate at each index
-    syms = odd_sym.get_all_odd_symmetries(inputs, axis=-3)
+    syms, sym_signs = odd_sym.get_all_odd_symmetries(inputs, axis=-3)
+
     expected_syms = [
         (
             jnp.stack([spin1_signs, -spin1_signs, spin1_signs, -spin1_signs], axis=-3),
@@ -76,7 +88,10 @@ def test_get_all_odd_symmetries():
             jnp.stack([spin2_logs, spin2_logs, spin2_logs, spin2_logs], axis=-3),
         ),
     ]
+    expected_sym_signs = jnp.array([1, -1, -1, 1])
+
     assert_pytree_allclose(syms, expected_syms)
+    np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
 
 def test_make_fn_odd():
