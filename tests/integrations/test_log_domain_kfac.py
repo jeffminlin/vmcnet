@@ -72,8 +72,8 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
     dense_params = dense_layer.init(subkey, batch)
 
     # Get concatenated dense kernel
-    dense_param_leaves = jax.tree_leaves(dense_params)
-    dense_bias, dense_kernel = dense_param_leaves[0], dense_param_leaves[1]
+    dense_bias = dense_params["params"]["bias"]
+    dense_kernel = dense_params["params"]["kernel"]
     concat_dense = jnp.concatenate(
         [dense_kernel, jnp.expand_dims(dense_bias, 0)], axis=0
     )
