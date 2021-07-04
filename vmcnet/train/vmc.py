@@ -3,6 +3,7 @@ from typing import Callable, Dict, Tuple
 
 import jax.numpy as jnp
 
+from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
 
@@ -81,61 +82,61 @@ def vmc_loop(
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
-        checkpoint_writer,
-        metrics_writer,
         best_checkpoint_data,
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
 
-    for epoch in range(nepochs):
-        # Save state for checkpointing at the start of the epoch for two reasons:
-        # 1. To save the model that generates the best energy and variance metrics,
-        # rather than the model one parameter UPDATE after the best metrics.
-        # 2. To ensure a fully consistent state can be reloading from a checkpoint, and
-        # the exact subsequent behavior can be reproduced (if run on same machine).
-        old_params = params
-        old_state = optimizer_state
-        old_data = data
-        old_key = key
+    with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
+        for epoch in range(nepochs):
+            # Save state for checkpointing at the start of the epoch for two reasons:
+            # 1. To save the model that generates the best energy and variance metrics,
+            # rather than the model one parameter UPDATE after the best metrics.
+            # 2. To ensure a fully consistent state can be reloaded from a checkpoint, &
+            # the exact subsequent behavior can be reproduced (if run on same machine).
+            old_params = params
+            old_state = optimizer_state
+            old_data = data
+            old_key = key
 
-        accept_ratio, data, key = walker_fn(params, data, key)
+            accept_ratio, data, key = walker_fn(params, data, key)
 
-        params, optimizer_state, metrics, key = update_param_fn(
-            data, params, optimizer_state, key
+            params, optimizer_state, metrics, key = update_param_fn(
+                data, params, optimizer_state, key
+            )
+
+            if metrics is None:  # don't checkpoint if no metrics to checkpoint
+                continue
+
+            metrics["accept_ratio"] = accept_ratio
+
+            (
+                checkpoint_metric,
+                checkpoint_str,
+                best_checkpoint_data,
+            ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
+                epoch,
+                old_params,
+                old_state,
+                old_data,
+                old_key,
+                metrics,
+                nchains,
+                running_energy_and_variance,
+                checkpoint_writer,
+                metrics_writer,
+                checkpoint_metric,
+                best_checkpoint_every,
+                logdir=logdir,
+                variance_scale=checkpoint_variance_scale,
+                checkpoint_every=checkpoint_every,
+                best_checkpoint_data=best_checkpoint_data,
+                checkpoint_dir=checkpoint_dir,
+            )
+            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+
+        utils.checkpoint.finish_checkpointing(
+            checkpoint_writer, best_checkpoint_data, logdir
         )
 
-        if metrics is None:  # don't checkpoint if no metrics to checkpoint
-            continue
-
-        metrics["accept_ratio"] = accept_ratio
-
-        (
-            checkpoint_metric,
-            checkpoint_str,
-            best_checkpoint_data,
-        ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
-            epoch,
-            old_params,
-            old_state,
-            old_data,
-            old_key,
-            metrics,
-            nchains,
-            running_energy_and_variance,
-            checkpoint_writer,
-            metrics_writer,
-            checkpoint_metric,
-            best_checkpoint_every,
-            logdir=logdir,
-            variance_scale=checkpoint_variance_scale,
-            checkpoint_every=checkpoint_every,
-            best_checkpoint_data=best_checkpoint_data,
-            checkpoint_dir=checkpoint_dir,
-        )
-        utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
-
-    utils.checkpoint.finish_checkpointing(
-        checkpoint_writer, metrics_writer, best_checkpoint_data, logdir
-    )
     return params, optimizer_state, data, key

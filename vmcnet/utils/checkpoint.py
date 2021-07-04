@@ -127,6 +127,15 @@ class ThreadedWriter(Generic[T]):
         self._done = True
         self._thread.join()
 
+    def __enter__(self):
+        """Enter a ThreadedWriter's context, starting up a thread."""
+        self.initialize()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Wait for the thread to finish, then leave the ThreadedWriter's context."""
+        self.close_and_await()
+
 
 class CheckpointWriter(ThreadedWriter[CheckpointData]):
     """A ThreadedWriter for saving checkpoints during training."""
@@ -166,14 +175,7 @@ def initialize_checkpointing(
     nhistory_max: int,
     logdir: str = None,
     checkpoint_every: int = None,
-) -> Tuple[
-    str,
-    jnp.float32,
-    RunningEnergyVariance,
-    CheckpointWriter,
-    MetricsWriter,
-    Optional[CheckpointData],
-]:
+) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData]]:
     """Initialize checkpointing objects.
 
     A suffix is added to the checkpointing directory if one with the same name already
@@ -181,7 +183,7 @@ def initialize_checkpointing(
 
     The checkpointing metric (error-adjusted running energy average) is initialized to
     infinity, and empty arrays are initialized in running_energy_and_variance. The
-    CheckpointWriter is also created and best checkpoint data is initialized to None.
+    best checkpoint data is initialized to None.
     """
     if logdir is not None:
         logging.info("Saving to " + logdir)
@@ -194,35 +196,24 @@ def initialize_checkpointing(
     running_energy_and_variance = RunningEnergyVariance(
         RunningMetric(nhistory_max), RunningMetric(nhistory_max)
     )
-
-    checkpoint_writer = CheckpointWriter()
-    checkpoint_writer.initialize()
     best_checkpoint_data = None
-
-    metrics_writer = MetricsWriter()
-    metrics_writer.initialize()
 
     return (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
-        checkpoint_writer,
-        metrics_writer,
         best_checkpoint_data,
     )
 
 
 def finish_checkpointing(
     checkpoint_writer: CheckpointWriter,
-    metrics_writer: MetricsWriter,
     best_checkpoint_data: CheckpointData = None,
     logdir: str = None,
 ):
-    """Save any final checkpoint data and close and await the CheckpointWriter."""
+    """Save any final checkpoint data to the CheckpointWriter."""
     if logdir is not None and best_checkpoint_data is not None:
         checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
-    checkpoint_writer.close_and_await()
-    metrics_writer.close_and_await()
 
 
 def get_checkpoint_metric(
