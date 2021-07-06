@@ -1,5 +1,5 @@
 """Antiequivariant parts to compose into a model."""
-from typing import List, Sequence, Tuple, Union
+from typing import Sequence, Union
 
 import flax
 import jax
@@ -7,10 +7,11 @@ import jax.numpy as jnp
 
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import FermiNetOrbitalLayer
+from vmcnet.utils.typing import SLArray, SLArrayList
 from .weights import WeightInitializer
 
 
-def slog_cofactor_antieq(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
     """Compute a cofactor-based antiequivariance, returning results in slogabs form.
 
     Input must be square in the last two dimensions, of shape (..., n, n). The second
@@ -108,9 +109,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     orbital_isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(
-        self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None
-    ) -> List[Tuple[jnp.ndarray, jnp.ndarray]]:
+    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
@@ -127,7 +126,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
                 as an extra input to the orbital layer.
 
         Returns:
-            (List[Tuple[jnp.ndarray, jnp.ndarray]]): per-spin list where each list
+            (SLArrayList): per-spin list where each list
              entry is a tuple of two arrays each of shape (..., nelec, d). The first
              array in the tuple contains the sign of the results and the second contains
              the logs of the absolute values of the results for the given spin.

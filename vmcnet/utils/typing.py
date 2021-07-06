@@ -4,7 +4,7 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, Tuple, TypeVar
+from typing import Any, List, Tuple, TypeVar
 
 import jax.numpy as jnp
 
@@ -37,3 +37,10 @@ S = TypeVar("S", bound=PyTree)
 #  4. The optimizer state
 #  5. The RNG key
 CheckpointData = Tuple[int, D, P, S, jnp.ndarray]
+
+ArrayList = List[jnp.ndarray]
+
+# Single array in (sign, logabs) form
+SLArray = Tuple[jnp.ndarray, jnp.ndarray]
+
+SLArrayList = List[SLArray]

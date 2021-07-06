@@ -6,6 +6,7 @@ from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.models as models
 import vmcnet.utils as utils
+from vmcnet.utils.slog_helpers import array_to_slog, array_from_slog
 
 from tests.test_utils import (
     assert_pytree_allclose,
@@ -101,10 +102,8 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
         return utils.distribute.mean_all_local_devices(jnp.square(prediction - target))
 
     def logdomaindense_loss(params, x):
-        sign_out, log_abs_out = logdomaindense_layer.apply(
-            params, jnp.sign(x), jnp.log(jnp.abs(x))
-        )
-        prediction = sign_out * jnp.exp(log_abs_out)
+        slog_out = logdomaindense_layer.apply(params, array_to_slog(x))
+        prediction = array_from_slog(slog_out)
         target = target_fn(x)
         kfac_ferminet_alpha.register_squared_error_loss(prediction, target)
         return utils.distribute.mean_all_local_devices(jnp.square(prediction - target))

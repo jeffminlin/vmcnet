@@ -9,6 +9,7 @@ import numpy as np
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
 from vmcnet.utils.typing import PyTree
+from vmcnet.utils.slog_helpers import array_to_slog
 
 
 def make_dummy_log_f():
@@ -78,9 +79,7 @@ def init_dense_and_logdomaindense_with_same_params(
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
     """Initialize Dense and LogDomainDense layers with the same parameters."""
     dense_params = dense_layer.init(key, batch)
-    logdomaindense_params = logdomaindense_layer.init(
-        key, jnp.sign(batch), jnp.log(jnp.abs(batch))
-    )
+    logdomaindense_params = logdomaindense_layer.init(key, array_to_slog(batch))
 
     # Concatenate dense kernel and bias
     dense_bias = dense_params["params"]["bias"]
