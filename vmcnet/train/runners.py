@@ -226,7 +226,7 @@ def molecule():
         )
 
     # Train
-    data, key = mcmc.metropolis.burn_data(
+    data, sharded_key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, data, params, sharded_key
     )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
@@ -270,7 +270,7 @@ def molecule():
             sharded_init_pos, sharded_amplitudes, move_metadata
         )
 
-    data, key = mcmc.metropolis.burn_data(
+    data, sharded_key = mcmc.metropolis.burn_data(
         burning_step, config.eval.nburn, data, params, sharded_key
     )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
