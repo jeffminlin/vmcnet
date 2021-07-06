@@ -251,6 +251,9 @@ def molecule():
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn, config.eval.nchains, pacore.get_position_from_data
     )
+    eval_walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+        config.eval.nsteps_per_energy_eval, metrop_step_fn
+    )
     optimizer_state = None
 
     if not config.eval.use_data_from_training:
@@ -276,7 +279,7 @@ def molecule():
         data,
         config.eval.nchains,
         config.eval.nepochs,
-        walker_fn,
+        eval_walker_fn,
         eval_update_param_fn,
         sharded_key,
         logdir=os.path.join(logdir, "eval"),
