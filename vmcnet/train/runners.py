@@ -1,12 +1,13 @@
 """Entry points for running standard jobs."""
+import functools
 import logging
 import os
+import sys
 
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
 import optax
-from absl import app
 from absl import flags
 from ml_collections.config_flags import config_flags
 
@@ -21,18 +22,82 @@ import vmcnet.train as train
 
 FLAGS = flags.FLAGS
 
-config_flags.DEFINE_config_file(
-    "config", os.path.join(os.path.dirname(__file__), "..", "utils", "config.py")
+config_flags.DEFINE_config_dict(
+    "config", utils.config.get_default_config(), lock_config=False
 )
 
 
-def molecule():
-    """Run VMC and evaluate a molecule."""
-    app.run(_molecule)
-
-
-def _molecule(argv):
+def _parse_flags():
+    FLAGS(sys.argv)
     config = FLAGS.config
+    model_type = config.model.type
+    config.model = config.model[model_type]
+    config.model.type = model_type
+
+    config.lock()
+    return config
+
+
+def _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi):
+    # Define parameter updates
+    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi.apply)
+    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential()
+    ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+
+    local_energy_fn = physics.core.combine_local_energy_terms(
+        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+    )
+
+    return local_energy_fn
+
+
+def _make_initial_distributed_data(config, init_pos, log_psi, params):
+    sharded_init_pos = utils.distribute.default_distribute_data(init_pos)
+    sharded_amplitudes = utils.distribute.pmap(log_psi.apply)(params, sharded_init_pos)
+    move_metadata = utils.distribute.replicate_all_local_devices(
+        dwpa.MoveMetadata(
+            std_move=config.vmc.std_move, move_acceptance_sum=0.0, moves_since_update=0
+        )
+    )
+    data = pacore.make_position_amplitude_data(
+        sharded_init_pos, sharded_amplitudes, move_metadata
+    )
+
+    return data
+
+
+def total_variation_clipping_fn(local_energies, threshold=5.0):
+    """Clip local energy to within a multiple of the total variation from the median."""
+    median_local_e = jnp.nanmedian(local_energies)
+    local_energies = jnp.where(
+        jnp.isfinite(local_energies),
+        local_energies,
+        median_local_e,
+    )
+    total_variation = utils.distribute.mean_all_local_devices(
+        jnp.abs(local_energies - median_local_e)
+    )
+    clipped_local_e = jax.lax.cond(
+        ~jnp.isnan(total_variation),
+        lambda x: jnp.clip(
+            x,
+            median_local_e - threshold * total_variation,
+            median_local_e + threshold * total_variation,
+        ),
+        lambda x: x,
+        local_energies,
+    )
+    return clipped_local_e
+
+
+def molecule():
+    """Run VMC on a molecule."""
+    config = _parse_flags()
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
@@ -63,7 +128,7 @@ def _molecule(argv):
         key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype_to_use
     )
 
-    log_psi = models.construct.get_model(
+    log_psi = models.construct.get_model_from_config(
         config.model, nelec, ion_pos, dtype=dtype_to_use
     )
 
@@ -72,16 +137,7 @@ def _molecule(argv):
     params = log_psi.init(subkey, init_pos[0:1])
     params = utils.distribute.replicate_all_local_devices(params)
 
-    sharded_init_pos = utils.distribute.default_distribute_data(init_pos)
-    sharded_amplitudes = utils.distribute.pmap(log_psi.apply)(params, sharded_init_pos)
-    move_metadata = utils.distribute.replicate_all_local_devices(
-        dwpa.MoveMetadata(
-            std_move=config.vmc.std_move, move_acceptance_sum=0.0, moves_since_update=0
-        )
-    )
-    data = pacore.make_position_amplitude_data(
-        sharded_init_pos, sharded_amplitudes, move_metadata
-    )
+    data = _make_initial_distributed_data(config, init_pos, log_psi, params)
 
     # Setup metropolis step
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
@@ -93,45 +149,17 @@ def _molecule(argv):
         config.vmc.nsteps_per_param_update, metrop_step_fn
     )
 
-    # Define parameter updates
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi.apply)
-    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-        ion_pos, ion_charges
-    )
-    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential()
-    ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-        ion_pos, ion_charges
-    )
+    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi)
 
-    local_energy_fn = physics.core.combine_local_energy_terms(
-        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
-    )
-
-    # def clipped_local_energy_fn(params, x):
-    #     local_energy = local_energy_fn(params, x)
-    #     median_local_e = jnp.nanmedian(local_energy)
-    #     local_energy = jnp.where(
-    #         jnp.isfinite(local_energy),
-    #         local_energy,
-    #         median_local_e,
-    #     )
-    #     total_variation = utils.distribute.mean_all_local_devices(
-    #         jnp.abs(local_energy - median_local_e)
-    #     )
-    #     clipped_local_e = jax.lax.cond(
-    #         ~jnp.isnan(total_variation),
-    #         lambda x: jnp.clip(
-    #             x,
-    #             median_local_e - 5.0 * total_variation,
-    #             median_local_e + 5.0 * total_variation,
-    #         ),
-    #         lambda x: x,
-    #         local_energy,
-    #     )
-    #     return clipped_local_e
+    if config.vmc.clip_threshold > 0.0:
+        clipping_fn = functools.partial(
+            total_variation_clipping_fn, threshold=config.vmc.clip_threshold
+        )
+    else:
+        clipping_fn = None
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi.apply, local_energy_fn, config.vmc.nchains
+        log_psi.apply, local_energy_fn, config.vmc.nchains, clipping_fn
     )
 
     if config.vmc.schedule_type == "constant":

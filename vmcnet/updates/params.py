@@ -11,6 +11,14 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
 
 
+def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
+    if energy_noclip is not None:
+        metrics.update({"energy_noclip": energy_noclip})
+    if variance_noclip is not None:
+        metrics.update({"variance_noclip": variance_noclip})
+    return metrics
+
+
 def create_grad_energy_update_param_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
@@ -56,6 +64,9 @@ def create_grad_energy_update_param_fn(
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(grad_energy, params, optimizer_state)
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
+        metrics = _update_metrics_with_noclip(
+            aux_energy_data[2], aux_energy_data[3], metrics
+        )
         return params, optimizer_state, metrics, key
 
     if not apply_pmap:
@@ -109,7 +120,10 @@ def create_kfac_update_param_fn(
         if optimizer.multi_device:
             energy = utils.distribute.get_first(stats["loss"])
             variance = utils.distribute.get_first(stats["aux"][0])
+            energy_noclip = utils.distribute.get_first(stats["aux"][2])
+            variance_noclip = utils.distribute.get_first(stats["aux"][3])
         metrics = {"energy": energy, "variance": variance}
+        metrics = _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics)
         return params, optimizer_state, metrics, key
 
     return update_param_fn

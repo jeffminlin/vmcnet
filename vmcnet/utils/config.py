@@ -5,12 +5,12 @@ import os
 from ml_collections import ConfigDict
 
 
-def get_config() -> ConfigDict:
+def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
     config = ConfigDict(
         {
             "problem": get_problem_config(),
-            "model": get_model_config("ferminet"),
+            "model": get_model_config(),
             "vmc": get_vmc_config(),
             "eval": get_eval_config(),
             "logdir": os.path.join(
@@ -27,7 +27,7 @@ def get_config() -> ConfigDict:
     return config
 
 
-def get_model_config(model_type: str) -> ConfigDict:
+def get_model_config() -> ConfigDict:
     """Get a default model configuration from a model type."""
     orthogonal_init = ConfigDict({"type": "orthogonal", "scale": 1.0})
     normal_init = ConfigDict({"type": "normal"})
@@ -49,33 +49,36 @@ def get_model_config(model_type: str) -> ConfigDict:
             "cyclic_spins": False,
         }
     )
-    model_configs = {
-        "ferminet": ConfigDict(
-            {
-                "backflow": ferminet_backflow,
-                "ndeterminants": 1,
-                "kernel_init_orbital_linear": orthogonal_init,
-                "kernel_init_envelope_dim": orthogonal_init,
-                "kernel_init_envelope_ion": orthogonal_init,
-                "bias_init_orbital_linear": normal_init,
-                "orbitals_use_bias": True,
-                "isotropic_decay": True,
-            }
-        ),
-        "brute-force-antisym": ConfigDict(
-            {
-                "backflow": ferminet_backflow,
-                "antisym_type": "double",
-                "ndense_resnet": 64,
-                "nlayers_resnet": 2,
-                "kernel_init_resnet": orthogonal_init,
-                "kernel_init_jastrow": ConfigDict({"type": "ones"}),
-                "bias_init_resnet": normal_init,
-            }
-        ),
-    }
-    config = model_configs[model_type]
-    config.type = model_type
+    config = ConfigDict(
+        {
+            "type": "ferminet",
+            "ferminet": ConfigDict(
+                {
+                    "backflow": ferminet_backflow,
+                    "ndeterminants": 1,
+                    "kernel_init_orbital_linear": orthogonal_init,
+                    "kernel_init_envelope_dim": orthogonal_init,
+                    "kernel_init_envelope_ion": orthogonal_init,
+                    "bias_init_orbital_linear": normal_init,
+                    "orbitals_use_bias": True,
+                    "isotropic_decay": True,
+                }
+            ),
+            "brute_force_antisym": ConfigDict(
+                {
+                    "backflow": ferminet_backflow,
+                    "antisym_type": "double",
+                    "ndense_resnet": 64,
+                    "nlayers_resnet": 2,
+                    "kernel_init_resnet": orthogonal_init,
+                    "kernel_init_jastrow": ConfigDict({"type": "ones"}),
+                    "bias_init_resnet": normal_init,
+                    "activation_fn_resnet": "tanh",
+                    "resnet_use_bias": True,
+                }
+            ),
+        }
+    )
     return config
 
 
@@ -101,6 +104,7 @@ def get_vmc_config() -> ConfigDict:
             "nsteps_per_param_update": 10,
             "nmoves_per_width_update": 100,
             "std_move": 0.25,
+            "clip_threshold": 5.0,
             "optimizer_type": "kfac",
             "schedule_type": "inverse_time",
             "learning_rate": 1e-4,
