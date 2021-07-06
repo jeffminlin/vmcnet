@@ -19,6 +19,22 @@ def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
     return metrics
 
 
+def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
+    if not apply_pmap:
+        return jax.jit(update_param_fn)
+
+    pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
+
+    def pmapped_update_param_fn_with_single_metrics(data, params, optimizer_state, key):
+        params, optimizer_state, metrics, key = pmapped_update_param_fn(
+            data, params, optimizer_state, key
+        )
+        metrics = utils.distribute.get_first(metrics)
+        return params, optimizer_state, metrics, key
+
+    return pmapped_update_param_fn_with_single_metrics
+
+
 def create_grad_energy_update_param_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
@@ -69,19 +85,9 @@ def create_grad_energy_update_param_fn(
         )
         return params, optimizer_state, metrics, key
 
-    if not apply_pmap:
-        return jax.jit(update_param_fn)
+    traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
 
-    pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
-
-    def pmapped_update_param_fn_with_single_metrics(data, params, optimizer_state, key):
-        params, optimizer_state, metrics, key = pmapped_update_param_fn(
-            data, params, optimizer_state, key
-        )
-        metrics = utils.distribute.get_first(metrics)
-        return params, optimizer_state, metrics, key
-
-    return pmapped_update_param_fn_with_single_metrics
+    return traced_fn
 
 
 def create_kfac_update_param_fn(
@@ -117,11 +123,16 @@ def create_kfac_update_param_fn(
             momentum=momentum,
             damping=damping,
         )
+        energy = stats["loss"]
+        variance = stats["aux"][0]
+        energy_noclip = stats["aux"][2]
+        variance_noclip = stats["aux"][3]
+
+        picked_stats = (energy, variance, energy_noclip, variance_noclip)
         if optimizer.multi_device:
-            energy = utils.distribute.get_first(stats["loss"])
-            variance = utils.distribute.get_first(stats["aux"][0])
-            energy_noclip = utils.distribute.get_first(stats["aux"][2])
-            variance_noclip = utils.distribute.get_first(stats["aux"][3])
+            picked_stats = (utils.distribute.get_first(stat) for stat in picked_stats)
+        energy, variance, energy_noclip, variance_noclip = picked_stats
+
         metrics = {"energy": energy, "variance": variance}
         metrics = _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics)
         return params, optimizer_state, metrics, key
@@ -133,6 +144,7 @@ def create_eval_update_param_fn(
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
+    apply_pmap: bool = True,
 ):
     """No update/clipping/grad function which simply evaluates the local energies.
 
@@ -161,4 +173,6 @@ def create_eval_update_param_fn(
         metrics = {"energy": energy, "variance": variance}
         return params, optimizer_state, metrics, key
 
-    return eval_update_param_fn
+    traced_fn = _make_traced_fn_with_single_metrics(eval_update_param_fn, apply_pmap)
+
+    return traced_fn
