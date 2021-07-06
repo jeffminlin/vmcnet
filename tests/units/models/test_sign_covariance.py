@@ -95,7 +95,7 @@ def test_get_sign_orbit_slog_array_list():
 
 
 def test_make_slog_fn_sign_covariant():
-    """Test making a function of multiple spins odd with respect to each spin."""
+    """Test making a fn of several spins sign covariant with respect to each spin."""
     nbatch = 5
     nelec_per_spin = (2, 3, 4)
     nelec_total = 9

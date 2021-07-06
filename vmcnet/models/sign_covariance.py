@@ -1,4 +1,4 @@
-"""Routines for dealing with odd symmetrization of a function."""
+"""Routines for symmetrizing a function to be sign covariant."""
 import functools
 from typing import Callable, Tuple
 
@@ -85,11 +85,11 @@ def get_sign_orbit_slog_array_list(
     """
     n_total = len(x)
     i_list = [i for i in range(n_total)]
-    get_odd_symmetries = functools.partial(
+    get_sign_symmetries = functools.partial(
         get_sign_orbit_one_sl_array, n_total=n_total, axis=axis
     )
     syms_and_signs = jax.tree_map(
-        get_odd_symmetries, x, i_list, is_leaf=is_tuple_of_arrays
+        get_sign_symmetries, x, i_list, is_leaf=is_tuple_of_arrays
     )
     syms = [x[0] for x in syms_and_signs]
     stacked_signs = jnp.stack([x[1] for x in syms_and_signs])
@@ -129,7 +129,7 @@ def make_slog_fn_sign_covariant(
             to the sign of each input, or in other words, will be odd.
     """
     # x is a SLArrayList of length n_total, with leaves of shape (..., n[i], d)
-    def odd_fn(x: SLArrayList):
+    def sign_covariant_fn(x: SLArrayList):
         # Symmetries leaves are of shape (..., 2**n_total, n[i], d)
         # Signs is single array of shape (2**n_total)
         symmetries, signs = get_sign_orbit_slog_array_list(x, axis=-3)
@@ -141,4 +141,4 @@ def make_slog_fn_sign_covariant(
         # Return final results collapsed to shape (..., d')
         return log_linear_exp(signed_results[0], signed_results[1], axis=-2)
 
-    return odd_fn
+    return sign_covariant_fn
