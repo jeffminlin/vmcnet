@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-import vmcnet.models.sign_covariance as odd_sym
+import vmcnet.models.sign_covariance as sign_cov
 from tests.test_utils import assert_pytree_allclose
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
@@ -20,7 +20,7 @@ def test_get_sign_orbit_one_sl_array():
     logs = jnp.array([[[-2.4, 2.4], [1.6, 0.8]], [[0.3, -0.2], [-10, 0]]])
 
     # Test for i=0, sign should alternate at each index
-    syms, sym_signs = odd_sym.get_sign_orbit_one_sl_array(
+    syms, sym_signs = sign_cov.get_sign_orbit_one_sl_array(
         (signs, logs), 0, n_total, axis=-3
     )
     expected_logs = jnp.stack([logs, logs, logs, logs, logs, logs, logs, logs], axis=-3)
@@ -36,7 +36,7 @@ def test_get_sign_orbit_one_sl_array():
     np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
     # Test for i=1, sign should alternate every two indices
-    syms, sym_signs = odd_sym.get_sign_orbit_one_sl_array(
+    syms, sym_signs = sign_cov.get_sign_orbit_one_sl_array(
         (signs, logs), 1, n_total, axis=-3
     )
     expected_syms = (
@@ -51,7 +51,7 @@ def test_get_sign_orbit_one_sl_array():
     np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
     # Test for i=3, sign should alternate every four indices
-    syms, sym_signs = odd_sym.get_sign_orbit_one_sl_array(
+    syms, sym_signs = sign_cov.get_sign_orbit_one_sl_array(
         (signs, logs), 2, n_total, axis=-3
     )
     expected_syms = (
@@ -76,7 +76,7 @@ def test_get_sign_orbit_slog_array_list():
     )
     inputs = [(spin1_signs, spin1_logs), (spin2_signs, spin2_logs)]
 
-    syms, sym_signs = odd_sym.get_sign_orbit_slog_array_list(inputs, axis=-3)
+    syms, sym_signs = sign_cov.get_sign_orbit_slog_array_list(inputs, axis=-3)
 
     expected_syms = [
         (
@@ -128,7 +128,7 @@ def test_make_slog_fn_sign_covariant():
         output = jnp.tanh(output)
         return array_to_slog(output)
 
-    covariant_fn = odd_sym.make_slog_fn_sign_covariant(fn)
+    covariant_fn = sign_cov.make_slog_fn_sign_covariant(fn)
     result = covariant_fn(slog_inputs)
     flip_sign_result = covariant_fn(flip_slog_inputs)
     same_sign_result = covariant_fn(same_slog_inputs)
