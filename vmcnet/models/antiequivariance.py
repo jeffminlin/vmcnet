@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import FermiNetOrbitalLayer
-from vmcnet.utils.typing import SLArray, SpinSplitSLArray
+from vmcnet.utils.typing import SLArray, SLArrayList
 from .weights import WeightInitializer
 
 
@@ -109,9 +109,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     orbital_isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(
-        self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None
-    ) -> SpinSplitSLArray:
+    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
@@ -128,7 +126,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
                 as an extra input to the orbital layer.
 
         Returns:
-            (SpinSplitSLArray): per-spin list where each list
+            (SLArrayList): per-spin list where each list
              entry is a tuple of two arrays each of shape (..., nelec, d). The first
              array in the tuple contains the sign of the results and the second contains
              the logs of the absolute values of the results for the given spin.

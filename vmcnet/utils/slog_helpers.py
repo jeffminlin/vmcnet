@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from .typing import SLArray, SpinSplitArray, SpinSplitSLArray
+from .typing import SLArray, ArrayList, SLArrayList
 
 
 def array_to_slog(x: jnp.ndarray) -> SLArray:
@@ -31,26 +31,26 @@ def array_from_slog(x: SLArray) -> jnp.ndarray:
     return x[0] * jnp.exp(x[1])
 
 
-def spin_split_array_to_slog(x: SpinSplitArray) -> SpinSplitSLArray:
-    """Map a SpinSplitArray to SpinSplitSLArray form.
+def array_list_to_slog(x: ArrayList) -> SLArrayList:
+    """Map an ArrayList to SLArrayList form.
 
     Args:
-        x (SpinSplitArray): input data as a regular spin-split array.
+        x (ArrayList): input data as a regular spin-split array.
 
     Returns:
-        (SpinSplitSLArray): same data with each array transformed to slog form.
+        (SLArrayList): same data with each array transformed to slog form.
     """
     return [array_to_slog(arr) for arr in x]
 
 
-def spin_split_array_from_slog(x: SpinSplitSLArray) -> SpinSplitArray:
-    """Map a SpinSplitSLArray to SpinSplitArray form.
+def array_list_from_slog(x: SLArrayList) -> ArrayList:
+    """Map a SLArrayList to ArrayList form.
 
     Args:
-        x (SpinSplitSLArray): input data as a spin-split slog array.
+        x (SLArrayList): input data as a list of slog arrays.
 
     Returns:
-        (SpinSplitSLArray): same data with slog tuples transformed to single arrays.
+        (ArrayList): same data with slog tuples transformed to single arrays.
     """
     return [array_from_slog(slog) for slog in x]
 
