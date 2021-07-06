@@ -1,5 +1,4 @@
 """Create configuration of hyperparameters."""
-import datetime
 import os
 
 from ml_collections import ConfigDict
@@ -16,9 +15,10 @@ def get_default_config() -> ConfigDict:
             "logdir": os.path.join(
                 os.curdir,  # this will be relative to the calling script
                 "logs",
-                "LiH",
-                datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
             ),
+            # if current_datetime_subfolder=True, will log into a subfolder named
+            # according to the datetime at start
+            "save_to_current_datetime_subfolder": True,
             "logging_level": "WARNING",
             "dtype": "float32",
             "initial_seed": 0,
