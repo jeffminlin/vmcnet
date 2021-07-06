@@ -129,7 +129,10 @@ def get_eval_config() -> ConfigDict:
             "nsteps_per_energy_eval": 10,
             "nmoves_per_width_update": 100,
             "std_move": 0.25,
-            "use_data_from_training": True,
+            # if use_data_from_training=True, nchains, nmoves_per_width_update, and
+            # std_move are completely ignored, and the data output from training is
+            # used as the initial positions instead
+            "use_data_from_training": False,
         }
     )
     return eval_config

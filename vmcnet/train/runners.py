@@ -56,9 +56,9 @@ def _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi):
     return local_energy_fn
 
 
-def _make_initial_distributed_data(config, init_pos, log_psi, params):
+def _make_initial_distributed_data(distributed_log_psi_apply, config, init_pos, params):
     sharded_init_pos = utils.distribute.default_distribute_data(init_pos)
-    sharded_amplitudes = utils.distribute.pmap(log_psi.apply)(params, sharded_init_pos)
+    sharded_amplitudes = distributed_log_psi_apply(params, sharded_init_pos)
     move_metadata = utils.distribute.replicate_all_local_devices(
         dwpa.MoveMetadata(
             std_move=config.vmc.std_move, move_acceptance_sum=0.0, moves_since_update=0
@@ -137,7 +137,10 @@ def molecule():
     params = log_psi.init(subkey, init_pos[0:1])
     params = utils.distribute.replicate_all_local_devices(params)
 
-    data = _make_initial_distributed_data(config, init_pos, log_psi, params)
+    distributed_log_psi_apply = jax.pmap(log_psi.apply)
+    data = _make_initial_distributed_data(
+        distributed_log_psi_apply, config, init_pos, params
+    )
 
     # Setup metropolis step
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
@@ -242,9 +245,7 @@ def molecule():
 
     if not config.eval.use_data_from_training:
         sharded_init_pos = utils.distribute.default_distribute_data(init_pos)
-        sharded_amplitudes = utils.distribute.pmap(log_psi.apply)(
-            params, sharded_init_pos
-        )
+        sharded_amplitudes = distributed_log_psi_apply(params, sharded_init_pos)
         move_metadata = utils.distribute.replicate_all_local_devices(
             dwpa.MoveMetadata(
                 std_move=config.vmc.std_move,
