@@ -105,11 +105,12 @@ def molecule():
 
     logging.info("Hyperparameter configuration: \n%s", config)
     if config.logdir:
-        logdir = config.logdir
         if config.save_to_current_datetime_subfolder:
-            logdir = os.path.join(
-                logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            config.logdir = os.path.join(
+                config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             )
+
+        logdir = config.logdir
         hparam_filename = utils.io.add_suffix_for_uniqueness(
             "hyperparams", logdir, pre_suffix=".json"
         )
