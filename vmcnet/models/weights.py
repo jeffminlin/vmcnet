@@ -1,4 +1,5 @@
 """Functions to get weight initializers from names."""
+import functools
 from typing import Any, Callable, Dict, Iterable
 
 import jax.numpy as jnp
@@ -23,8 +24,8 @@ Dtype = Any
 WeightInitializer = Callable[[Key, Shape, Dtype], jnp.ndarray]
 
 INITIALIZER_CONSTRUCTORS: Dict[str, Callable] = {
-    "zeros": lambda: zeros,
-    "ones": lambda: ones,
+    "zeros": lambda dtype=jnp.float32: functools.partial(zeros, dtype=dtype),
+    "ones": lambda dtype=jnp.float32: functools.partial(ones, dtype=dtype),
     "uniform": uniform,
     "normal": normal,
     "orthogonal": orthogonal,
@@ -55,14 +56,16 @@ def validate_kernel_initializer(name: str) -> None:
         )
 
 
-def get_kernel_initializer(name: str, **kwargs: Any) -> WeightInitializer:
+def get_kernel_initializer(
+    name: str, dtype=jnp.float32, **kwargs: Any
+) -> WeightInitializer:
     """Get a kernel initializer."""
     validate_kernel_initializer(name)
     constructor = INITIALIZER_CONSTRUCTORS[name]
     if name == "orthogonal" or name == "delta_orthogonal":
-        return constructor(scale=kwargs.get("scale", 1.0))
+        return constructor(scale=kwargs.get("scale", 1.0), dtype=dtype)
     else:
-        return constructor()
+        return constructor(dtype=dtype)
 
 
 def validate_bias_initializer(name: str) -> None:
@@ -74,7 +77,7 @@ def validate_bias_initializer(name: str) -> None:
         )
 
 
-def get_bias_initializer(name: str) -> WeightInitializer:
+def get_bias_initializer(name: str, dtype=jnp.float32) -> WeightInitializer:
     """Get a bias initializer."""
     validate_bias_initializer(name)
-    return INITIALIZER_CONSTRUCTORS[name]()
+    return INITIALIZER_CONSTRUCTORS[name](dtype=dtype)

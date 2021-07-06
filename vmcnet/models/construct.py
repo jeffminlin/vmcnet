@@ -4,6 +4,7 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 import flax
 import jax
 import jax.numpy as jnp
+from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from .antisymmetry import (
@@ -23,8 +24,83 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from .jastrow import IsotropicAtomicExpDecay
-from .weights import WeightInitializer
+from vmcnet.models.jastrow import IsotropicAtomicExpDecay
+from vmcnet.models.weights import (
+    WeightInitializer,
+    get_bias_initializer,
+    get_kernel_initializer,
+)
+
+
+def get_model(
+    model_config: ConfigDict,
+    nelec: jnp.ndarray,
+    ion_pos: jnp.ndarray,
+    dtype=jnp.float32,
+) -> flax.linen.Module:
+    """Get a model from a hyperparameter config."""
+    spin_split = tuple(jnp.cumsum(nelec)[:-1])
+
+    def get_kernel_init_from_config(config):
+        return get_kernel_initializer(config.type, **config, dtype=dtype)
+
+    def get_bias_init_from_config(config):
+        return get_bias_initializer(config.type, dtype=dtype)
+
+    def get_activation_fn(name):
+        if name == "tanh":
+            return jnp.tanh
+        else:
+            raise ValueError("Activations besides tanh are not yet supported.")
+
+    if model_config.type == "ferminet":
+        model = FermiNet(
+            spin_split,
+            model_config.backflow.equivariant_shapes,
+            model_config.ndeterminants,
+            kernel_initializer_unmixed=get_kernel_init_from_config(
+                model_config.backflow.kernel_init_unmixed
+            ),
+            kernel_initializer_mixed=get_kernel_init_from_config(
+                model_config.backflow.kernel_init_mixed
+            ),
+            kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
+                model_config.backflow.kernel_init_2e_1e_stream
+            ),
+            kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
+                model_config.backflow.kernel_init_2e_2e_stream
+            ),
+            kernel_initializer_orbital_linear=get_kernel_init_from_config(
+                model_config.kernel_init_orbital_linear
+            ),
+            kernel_initializer_envelope_dim=get_kernel_init_from_config(
+                model_config.kernel_init_envelope_dim
+            ),
+            kernel_initializer_envelope_ion=get_kernel_init_from_config(
+                model_config.kernel_init_envelope_ion
+            ),
+            bias_initializer_1e_stream=get_bias_init_from_config(
+                model_config.backflow.bias_init_1e_stream
+            ),
+            bias_initializer_2e_stream=get_bias_init_from_config(
+                model_config.backflow.bias_init_2e_stream
+            ),
+            bias_initializer_orbital_linear=get_bias_init_from_config(
+                model_config.bias_init_orbital_linear
+            ),
+            activation_fn=get_activation_fn(model_config.backflow.activation_fn),
+            ion_pos=ion_pos,
+            include_2e_stream=model_config.backflow.include_2e_stream,
+            include_ei_norm=model_config.backflow.include_ei_norm,
+            include_ee_norm=model_config.backflow.include_ee_norm,
+            streams_use_bias=model_config.backflow.use_bias,
+            orbitals_use_bias=model_config.orbitals_use_bias,
+            isotropic_decay=model_config.isotropic_decay,
+            skip_connection=model_config.backflow.skip_connection,
+            cyclic_spins=model_config.backflow.cyclic_spins,
+        )
+
+    return model
 
 
 class ComposedModel(flax.linen.Module):

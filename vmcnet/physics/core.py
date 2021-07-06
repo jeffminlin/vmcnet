@@ -9,6 +9,40 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import P
 
 
+def initialize_pos(
+    key: jnp.ndarray,
+    nchains: int,
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
+    nelec_total: int,
+    init_width: float = 1.0,
+    dtype=jnp.float32,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Initialize a set of plausible initial electron positions."""
+    nion = len(ion_charges)
+    replace = True
+
+    if nelec_total <= nion:
+        replace = False
+
+    assignments = []
+    for _ in range(nchains):
+        key, subkey = jax.random.split(key)
+        choices = jax.random.choice(
+            subkey,
+            nion,
+            shape=(nelec_total,),
+            replace=replace,
+            p=ion_charges / jnp.sum(ion_charges),
+        )
+        assignments.append(ion_pos[choices])
+    elecs_at_ions = jnp.stack(assignments, axis=0)
+    key, subkey = jax.random.split(key)
+    return key, elecs_at_ions + init_width * jax.random.normal(
+        subkey, elecs_at_ions.shape, dtype=dtype
+    )
+
+
 def combine_local_energy_terms(
     local_energy_terms: Sequence[Callable[[P, jnp.ndarray], jnp.ndarray]]
 ) -> Callable[[P, jnp.ndarray], jnp.ndarray]:

@@ -269,10 +269,10 @@ def save_metrics_and_handle_checkpoints(
     checkpoint_writer: CheckpointWriter,
     metrics_writer: MetricsWriter,
     checkpoint_metric: jnp.float32,
-    best_checkpoint_every: int,
-    logdir: str = None,
+    logdir: Optional[str] = None,
     variance_scale: float = 10.0,
-    checkpoint_every: int = None,
+    checkpoint_every: Optional[int] = None,
+    best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
 ) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
@@ -394,8 +394,8 @@ def track_and_save_best_checkpoint(
     logdir: str,
     variance_scale: float,
     checkpoint_str: str,
-    best_checkpoint_every: int,
-    best_checkpoint_data: Optional[CheckpointData[D, P, S]],
+    best_checkpoint_every: Optional[int] = None,
+    best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
 ) -> Tuple[str, jnp.float32, Optional[CheckpointData[D, P, S]]]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
 
@@ -440,27 +440,33 @@ def track_and_save_best_checkpoint(
         additional info if this function did checkpointing, then best error-adjusted
         energy average, then new best checkpoint data, or None.
     """
-    energy, variance = running_energy_and_variance
+    if best_checkpoint_every is not None:
+        energy, variance = running_energy_and_variance
 
-    energy.move_history_window(metrics["energy"])
-    variance.move_history_window(metrics["variance"])
-    error_adjusted_running_avg = get_checkpoint_metric(
-        energy.avg, variance.avg, nchains * len(energy.history), variance_scale
-    )
-
-    if error_adjusted_running_avg < checkpoint_metric:
-        best_checkpoint_data = (
-            epoch,
-            data,
-            params,
-            optimizer_state,
-            key,
+        energy.move_history_window(metrics["energy"])
+        variance.move_history_window(metrics["variance"])
+        error_adjusted_running_avg = get_checkpoint_metric(
+            energy.avg, variance.avg, nchains * len(energy.history), variance_scale
         )
 
-    if (epoch + 1) % best_checkpoint_every == 0 and best_checkpoint_data is not None:
-        checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
-        checkpoint_str = checkpoint_str + ", best weights saved"
-        best_checkpoint_data = None
+        if error_adjusted_running_avg < checkpoint_metric:
+            best_checkpoint_data = (
+                epoch,
+                data,
+                params,
+                optimizer_state,
+                key,
+            )
+
+        should_save_best_checkpoint = (epoch + 1) % best_checkpoint_every == 0
+        if should_save_best_checkpoint and best_checkpoint_data is not None:
+            checkpoint_writer.save_data(
+                logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
+            )
+            checkpoint_str = checkpoint_str + ", best weights saved"
+            best_checkpoint_data = None
+    else:
+        error_adjusted_running_avg = checkpoint_metric
 
     return checkpoint_str, error_adjusted_running_avg, best_checkpoint_data
 

@@ -89,7 +89,11 @@ def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):
     """Adds a numerical suffix to keep names unique in a directory."""
     final_name = name
     i = 0
-    while (final_name + pre_suffix) in os.listdir(logdir):
-        i += 1
-        final_name = name + "_" + str(i)
+    try:
+        while (final_name + pre_suffix) in os.listdir(logdir):
+            i += 1
+            final_name = name + "_" + str(i)
+    except FileNotFoundError:
+        # don't do anything to the name if the directory doesn't exist
+        pass
     return final_name

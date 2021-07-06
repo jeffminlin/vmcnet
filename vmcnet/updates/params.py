@@ -76,7 +76,7 @@ def create_grad_energy_update_param_fn(
 def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
-    get_position_from_data: Callable[[D], jnp.ndarray],
+    get_position_fn: Callable[[D], jnp.ndarray],
 ) -> Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
     """Create momentum-less KFAC update step function.
 
@@ -102,7 +102,7 @@ def create_kfac_update_param_fn(
             params=params,
             state=optimizer_state,
             rng=subkey,
-            data_iterator=iter([get_position_from_data(data)]),
+            data_iterator=iter([get_position_fn(data)]),
             momentum=momentum,
             damping=damping,
         )
@@ -113,3 +113,38 @@ def create_kfac_update_param_fn(
         return params, optimizer_state, metrics, key
 
     return update_param_fn
+
+
+def create_eval_update_param_fn(
+    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    nchains: int,
+    get_position_fn: Callable[[D], jnp.ndarray],
+):
+    """No update/clipping/grad function which simply evaluates the local energies.
+
+    Can be used to do simple unclipped MCMC with :func:`~vmcnet.train.vmc.vmc_loop`.
+
+    Arguments:
+        local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
+            (params, x) -> (Hpsi / psi)(x)
+        nchains (int): total number of chains across all devices, used to compute a
+            sample variance estimate of the local energy
+        get_position_fn (Callable): gets the walker positions from the MCMC data
+
+    Returns:
+        Callable: function which evaluates the local energies and averages them, without
+        updating the parameters
+    """
+
+    def eval_update_param_fn(data, params, optimizer_state, key):
+        local_energies = local_energy_fn(params, get_position_fn(data))
+        energy = utils.distribute.mean_all_local_devices(local_energies)
+        variance = (
+            utils.distribute.mean_all_local_devices(jnp.square(local_energies - energy))
+            * nchains
+            / (nchains - 1)
+        )  # adjust by n / (n - 1) to get an unbiased estimator
+        metrics = {"energy": energy, "variance": variance}
+        return params, optimizer_state, metrics, key
+
+    return eval_update_param_fn
