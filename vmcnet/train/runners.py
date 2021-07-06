@@ -154,6 +154,7 @@ def molecule():
         config.vmc.nmoves_per_width_update,
         dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
     )
+    burning_step = mcmc.metropolis.make_jitted_burning_step(metrop_step_fn)
     walker_fn = mcmc.metropolis.make_jitted_walker_fn(
         config.vmc.nsteps_per_param_update, metrop_step_fn
     )
@@ -225,6 +226,9 @@ def molecule():
         )
 
     # Train
+    data, key = mcmc.metropolis.burn_data(
+        burning_step, config.vmc.nburn, data, params, sharded_key
+    )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
         params,
         optimizer_state,
@@ -263,6 +267,9 @@ def molecule():
             sharded_init_pos, sharded_amplitudes, move_metadata
         )
 
+    data, key = mcmc.metropolis.burn_data(
+        burning_step, config.eval.nburn, data, params, sharded_key
+    )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
         params,
         optimizer_state,
