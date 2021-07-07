@@ -27,9 +27,16 @@ from .equivariance import (
 from vmcnet.models.jastrow import IsotropicAtomicExpDecay
 from vmcnet.models.weights import (
     WeightInitializer,
-    get_bias_initializer,
-    get_kernel_initializer,
+    get_bias_init_from_config,
+    get_kernel_init_from_config,
 )
+
+
+def _get_named_activation_fn(name):
+    if name == "tanh":
+        return jnp.tanh
+    else:
+        raise ValueError("Activations besides tanh are not yet supported.")
 
 
 def get_model_from_config(
@@ -41,25 +48,11 @@ def get_model_from_config(
     """Get a model from a hyperparameter config."""
     spin_split = tuple(jnp.cumsum(nelec)[:-1])
 
-    def get_kernel_init_from_config(config):
-        return get_kernel_initializer(config.type, **config, dtype=dtype)
-
-    def get_bias_init_from_config(config):
-        return get_bias_initializer(config.type, dtype=dtype)
-
-    def get_activation_fn(name):
-        if name == "tanh":
-            return jnp.tanh
-        else:
-            raise ValueError("Activations besides tanh are not yet supported.")
-
     backflow = get_backflow_from_model_config(
         model_config,
         ion_pos,
         spin_split,
-        get_kernel_init_from_config,
-        get_bias_init_from_config,
-        get_activation_fn,
+        dtype=dtype,
     )
 
     if model_config.type == "ferminet":
@@ -68,16 +61,16 @@ def get_model_from_config(
             backflow,
             model_config.ndeterminants,
             kernel_initializer_orbital_linear=get_kernel_init_from_config(
-                model_config.kernel_init_orbital_linear
+                model_config.kernel_init_orbital_linear, dtype=dtype
             ),
             kernel_initializer_envelope_dim=get_kernel_init_from_config(
-                model_config.kernel_init_envelope_dim
+                model_config.kernel_init_envelope_dim, dtype=dtype
             ),
             kernel_initializer_envelope_ion=get_kernel_init_from_config(
-                model_config.kernel_init_envelope_ion
+                model_config.kernel_init_envelope_ion, dtype=dtype
             ),
             bias_initializer_orbital_linear=get_bias_init_from_config(
-                model_config.bias_init_orbital_linear
+                model_config.bias_init_orbital_linear, dtype=dtype
             ),
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
@@ -90,15 +83,15 @@ def get_model_from_config(
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=get_kernel_init_from_config(
-                    model_config.kernel_init_resnet
+                    model_config.kernel_init_resnet, dtype=dtype
                 ),
                 kernel_initializer_jastrow=get_kernel_init_from_config(
-                    model_config.kernel_init_jastrow
+                    model_config.kernel_init_jastrow, dtype=dtype
                 ),
                 bias_initializer_resnet=get_bias_init_from_config(
-                    model_config.bias_init_resnet
+                    model_config.bias_init_resnet, dtype=dtype
                 ),
-                activation_fn_resnet=get_activation_fn(
+                activation_fn_resnet=_get_named_activation_fn(
                     model_config.activation_fn_resnet
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
@@ -110,15 +103,15 @@ def get_model_from_config(
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=get_kernel_init_from_config(
-                    model_config.kernel_init_resnet
+                    model_config.kernel_init_resnet, dtype=dtype
                 ),
                 kernel_initializer_jastrow=get_kernel_init_from_config(
-                    model_config.kernel_init_jastrow
+                    model_config.kernel_init_jastrow, dtype=dtype
                 ),
                 bias_initializer_resnet=get_bias_init_from_config(
-                    model_config.bias_init_resnet
+                    model_config.bias_init_resnet, dtype=dtype
                 ),
-                activation_fn_resnet=get_activation_fn(
+                activation_fn_resnet=_get_named_activation_fn(
                     model_config.activation_fn_resnet
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
@@ -131,33 +124,31 @@ def get_backflow_from_model_config(
     model_config,
     ion_pos,
     spin_split,
-    get_kernel_init_from_config,
-    get_bias_init_from_config,
-    get_activation_fn,
+    dtype=jnp.float32,
 ):
     """Get a FermiNet backflow from a model configuration."""
     residual_blocks = _get_residual_blocks_for_ferminet_backflow(
         spin_split,
         model_config.backflow.ndense_list,
         kernel_initializer_unmixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_unmixed
+            model_config.backflow.kernel_init_unmixed, dtype=dtype
         ),
         kernel_initializer_mixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_mixed
+            model_config.backflow.kernel_init_mixed, dtype=dtype
         ),
         kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_1e_stream
+            model_config.backflow.kernel_init_2e_1e_stream, dtype=dtype
         ),
         kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_2e_stream
+            model_config.backflow.kernel_init_2e_2e_stream, dtype=dtype
         ),
         bias_initializer_1e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_1e_stream
+            model_config.backflow.bias_init_1e_stream, dtype=dtype
         ),
         bias_initializer_2e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_2e_stream
+            model_config.backflow.bias_init_2e_stream, dtype=dtype
         ),
-        activation_fn=get_activation_fn(model_config.backflow.activation_fn),
+        activation_fn=_get_named_activation_fn(model_config.backflow.activation_fn),
         use_bias=model_config.backflow.use_bias,
         skip_connection=model_config.backflow.skip_connection,
         cyclic_spins=model_config.backflow.cyclic_spins,

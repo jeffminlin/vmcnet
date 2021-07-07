@@ -17,6 +17,7 @@ from jax.nn.initializers import (
     lecun_normal,
     lecun_uniform,
 )
+from ml_collections import ConfigDict
 
 Key = Any
 Shape = Iterable[int]
@@ -47,6 +48,7 @@ VALID_KERNEL_INITIALIZERS = INITIALIZER_CONSTRUCTORS.keys()
 VALID_BIAS_INITIALIZERS = ["zeros", "ones", "uniform", "normal"]
 
 
+# TODO: clean up initializer getting methods
 def validate_kernel_initializer(name: str) -> None:
     """Check that a kernel initializer name is in the list of supported kernel inits."""
     if name not in VALID_KERNEL_INITIALIZERS:
@@ -68,6 +70,15 @@ def get_kernel_initializer(
         return constructor(dtype=dtype)
 
 
+def get_kernel_init_from_config(config: ConfigDict, dtype=jnp.float32):
+    """Get a kernel initializer from a ConfigDict.
+
+    The ConfigDict should have the key "type", as well as any other kwargs to pass
+    to the initializer constructor.
+    """
+    return get_kernel_initializer(config.type, dtype=dtype, **config)
+
+
 def validate_bias_initializer(name: str) -> None:
     """Check that a bias initializer name is in the list of supported bias inits."""
     if name not in VALID_BIAS_INITIALIZERS:
@@ -81,3 +92,12 @@ def get_bias_initializer(name: str, dtype=jnp.float32) -> WeightInitializer:
     """Get a bias initializer."""
     validate_bias_initializer(name)
     return INITIALIZER_CONSTRUCTORS[name](dtype=dtype)
+
+
+def get_bias_init_from_config(config, dtype=jnp.float32):
+    """Get a bias initializer from a ConfigDict.
+
+    The ConfigDict should have the key "type", as well as any other kwargs to pass
+    to the initializer constructor.
+    """
+    return get_bias_initializer(config.type, dtype=dtype)
