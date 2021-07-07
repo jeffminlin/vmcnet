@@ -56,6 +56,27 @@ def array_list_from_slog(x: SLArrayList) -> ArrayList:
     return [array_from_slog(slog) for slog in x]
 
 
+def slog_array_list_stack(x: SLArrayList, axis: int = 0) -> SLArray:
+    """Stack a list of SLArrays which are all of the same shape."""
+    return (
+        jnp.stack([a[0] for a in x], axis=axis),
+        jnp.stack([a[1] for a in x], axis=axis),
+    )
+
+
+def slog_array_list_concat(x: SLArrayList, axis: int = 0) -> SLArray:
+    """Concat a list of SLArrays of the same shape except on the specified axis."""
+    return (
+        jnp.concatenate([a[0] for a in x], axis=axis),
+        jnp.concatenate([a[1] for a in x], axis=axis),
+    )
+
+
+def slog_ones_like(x: SLArray) -> SLArray:
+    """Generate array of ones matching input shape, in slog form."""
+    return (jnp.ones_like(x[0]), jnp.zeros_like(x[0]))
+
+
 def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     """Computes the product of two slog array tuples, as another slog array tuple.
 
@@ -78,32 +99,6 @@ def slog_array_list_sum(x: SLArrayList) -> SLArray:
     return slog_sum_over_axis(stacked_vals)
 
 
-def slog_array_list_stack(x: SLArrayList, axis: int = 0) -> SLArray:
-    """Stack a list of SLArrays which are all of the same shape."""
-    return (
-        jnp.stack([a[0] for a in x], axis=axis),
-        jnp.stack([a[1] for a in x], axis=axis),
-    )
-
-
-def slog_array_list_concat(x: SLArrayList, axis: int = 0) -> SLArray:
-    """Concat a list of SLArrays of the same shape except on the specified axis."""
-    return (
-        jnp.concatenate([a[0] for a in x], axis=axis),
-        jnp.concatenate([a[1] for a in x], axis=axis),
-    )
-
-
 def slog_sum(x: SLArray, y: SLArray) -> SLArray:
     """Take the sum of two SLArrays which are of the same shape."""
     return slog_array_list_sum([x, y])
-
-
-def slog_ones_like(x: SLArray) -> SLArray:
-    """Generate array of ones matching input shape, in slog form."""
-    return (jnp.ones_like(x[0]), jnp.zeros_like(x[0]))
-
-
-def slog_flip_sign(x: SLArray) -> SLArray:
-    """Flip the sign of an SLArray value."""
-    return (-x[0], x[1])

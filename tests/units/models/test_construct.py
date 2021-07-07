@@ -75,7 +75,7 @@ def _make_ferminet():
     log_psis = []
     # No need for combinatorial testing over these flags; just test with both
     # false and both true to cover our bases without making the test too slow.
-    for (cyclic_spins, use_odd_fn_of_determinants) in [(False, False), (True, True)]:
+    for (cyclic_spins, use_det_resnet) in [(False, False), (True, True)]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.FermiNet(
             spin_split,
@@ -88,7 +88,7 @@ def _make_ferminet():
             jnp.tanh,
             ion_pos=ion_pos,
             cyclic_spins=cyclic_spins,
-            use_odd_fn_of_determinants=use_odd_fn_of_determinants,
+            use_det_resnet=use_det_resnet,
         )
         log_psis.append(log_psi)
 

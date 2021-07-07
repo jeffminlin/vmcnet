@@ -3,8 +3,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+import numpy as np
 import vmcnet.models as models
-from vmcnet.utils.slog_helpers import array_to_slog
+from vmcnet.utils.slog_helpers import array_from_slog, array_to_slog
 from vmcnet.utils.typing import SLArray
 
 from tests.test_utils import (
@@ -12,6 +13,21 @@ from tests.test_utils import (
     get_resnet_and_log_domain_resnet_same_params,
     assert_pytree_allclose,
 )
+
+
+def test_log_domain_tanh_like_activation():
+    """Test output and stability of log domain activation fn."""
+    activation = models.core.log_domain_tanh_like_activation
+    # Making sure here to test for numerical stability with a zero value!
+    x = jnp.array([0, 1, -1, 100, -100])
+    slog_x = array_to_slog(x)
+
+    slog_output = activation(slog_x)
+    array_output = array_from_slog(slog_output)
+
+    # Equivalent function in non-log space should be sign(x)/(1 + 1/|x|)
+    expected_output = jnp.sign(x) / (1 + 1 / jnp.abs(x))
+    np.testing.assert_allclose(array_output, expected_output)
 
 
 @pytest.mark.slow
