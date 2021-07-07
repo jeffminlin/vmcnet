@@ -14,7 +14,6 @@ from vmcnet.models.core import (
     Activation,
     SimpleResNet,
     get_nelec_per_spin,
-    log_linear_exp,
 )
 from vmcnet.models.equivariance import (
     FermiNetBackflow,
@@ -25,6 +24,7 @@ from vmcnet.models.equivariance import (
 )
 from vmcnet.models.jastrow import IsotropicAtomicExpDecay
 from vmcnet.models.weights import WeightInitializer
+from vmcnet.utils.slog_helpers import slog_linear_comb
 
 
 class ComposedModel(flax.linen.Module):
@@ -257,8 +257,8 @@ class FermiNet(flax.linen.Module):
         ]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
-        signs, log_dets = slogdet_product(orbitals)
-        _, log_psi = log_linear_exp(signs, log_dets, axis=0)
+        slog_result = slogdet_product(orbitals)
+        _, log_psi = slog_linear_comb(slog_result, axis=0)
         return jnp.squeeze(log_psi, axis=0)
 
 
