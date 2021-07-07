@@ -8,6 +8,11 @@ from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from vmcnet.utils.typing import SpinSplit
+from vmcnet.models.sign_covariance import make_slog_fn_sign_covariant
+from vmcnet.models.weights import get_kernel_initializer, get_bias_initializer
+from vmcnet.utils.slog_helpers import slog_sum_over_axis, slog_array_list_concat
+from vmcnet.utils.typing import SLArray, SLArrayList
+
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -15,8 +20,11 @@ from .antisymmetry import (
 )
 from .core import (
     Activation,
+    SLActivation,
+    LogDomainResNet,
     SimpleResNet,
     get_nelec_per_spin,
+    log_domain_tanh_like_activation,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -26,7 +34,7 @@ from .equivariance import (
     FermiNetTwoElectronLayer,
 )
 from vmcnet.models.jastrow import IsotropicAtomicExpDecay
-from vmcnet.models.weights import (
+from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
     get_kernel_init_from_config,
@@ -331,6 +339,27 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
+        use_odd_fn_of_determinants (bool, optional): whether the determinants calculated
+            should be combined using a generic odd function, or simply multilpied
+            together. If set to True, generic odd function is constructed using a
+            LogDomainResnet symmetrized to be sign covariant. Defaults to False.
+        ndense_det_resnet (int, optional): the number of neurons in the dense layers
+            of the determinant resnet. Only relevant if use_odd_fn_of_determinants is
+            True. Defaults to 10.
+        nlayers_det_resnet (int, optional): the number of layers in the determinant
+            resnet. Only relevant if use_odd_fn_of_determinants is True. Defaults to 3.
+        activation_fn_det_resnet (SLActivation, optional): the log-domain activation function to
+            use for the determinant resnet. Only relevant if use_odd_fn_of_determinants
+            is True. Defaults to a tanh equivalent implemented in the log domain.
+        kernel_initializer_det_resnet (WeightInitializer, optional): kernel initializer
+            for the determinatn resnet.  Only relevant if use_odd_fn_of_determinants
+            is True. Defaults to orthogonal.
+        bias_initializer_det_resnet (WeightInitiailizer, optional): kernel initializer
+            for the determinatn resnet.  Only relevant if use_odd_fn_of_determinants
+            is True. Defaults to normal.
+        use_bias_det_resnet (bool, optional): Whether to use a bias in the determinant
+            resnet. Only relevant if use_odd_fn_of_determinants is True. Defaults to
+            True.
     """
 
     spin_split: Union[int, Sequence[int]]
@@ -342,12 +371,33 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
+    cyclic_spins: bool = True
+    use_odd_fn_of_determinants: bool = False
+    ndense_det_resnet: int = 10
+    nlayers_det_resnet: int = 3
+    activation_fn_det_resnet: SLActivation = log_domain_tanh_like_activation
+    kernel_initializer_det_resnet: WeightInitializer = get_kernel_initializer(
+        "orthogonal"
+    )
+    bias_initializer_resnet: WeightInitializer = get_bias_initializer("normal")
+    use_bias_det_resnet: bool = True
 
     def setup(self):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
+
+    def _apply_det_resnet(self, x: SLArrayList) -> SLArray:
+        concat_x = slog_array_list_concat(x, axis=-1)
+        return LogDomainResNet(
+            self.ndense_det_resnet,
+            1,
+            self.nlayers_det_resnet,
+            self.activation_fn_det_resnet,
+            self.kernel_initializer_det_resnet,
+            use_bias=self.use_bias_det_resnet,
+        )(concat_x)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -380,10 +430,19 @@ class FermiNet(flax.linen.Module):
             )(stream_1e, r_ei)
             for _ in range(self.ndeterminants)
         ]
-        orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
+        orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
-        slog_dets = slogdet_product(orbitals)
-        _, log_psi = slog_sum_over_axis(slog_dets)
+        if self.use_odd_fn_of_determinants:
+            # slogdets shape is [(ndeterminants, ...)]
+            slogdets = jax.tree_map(jnp.linalg.slogdet, orbitals)
+            # Swap axes to get shape [(..., ndeterminants)]
+            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), slogdets)
+            sign_cov_fn = make_slog_fn_sign_covariant(self._apply_det_resnet)
+            _, log_psi = sign_cov_fn(fn_inputs)
+            return log_psi
+
+        slog_det_prods = slogdet_product(orbitals)
+        _, log_psi = slog_sum_over_axis(slog_det_prods)
         return log_psi
 
 

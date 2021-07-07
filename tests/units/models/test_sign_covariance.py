@@ -107,7 +107,7 @@ def test_make_slog_fn_sign_covariant():
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
 
-    inputs = [jax.random.normal(key, (nbatch, n, d)) for n in nelec_per_spin]
+    inputs = [jax.random.normal(key, (nbatch, n * d)) for n in nelec_per_spin]
     flip_sign_inputs = [inputs[0], -inputs[1], inputs[2]]
     same_sign_inputs = [inputs[0], -inputs[1], -inputs[2]]
     slog_inputs = array_list_to_slog(inputs)
@@ -120,8 +120,8 @@ def test_make_slog_fn_sign_covariant():
     weights2 = jax.random.normal(subkey, (dhidden, dout))
 
     def fn(x: SLArrayList) -> SLArray:
-        all_signs = jnp.concatenate([s[0] for s in x], axis=-2)
-        all_logs = jnp.concatenate([s[1] for s in x], axis=-2)
+        all_signs = jnp.concatenate([s[0] for s in x], axis=-1)
+        all_logs = jnp.concatenate([s[1] for s in x], axis=-1)
         all_vals = array_from_slog((all_signs, all_logs))
         all_vals = jnp.reshape(
             all_vals, (all_vals.shape[0], all_vals.shape[1], nelec_total * d)

@@ -111,16 +111,16 @@ def make_slog_fn_sign_covariant(
     g(U,D) = f(U,D) - f(-U,D) - f(U, -D) + f(-U, -D).
 
     As currently implemented, this method assumes the output of the function is a single
-    SLArray, and that the function only applies to the last two axes of its inputs, so
+    SLArray, and that the function only applies to the last axis of its input, so
     that the previous axes can all be treated as batch dimensions. Essentially, the
-    function must be a map from inputs of shape (..., n[i], d) to outputs of shape
-    (..., d'). This allows us to insert the orbit symmetries along axis -3 and then
+    function must be a map from inputs of shape (..., d) to outputs of shape
+    (..., d'). This allows us to insert the orbit symmetries along axis -2 and then
     remove the extra dimension by summing over the inserted axis at the end, which
     considerably simplifies the implementation relative to handling a more general case.
 
     Args:
         fn (Callable): the function to symmetrize, which takes an input an SLArrayList
-            with leaves of shape (..., n[i], d), and outputs a single SLArray of
+            with leaves of shape (..., d), and outputs a single SLArray of
             shape (..., d').
 
     Returns:
@@ -128,11 +128,11 @@ def make_slog_fn_sign_covariant(
             which has been symmetrized so that its output will be covariant with respect
             to the sign of each input, or in other words, will be odd.
     """
-    # x is a SLArrayList of length n_total, with leaves of shape (..., n[i], d)
+    # x is a SLArrayList of length n_total, with leaves of shape (..., d)
     def sign_covariant_fn(x: SLArrayList):
-        # Symmetries leaves are of shape (..., 2**n_total, n[i], d)
+        # Symmetries leaves are of shape (..., 2**n_total, d)
         # Signs is single array of shape (2**n_total)
-        symmetries, signs = get_sign_orbit_slog_array_list(x, axis=-3)
+        symmetries, signs = get_sign_orbit_slog_array_list(x, axis=-2)
         # all_results is of shape (..., 2**n_total, d')
         all_results = fn(symmetries)
         shaped_signs = jnp.expand_dims(signs, axis=-1)

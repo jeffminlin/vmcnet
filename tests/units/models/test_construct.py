@@ -73,7 +73,9 @@ def _make_ferminet():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
-    for cyclic_spins in [True, False]:
+    # No need for combinatorial testing over these flags; just test with both
+    # false and both true to cover our bases without making the test too slow.
+    for (cyclic_spins, use_odd_fn_of_determinants) in [(False, False), (True, True)]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.FermiNet(
             spin_split,
@@ -83,6 +85,10 @@ def _make_ferminet():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
+            jnp.tanh,
+            ion_pos=ion_pos,
+            cyclic_spins=cyclic_spins,
+            use_odd_fn_of_determinants=use_odd_fn_of_determinants,
         )
         log_psis.append(log_psi)
 

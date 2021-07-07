@@ -14,6 +14,8 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import SLArray, PyTree, SpinSplit
+from vmcnet.utils.slog_helpers import slog_flip_sign, slog_sum, slog_ones_like
+from vmcnet.utils.typing import SLArray, PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
@@ -41,6 +43,11 @@ def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ..
     else:
         spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
         return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
+
+
+def log_domain_tanh_like_activation(x: SLArray) -> SLArray:
+    """Calculates a function which acts like a tanh, but on log domain values."""
+    return slog_flip_sign(slog_sum(slog_ones_like(x), slog_flip_sign(x)))
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
@@ -232,11 +239,12 @@ class LogDomainResNet(flax.linen.Module):
             the final Dense call.
         nlayers (int): number of dense layers applied to the input, including the final
             layer. If this is 0, the final dense layer will still be applied.
-        kernel_init (WeightInitializer, optional): initializer function for the weight
-            matrices of each layer. Defaults to orthogonal initialization.
         activation_fn (SLActivation): activation function between intermediate layers
             (is not applied after the final dense layer). Has the signature
             SLArray -> SLArray (shape is preserved).
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrices of each layer. Defaults to orthogonal initialization.
+
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
     """
