@@ -66,9 +66,12 @@ def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     return (sx * sy, lx + ly)
 
 
-def slog_sum_over_axis(x: SLArray, axis: int = 0) -> SLArray:
+def slog_sum_over_axis(x: SLArray, axis: int = 0, keepdims=False) -> SLArray:
     """Take the sum of a single slog array over a specified axis."""
     signs, logs = log_linear_exp(x[0], x[1], axis=axis)
+    if keepdims:
+        return signs, logs
+
     return (jnp.squeeze(signs, axis=axis), jnp.squeeze(logs, axis=axis))
 
 

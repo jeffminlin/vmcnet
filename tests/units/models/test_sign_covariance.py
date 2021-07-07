@@ -1,4 +1,5 @@
 """Test sign covariance routines."""
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -131,6 +132,7 @@ def test_make_slog_fn_sign_covariant():
 
     covariant_fn = sign_cov.make_slog_fn_sign_covariant(fn)
     result = covariant_fn(slog_inputs)
+    chex.assert_shape(result, (nbatch, dout))
     flip_sign_result = covariant_fn(flip_slog_inputs)
     same_sign_result = covariant_fn(same_slog_inputs)
 
