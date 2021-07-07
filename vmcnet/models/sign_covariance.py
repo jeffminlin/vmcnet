@@ -6,8 +6,8 @@ import jax
 import jax.numpy as jnp
 
 from .core import is_tuple_of_arrays
+from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
 from vmcnet.utils.typing import SLArray, SLArrayList
-from vmcnet.utils.slog_helpers import slog_multiply, slog_linear_comb
 
 
 def get_sign_orbit_one_sl_array(
@@ -139,6 +139,6 @@ def make_slog_fn_sign_covariant(
         signed_results = (all_results[0] * shaped_signs, all_results[1])
 
         # Return final results collapsed to shape (..., d')
-        return slog_linear_comb(signed_results, axis=-2)
+        return slog_sum_over_axis(signed_results, axis=-2)
 
     return sign_covariant_fn

@@ -2,11 +2,11 @@
 import jax
 import jax.numpy as jnp
 import vmcnet.models as models
+from vmcnet.utils.slog_helpers import array_to_slog
 from tests.test_utils import (
     init_dense_and_logdomaindense_with_same_params,
     assert_pytree_allclose,
 )
-from vmcnet.utils.slog_helpers import array_to_slog
 
 
 def test_dense_in_regular_and_log_domain_match():

@@ -4,13 +4,14 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.models.sign_covariance as sign_cov
-from tests.test_utils import assert_pytree_allclose
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_from_slog,
     array_list_to_slog,
 )
 from vmcnet.utils.typing import SLArray, SLArrayList
+
+from tests.test_utils import assert_pytree_allclose
 
 
 def test_get_sign_orbit_one_sl_array():

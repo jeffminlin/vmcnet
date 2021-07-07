@@ -5,6 +5,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
+from .jastrow import IsotropicAtomicExpDecay
 from vmcnet.models.antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -22,9 +23,8 @@ from vmcnet.models.equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from vmcnet.models.jastrow import IsotropicAtomicExpDecay
-from vmcnet.models.weights import WeightInitializer
-from vmcnet.utils.slog_helpers import slog_linear_comb
+from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from .weights import WeightInitializer
 
 
 class ComposedModel(flax.linen.Module):
@@ -257,8 +257,8 @@ class FermiNet(flax.linen.Module):
         ]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
-        slog_result = slogdet_product(orbitals)
-        _, log_psi = slog_linear_comb(slog_result, axis=0)
+        slog_dets = slogdet_product(orbitals)
+        _, log_psi = slog_sum_over_axis(slog_dets)
         return jnp.squeeze(log_psi, axis=0)
 
 

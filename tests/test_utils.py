@@ -8,8 +8,8 @@ import numpy as np
 
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
-from vmcnet.utils.typing import PyTree
 from vmcnet.utils.slog_helpers import array_to_slog
+from vmcnet.utils.typing import PyTree
 
 
 def make_dummy_log_f():

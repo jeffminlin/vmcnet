@@ -1,18 +1,19 @@
 """Core model building parts."""
-from typing import Callable, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Sequence, Tuple, Union, cast
 
 import flax
 import jax
 import jax.numpy as jnp
 
-import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
     get_bias_initializer,
     get_kernel_initializer,
 )
+from vmcnet.utils.log_linear_exp import log_linear_exp
+from vmcnet.utils.kfac import register_batch_dense
+from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import SLArray, PyTree
-from vmcnet.utils.slog_helpers import slog_linear_comb, slog_sum
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
@@ -96,7 +97,7 @@ class Dense(flax.linen.Module):
             y = y + bias
 
         if self.register_kfac:
-            return utils.kfac.register_batch_dense(y, inputs, kernel, bias)
+            return register_batch_dense(y, inputs, kernel, bias)
         else:
             return y
 
@@ -146,8 +147,9 @@ class LogDomainDense(flax.linen.Module):
 
         kernel = self.param("kernel", self.kernel_init, (input_dim, self.features))
 
-        return slog_linear_comb(
-            (sign_x, log_abs_x),
+        return log_linear_exp(
+            sign_x,
+            log_abs_x,
             kernel,
             axis=-1,
             register_kfac=self.register_kfac,
