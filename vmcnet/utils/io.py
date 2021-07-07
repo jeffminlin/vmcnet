@@ -23,8 +23,26 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
+def process_checkpoint_data_for_saving(checkpoint_data: CheckpointData):
+    """Process potentially pmapped checkpoint data to prepare for saving to disc.
+
+    Params and opt_state are always replicated across devices, so here we save only
+    only copy. Params must also be converted from a frozen_dict to a dict.
+    """
+    (epoch, data, params, optimizer_state, key) = checkpoint_data
+    params = params.unfreeze()
+    if is_distributed(params):
+        params = get_first(params)
+        optimizer_state = get_first(optimizer_state)
+    return (epoch, data, params, optimizer_state, key)
+
+
 def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
-    """Save a VMC state.
+    """Save a VMC state to disc.
+
+    Data is not processed beyond splitting the data into its constituent pieces and
+    saving each one to disc. Data should thus be preprocessed as needed, for example
+    by getting a single copy of params that have been replicated across multiple GPUs.
 
     Args:
       directory (str): directory in which to write the checkpoint
@@ -34,17 +52,10 @@ def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
     (epoch, data, params, optimizer_state, key) = checkpoint_data
 
     with open_or_create(directory, name, "wb") as file_handle:
-        params = params.unfreeze()
-        if is_distributed(params):
-            params = get_first(params)
-            optimizer_state = get_first(optimizer_state)
-
         np.savez(
             file_handle,
             e=epoch,
             d=data,
-            # Params and opt_state are always replicated, so only save one copy.
-            # Params must also be converted from a frozen_dict to a dict.
             p=params,
             o=optimizer_state,
             k=key,

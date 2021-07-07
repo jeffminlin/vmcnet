@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 
+import jax
 import jax.numpy as jnp
 
 import vmcnet.utils.io as io
@@ -149,7 +150,7 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
             directory (str): directory in which to write the checkpoint
             name (str): filename for the checkpoint
 
-            data_to_save (CheckpointData): checkpoint data which contains:
+            checkpoint_data (CheckpointData): checkpoint data which contains:
                 epoch (int): epoch at which checkpoint is being saved
                 data (pytree or jnp.ndarray): walker data to save
                 params (pytree): model parameters to save
@@ -158,6 +159,13 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
                     checkpoint
         """
         io.save_vmc_state(directory, name, checkpoint_data)
+
+    def save_data(self, directory: str, name: str, checkpoint_data: CheckpointData):
+        """Queue up checkpoint data to be written to disc."""
+        checkpoint_data = io.process_checkpoint_data_for_saving(checkpoint_data)
+        # Move data to CPU to avoid clogging up GPU memory with queued checkpoints
+        checkpoint_data = jax.device_put(checkpoint_data, jax.devices("cpu")[0])
+        self._queue.put((directory, name, checkpoint_data))
 
 
 class MetricsWriter(ThreadedWriter[Dict]):
