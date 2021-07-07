@@ -258,8 +258,8 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
         slog_dets = slogdet_product(orbitals)
-        _, log_psi = slog_sum_over_axis(slog_dets, keepdims=True)
-        return jnp.squeeze(log_psi, axis=0)
+        _, log_psi = slog_sum_over_axis(slog_dets)
+        return log_psi
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
