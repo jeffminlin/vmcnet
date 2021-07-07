@@ -10,7 +10,7 @@ from vmcnet.utils.slog_helpers import array_to_slog, array_from_slog
 
 from tests.test_utils import (
     assert_pytree_allclose,
-    init_dense_and_logdomaindense_with_same_params,
+    get_dense_and_log_domain_dense_same_params,
 )
 
 
@@ -120,9 +120,7 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
     (
         dense_params,
         logdomaindense_params,
-    ) = init_dense_and_logdomaindense_with_same_params(
-        subkey, batch, dense_layer, logdomaindense_layer
-    )
+    ) = get_dense_and_log_domain_dense_same_params(subkey, batch, dense_layer)
 
     nsteps = 6
 

@@ -71,26 +71,42 @@ def dummy_model_apply(params, x):
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
 
 
-def init_dense_and_logdomaindense_with_same_params(
+def _get_log_domain_params_for_dense_layer(params):
+    if "bias" not in params:
+        return {"kernel": params["kernel"]}
+
+    kernel = params["kernel"]
+    bias = params["bias"]
+    return {"kernel": jnp.concatenate([kernel, jnp.expand_dims(bias, 0)], axis=0)}
+
+
+def get_dense_and_log_domain_dense_same_params(
     key: jnp.ndarray,
     batch: jnp.ndarray,
     dense_layer: models.core.Dense,
-    logdomaindense_layer: models.core.LogDomainDense,
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
-    """Initialize Dense and LogDomainDense layers with the same parameters."""
+    """Get matching params for Dense and LogDomainDense layers."""
     dense_params = dense_layer.init(key, batch)
-    logdomaindense_params = logdomaindense_layer.init(key, array_to_slog(batch))
+    log_domain_params = _get_log_domain_params_for_dense_layer(dense_params["params"])
+    log_domain_params = frozen_dict.freeze({"params": log_domain_params})
+    return dense_params, log_domain_params
 
-    # Concatenate dense kernel and bias
-    dense_bias = dense_params["params"]["bias"]
-    dense_kernel = dense_params["params"]["kernel"]
-    concat_dense = jnp.concatenate(
-        [dense_kernel, jnp.expand_dims(dense_bias, 0)], axis=0
-    )
 
-    # Replace the LogDomainDense kernel with concatenated dense kernel
-    logdomaindense_params = jax.tree_map(lambda _: concat_dense, logdomaindense_params)
-    return dense_params, logdomaindense_params
+def get_resnet_and_log_domain_resnet_same_params(
+    key: jnp.ndarray,
+    batch: jnp.ndarray,
+    resnet: models.core.SimpleResNet,
+) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
+    """Get matching params for SimpleResNet and LogDomainResnet models."""
+    resnet_params = resnet.init(key, batch)
+    log_domain_params = {}
+
+    for dense_layer_key, layer_params in resnet_params["params"].items():
+        log_domain_layer_params = _get_log_domain_params_for_dense_layer(layer_params)
+        log_domain_params[dense_layer_key] = log_domain_layer_params
+
+    log_domain_params = frozen_dict.freeze({"params": log_domain_params})
+    return resnet_params, log_domain_params
 
 
 def assert_pytree_allclose(
