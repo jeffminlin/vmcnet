@@ -165,7 +165,7 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
         checkpoint_data = io.process_checkpoint_data_for_saving(checkpoint_data)
         # Move data to CPU to avoid clogging up GPU memory with queued checkpoints
         checkpoint_data = jax.device_put(checkpoint_data, jax.devices("cpu")[0])
-        self._queue.put((directory, name, checkpoint_data))
+        super().save_data(directory, name, checkpoint_data)
 
 
 class MetricsWriter(ThreadedWriter[Dict]):
