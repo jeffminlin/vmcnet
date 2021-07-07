@@ -53,39 +53,13 @@ def get_model_from_config(
         else:
             raise ValueError("Activations besides tanh are not yet supported.")
 
-    residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+    backflow = get_backflow_from_model_config(
+        model_config,
+        ion_pos,
         spin_split,
-        model_config.backflow.equivariant_shapes,
-        kernel_initializer_unmixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_unmixed
-        ),
-        kernel_initializer_mixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_mixed
-        ),
-        kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_1e_stream
-        ),
-        kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_2e_stream
-        ),
-        bias_initializer_1e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_1e_stream
-        ),
-        bias_initializer_2e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_2e_stream
-        ),
-        activation_fn=get_activation_fn(model_config.backflow.activation_fn),
-        use_bias=model_config.backflow.use_bias,
-        skip_connection=model_config.backflow.skip_connection,
-        cyclic_spins=model_config.backflow.cyclic_spins,
-    )
-
-    backflow = FermiNetBackflow(
-        residual_blocks,
-        ion_pos=ion_pos,
-        include_2e_stream=model_config.backflow.include_2e_stream,
-        include_ei_norm=model_config.backflow.include_ei_norm,
-        include_ee_norm=model_config.backflow.include_ee_norm,
+        get_kernel_init_from_config,
+        get_bias_init_from_config,
+        get_activation_fn,
     )
 
     if model_config.type == "ferminet":
@@ -151,6 +125,53 @@ def get_model_from_config(
             )
 
     return model
+
+
+def get_backflow_from_model_config(
+    model_config,
+    ion_pos,
+    spin_split,
+    get_kernel_init_from_config,
+    get_bias_init_from_config,
+    get_activation_fn,
+):
+    """Get a FermiNet backflow from a model configuration."""
+    residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+        spin_split,
+        model_config.backflow.ndense_list,
+        kernel_initializer_unmixed=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_unmixed
+        ),
+        kernel_initializer_mixed=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_mixed
+        ),
+        kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_2e_1e_stream
+        ),
+        kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_2e_2e_stream
+        ),
+        bias_initializer_1e_stream=get_bias_init_from_config(
+            model_config.backflow.bias_init_1e_stream
+        ),
+        bias_initializer_2e_stream=get_bias_init_from_config(
+            model_config.backflow.bias_init_2e_stream
+        ),
+        activation_fn=get_activation_fn(model_config.backflow.activation_fn),
+        use_bias=model_config.backflow.use_bias,
+        skip_connection=model_config.backflow.skip_connection,
+        cyclic_spins=model_config.backflow.cyclic_spins,
+    )
+
+    backflow = FermiNetBackflow(
+        residual_blocks,
+        ion_pos=ion_pos,
+        include_2e_stream=model_config.backflow.include_2e_stream,
+        include_ei_norm=model_config.backflow.include_ei_norm,
+        include_ee_norm=model_config.backflow.include_ee_norm,
+    )
+
+    return backflow
 
 
 class ComposedModel(flax.linen.Module):

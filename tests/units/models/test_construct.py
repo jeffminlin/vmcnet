@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.models as models
+import vmcnet.utils as utils
 
 
 def test_compose_negative_with_three_body_antisymmetry():
@@ -43,12 +44,34 @@ def _get_initial_pos_and_hyperparams():
     ion_pos = jax.random.normal(subkey, (5, 3))
 
     key, subkey = jax.random.split(key)
-    init_pos = jax.random.normal(subkey, shape=(20, 6, 3))
+    init_pos = jax.random.normal(subkey, shape=(7, 6, 3))
 
     spin_split = (2,)  # 2 up, 4 down
-    ndense_list = ((64, 8), (64, 8), (32, 8), (32, 4), (12,), (14, 3), (13,))
+    ndense_list = ((6, 3), (6, 3), (3, 3), (3, 4), (12,), (11, 3), (9,))
 
     return key, ion_pos, init_pos, spin_split, ndense_list
+
+
+def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
+    residual_blocks = models.construct._get_residual_blocks_for_ferminet_backflow(
+        spin_split,
+        ndense_list,
+        models.weights.get_kernel_initializer("orthogonal"),
+        models.weights.get_kernel_initializer("xavier_normal"),
+        models.weights.get_kernel_initializer("glorot_uniform"),
+        models.weights.get_kernel_initializer("kaiming_uniform"),
+        models.weights.get_bias_initializer("zeros"),
+        models.weights.get_bias_initializer("normal"),
+        jnp.tanh,
+        cyclic_spins=cyclic_spins,
+    )
+    return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
+
+
+def _jit_eval_model(key, init_pos, log_psi):
+    key, subkey = jax.random.split(key)
+    params = log_psi.init(subkey, init_pos)
+    jax.jit(log_psi.apply)(params, init_pos)
 
 
 def test_ferminet_can_be_constructed():
@@ -56,28 +79,18 @@ def test_ferminet_can_be_constructed():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
+        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.FermiNet(
             spin_split,
-            ndense_list,
+            backflow,
             3,
-            models.weights.get_kernel_initializer("orthogonal"),
-            models.weights.get_kernel_initializer("xavier_normal"),
-            models.weights.get_kernel_initializer("glorot_uniform"),
-            models.weights.get_kernel_initializer("kaiming_uniform"),
             models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
-            models.weights.get_bias_initializer("zeros"),
-            models.weights.get_bias_initializer("normal"),
             models.weights.get_bias_initializer("uniform"),
-            jnp.tanh,
-            ion_pos=ion_pos,
-            cyclic_spins=cyclic_spins,
         )
 
-        key, subkey = jax.random.split(key)
-        params = log_psi.init(subkey, init_pos)
-        jax.jit(log_psi.apply)(params, init_pos)
+        _jit_eval_model(key, init_pos, log_psi)
 
 
 def test_split_antisymmetry_can_be_constructed():
@@ -85,29 +98,19 @@ def test_split_antisymmetry_can_be_constructed():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
+        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
             spin_split,
-            ndense_list,
+            backflow,
             32,
             3,
-            models.weights.get_kernel_initializer("orthogonal"),
-            models.weights.get_kernel_initializer("xavier_normal"),
-            models.weights.get_kernel_initializer("kaiming_uniform"),
-            models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
-            models.weights.get_bias_initializer("zeros"),
-            models.weights.get_bias_initializer("normal"),
             models.weights.get_bias_initializer("uniform"),
             jnp.tanh,
-            jnp.tanh,
-            ion_pos=ion_pos,
-            cyclic_spins=cyclic_spins,
         )
 
-        key, subkey = jax.random.split(key)
-        params = log_psi.init(subkey, init_pos)
-        jax.jit(log_psi.apply)(params, init_pos)
+        _jit_eval_model(key, init_pos, log_psi)
 
 
 def test_composed_antisymmetry_can_be_constructed():
@@ -115,26 +118,40 @@ def test_composed_antisymmetry_can_be_constructed():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     for cyclic_spins in [True, False]:
+        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
             spin_split,
-            ndense_list,
+            backflow,
             32,
             3,
-            models.weights.get_kernel_initializer("orthogonal"),
-            models.weights.get_kernel_initializer("xavier_normal"),
-            models.weights.get_kernel_initializer("kaiming_uniform"),
-            models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
-            models.weights.get_bias_initializer("zeros"),
-            models.weights.get_bias_initializer("normal"),
             models.weights.get_bias_initializer("uniform"),
             jnp.tanh,
-            jnp.tanh,
-            ion_pos=ion_pos,
-            cyclic_spins=cyclic_spins,
         )
 
-        key, subkey = jax.random.split(key)
-        params = log_psi.init(subkey, init_pos)
-        jax.jit(log_psi.apply)(params, init_pos)
+        _jit_eval_model(key, init_pos, log_psi)
+
+
+def test_get_model_from_default_config(mocker):
+    """Test that construction using the default model config does not raise an error."""
+    ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
+    nelec = jnp.array([4, 3])
+
+    mocker.patch("vmcnet.models.construct.FermiNet")
+    mocker.patch("vmcnet.models.construct.SplitBruteForceAntisymmetryWithDecay")
+    mocker.patch("vmcnet.models.construct.ComposedBruteForceAntisymmetryWithDecay")
+
+    for model_type in ["ferminet", "brute_force_antisym"]:
+        if model_type == "brute_force_antisym":
+            for subtype in ["rank_one", "double"]:
+                model_config = utils.config.get_model_config()
+                model_config.type = model_type
+                model_config.brute_force_antisym.antisym_type = subtype
+                model_config = utils.config.choose_model_type_in_config(model_config)
+                models.construct.get_model_from_config(model_config, nelec, ion_pos)
+        elif model_type == "ferminet":
+            model_config = utils.config.get_model_config()
+            model_config.type = model_type
+            model_config = utils.config.choose_model_type_in_config(model_config)
+            models.construct.get_model_from_config(model_config, nelec, ion_pos)

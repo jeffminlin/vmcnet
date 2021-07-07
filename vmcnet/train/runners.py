@@ -31,10 +31,7 @@ config_flags.DEFINE_config_dict(
 def _parse_flags():
     FLAGS(sys.argv)
     config = FLAGS.config
-    model_type = config.model.type
-    config.model = config.model[model_type]
-    config.model.type = model_type
-
+    config.model = utils.config.choose_model_type_in_config(config.model)
     config.lock()
     return config
 

@@ -27,13 +27,21 @@ def get_default_config() -> ConfigDict:
     return config
 
 
+def choose_model_type_in_config(model_config):
+    """Given a model config with a specified type, select the specified model."""
+    model_type = model_config.type
+    model_config = model_config[model_type]
+    model_config.type = model_type
+    return model_config
+
+
 def get_model_config() -> ConfigDict:
     """Get a default model configuration from a model type."""
     orthogonal_init = ConfigDict({"type": "orthogonal", "scale": 1.0})
     normal_init = ConfigDict({"type": "normal"})
     ferminet_backflow = ConfigDict(
         {
-            "equivariant_shapes": ((256, 16), (256, 16), (256, 16), (256,)),
+            "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
             "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
             "kernel_init_mixed": orthogonal_init,
             "kernel_init_2e_1e_stream": orthogonal_init,
