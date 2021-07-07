@@ -11,9 +11,10 @@ from vmcnet.models.weights import (
     get_bias_initializer,
     get_kernel_initializer,
 )
-from vmcnet.utils.typing import SLArray, PyTree
+from vmcnet.utils.typing import SLArray, SLArrayList, PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
+SLActivation = Callable[[SLArray], SLArray]
 
 
 def log_linear_exp(
@@ -77,6 +78,13 @@ def log_linear_exp(
     return signs, vals
 
 
+def sum_sl_array_list(x: SLArrayList) -> SLArray:
+    """Take the sum of a list of SLArrays which are all of the same shape."""
+    stacked_signs = jnp.stack([a[0] for a in x])
+    stacked_logs = jnp.stack([a[1] for a in x])
+    return log_linear_exp(stacked_signs, stacked_logs)
+
+
 def is_tuple_of_arrays(x: PyTree) -> bool:
     """Returns True if x is a tuple of jnp.ndarray objects."""
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
@@ -105,6 +113,10 @@ def get_nelec_per_spin(
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
+
+
+def _sl_valid_skip(x: SLArray, y: SLArray):
+    return x[0].shape[-1] == y[0].shape[-1]
 
 
 class Dense(flax.linen.Module):
@@ -275,5 +287,69 @@ class SimpleResNet(flax.linen.Module):
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
                 x = cast(jnp.ndarray, x + prev_x)
+
+        return self.final_dense(x)
+
+
+class LogDomainResNet(flax.linen.Module):
+    """Simplest fully-connected ResNet, implemented in the log domain.
+
+    Attributes:
+        ndense_inner (int): number of dense nodes in layers before the final layer.
+        ndense_outer (int): number of output features, i.e. the number of dense nodes in
+            the final Dense call.
+        nlayers (int): number of dense layers applied to the input, including the final
+            layer. If this is 0, the final dense layer will still be applied.
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrices of each layer. Defaults to orthogonal initialization.
+        activation_fn (SLActivation): activation function between intermediate layers
+            (is not applied after the final dense layer). Has the signature
+            SLArray -> SLArray (shape is preserved).
+        use_bias (bool, optional): whether the dense layers should all have bias terms
+            or not. Defaults to True.
+    """
+
+    ndense_inner: int
+    ndense_final: int
+    nlayers: int
+    activation_fn: SLActivation
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    use_bias: bool = True
+
+    def setup(self):
+        """Setup dense layers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._activation_fn = self.activation_fn
+
+        self.inner_dense = [
+            LogDomainDense(
+                self.ndense_inner,
+                kernel_init=self.kernel_init,
+                use_bias=self.use_bias,
+            )
+            for _ in range(self.nlayers - 1)
+        ]
+        self.final_dense = LogDomainDense(
+            self.ndense_final,
+            kernel_init=self.kernel_init,
+            use_bias=False,
+        )
+
+    def __call__(self, x: SLArray) -> SLArray:
+        """Repeated application of (dense layer -> activation -> optional skip) block.
+
+        Args:
+            x (SLArray): an slog input array of shape (..., d)
+
+        Returns:
+            SLArray: slog array of shape (..., self.ndense_final)
+        """
+        for dense_layer in self.inner_dense:
+            prev_x = x
+            x = dense_layer(prev_x)
+            x = self._activation_fn(x)
+            if _sl_valid_skip(prev_x, x):
+                x = sum_sl_array_list([x, prev_x])
 
         return self.final_dense(x)
