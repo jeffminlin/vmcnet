@@ -35,7 +35,7 @@ def test_dense_in_regular_and_log_domain_match():
 def test_resnet_in_regular_and_log_domain_match():
     """Test that LogDomainResnet does the same thing as SimpleResnet."""
     ninner = 4
-    nouter = 3
+    nfinal = 3
     nlayers = 5
 
     # Define activation function with simple analog in log domain
@@ -48,10 +48,10 @@ def test_resnet_in_regular_and_log_domain_match():
         return (sign_x, 2 * log_x - jnp.log(10))
 
     resnet = models.core.SimpleResNet(
-        ninner, nouter, nlayers, activation_fn=activation_fn
+        ninner, nfinal, nlayers, activation_fn=activation_fn
     )
     log_domain_resnet = models.core.LogDomainResNet(
-        ninner, nouter, nlayers, activation_fn=log_domain_activation_fn
+        ninner, nfinal, nlayers, activation_fn=log_domain_activation_fn
     )
 
     x = jnp.array([0.2, 3.0, 4.2, -2.3, 7.4, -3.0])  # random vector
@@ -66,4 +66,4 @@ def test_resnet_in_regular_and_log_domain_match():
     out = resnet.apply(resnet_params, x)
     slog_out = log_domain_resnet.apply(log_domain_resnet_params, slog_x)
 
-    assert_pytree_allclose(slog_out, array_to_slog(out), rtol=1e-6)
+    assert_pytree_allclose(slog_out, array_to_slog(out), rtol=1e-5)

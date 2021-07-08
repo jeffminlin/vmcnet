@@ -5,25 +5,25 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from .jastrow import IsotropicAtomicExpDecay
-from vmcnet.models.antisymmetry import (
+from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from vmcnet.models.core import (
+from .core import (
     Activation,
     SimpleResNet,
     get_nelec_per_spin,
 )
-from vmcnet.models.equivariance import (
+from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
     FermiNetOrbitalLayer,
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from .jastrow import IsotropicAtomicExpDecay
 from .weights import WeightInitializer
 
 

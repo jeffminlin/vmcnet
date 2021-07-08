@@ -161,7 +161,7 @@ class SimpleResNet(flax.linen.Module):
 
     Attributes:
         ndense_inner (int): number of dense nodes in layers before the final layer.
-        ndense_outer (int): number of output features, i.e. the number of dense nodes in
+        ndense_final (int): number of output features, i.e. the number of dense nodes in
             the final Dense call.
         nlayers (int): number of dense layers applied to the input, including the final
             layer. If this is 0, the final dense layer will still be applied.
@@ -230,7 +230,7 @@ class LogDomainResNet(flax.linen.Module):
 
     Attributes:
         ndense_inner (int): number of dense nodes in layers before the final layer.
-        ndense_outer (int): number of output features, i.e. the number of dense nodes in
+        ndense_final (int): number of output features, i.e. the number of dense nodes in
             the final Dense call.
         nlayers (int): number of dense layers applied to the input, including the final
             layer. If this is 0, the final dense layer will still be applied.
