@@ -9,7 +9,7 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import P
 
 
-def initialize_pos(
+def initialize_molecular_pos(
     key: jnp.ndarray,
     nchains: int,
     ion_pos: jnp.ndarray,
@@ -129,6 +129,7 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
+# TODO: make output type hint cleaner, maybe even make
 def create_value_and_grad_energy_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
@@ -167,10 +168,12 @@ def create_value_and_grad_energy_fn(
             sample variance estimate of the local energy
 
     Returns:
-        Callable: function which computes the energy value and gradient. Has signature
+        Callable: function which computes the clipped energy value and gradient. Has the
+        signature
             (params, x)
             -> ((expected_energy, auxilliary_energy_data), grad_energy),
-        where auxilliary_energy_data is the tuple (expected_variance, local_energies)
+        where auxilliary_energy_data is the tuple
+        (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 
     def _get_statistics_from_local_energy(local_energies):

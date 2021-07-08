@@ -4,9 +4,11 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, List, Tuple, TypeVar
+from typing import Any, List, Tuple, TypeVar, Union
 
 import jax.numpy as jnp
+import kfac_ferminet_alpha.optimizer as kfac_opt
+import optax
 
 
 # Currently using PyTree = Any just to improve readability in the code.
@@ -29,6 +31,9 @@ P = TypeVar("P", bound=PyTree)
 
 # TypeVar for a pytree containing optimizer state
 S = TypeVar("S", bound=PyTree)
+
+# Actual optimizer states currently used
+OptimizerState = Union[kfac_opt.State, optax.OptState]
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch
