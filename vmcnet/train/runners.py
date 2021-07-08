@@ -613,7 +613,6 @@ def molecule():
     ) = _setup_distributed_vmc(
         config,
         init_pos,
-        dtype_to_use,
         ion_pos,
         ion_charges,
         nelec,
