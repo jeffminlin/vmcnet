@@ -138,10 +138,6 @@ def test_get_model_from_default_config(mocker):
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
     nelec = jnp.array([4, 3])
 
-    mocker.patch("vmcnet.models.construct.FermiNet")
-    mocker.patch("vmcnet.models.construct.SplitBruteForceAntisymmetryWithDecay")
-    mocker.patch("vmcnet.models.construct.ComposedBruteForceAntisymmetryWithDecay")
-
     for model_type in ["ferminet", "brute_force_antisym"]:
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
