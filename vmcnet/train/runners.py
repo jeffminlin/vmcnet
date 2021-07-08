@@ -336,7 +336,7 @@ def _get_adam_update_fn(
     optax.OptState,
 ]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule)
-    optimizer_state = optimizer.init(params)
+    optimizer_state = utils.distribute.pmap(optimizer.init)(params)
 
     def optimizer_apply(grad, params, optimizer_state):
         updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
@@ -458,7 +458,7 @@ def _setup_distributed_vmc(
     log_psi, params, key = _get_and_init_model(
         config.model, ion_pos, nelec, init_pos, key, dtype=dtype
     )
-    distributed_log_psi_apply = jax.pmap(log_psi.apply)
+    distributed_log_psi_apply = utils.distribute.pmap(log_psi.apply)
 
     # Make initial data
     data = _make_initial_distributed_data(
