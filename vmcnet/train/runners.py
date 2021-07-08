@@ -192,18 +192,11 @@ def _assemble_mol_local_energy_fn(
 def total_variation_clipping_fn(local_energies, threshold=5.0):
     """Clip local energy to within a multiple of the total variation from the median."""
     median_local_e = jnp.nanmedian(local_energies)
-    total_variation = utils.distribute.nanmean_all_local_devices(
-        jnp.abs(local_energies - median_local_e)
-    )
-    clipped_local_e = jax.lax.cond(
-        ~jnp.isnan(total_variation),
-        lambda x: jnp.clip(
-            x,
-            median_local_e - threshold * total_variation,
-            median_local_e + threshold * total_variation,
-        ),
-        lambda x: x,
+    total_variation = jnp.nanmean(jnp.abs(local_energies - median_local_e))
+    clipped_local_e = jnp.clip(
         local_energies,
+        median_local_e - threshold * total_variation,
+        median_local_e + threshold * total_variation,
     )
     return clipped_local_e
 
