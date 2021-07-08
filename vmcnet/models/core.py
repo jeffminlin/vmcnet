@@ -1,80 +1,22 @@
 """Core model building parts."""
-from typing import Callable, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Sequence, Tuple, Union, cast
 
 import flax
 import jax
 import jax.numpy as jnp
 
-import vmcnet.utils as utils
 from vmcnet.models.weights import (
     WeightInitializer,
     get_bias_initializer,
     get_kernel_initializer,
 )
+from vmcnet.utils.log_linear_exp import log_linear_exp
+from vmcnet.utils.kfac import register_batch_dense
+from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import SLArray, PyTree
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
-
-
-def log_linear_exp(
-    signs: jnp.ndarray,
-    vals: jnp.ndarray,
-    weights: Optional[jnp.ndarray] = None,
-    axis: int = 0,
-    register_kfac: bool = True,
-) -> SLArray:
-    """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)) + b_j.
-
-    In order to avoid overflow when computing
-
-        log(abs(sum_i(sign_i * w_ij * exp(vals_i)))),
-
-    the largest exp(val_i) is divided out from all the values and added back in after
-    the outer log, i.e.
-
-        log(abs(sum_i(sign_i * w_ij * exp(vals_i - max)))) + max.
-
-    This trick also avoids the underflow issue of when all vals are small enough that
-    exp(val_i) is approximately 0 for all i.
-
-    Args:
-        signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
-            where d is the size of the given axis
-        vals (jnp.ndarray): array of log|abs(x)| with shape (..., d, ...), where d is
-            the size of the given axis
-        weights (jnp.ndarray, optional): weights of a linear transformation to apply to
-            the given axis, with shape (d, d'). If not provided, a simple sum is taken
-            instead, equivalent to (d, 1) weights equal to 1. Defaults to None.
-        axis (int, optional): axis along which to take the sum and max. Defaults to 0.
-        register_kfac (bool, optional): if weights are not None, whether to register the
-            linear part of the computation with KFAC. Defaults to True.
-
-    Returns:
-        (SLArray): sign of linear combination, log of linear
-        combination. Both outputs have shape (..., d', ...), where d' = 1 if weights is
-        None, and d' = weights.shape[1] otherwise.
-    """
-    max_val = jnp.max(vals, axis=axis, keepdims=True)
-    terms_divided_by_max = signs * jnp.exp(vals - max_val)
-    if weights is not None:
-        # swap axis and -1 to conform to jnp.dot and register_batch_dense api
-        terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)
-        transformed_divided_by_max = jnp.dot(terms_divided_by_max, weights)
-        if register_kfac:
-            transformed_divided_by_max = utils.kfac.register_batch_dense(
-                transformed_divided_by_max, terms_divided_by_max, weights, None
-            )
-
-        # swap axis and -1 back after the contraction and registration
-        transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, axis, -1)
-    else:
-        transformed_divided_by_max = jnp.sum(
-            terms_divided_by_max, axis=axis, keepdims=True
-        )
-
-    signs = jnp.sign(transformed_divided_by_max)
-    vals = jnp.log(jnp.abs(transformed_divided_by_max)) + max_val
-    return signs, vals
+SLActivation = Callable[[SLArray], SLArray]
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:
@@ -105,6 +47,10 @@ def get_nelec_per_spin(
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
+
+
+def _sl_valid_skip(x: SLArray, y: SLArray):
+    return x[0].shape[-1] == y[0].shape[-1]
 
 
 class Dense(flax.linen.Module):
@@ -151,7 +97,7 @@ class Dense(flax.linen.Module):
             y = y + bias
 
         if self.register_kfac:
-            return utils.kfac.register_batch_dense(y, inputs, kernel, bias)
+            return register_batch_dense(y, inputs, kernel, bias)
         else:
             return y
 
@@ -215,7 +161,7 @@ class SimpleResNet(flax.linen.Module):
 
     Attributes:
         ndense_inner (int): number of dense nodes in layers before the final layer.
-        ndense_outer (int): number of output features, i.e. the number of dense nodes in
+        ndense_final (int): number of output features, i.e. the number of dense nodes in
             the final Dense call.
         nlayers (int): number of dense layers applied to the input, including the final
             layer. If this is 0, the final dense layer will still be applied.
@@ -275,5 +221,69 @@ class SimpleResNet(flax.linen.Module):
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
                 x = cast(jnp.ndarray, x + prev_x)
+
+        return self.final_dense(x)
+
+
+class LogDomainResNet(flax.linen.Module):
+    """Simplest fully-connected ResNet, implemented in the log domain.
+
+    Attributes:
+        ndense_inner (int): number of dense nodes in layers before the final layer.
+        ndense_final (int): number of output features, i.e. the number of dense nodes in
+            the final Dense call.
+        nlayers (int): number of dense layers applied to the input, including the final
+            layer. If this is 0, the final dense layer will still be applied.
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrices of each layer. Defaults to orthogonal initialization.
+        activation_fn (SLActivation): activation function between intermediate layers
+            (is not applied after the final dense layer). Has the signature
+            SLArray -> SLArray (shape is preserved).
+        use_bias (bool, optional): whether the dense layers should all have bias terms
+            or not. Defaults to True.
+    """
+
+    ndense_inner: int
+    ndense_final: int
+    nlayers: int
+    activation_fn: SLActivation
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    use_bias: bool = True
+
+    def setup(self):
+        """Setup dense layers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._activation_fn = self.activation_fn
+
+        self.inner_dense = [
+            LogDomainDense(
+                self.ndense_inner,
+                kernel_init=self.kernel_init,
+                use_bias=self.use_bias,
+            )
+            for _ in range(self.nlayers - 1)
+        ]
+        self.final_dense = LogDomainDense(
+            self.ndense_final,
+            kernel_init=self.kernel_init,
+            use_bias=False,
+        )
+
+    def __call__(self, x: SLArray) -> SLArray:
+        """Repeated application of (dense layer -> activation -> optional skip) block.
+
+        Args:
+            x (SLArray): an slog input array of shape (..., d)
+
+        Returns:
+            SLArray: slog array of shape (..., self.ndense_final)
+        """
+        for dense_layer in self.inner_dense:
+            prev_x = x
+            x = dense_layer(prev_x)
+            x = self._activation_fn(x)
+            if _sl_valid_skip(prev_x, x):
+                x = slog_sum(x, prev_x)
 
         return self.final_dense(x)

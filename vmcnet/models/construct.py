@@ -5,26 +5,26 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.models.antisymmetry import (
+from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from vmcnet.models.core import (
+from .core import (
     Activation,
     SimpleResNet,
     get_nelec_per_spin,
-    log_linear_exp,
 )
-from vmcnet.models.equivariance import (
+from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
     FermiNetOrbitalLayer,
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from vmcnet.models.jastrow import IsotropicAtomicExpDecay
-from vmcnet.models.weights import WeightInitializer
+from .jastrow import IsotropicAtomicExpDecay
+from .weights import WeightInitializer
 
 
 class ComposedModel(flax.linen.Module):
@@ -257,9 +257,9 @@ class FermiNet(flax.linen.Module):
         ]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
 
-        signs, log_dets = slogdet_product(orbitals)
-        _, log_psi = log_linear_exp(signs, log_dets, axis=0)
-        return jnp.squeeze(log_psi, axis=0)
+        slog_dets = slogdet_product(orbitals)
+        _, log_psi = slog_sum_over_axis(slog_dets)
+        return log_psi
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

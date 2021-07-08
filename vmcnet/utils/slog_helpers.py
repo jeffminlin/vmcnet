@@ -2,6 +2,7 @@
 
 import jax.numpy as jnp
 
+from .log_linear_exp import log_linear_exp
 from .typing import SLArray, ArrayList, SLArrayList
 
 
@@ -63,3 +64,20 @@ def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     (sx, lx) = x
     (sy, ly) = y
     return (sx * sy, lx + ly)
+
+
+def slog_sum_over_axis(x: SLArray, axis: int = 0) -> SLArray:
+    """Take the sum of a single slog array over a specified axis."""
+    signs, logs = log_linear_exp(x[0], x[1], axis=axis)
+    return (jnp.squeeze(signs, axis=axis), jnp.squeeze(logs, axis=axis))
+
+
+def slog_array_list_sum(x: SLArrayList) -> SLArray:
+    """Take the sum of a list of SLArrays which are all of the same shape."""
+    stacked_vals = (jnp.stack([a[0] for a in x]), jnp.stack([a[1] for a in x]))
+    return slog_sum_over_axis(stacked_vals)
+
+
+def slog_sum(x: SLArray, y: SLArray):
+    """Take the sum of two SLArrays which are of the same shape."""
+    return slog_array_list_sum([x, y])

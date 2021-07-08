@@ -1,16 +1,18 @@
 """Test sign covariance routines."""
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.models.sign_covariance as sign_cov
-from tests.test_utils import assert_pytree_allclose
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_from_slog,
     array_list_to_slog,
 )
 from vmcnet.utils.typing import SLArray, SLArrayList
+
+from tests.test_utils import assert_pytree_allclose
 
 
 def test_get_sign_orbit_one_sl_array():
@@ -130,6 +132,7 @@ def test_make_slog_fn_sign_covariant():
 
     covariant_fn = sign_cov.make_slog_fn_sign_covariant(fn)
     result = covariant_fn(slog_inputs)
+    chex.assert_shape(result, (nbatch, dout))
     flip_sign_result = covariant_fn(flip_slog_inputs)
     same_sign_result = covariant_fn(same_slog_inputs)
 
