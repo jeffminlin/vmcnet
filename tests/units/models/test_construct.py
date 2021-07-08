@@ -85,9 +85,6 @@ def _make_ferminet():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
-            jnp.tanh,
-            ion_pos=ion_pos,
-            cyclic_spins=cyclic_spins,
             use_det_resnet=use_det_resnet,
         )
         log_psis.append(log_psi)

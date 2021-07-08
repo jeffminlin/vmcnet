@@ -50,15 +50,15 @@ def log_linear_exp(
     # In that case, the subtraction of vals - max_val will be inf - inf at the maximal
     # index, which will give a nan. However, we can safely replace it with a zero as we
     # have actually pulled the inf term outside the sum anyway.
-    inf_values = vals == jnp.inf
-    only_inf_value_in_slice = jnp.logical_and(
-        inf_values, jnp.count_nonzero(inf_values, axis=axis, keepdims=True) == 1
-    )
+    value_is_inf = vals == jnp.inf
+    single_inf_in_slice = jnp.count_nonzero(value_is_inf, axis=axis, keepdims=True) == 1
+    value_is_only_inf_in_slice = jnp.logical_and(value_is_inf, single_inf_in_slice)
     diffs_with_max = jnp.where(
-        only_inf_value_in_slice,
+        value_is_only_inf_in_slice,
         0,
         vals - max_val,
     )
+
     terms_divided_by_max = signs * jnp.exp(diffs_with_max)
     if weights is not None:
         # swap axis and -1 to conform to jnp.dot and register_batch_dense api

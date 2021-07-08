@@ -33,11 +33,14 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from vmcnet.models.jastrow import IsotropicAtomicExpDecay
+from .jastrow import IsotropicAtomicExpDecay
+from .sign_covariance import make_slog_fn_sign_covariant
 from .weights import (
     WeightInitializer,
-    get_bias_init_from_config,
+    get_kernel_initializer,
     get_kernel_init_from_config,
+    get_bias_initializer,
+    get_bias_init_from_config,
 )
 
 
@@ -372,7 +375,6 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    cyclic_spins: bool = True
     use_det_resnet: bool = False
     ndense_det_resnet: int = 10
     nlayers_det_resnet: int = 3
