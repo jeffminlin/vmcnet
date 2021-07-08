@@ -32,6 +32,7 @@ from vmcnet.models.weights import (
 )
 
 
+# TODO: figure out a way to add other options in a scalable way
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh

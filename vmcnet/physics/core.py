@@ -129,7 +129,7 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
-# TODO: make output type hint cleaner, maybe even make
+# TODO: make output type hint cleaner
 def create_value_and_grad_energy_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
