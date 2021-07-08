@@ -10,7 +10,7 @@ from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import ArrayList, PyTree
 
 
 def _split_mean(
@@ -638,6 +638,64 @@ class SplitDense(flax.linen.Module):
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
 
+def _compute_exponential_envelopes_one_spin(
+    r_ei_leaf: jnp.ndarray,
+    norbitals: int,
+    kernel_initializer_dim: WeightInitializer,
+    kernel_initializer_ion: WeightInitializer,
+    isotropic: bool = False,
+) -> jnp.ndarray:
+    """Calculate exponential envelopes for orbitals of a single spin."""
+    if isotropic:
+        scale_out = _isotropy_on_leaf(
+            r_ei_leaf,
+            norbitals,
+            kernel_initializer_dim,
+            register_kfac=False,
+        )
+    else:
+        scale_out = _anisotropy_on_leaf(
+            r_ei_leaf,
+            norbitals,
+            kernel_initializer_dim,
+            register_kfac=True,
+        )
+    # scale_out has shape (..., nelec, norbitals, nion, d)
+    distances = jnp.linalg.norm(scale_out, axis=-1)
+    inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
+
+    lin_comb_nion = Dense(
+        1,
+        kernel_init=kernel_initializer_ion,
+        use_bias=False,
+        register_kfac=False,
+    )(inv_exp_distances)
+
+    return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
+
+
+def _compute_exponential_envelopes_all_spins(
+    r_ei: jnp.ndarray,
+    spin_split: Union[int, Sequence[int]],
+    norbitals_per_spin: Sequence[int],
+    kernel_initializer_dim: WeightInitializer,
+    kernel_initializer_ion: WeightInitializer,
+    isotropic: bool = False,
+) -> ArrayList:
+    """Calculate exponential envelopes for all spins."""
+    r_ei_split = jnp.split(r_ei, spin_split, axis=-3)
+    return jax.tree_map(
+        functools.partial(
+            _compute_exponential_envelopes_one_spin,
+            kernel_initializer_dim=kernel_initializer_dim,
+            kernel_initializer_ion=kernel_initializer_ion,
+            isotropic=isotropic,
+        ),
+        r_ei_split,
+        list(norbitals_per_spin),
+    )
+
+
 class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
@@ -690,37 +748,6 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _compute_exponential_envelopes_on_leaf(
-        self, r_ei_leaf: jnp.ndarray, norbitals: int, isotropic: bool = False
-    ) -> jnp.ndarray:
-        """Pick a type of exp envelope and multiply by the linear part element-wise."""
-        if isotropic:
-            scale_out = _isotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=False,
-            )
-        else:
-            scale_out = _anisotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=True,
-            )
-        # scale_out has shape (..., nelec, norbitals, nion, d)
-        distances = jnp.linalg.norm(scale_out, axis=-1)
-        inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
-
-        lin_comb_nion = Dense(
-            1,
-            kernel_init=self.kernel_initializer_envelope_ion,
-            use_bias=False,
-            register_kfac=False,
-        )(inv_exp_distances)
-
-        return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
-
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
         """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
@@ -746,14 +773,13 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             use_bias=self.use_bias,
         )(x)
         if r_ei is not None:
-            r_ei_split = jnp.split(r_ei, self.spin_split, axis=-3)
-            exp_envelopes = jax.tree_map(
-                functools.partial(
-                    self._compute_exponential_envelopes_on_leaf,
-                    isotropic=self.isotropic_decay,
-                ),
-                r_ei_split,
-                list(self.norbitals_per_spin),
+            exp_envelopes = _compute_exponential_envelopes_all_spins(
+                r_ei,
+                self.spin_split,
+                self.norbitals_per_spin,
+                self._kernel_initializer_envelope_dim,
+                self._kernel_initializer_envelope_ion,
+                self.isotropic_decay,
             )
             orbs = _tree_prod(orbs, exp_envelopes)
         return orbs
@@ -811,38 +837,6 @@ class EquivariantOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _compute_exponential_envelopes_on_leaf(
-        self, r_ei_leaf: jnp.ndarray, norbitals: int, isotropic: bool = False
-    ) -> jnp.ndarray:
-        """Pick a type of exp envelope and multiply by the linear part element-wise."""
-        if isotropic:
-            scale_out = _isotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=False,
-            )
-        else:
-            scale_out = _anisotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=True,
-            )
-        # scale_out has shape (..., nelec, norbitals, nion, d)
-        distances = jnp.linalg.norm(scale_out, axis=-1)
-        inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
-
-        lin_comb_nion = Dense(
-            1,
-            kernel_init=self.kernel_initializer_envelope_ion,
-            use_bias=False,
-            register_kfac=False,
-        )(inv_exp_distances)
-
-        # (..., 1, nelec, norbitals)
-        return jnp.expand_dims(jnp.squeeze(lin_comb_nion, axis=-1), -3)
-
     def _get_orbital_matrices_one_spin(
         self, x: jnp.ndarray, norbitals: int
     ) -> jnp.ndarray:
@@ -887,17 +881,22 @@ class EquivariantOrbitalLayer(flax.linen.Module):
         # [nspin[i]: (..., nelec[i], d)]
         split_x = jnp.split(x, self.spin_split, -2)
         # shape [nspins: (..., nelec[i], nelec[i], norbitals[i])]
-        orbs = [self._get_orbital_matrices_one_spin(x) for x in split_x]
+        orbs = [
+            self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
+            for (i, x) in enumerate(split_x)
+        ]
 
         if r_ei is not None:
-            r_ei_split = jnp.split(r_ei, self.spin_split, axis=-3)
+            exp_envelopes = _compute_exponential_envelopes_all_spins(
+                r_ei,
+                self.spin_split,
+                self.norbitals_per_spin,
+                self._kernel_initializer_envelope_dim,
+                self._kernel_initializer_envelope_ion,
+                self.isotropic_decay,
+            )
             exp_envelopes = jax.tree_map(
-                functools.partial(
-                    self._compute_exponential_envelopes_on_leaf,
-                    isotropic=self.isotropic_decay,
-                ),
-                r_ei_split,
-                list(self.norbitals_per_spin),
+                lambda x: jnp.expand_dims(x, axis=-3), exp_envelopes
             )
             orbs = _tree_prod(orbs, exp_envelopes)
         return orbs
