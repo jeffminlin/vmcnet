@@ -18,7 +18,17 @@ def initialize_molecular_pos(
     init_width: float = 1.0,
     dtype=jnp.float32,
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    """Initialize a set of plausible initial electron positions."""
+    """Initialize a set of plausible initial electron positions.
+
+    For each chain, each electron is assigned to a random ion and then its position is
+    sampled from a normal distribution centered at that ion with diagonal covariance
+    with diagonal entries all equal to init_width.
+
+    If there are no more electrons than there are ions, the assignment is done without
+    replacement. If there are more electrons than ions, the assignment is done with
+    replacement, and the probability of choosing ion i is its relative charge (as a
+    fraction of the sum of the ion charges).
+    """
     nion = len(ion_charges)
     replace = True
 

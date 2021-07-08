@@ -29,6 +29,7 @@ from vmcnet.utils.typing import P, D, S, OptimizerState
 
 FLAGS = flags.FLAGS
 
+# TODO: add support for config_flags.DEFINE_config_file
 config_flags.DEFINE_config_dict(
     "config", utils.config.get_default_config(), lock_config=False
 )
@@ -42,8 +43,8 @@ def _parse_flags():
     return config
 
 
-def _get_logdir_and_save_hyperparams(config: ConfigDict) -> str:
-    logging.info("Hyperparameter configuration: \n%s", config)
+def _get_logdir_and_save_config(config: ConfigDict) -> str:
+    logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
             config.logdir = os.path.join(
@@ -51,10 +52,10 @@ def _get_logdir_and_save_hyperparams(config: ConfigDict) -> str:
             )
 
         logdir = config.logdir
-        hparam_filename = utils.io.add_suffix_for_uniqueness(
-            "hyperparams", logdir, pre_suffix=".json"
+        config_filename = utils.io.add_suffix_for_uniqueness(
+            "config", logdir, trailing_suffix=".json"
         )
-        with utils.io.open_or_create(logdir, hparam_filename + ".json", "w") as f:
+        with utils.io.open_or_create(logdir, config_filename + ".json", "w") as f:
             f.write(config.to_json(indent=4))
     else:
         logdir = None
@@ -263,6 +264,13 @@ def _get_learning_rate_schedule(vmc_config: ConfigDict) -> Callable[[int], jnp.f
 
         def learning_rate_schedule(t):
             return vmc_config.learning_rate / (1.0 + vmc_config.learning_decay_rate * t)
+
+    else:
+        raise ValueError(
+            "Learning rate schedule type not supported; {} was requested".format(
+                vmc_config.schedule_type
+            )
+        )
 
     return learning_rate_schedule
 
@@ -526,7 +534,7 @@ def _setup_distributed_eval(
     return eval_update_param_fn, eval_burning_step, eval_walker_fn
 
 
-def _runner(
+def _burn_and_run_vmc(
     run_config: ConfigDict,
     logdir: str,
     params: P,
@@ -577,14 +585,13 @@ def _runner(
 # TODO: add integration test which runs this runner with a close-to-default config
 # (probably use smaller nchains and smaller nepochs) to make sure it doesn't raise
 # top-level errors
-def molecule():
+def run_molecule():
     """Run VMC on a molecule."""
-    # Preprocess config flags
     config = _parse_flags()
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
-    logdir = _get_logdir_and_save_hyperparams(config)
+    logdir = _get_logdir_and_save_config(config)
 
     dtype_to_use = _get_dtype(config)
 
@@ -592,13 +599,11 @@ def molecule():
         config, dtype=dtype_to_use
     )
 
-    # Init
     key = jax.random.PRNGKey(config.initial_seed)
     key, init_pos = physics.core.initialize_molecular_pos(
         key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype_to_use
     )
 
-    # Setup
     (
         log_psi,
         distributed_log_psi_apply,
@@ -620,8 +625,7 @@ def molecule():
         dtype=dtype_to_use,
     )
 
-    # Train
-    params, optimizer_state, data, sharded_key = _runner(
+    params, optimizer_state, data, sharded_key = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
@@ -636,7 +640,11 @@ def molecule():
 
     logging.info("Completed VMC! Evaluating")
 
-    # Setup
+    # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
+    # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post
+    # evaluation
+    eval_logdir = os.path.join(logdir, "eval")
+
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_distributed_eval(
         config, log_psi.apply, local_energy_fn, pacore.get_position_from_data
     )
@@ -647,10 +655,9 @@ def molecule():
             distributed_log_psi_apply, config.eval, init_pos, params
         )
 
-    # Evaluate
-    _runner(
+    _burn_and_run_vmc(
         config.eval,
-        logdir,
+        eval_logdir,
         params,
         optimizer_state,
         data,

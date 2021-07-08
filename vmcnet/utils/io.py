@@ -85,12 +85,19 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
             return (epoch, data, params, optimizer_state, key)
 
 
-def add_suffix_for_uniqueness(name, logdir, pre_suffix=""):
-    """Adds a numerical suffix to keep names unique in a directory."""
+def add_suffix_for_uniqueness(name, logdir, trailing_suffix=""):
+    """Adds a numerical suffix to keep names unique in a directory.
+
+    Checks for the presence of name + trailing_suffix, name + "_1" + trailing_suffix,
+    name + "_2" + trailing_suffix, etc. until an integer i >= 1 is found such that
+    name + "_i" + trailing_suffix is not in logdir. Then name + "_i" is returned.
+
+    If name + trailing_suffix is not in logdir, returns name.
+    """
     final_name = name
     i = 0
     try:
-        while (final_name + pre_suffix) in os.listdir(logdir):
+        while (final_name + trailing_suffix) in os.listdir(logdir):
             i += 1
             final_name = name + "_" + str(i)
     except FileNotFoundError:

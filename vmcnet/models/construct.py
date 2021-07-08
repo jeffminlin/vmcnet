@@ -3,7 +3,6 @@ from typing import Callable, List, Sequence, Tuple, Union
 
 import flax
 import jax
-from jax.core import Value
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
