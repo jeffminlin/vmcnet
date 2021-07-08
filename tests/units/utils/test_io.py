@@ -25,7 +25,10 @@ def test_pmapped_save_and_reload_vmc_state(tmp_path):
     )
 
     # Save the vmc state to file, then reload it and redistribute it
-    io.save_vmc_state(directory, file_name, (epoch, data, params, opt_state, key))
+    processed_data = io.process_checkpoint_data_for_saving(
+        (epoch, data, params, opt_state, key)
+    )
+    io.save_vmc_state(directory, file_name, processed_data)
     (
         restored_epoch,
         restored_data,
@@ -64,7 +67,10 @@ def test_non_pmapped_save_and_reload_vmc_state(tmp_path):
     opt_state = {"momentum": 2.0}
 
     # Save the vmc state to file, then reload it and redistribute it
-    io.save_vmc_state(directory, file_name, (epoch, data, params, opt_state, key))
+    processed_data = io.process_checkpoint_data_for_saving(
+        (epoch, data, params, opt_state, key)
+    )
+    io.save_vmc_state(directory, file_name, processed_data)
     (
         restored_epoch,
         restored_data,
@@ -95,7 +101,10 @@ def test_array_data_save_and_reload_vmc_state(tmp_path):
     opt_state = {"momentum": 2.0}
 
     # Save the vmc state to file, then reload it and redistribute it
-    io.save_vmc_state(directory, file_name, (epoch, data, params, opt_state, key))
+    processed_data = io.process_checkpoint_data_for_saving(
+        (epoch, data, params, opt_state, key)
+    )
+    io.save_vmc_state(directory, file_name, processed_data)
     (
         restored_epoch,
         restored_data,
