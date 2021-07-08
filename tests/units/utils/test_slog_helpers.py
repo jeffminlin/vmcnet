@@ -49,7 +49,7 @@ def test_slog_sum_over_axis():
 
     sum_log_vals = helpers.slog_sum_over_axis(slogs, 0)
 
-    assert_pytree_allclose(log_sum_vals, sum_log_vals)
+    assert_pytree_allclose(log_sum_vals, sum_log_vals, rtol=1e-6)
 
 
 def test_sl_array_list_sum():
