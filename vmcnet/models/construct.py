@@ -3,6 +3,7 @@ from typing import Callable, List, Sequence, Tuple, Union
 
 import flax
 import jax
+from jax.core import Value
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
@@ -57,7 +58,7 @@ def get_model_from_config(
     )
 
     if model_config.type == "ferminet":
-        model = FermiNet(
+        return FermiNet(
             spin_split,
             backflow,
             model_config.ndeterminants,
@@ -78,7 +79,7 @@ def get_model_from_config(
         )
     elif model_config.type == "brute_force_antisym":
         if model_config.antisym_type == "rank_one":
-            model = SplitBruteForceAntisymmetryWithDecay(
+            return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
                 backflow,
                 ndense_resnet=model_config.ndense_resnet,
@@ -98,7 +99,7 @@ def get_model_from_config(
                 resnet_use_bias=model_config.resnet_use_bias,
             )
         elif model_config.antisym_type == "double":
-            model = ComposedBruteForceAntisymmetryWithDecay(
+            return ComposedBruteForceAntisymmetryWithDecay(
                 spin_split,
                 backflow,
                 ndense_resnet=model_config.ndense_resnet,
@@ -117,8 +118,16 @@ def get_model_from_config(
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
             )
-
-    return model
+        else:
+            raise ValueError(
+                "Unsupported brute-force antisymmetry type; {} was requested".format(
+                    model_config.antisym_type
+                )
+            )
+    else:
+        raise ValueError(
+            "Unsupported model type; {} was requested".format(model_config.type)
+        )
 
 
 def get_backflow_from_model_config(
