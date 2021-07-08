@@ -31,14 +31,14 @@ FLAGS = flags.FLAGS
 
 # TODO: add support for config_flags.DEFINE_config_file
 config_flags.DEFINE_config_dict(
-    "config", utils.config.get_default_config(), lock_config=False
+    "config", train.default_config.get_default_config(), lock_config=False
 )
 
 
 def _parse_flags():
     FLAGS(sys.argv)
     config = FLAGS.config
-    config.model = utils.config.choose_model_type_in_config(config.model)
+    config.model = train.default_config.choose_model_type_in_config(config.model)
     config.lock()
     return config
 

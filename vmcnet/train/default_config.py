@@ -8,16 +8,16 @@ def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
     config = ConfigDict(
         {
-            "problem": get_problem_config(),
-            "model": get_model_config(),
-            "vmc": get_vmc_config(),
-            "eval": get_eval_config(),
+            "problem": get_default_molecular_config(),
+            "model": get_default_model_config(),
+            "vmc": get_default_vmc_config(),
+            "eval": get_default_eval_config(),
             "logdir": os.path.join(
                 os.curdir,  # this will be relative to the calling script
                 "logs",
             ),
-            # if current_datetime_subfolder=True, will log into a subfolder named
-            # according to the datetime at start
+            # if save_to_current_datetime_subfolder=True, will log into a subfolder
+            # named according to the datetime at start
             "save_to_current_datetime_subfolder": True,
             "logging_level": "WARNING",
             "dtype": "float32",
@@ -28,14 +28,21 @@ def get_default_config() -> ConfigDict:
 
 
 def choose_model_type_in_config(model_config):
-    """Given a model config with a specified type, select the specified model."""
+    """Given a model config with a specified type, select the specified model.
+
+    The default config contains architecture hyperparameters for several types of models
+    (in order to support command-line overwriting via absl.flags), but only one needs to
+    be retained after the model type is chosen at the beginning of a run, so this
+    function returns a ConfigDict with only the hyperparams associated with the model in
+    model_config.type.
+    """
     model_type = model_config.type
     model_config = model_config[model_type]
     model_config.type = model_type
     return model_config
 
 
-def get_model_config() -> ConfigDict:
+def get_default_model_config() -> ConfigDict:
     """Get a default model configuration from a model type."""
     orthogonal_init = ConfigDict({"type": "orthogonal", "scale": 1.0})
     normal_init = ConfigDict({"type": "normal"})
@@ -90,7 +97,7 @@ def get_model_config() -> ConfigDict:
     return config
 
 
-def get_problem_config() -> ConfigDict:
+def get_default_molecular_config() -> ConfigDict:
     """Get a default molecular configuration (LiH)."""
     problem_config = ConfigDict(
         {
@@ -102,7 +109,7 @@ def get_problem_config() -> ConfigDict:
     return problem_config
 
 
-def get_vmc_config() -> ConfigDict:
+def get_default_vmc_config() -> ConfigDict:
     """Get a default VMC training configuration."""
     vmc_config = ConfigDict(
         {
@@ -127,7 +134,7 @@ def get_vmc_config() -> ConfigDict:
     return vmc_config
 
 
-def get_eval_config() -> ConfigDict:
+def get_default_eval_config() -> ConfigDict:
     """Get a default evaluation configuration."""
     eval_config = ConfigDict(
         {

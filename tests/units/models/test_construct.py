@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.models as models
-import vmcnet.utils as utils
+import vmcnet.train as train
 
 
 def test_compose_negative_with_three_body_antisymmetry():
@@ -141,13 +141,17 @@ def test_get_model_from_default_config(mocker):
     for model_type in ["ferminet", "brute_force_antisym"]:
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
-                model_config = utils.config.get_model_config()
+                model_config = train.default_config.get_default_model_config()
                 model_config.type = model_type
                 model_config.brute_force_antisym.antisym_type = subtype
-                model_config = utils.config.choose_model_type_in_config(model_config)
+                model_config = train.default_config.choose_model_type_in_config(
+                    model_config
+                )
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type == "ferminet":
-            model_config = utils.config.get_model_config()
+            model_config = train.default_config.get_default_model_config()
             model_config.type = model_type
-            model_config = utils.config.choose_model_type_in_config(model_config)
+            model_config = train.default_config.choose_model_type_in_config(
+                model_config
+            )
             models.construct.get_model_from_config(model_config, nelec, ion_pos)
