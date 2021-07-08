@@ -238,8 +238,20 @@ def create_value_and_grad_energy_fn(
         psi_primals, psi_tangents = jax.jvp(log_psi_apply, primals, tangents)
         loss_functions.register_normal_predictive_distribution(psi_primals[:, None])
         primals_out = (energy, aux_data)
-        local_grad = psi_tangents * (local_energies - energy)
-        tangents_out = (2.0 * jnp.nansum(local_grad), aux_data)
+
+        centered_local_energies = local_energies - energy
+
+        # at a minimum, zero out contributions to the gradient from places where the
+        # wavefunction value is not defined. zeroing out contributions to the gradient
+        # where the local gradient is nan but the wavefunction is not is trickier, and
+        # goes back to generally tricky properties of autodiff frameworks, see
+        # https://github.com/google/jax/issues/1052
+        local_grads = jnp.where(
+            jnp.isfinite(psi_primals),
+            psi_tangents * centered_local_energies,
+            jnp.zeros_like(psi_primals),
+        )
+        tangents_out = (2.0 * jnp.sum(local_grads), aux_data)
         return primals_out, tangents_out
 
     energy_data_val_and_grad = jax.value_and_grad(
