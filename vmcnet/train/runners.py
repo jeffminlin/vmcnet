@@ -631,7 +631,7 @@ def molecule():
         walker_fn,
         update_param_fn,
         sharded_key,
-        train=True,
+        should_checkpoint=True,
     )
 
     logging.info("Completed VMC! Evaluating")
@@ -658,5 +658,5 @@ def molecule():
         eval_walker_fn,
         eval_update_param_fn,
         sharded_key,
-        train=False,
+        should_checkpoint=False,
     )
