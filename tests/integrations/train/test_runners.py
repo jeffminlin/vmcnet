@@ -28,13 +28,13 @@ def test_run_molecule(mocker, tmp_path):
     to the runner with default configs, and that there is some potentially reasonable
     logging occurring. It will not generally catch more subtle bugs.
     """
-    vmc_nchains = 100
-    vmc_nepochs = 50
-    vmc_checkpoint_every = 3
+    vmc_nchains = 10
+    vmc_nepochs = 5
+    vmc_checkpoint_every = 2
     vmc_best_checkpoint_every = 4
 
     eval_nchains = 20
-    eval_nepochs = 15
+    eval_nepochs = 3
 
     def _mock_flag_parser():
         config = train.default_config.get_default_config()
