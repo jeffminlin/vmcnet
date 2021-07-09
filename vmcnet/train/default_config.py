@@ -129,6 +129,7 @@ def get_default_vmc_config() -> ConfigDict:
             "checkpoint_dir": "checkpoints",
             "checkpoint_variance_scale": 10,
             "nhistory_max": 200,
+            "nan_safe": True,
         }
     )
     return vmc_config

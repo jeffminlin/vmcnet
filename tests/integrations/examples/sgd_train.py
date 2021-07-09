@@ -4,6 +4,7 @@ import logging
 import jax
 
 import vmcnet.mcmc as mcmc
+import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
@@ -50,10 +51,11 @@ def sgd_vmc_loop_with_logging(
             learning_rate,
         )
 
+    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        log_psi_model.apply, local_energy_fn, nchains
+    )
     update_param_fn = updates.params.create_grad_energy_update_param_fn(
-        log_psi_model.apply,
-        local_energy_fn,
-        nchains,
+        energy_data_val_and_grad,
         sgd_apply,
         get_position_from_data,
     )
