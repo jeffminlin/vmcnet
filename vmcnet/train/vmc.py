@@ -1,5 +1,5 @@
 """Main VMC loop."""
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple, Optional
 
 import jax.numpy as jnp
 
@@ -18,8 +18,8 @@ def vmc_loop(
     update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     key: jnp.ndarray,
     logdir: str = None,
-    checkpoint_every: int = 1000,
-    best_checkpoint_every: int = 100,
+    checkpoint_every: Optional[int] = 1000,
+    best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     nhistory_max: int = 200,
@@ -126,10 +126,10 @@ def vmc_loop(
                 checkpoint_writer,
                 metrics_writer,
                 checkpoint_metric,
-                best_checkpoint_every,
                 logdir=logdir,
                 variance_scale=checkpoint_variance_scale,
                 checkpoint_every=checkpoint_every,
+                best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
             )

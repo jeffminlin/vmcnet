@@ -11,6 +11,30 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
 
 
+def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
+    if energy_noclip is not None:
+        metrics.update({"energy_noclip": energy_noclip})
+    if variance_noclip is not None:
+        metrics.update({"variance_noclip": variance_noclip})
+    return metrics
+
+
+def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
+    if not apply_pmap:
+        return jax.jit(update_param_fn)
+
+    pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
+
+    def pmapped_update_param_fn_with_single_metrics(data, params, optimizer_state, key):
+        params, optimizer_state, metrics, key = pmapped_update_param_fn(
+            data, params, optimizer_state, key
+        )
+        metrics = utils.distribute.get_first(metrics)
+        return params, optimizer_state, metrics, key
+
+    return pmapped_update_param_fn_with_single_metrics
+
+
 def create_grad_energy_update_param_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
@@ -56,27 +80,20 @@ def create_grad_energy_update_param_fn(
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(grad_energy, params, optimizer_state)
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
-        return params, optimizer_state, metrics, key
-
-    if not apply_pmap:
-        return jax.jit(update_param_fn)
-
-    pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
-
-    def pmapped_update_param_fn_with_single_metrics(data, params, optimizer_state, key):
-        params, optimizer_state, metrics, key = pmapped_update_param_fn(
-            data, params, optimizer_state, key
+        metrics = _update_metrics_with_noclip(
+            aux_energy_data[2], aux_energy_data[3], metrics
         )
-        metrics = utils.distribute.get_first(metrics)
         return params, optimizer_state, metrics, key
 
-    return pmapped_update_param_fn_with_single_metrics
+    traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
+
+    return traced_fn
 
 
 def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
-    get_position_from_data: Callable[[D], jnp.ndarray],
+    get_position_fn: Callable[[D], jnp.ndarray],
 ) -> Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
     """Create momentum-less KFAC update step function.
 
@@ -102,14 +119,60 @@ def create_kfac_update_param_fn(
             params=params,
             state=optimizer_state,
             rng=subkey,
-            data_iterator=iter([get_position_from_data(data)]),
+            data_iterator=iter([get_position_fn(data)]),
             momentum=momentum,
             damping=damping,
         )
+        energy = stats["loss"]
+        variance = stats["aux"][0]
+        energy_noclip = stats["aux"][2]
+        variance_noclip = stats["aux"][3]
+
+        picked_stats = (energy, variance, energy_noclip, variance_noclip)
         if optimizer.multi_device:
-            energy = utils.distribute.get_first(stats["loss"])
-            variance = utils.distribute.get_first(stats["aux"][0])
+            picked_stats = (utils.distribute.get_first(stat) for stat in picked_stats)
+        energy, variance, energy_noclip, variance_noclip = picked_stats
+
         metrics = {"energy": energy, "variance": variance}
+        metrics = _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics)
         return params, optimizer_state, metrics, key
 
     return update_param_fn
+
+
+def create_eval_update_param_fn(
+    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    nchains: int,
+    get_position_fn: Callable[[D], jnp.ndarray],
+    apply_pmap: bool = True,
+):
+    """No update/clipping/grad function which simply evaluates the local energies.
+
+    Can be used to do simple unclipped MCMC with :func:`~vmcnet.train.vmc.vmc_loop`.
+
+    Arguments:
+        local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
+            (params, x) -> (Hpsi / psi)(x)
+        nchains (int): total number of chains across all devices, used to compute a
+            sample variance estimate of the local energy
+        get_position_fn (Callable): gets the walker positions from the MCMC data
+
+    Returns:
+        Callable: function which evaluates the local energies and averages them, without
+        updating the parameters
+    """
+
+    def eval_update_param_fn(data, params, optimizer_state, key):
+        local_energies = local_energy_fn(params, get_position_fn(data))
+        energy = utils.distribute.mean_all_local_devices(local_energies)
+        variance = (
+            utils.distribute.mean_all_local_devices(jnp.square(local_energies - energy))
+            * nchains
+            / (nchains - 1)
+        )  # adjust by n / (n - 1) to get an unbiased estimator
+        metrics = {"energy": energy, "variance": variance}
+        return params, optimizer_state, metrics, key
+
+    traced_fn = _make_traced_fn_with_single_metrics(eval_update_param_fn, apply_pmap)
+
+    return traced_fn

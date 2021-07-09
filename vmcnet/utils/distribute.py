@@ -66,7 +66,12 @@ def mean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
     return pmean_if_pmap(jnp.mean(x))
 
 
-p_split = jax.pmap(lambda key: tuple(jax.random.split(key)))
+def nanmean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
+    """Compute a nan-safe mean over all local devices."""
+    return pmean_if_pmap(jnp.nanmean(x))
+
+
+p_split = pmap(lambda key: tuple(jax.random.split(key)))
 
 
 def reshape_data_leaves_for_distribution(data_leaf: jnp.ndarray) -> jnp.ndarray:

@@ -1,5 +1,5 @@
 """Core local energy and gradient construction routines."""
-from typing import Callable, Sequence, Tuple, cast
+from typing import Callable, Optional, Sequence, Tuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -7,6 +7,50 @@ from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import P
+
+
+def initialize_molecular_pos(
+    key: jnp.ndarray,
+    nchains: int,
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
+    nelec_total: int,
+    init_width: float = 1.0,
+    dtype=jnp.float32,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Initialize a set of plausible initial electron positions.
+
+    For each chain, each electron is assigned to a random ion and then its position is
+    sampled from a normal distribution centered at that ion with diagonal covariance
+    with diagonal entries all equal to init_width.
+
+    If there are no more electrons than there are ions, the assignment is done without
+    replacement. If there are more electrons than ions, the assignment is done with
+    replacement, and the probability of choosing ion i is its relative charge (as a
+    fraction of the sum of the ion charges).
+    """
+    nion = len(ion_charges)
+    replace = True
+
+    if nelec_total <= nion:
+        replace = False
+
+    assignments = []
+    for _ in range(nchains):
+        key, subkey = jax.random.split(key)
+        choices = jax.random.choice(
+            subkey,
+            nion,
+            shape=(nelec_total,),
+            replace=replace,
+            p=ion_charges / jnp.sum(ion_charges),
+        )
+        assignments.append(ion_pos[choices])
+    elecs_at_ions = jnp.stack(assignments, axis=0)
+    key, subkey = jax.random.split(key)
+    return key, elecs_at_ions + init_width * jax.random.normal(
+        subkey, elecs_at_ions.shape, dtype=dtype
+    )
 
 
 def combine_local_energy_terms(
@@ -95,12 +139,41 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
+def _get_statistics_from_local_energy(
+    local_energies: jnp.ndarray, nchains: int, nan_safe: bool = True
+) -> Tuple[jnp.float32, jnp.float32]:
+    # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
+    # compiled version of these two computations, since the quality of the gradients
+    # is fairly crucial to the success of the algorithm
+    if nan_safe:
+        allreduce_mean = utils.distribute.nanmean_all_local_devices
+    else:
+        allreduce_mean = utils.distribute.mean_all_local_devices
+    energy = allreduce_mean(local_energies)
+    variance = (
+        allreduce_mean(jnp.square(local_energies - energy)) * nchains / (nchains - 1)
+    )
+    # adjust by n / (n - 1) to get an unbiased estimator
+    return energy, variance
+
+
+# TODO: make output type hint cleaner
 def create_value_and_grad_energy_fn(
     log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,
+    clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
 ) -> Callable[
-    [P, jnp.ndarray], Tuple[Tuple[jnp.float32, Tuple[jnp.float32, jnp.ndarray]], P]
+    [P, jnp.ndarray],
+    Tuple[
+        Tuple[
+            jnp.float32,
+            Tuple[
+                jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
+            ],
+        ],
+        P,
+    ],
 ]:
     """Create a function which computes unbiased energy gradients.
 
@@ -123,40 +196,64 @@ def create_value_and_grad_energy_fn(
             sample variance estimate of the local energy
 
     Returns:
-        Callable: function which computes the energy value and gradient. Has signature
+        Callable: function which computes the clipped energy value and gradient. Has the
+        signature
             (params, x)
             -> ((expected_energy, auxilliary_energy_data), grad_energy),
-        where auxilliary_energy_data is the tuple (expected_variance, local_energies)
+        where auxilliary_energy_data is the tuple
+        (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 
     @jax.custom_jvp
     def compute_energy_data(
         params: P, positions: jnp.ndarray
-    ) -> Tuple[jnp.float32, Tuple[jnp.float32, jnp.ndarray]]:
-        local_energies = local_energy_fn(params, positions)
-
-        # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
-        # compiled version of these two computations, since the quality of the gradients
-        # is fairly crucial to the success of the algorithm
-        energy = utils.distribute.mean_all_local_devices(local_energies)
-        variance = (
-            utils.distribute.mean_all_local_devices(jnp.square(local_energies - energy))
-            * nchains
-            / (nchains - 1)
-        )  # adjust by n / (n - 1) to get an unbiased estimator
-        aux_data = (variance, local_energies)
+    ) -> Tuple[
+        jnp.float32,
+        Tuple[jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]],
+    ]:
+        local_energies_noclip = local_energy_fn(params, positions)
+        if clipping_fn is not None:
+            local_energies = clipping_fn(local_energies_noclip)
+            energy, variance = _get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=True
+            )
+            energy_noclip, variance_noclip = _get_statistics_from_local_energy(
+                local_energies_noclip, nchains, nan_safe=False
+            )
+            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
+        else:
+            local_energies = local_energies_noclip
+            energy, variance = _get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=True
+            )
+            aux_data = (variance, local_energies, None, None)
         return energy, aux_data
 
     @compute_energy_data.defjvp
     def compute_energy_data_jvp(primals, tangents):
         params, positions = primals
         energy, aux_data = compute_energy_data(params, positions)
-        _, local_energies = aux_data
+        _, local_energies, _, _ = aux_data
 
         psi_primals, psi_tangents = jax.jvp(log_psi_apply, primals, tangents)
         loss_functions.register_normal_predictive_distribution(psi_primals[:, None])
         primals_out = (energy, aux_data)
-        tangents_out = (2.0 * jnp.dot(psi_tangents, local_energies - energy), aux_data)
+
+        centered_local_energies = local_energies - energy
+
+        # at a minimum, zero out contributions to the gradient from places where the
+        # wavefunction value is not defined. zeroing out contributions to the gradient
+        # where the local gradient is nan but the wavefunction is not is trickier, and
+        # goes back to generally tricky properties of autodiff frameworks, see
+        # https://github.com/google/jax/issues/1052
+        # TODO: handle nans better, possibly with defvjp instead of defjvp
+        # TODO: add option to not mask out nans for debugging purposes
+        local_grads = jnp.where(
+            jnp.isfinite(psi_primals),
+            psi_tangents * centered_local_energies,
+            jnp.zeros_like(psi_primals),
+        )
+        tangents_out = (2.0 * jnp.sum(local_grads), aux_data)
         return primals_out, tangents_out
 
     energy_data_val_and_grad = jax.value_and_grad(

@@ -1,9 +1,10 @@
 """Combine pieces to form full models."""
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Sequence, Tuple, Union
 
 import flax
 import jax
 import jax.numpy as jnp
+from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from .antisymmetry import (
@@ -23,8 +24,154 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from .jastrow import IsotropicAtomicExpDecay
-from .weights import WeightInitializer
+from vmcnet.models.jastrow import IsotropicAtomicExpDecay
+from vmcnet.models.weights import (
+    WeightInitializer,
+    get_bias_init_from_config,
+    get_kernel_init_from_config,
+)
+
+
+# TODO: figure out a way to add other options in a scalable way
+def _get_named_activation_fn(name):
+    if name == "tanh":
+        return jnp.tanh
+    else:
+        raise ValueError("Activations besides tanh are not yet supported.")
+
+
+def get_model_from_config(
+    model_config: ConfigDict,
+    nelec: jnp.ndarray,
+    ion_pos: jnp.ndarray,
+    dtype=jnp.float32,
+) -> flax.linen.Module:
+    """Get a model from a hyperparameter config."""
+    spin_split = tuple(jnp.cumsum(nelec)[:-1])
+
+    backflow = get_backflow_from_model_config(
+        model_config,
+        ion_pos,
+        spin_split,
+        dtype=dtype,
+    )
+
+    if model_config.type == "ferminet":
+        return FermiNet(
+            spin_split,
+            backflow,
+            model_config.ndeterminants,
+            kernel_initializer_orbital_linear=get_kernel_init_from_config(
+                model_config.kernel_init_orbital_linear, dtype=dtype
+            ),
+            kernel_initializer_envelope_dim=get_kernel_init_from_config(
+                model_config.kernel_init_envelope_dim, dtype=dtype
+            ),
+            kernel_initializer_envelope_ion=get_kernel_init_from_config(
+                model_config.kernel_init_envelope_ion, dtype=dtype
+            ),
+            bias_initializer_orbital_linear=get_bias_init_from_config(
+                model_config.bias_init_orbital_linear, dtype=dtype
+            ),
+            orbitals_use_bias=model_config.orbitals_use_bias,
+            isotropic_decay=model_config.isotropic_decay,
+        )
+    elif model_config.type == "brute_force_antisym":
+        if model_config.antisym_type == "rank_one":
+            return SplitBruteForceAntisymmetryWithDecay(
+                spin_split,
+                backflow,
+                ndense_resnet=model_config.ndense_resnet,
+                nlayers_resnet=model_config.nlayers_resnet,
+                kernel_initializer_resnet=get_kernel_init_from_config(
+                    model_config.kernel_init_resnet, dtype=dtype
+                ),
+                kernel_initializer_jastrow=get_kernel_init_from_config(
+                    model_config.kernel_init_jastrow, dtype=dtype
+                ),
+                bias_initializer_resnet=get_bias_init_from_config(
+                    model_config.bias_init_resnet, dtype=dtype
+                ),
+                activation_fn_resnet=_get_named_activation_fn(
+                    model_config.activation_fn_resnet
+                ),
+                resnet_use_bias=model_config.resnet_use_bias,
+            )
+        elif model_config.antisym_type == "double":
+            return ComposedBruteForceAntisymmetryWithDecay(
+                spin_split,
+                backflow,
+                ndense_resnet=model_config.ndense_resnet,
+                nlayers_resnet=model_config.nlayers_resnet,
+                kernel_initializer_resnet=get_kernel_init_from_config(
+                    model_config.kernel_init_resnet, dtype=dtype
+                ),
+                kernel_initializer_jastrow=get_kernel_init_from_config(
+                    model_config.kernel_init_jastrow, dtype=dtype
+                ),
+                bias_initializer_resnet=get_bias_init_from_config(
+                    model_config.bias_init_resnet, dtype=dtype
+                ),
+                activation_fn_resnet=_get_named_activation_fn(
+                    model_config.activation_fn_resnet
+                ),
+                resnet_use_bias=model_config.resnet_use_bias,
+            )
+        else:
+            raise ValueError(
+                "Unsupported brute-force antisymmetry type; {} was requested".format(
+                    model_config.antisym_type
+                )
+            )
+    else:
+        raise ValueError(
+            "Unsupported model type; {} was requested".format(model_config.type)
+        )
+
+
+def get_backflow_from_model_config(
+    model_config,
+    ion_pos,
+    spin_split,
+    dtype=jnp.float32,
+):
+    """Get a FermiNet backflow from a model configuration."""
+    residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+        spin_split,
+        model_config.backflow.ndense_list,
+        kernel_initializer_unmixed=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_unmixed, dtype=dtype
+        ),
+        kernel_initializer_mixed=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_mixed, dtype=dtype
+        ),
+        kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_2e_1e_stream, dtype=dtype
+        ),
+        kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
+            model_config.backflow.kernel_init_2e_2e_stream, dtype=dtype
+        ),
+        bias_initializer_1e_stream=get_bias_init_from_config(
+            model_config.backflow.bias_init_1e_stream, dtype=dtype
+        ),
+        bias_initializer_2e_stream=get_bias_init_from_config(
+            model_config.backflow.bias_init_2e_stream, dtype=dtype
+        ),
+        activation_fn=_get_named_activation_fn(model_config.backflow.activation_fn),
+        use_bias=model_config.backflow.use_bias,
+        skip_connection=model_config.backflow.skip_connection,
+        cyclic_spins=model_config.backflow.cyclic_spins,
+    )
+
+    backflow = FermiNetBackflow(
+        residual_blocks,
+        ion_pos=ion_pos,
+        include_2e_stream=model_config.backflow.include_2e_stream,
+        include_ei_norm=model_config.backflow.include_ei_norm,
+        include_ee_norm=model_config.backflow.include_ee_norm,
+    )
+
+    return backflow
 
 
 class ComposedModel(flax.linen.Module):
@@ -60,7 +207,60 @@ def _get_residual_blocks_for_ferminet_backflow(
     skip_connection: bool = True,
     cyclic_spins: bool = True,
 ) -> List[FermiNetResidualBlock]:
-    """Construct a list of FermiNet residual blocks composed by FermiNetBackflow."""
+    """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
+
+    Arguments:
+        spin_split (int or Sequence[int]): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        ndense_list: (list of (int, ...)): number of dense nodes in each of the
+            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
+            determines the number of residual blocks which are composed on top of the
+            input streams. If ndense_2e is specified, then then a dense layer is applied
+            to the two-electron stream with an optional skip connection, otherwise
+            the two-electron stream is mixed into the one-electron stream but no
+            transformation is done.
+        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
+            unmixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the previous one-electron stream output. Has
+            signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
+            mixed part of the one-electron stream. This initializes the part of the
+            dense kernel which multiplies the average of the previous one-electron
+            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
+            two-electron part of the one-electron stream. This initializes the part of
+            the dense kernel which multiplies the average of the previous two-electron
+            stream which is mixed into the one-electron stream. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
+            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
+            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+        activation_fn (Activation): activation function in the electron streams. Has
+            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+        use_bias (bool, optional): whether to add a bias term in the electron streams.
+            Defaults to True.
+        skip_connection (bool, optional): whether to add residual skip connections
+            whenever the shapes of the input and outputs of the streams match. Defaults
+            to True.
+        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
+            stream should satisfy a cyclic equivariance structure, i.e. if there are
+            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
+            but before the linear transformation, cyclic equivariance means the inputs
+            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
+            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
+            When there are only two spins (spin-1/2 case), then this is equivalent to
+            true spin equivariance. Defaults to False (original FermiNet).
+    """
     residual_blocks = []
     for ndense in ndense_list:
         one_electron_layer = FermiNetOneElectronLayer(
@@ -104,30 +304,12 @@ class FermiNet(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense_list: (list of (int, ...)): number of dense nodes in each of the
-            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
-            determines the number of residual blocks which are composed on top of the
-            input streams. If ndense_2e is specified, then then a dense layer is applied
-            to the two-electron stream with an optional skip connection, otherwise
-            the two-electron stream is mixed into the one-electron stream but no
-            transformation is done.
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
@@ -139,84 +321,32 @@ class FermiNet(flax.linen.Module):
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
             linear combination over the ions of exponential envelopes. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        activation_fn (Activation): activation function in the electron streams. Has
-            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
-            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
-        include_2e_stream (bool, optional): whether to compute pairwise electron
-            displacements/distances. Defaults to True.
-        include_ei_norm (bool, optional): whether to include electron-ion distances in
-            the one-electron input. Defaults to True.
-        include_ee_norm (bool, optional): whether to include electron-electron distances
-            in the two-electron input. Defaults to True.
-        streams_use_bias (bool, optional): whether to add a bias term in the electron
-            streams. Defaults to True.
         orbitals_use_bias (bool, optional): whether to add a bias term in the linear
             part of the orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should be
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
     """
 
     spin_split: Union[int, Sequence[int]]
-    ndense_list: List[Tuple[int, ...]]
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndeterminants: int
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
-    activation_fn: Activation
-    ion_pos: Optional[jnp.ndarray] = None
-    include_2e_stream: bool = True
-    include_ei_norm: bool = True
-    include_ee_norm: bool = True
-    streams_use_bias: bool = True
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    skip_connection: bool = True
-    cyclic_spins: bool = True
 
     def setup(self):
-        """Setup residual blocks."""
-        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
-            self.spin_split,
-            self.ndense_list,
-            self.kernel_initializer_unmixed,
-            self.kernel_initializer_mixed,
-            self.kernel_initializer_2e_1e_stream,
-            self.kernel_initializer_2e_2e_stream,
-            self.bias_initializer_1e_stream,
-            self.bias_initializer_2e_stream,
-            self.activation_fn,
-            self.streams_use_bias,
-            self.skip_connection,
-            self.cyclic_spins,
-        )
+        """Setup backflow."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._backflow = self.backflow
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -235,13 +365,7 @@ class FermiNet(flax.linen.Module):
         """
         nelec_total = elec_pos.shape[-2]
         norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-        stream_1e, r_ei = FermiNetBackflow(
-            self.residual_blocks,
-            ion_pos=self.ion_pos,
-            include_2e_stream=self.include_2e_stream,
-            include_ei_norm=self.include_ei_norm,
-            include_ee_norm=self.include_ee_norm,
-        )(elec_pos)
+        stream_1e, r_ei = self._backflow(elec_pos)
         orbitals = [
             FermiNetOrbitalLayer(
                 spin_split=self.spin_split,
@@ -278,113 +402,43 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense_list: (list of (int, ...)): number of dense nodes in each of the
-            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
-            determines the number of residual blocks which are composed on top of the
-            input streams. If ndense_2e is specified, then then a dense layer is applied
-            to the two-electron stream with an optional skip connection, otherwise
-            the two-electron stream is mixed into the one-electron stream but no
-            transformation is done.
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
             ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNets. Has signature
             (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
             decay rates in the exponential decay Jastrow factor. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNets. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        activation_fn_backflow (Activation): activation function in the electron
-            streams. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
         activation_fn_resnet (Activation): activation function in the antisymmetrized
             ResNets. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
-            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
-        include_2e_stream (bool, optional): whether to compute pairwise electron
-            displacements/distances. Defaults to True.
-        include_ei_norm (bool, optional): whether to include electron-ion distances in
-            the one-electron input. Defaults to True.
-        include_ee_norm (bool, optional): whether to include electron-electron distances
-            in the two-electron input. Defaults to True.
-        streams_use_bias (bool, optional): whether to add a bias term in the electron
-            streams. Defaults to True.
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNets. Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet backflow).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet backflow).
     """
 
     spin_split: Union[int, Sequence[int]]
-    ndense_list: List[Tuple[int, int]]
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndense_resnet: int
     nlayers_resnet: int
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
     kernel_initializer_resnet: WeightInitializer
     kernel_initializer_jastrow: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
     bias_initializer_resnet: WeightInitializer
-    activation_fn_backflow: Activation
     activation_fn_resnet: Activation
-    ion_pos: Optional[jnp.ndarray] = None
-    include_2e_stream: bool = True
-    include_ei_norm: bool = True
-    include_ee_norm: bool = True
-    streams_use_bias: bool = True
     resnet_use_bias: bool = True
-    skip_connection: bool = True
-    cyclic_spins: bool = True
 
     def setup(self):
-        """Setup residual blocks."""
-        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
-            self.spin_split,
-            self.ndense_list,
-            self.kernel_initializer_unmixed,
-            self.kernel_initializer_mixed,
-            self.kernel_initializer_2e_1e_stream,
-            self.kernel_initializer_2e_2e_stream,
-            self.bias_initializer_1e_stream,
-            self.bias_initializer_2e_stream,
-            self.activation_fn_backflow,
-            self.streams_use_bias,
-            self.skip_connection,
-            self.cyclic_spins,
-        )
+        """Setup backflow."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._backflow = self.backflow
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -401,13 +455,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei = FermiNetBackflow(
-            self.residual_blocks,
-            ion_pos=self.ion_pos,
-            include_2e_stream=self.include_2e_stream,
-            include_ei_norm=self.include_ei_norm,
-            include_ee_norm=self.include_ee_norm,
-        )(elec_pos)
+        stream_1e, r_ei = self._backflow(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
             [
@@ -447,112 +495,42 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense_list: (list of (int, ...)): number of dense nodes in each of the
-            residual blocks, (ndense_1e, optional ndense_2e). The length of this list
-            determines the number of residual blocks which are composed on top of the
-            input streams. If ndense_2e is specified, then then a dense layer is applied
-            to the two-electron stream with an optional skip connection, otherwise
-            the two-electron stream is mixed into the one-electron stream but no
-            transformation is done.
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
         ndense_resnet (int): number of dense nodes in each layer of the ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
-        kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
-            unmixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_mixed (WeightInitializer): kernel initializer for the
-            mixed part of the one-electron stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
-            two-electron part of the one-electron stream. This initializes the part of
-            the dense kernel which multiplies the average of the previous two-electron
-            stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNet. Has signature
             (key, shape, dtype) -> jnp.ndarray
         kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
             decay rates in the exponential decay Jastrow factor. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNet. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        activation_fn_backflow (Activation): activation function in the electron
-            streams. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
         activation_fn_resnet (Activation): activation function in the antisymmetrized
             ResNet. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
-            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
-        include_2e_stream (bool, optional): whether to compute pairwise electron
-            displacements/distances. Defaults to True.
-        include_ei_norm (bool, optional): whether to include electron-ion distances in
-            the one-electron input. Defaults to True.
-        include_ee_norm (bool, optional): whether to include electron-electron distances
-            in the two-electron input. Defaults to True.
-        streams_use_bias (bool, optional): whether to add a bias term in the electron
-            streams. Defaults to True.
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNet. Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet backflow).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet backflow).
     """
 
     spin_split: Union[int, Sequence[int]]
-    ndense_list: List[Tuple[int, int]]
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndense_resnet: int
     nlayers_resnet: int
-    kernel_initializer_unmixed: WeightInitializer
-    kernel_initializer_mixed: WeightInitializer
-    kernel_initializer_2e_1e_stream: WeightInitializer
-    kernel_initializer_2e_2e_stream: WeightInitializer
     kernel_initializer_resnet: WeightInitializer
     kernel_initializer_jastrow: WeightInitializer
-    bias_initializer_1e_stream: WeightInitializer
-    bias_initializer_2e_stream: WeightInitializer
     bias_initializer_resnet: WeightInitializer
-    activation_fn_backflow: Activation
     activation_fn_resnet: Activation
-    ion_pos: Optional[jnp.ndarray] = None
-    include_2e_stream: bool = True
-    include_ei_norm: bool = True
-    include_ee_norm: bool = True
-    streams_use_bias: bool = True
     resnet_use_bias: bool = True
-    skip_connection: bool = True
-    cyclic_spins: bool = True
 
     def setup(self):
-        """Setup residual blocks."""
-        self.residual_blocks = _get_residual_blocks_for_ferminet_backflow(
-            self.spin_split,
-            self.ndense_list,
-            self.kernel_initializer_unmixed,
-            self.kernel_initializer_mixed,
-            self.kernel_initializer_2e_1e_stream,
-            self.kernel_initializer_2e_2e_stream,
-            self.bias_initializer_1e_stream,
-            self.bias_initializer_2e_stream,
-            self.activation_fn_backflow,
-            self.streams_use_bias,
-            self.skip_connection,
-            self.cyclic_spins,
-        )
+        """Setup backflow."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._backflow = self.backflow
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -569,13 +547,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei = FermiNetBackflow(
-            self.residual_blocks,
-            ion_pos=self.ion_pos,
-            include_2e_stream=self.include_2e_stream,
-            include_ei_norm=self.include_ei_norm,
-            include_ee_norm=self.include_ee_norm,
-        )(elec_pos)
+        stream_1e, r_ei = self._backflow(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = ComposedBruteForceAntisymmetrize(
             SimpleResNet(
