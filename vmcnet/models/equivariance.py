@@ -786,7 +786,21 @@ class FermiNetOrbitalLayer(flax.linen.Module):
 
 
 class EquivariantOrbitalLayer(flax.linen.Module):
-    """Make a different orbital matrix equivariantly for each electron.
+    """Equivariantly generate an orbital matrix corresponding to each input stream.
+
+    The calculation being done here is a bit subtle, so it's worth explaining here
+    in some detail. Let the equivariant input vectors to this layer be y_i. Then, this
+    layer will generate an orbital matrix M_p for each particle P, such that the
+    (i,j)th element of M_p satisfies M_(p,i,j) = phi_j(y_p, y_i). This is essentially
+    the usual orbital matrix formula M_(i,j) = phi_j(y_i), except with an added
+    dependence on the particle index p which allows us to generate a distinct matrix
+    for each input particle. This construction allows us to generate a unique
+    antisymmetric determinant D_p = det(M_p) for each input particle, which can then
+    be the basis for an expressive antiequivariant layer.
+
+    If r_ei is provided in addition to the main inputs y_i, then an exponentially
+    decaying envelope is also applied equally to every orbital matrix M_p in order to
+    ensure that the orbital values decay to zero far from the ions.
 
     Attributes:
         spin_split (int or Sequence[int]): number of spins to split inputs equally,
@@ -840,20 +854,38 @@ class EquivariantOrbitalLayer(flax.linen.Module):
     def _get_orbital_matrices_one_spin(
         self, x: jnp.ndarray, norbitals: int
     ) -> jnp.ndarray:
-        nelec_spin = x.shape[-2]
+        """Get the equivariant orbital matrices for a single spin.
+
+        Args:
+            x (jnp.ndarray): input array of shape (..., nelec[i], d).
+            norbitals (int): number of orbitals to generate. For square matrices,
+                norbitals should equal nelec[i]
+
+        Returns:
+            (jnp.ndarray): the equivariant orbitals for this spin block, as an array
+                of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
+                are equivariant with respect to the input particles.
+        """
+        batch_dims = x.shape[:-2]
+        nelec = x.shape[-2]
         d = x.shape[-1]
-        shape_prefix = x.shape[:-2]
-        flattened_shape = (*shape_prefix, nelec_spin * d)
-        final_shape = (*shape_prefix, nelec_spin, nelec_spin, d)
-        equivariant_within_block = jnp.reshape(
-            jnp.tile(jnp.reshape(x, flattened_shape), nelec_spin), final_shape
+        dense_input_piece_shape = (*batch_dims, nelec, nelec, d)
+
+        # Since the goal is to calculate M_(p,i,j) = phi_j(y_p, y_i), we need to create
+        # the right combinations (y_p, y_i) before we can apply a dense layer to
+        # generate the orbitals. The below lines build up these combinations so that,
+        # for example, if x is [[1, 2],[3,4]], then dense_inputs will be equal to
+        # [[[1,2,1,2],[3,4,1,2]], [[1,2,3,4],[3,4,3,4]].
+        per_column_dense_inputs = jnp.reshape(
+            jnp.repeat(x, nelec, axis=-3), dense_input_piece_shape
         )
-        equivariant_over_blocks = jnp.reshape(
-            jnp.repeat(x, nelec_spin, axis=-2), final_shape
+        per_matrix_dense_inputs = jnp.reshape(
+            jnp.repeat(x, nelec, axis=-2), dense_input_piece_shape
         )
         dense_inputs = jnp.concatenate(
-            [equivariant_within_block, equivariant_over_blocks], axis=-1
+            [per_column_dense_inputs, per_matrix_dense_inputs], axis=-1
         )
+
         return Dense(
             norbitals,
             self.kernel_initializer_linear,
@@ -863,24 +895,25 @@ class EquivariantOrbitalLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
-        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
+        """Calculate an equivariant orbital matrix for each input particle.
 
         Args:
             x (jnp.ndarray): array of shape (..., nelec, d)
             r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
 
         Returns:
-            [(..., nelec[i], self.norbitals_per_spin[i])]: list of FermiNet orbital
-            matrices computed from an output stream x and the electron-ion displacements
-            r_ei. Here n[i] is the number of particles in the ith split. The exponential
+            (ArrayList): list of length nspins of arrays of shape
+            (..., nelec[i], nelec[i], self.norbitals_per_spin[i]). Here nelec[i] is the
+            number of particles in the ith split. The output arrays have both their -2
+            and -3 axes equivariant with respect to the input particles. The exponential
             envelopes are computed only when r_ei is not None (so, when connected to
             FermiNetBackflow, when ion locations are specified). To output square
-            matrices, say for composing with the determinant anti-symmetry,
-            nelec[i] should be equal to self.norbitals_per_spin[i].
+            matrices, say in order to be able to take antiequivariant per-particle
+            determinants, nelec[i] should be equal to self.norbitals_per_spin[i].
         """
-        # [nspin[i]: (..., nelec[i], d)]
+        # List of nspins arrays of shape (..., nelec[i], d)]
         split_x = jnp.split(x, self.spin_split, -2)
-        # shape [nspins: (..., nelec[i], nelec[i], norbitals[i])]
+        # List of nspins arrays of shape (..., nelec[i], nelec[i], norbitals[i])
         orbs = [
             self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
             for (i, x) in enumerate(split_x)
@@ -895,6 +928,7 @@ class EquivariantOrbitalLayer(flax.linen.Module):
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
             )
+            # Envelope must be expanded to apply equally to each per-particle matrix.
             exp_envelopes = jax.tree_map(
                 lambda x: jnp.expand_dims(x, axis=-3), exp_envelopes
             )
