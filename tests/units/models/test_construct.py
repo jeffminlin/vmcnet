@@ -69,7 +69,17 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
     return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
 
 
+def _get_det_resnet():
+    return models.construct.get_resnet_determinant_fn_for_ferminet(
+        6,
+        3,
+        models.core.log_domain_tanh_like_activation,
+        models.weights.get_kernel_initializer("orthogonal"),
+    )
+
+
 def _make_ferminet():
+    """Make sure basic construction of the FermiNet does not raise exceptions."""
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
@@ -77,6 +87,7 @@ def _make_ferminet():
     # false and both true to cover our bases without making the test too slow.
     for (cyclic_spins, use_det_resnet) in [(False, False), (True, True)]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+        det_resnet = _get_det_resnet() if use_det_resnet else None
         log_psi = models.construct.FermiNet(
             spin_split,
             backflow,
@@ -85,7 +96,7 @@ def _make_ferminet():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
-            use_det_resnet=use_det_resnet,
+            determinant_fn=det_resnet,
         )
         log_psis.append(log_psi)
 

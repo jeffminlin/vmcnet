@@ -1,5 +1,5 @@
 """Combine pieces to form full models."""
-from typing import Callable, List, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import flax
 import jax
@@ -24,7 +24,6 @@ from .core import (
     LogDomainResNet,
     SimpleResNet,
     get_nelec_per_spin,
-    log_domain_tanh_like_activation,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -37,10 +36,8 @@ from .jastrow import IsotropicAtomicExpDecay
 from .sign_covariance import make_slog_fn_sign_covariant
 from .weights import (
     WeightInitializer,
-    get_kernel_initializer,
-    get_kernel_init_from_config,
-    get_bias_initializer,
     get_bias_init_from_config,
+    get_kernel_init_from_config,
 )
 
 
@@ -303,6 +300,47 @@ def _get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
+def get_resnet_determinant_fn_for_ferminet(
+    ndense: int,
+    nlayers: int,
+    activation: SLActivation,
+    kernel_initializer: WeightInitializer,
+    use_bias: bool = True,
+) -> Callable[[SLArrayList], SLArray]:
+    """Get a resnet-based determinant function for FermiNet construction.
+
+    This is used as a more general way to combine the determinant outputs into the
+    final wavefunction value, relative to the original method of a sum of products.
+
+    Args:
+        ndense (int): the number of neurons in the dense layers
+            of the ResNet.
+        nlayers (int): the number of layers in the ResNet.
+        activation (SLActivation): the log-domain activation
+            function to use for the  resnet.
+        kernel_initializer (WeightInitializer): kernel initializer for the resnet.
+        use_bias(bool)): Whether to use a bias in the ResNet. Defaults to True.
+
+    Returns:
+        (Callable[[SLArrayList, SLArray]): A resnet-based function which takes as input
+        a list of nspins SLArrays, each of shape (..., ndeterminants) and outputs a
+        single SLArray of shape (..., 1).
+    """
+
+    def fn(det_values: SLArrayList) -> SLArray:
+        concat_values = slog_array_list_concat(det_values, axis=-1)
+        return LogDomainResNet(
+            ndense,
+            1,
+            nlayers,
+            activation,
+            kernel_initializer,
+            use_bias,
+        )(concat_values)
+
+    return fn
+
+
 class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
@@ -342,28 +380,15 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        use_det_resnet (bool, optional): If set to True, the final wavefunction value is
-            calculated by feeding the determinants into a generic spin-wise sign
-            covariant function based on a LogDomainResnet. Otherwise, the final
+        determinant_fn (Callable[[SLArrayList], SLArray], optional): An arbitrary
+            function that can map an SLArrayList of nspins determinant outputs of shape
+            (..., ndeterminants) to a single output SLArray of shape (..., 1). If
+            provided, this function will be symmetrized to be sign-covariant (odd) with
+            respect to each spin, and will then be used to combine the orbital
+            determinants into the final wavefunction value. If not provided, the final
             wavefunction value is calculated as the sum of the product of the
             determinants, where the product is taken across the nspins spins and the sum
-            is taken across the ndeterminants determinants. Defaults to False.
-        ndense_det_resnet (int, optional): the number of neurons in the dense layers
-            of the determinant resnet. Only relevant if use_det_resnet is
-            True. Defaults to 10.
-        nlayers_det_resnet (int, optional): the number of layers in the determinant
-            resnet. Only relevant if use_det_resnet is True. Defaults to 3.
-        activation_fn_det_resnet (SLActivation, optional): the log-domain activation
-            function to use for the determinant resnet. Only relevant if use_det_resnet
-            is True. Defaults to a tanh-like function implemented in the log domain.
-        kernel_initializer_det_resnet (WeightInitializer, optional): kernel initializer
-            for the determinant resnet. Only relevant if use_det_resnet is True.
-            Defaults to orthogonal.
-        bias_initializer_det_resnet (WeightInitiailizer, optional): bias initializer
-            for the determinant resnet. Only relevant if use_det_resnet
-            is True. Defaults to normal.
-        use_bias_det_resnet (bool, optional): Whether to use a bias in the determinant
-            resnet. Only relevant if use_det_resnet is True. Defaults to True.
+            is taken across the ndeterminants determinants. Defaults to None.
     """
 
     spin_split: Union[int, Sequence[int]]
@@ -375,33 +400,14 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    use_det_resnet: bool = False
-    ndense_det_resnet: int = 10
-    nlayers_det_resnet: int = 3
-    activation_fn_det_resnet: SLActivation = log_domain_tanh_like_activation
-    kernel_initializer_det_resnet: WeightInitializer = get_kernel_initializer(
-        "orthogonal"
-    )
-    bias_initializer_resnet: WeightInitializer = get_bias_initializer("normal")
-    use_bias_det_resnet: bool = True
+    determinant_fn: Optional[Callable[[SLArrayList], SLArray]] = None
 
     def setup(self):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
-
-    def _apply_det_resnet(self, det_values: SLArrayList) -> SLArray:
-        """Apply a log-domain ResNet to an SLArrayList of determinant outputs."""
-        concat_values = slog_array_list_concat(det_values, axis=-1)
-        return LogDomainResNet(
-            self.ndense_det_resnet,
-            1,
-            self.nlayers_det_resnet,
-            self.activation_fn_det_resnet,
-            self.kernel_initializer_det_resnet,
-            use_bias=self.use_bias_det_resnet,
-        )(concat_values)
+        self._determinant_fn = self.determinant_fn
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -437,14 +443,14 @@ class FermiNet(flax.linen.Module):
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
-        if self.use_det_resnet:
+        if self._determinant_fn is not None:
             # slogdets is SLArrayList of shape [nspins: (ndeterminants, ...)]
             slogdets = jax.tree_map(jnp.linalg.slogdet, orbitals)
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), slogdets)
             # Symmetrize the resnet to be sign covariant with respect to each spin.
-            sign_cov_det_resnet = make_slog_fn_sign_covariant(self._apply_det_resnet)
-            _, log_psi = sign_cov_det_resnet(fn_inputs)
+            sign_cov_det_fn = make_slog_fn_sign_covariant(self._determinant_fn)
+            _, log_psi = sign_cov_det_fn(fn_inputs)
             return log_psi
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
