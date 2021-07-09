@@ -749,7 +749,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
+    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
 
         Args:
@@ -842,14 +842,14 @@ class EquivariantOrbitalLayer(flax.linen.Module):
     ) -> jnp.ndarray:
         nelec_spin = x.shape[-2]
         d = x.shape[-1]
-        shape_prefix = x[:-2]
+        shape_prefix = x.shape[:-2]
         flattened_shape = (*shape_prefix, nelec_spin * d)
         final_shape = (*shape_prefix, nelec_spin, nelec_spin, d)
         equivariant_within_block = jnp.reshape(
             jnp.tile(jnp.reshape(x, flattened_shape), nelec_spin), final_shape
         )
         equivariant_over_blocks = jnp.reshape(
-            jnp.repeat(jnp.reshape(x, flattened_shape), nelec_spin), final_shape
+            jnp.repeat(x, nelec_spin, axis=-2), final_shape
         )
         dense_inputs = jnp.concatenate(
             [equivariant_within_block, equivariant_over_blocks], axis=-1
@@ -862,7 +862,7 @@ class EquivariantOrbitalLayer(flax.linen.Module):
         )(dense_inputs)
 
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
+    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
 
         Args:
