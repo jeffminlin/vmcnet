@@ -1,5 +1,4 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Sequence, Union
 
 import flax
 import jax
@@ -7,7 +6,7 @@ import jax.numpy as jnp
 
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import EquivariantOrbitalLayer, FermiNetOrbitalLayer
-from vmcnet.utils.typing import SLArray, SLArrayList
+from vmcnet.utils.typing import SLArray, SLArrayList, SpinSplit
 from .weights import WeightInitializer
 
 
@@ -68,7 +67,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
 def _multiply_eq_inputs_by_split_slog_antisym(
     eq_inputs: jnp.ndarray,
     split_slog_antisym: SLArrayList,
-    spin_split: Union[int, Sequence[int]],
+    spin_split: SpinSplit,
 ) -> SLArrayList:
     """Multiply equivariant input array with a spin-split slog-form antisymmetry.
 
@@ -76,7 +75,7 @@ def _multiply_eq_inputs_by_split_slog_antisym(
         eq_inputs (jnp.ndarray): array of shape (..., nelec, d)
         split_slog_antisym (SLArrayList): SLArrayList containing nspins arrays of shape
             (..., nelec[i])
-        spin_split (Union[int, Sequence[int]]): the spin split.
+        spin_split (SpinSplit): the spin split.
 
     Returns:
         (SLArrayList): list of per-spin slog arrays of shape (..., nelec[i], d) which
@@ -103,7 +102,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
-         spin_split (int or Sequence[int]): number of spins to split the input equally,
+         spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -134,7 +133,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     orbital_kernel_initializer_linear: WeightInitializer
     orbital_kernel_initializer_envelope_dim: WeightInitializer
     orbital_kernel_initializer_envelope_ion: WeightInitializer
@@ -190,7 +189,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     """Antiequivariant layer based on determinants of per-particle orbital matrices.
 
     Attributes:
-         spin_split (int or Sequence[int]): number of spins to split the input equally,
+         spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -221,7 +220,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     orbital_kernel_initializer_linear: WeightInitializer
     orbital_kernel_initializer_envelope_dim: WeightInitializer
     orbital_kernel_initializer_envelope_ion: WeightInitializer

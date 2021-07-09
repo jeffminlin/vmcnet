@@ -1,6 +1,6 @@
 """Permutation equivariant functions."""
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import flax
 import jax
@@ -10,12 +10,12 @@ from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import ArrayList, PyTree
+from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
 
 
 def _split_mean(
     x: jnp.ndarray,
-    splits: Union[int, Sequence[int]],
+    splits: SpinSplit,
     axis: int = -2,
     keepdims: bool = True,
 ) -> List[jnp.ndarray]:
@@ -169,7 +169,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -209,7 +209,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             true spin equivariance. Defaults to False (original FermiNet).
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     ndense: int
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
@@ -568,7 +568,7 @@ class SplitDense(flax.linen.Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -590,7 +590,7 @@ class SplitDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     ndense_per_spin: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -676,7 +676,7 @@ def _compute_exponential_envelopes_one_spin(
 
 def _compute_exponential_envelopes_all_spins(
     r_ei: jnp.ndarray,
-    spin_split: Union[int, Sequence[int]],
+    spin_split: SpinSplit,
     norbitals_per_spin: Sequence[int],
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
@@ -700,7 +700,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split inputs equally,
+        spin_split (SpinSplit): number of spins to split inputs equally,
             or specified sequence of locations to split along the electron axis. E.g.,
             if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
@@ -732,7 +732,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
@@ -803,7 +803,7 @@ class EquivariantOrbitalLayer(flax.linen.Module):
     ensure that the orbital values decay to zero far from the ions.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split inputs equally,
+        spin_split (SpinSplit): number of spins to split inputs equally,
             or specified sequence of locations to split along the electron axis. E.g.,
             if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
@@ -835,7 +835,7 @@ class EquivariantOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer

@@ -1,5 +1,5 @@
 """Test model antiequivariances."""
-from typing import Callable
+from typing import Any, Callable
 
 import chex
 import jax.numpy as jnp
@@ -8,6 +8,7 @@ import pytest
 
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
+from vmcnet.utils.typing import SpinSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
@@ -52,7 +53,7 @@ def test_slog_cofactor_antiequivarance():
 
 
 @pytest.mark.slow
-def _test_layer_antiequivariance(build_layer: Callable) -> None:
+def _test_layer_antiequivariance(build_layer: Callable[[SpinSplit], Any]) -> None:
     """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
     (
