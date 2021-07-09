@@ -24,6 +24,7 @@ from .core import (
     LogDomainResNet,
     SimpleResNet,
     get_nelec_per_spin,
+    log_domain_tanh_like_activation,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -45,8 +46,12 @@ from .weights import (
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh
+    elif name == "log_domain_tanh_like":
+        return log_domain_tanh_like_activation
     else:
-        raise ValueError("Activations besides tanh are not yet supported.")
+        raise ValueError(
+            "Activations besides tanh and log_domain_tanh_like are not yet supported."
+        )
 
 
 def get_model_from_config(
@@ -66,6 +71,16 @@ def get_model_from_config(
     )
 
     if model_config.type == "ferminet":
+        determinant_fn = None
+        if model_config.use_det_resnet:
+            resnet_config = model_config.det_resnet
+            determinant_fn = get_resnet_determinant_fn_for_ferminet(
+                resnet_config.ndense,
+                resnet_config.nlayers,
+                _get_named_activation_fn(resnet_config.activation),
+                get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
+                resnet_config.use_bias,
+            )
         return FermiNet(
             spin_split,
             backflow,
@@ -84,6 +99,7 @@ def get_model_from_config(
             ),
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
+            determinant_fn=determinant_fn,
         )
     elif model_config.type == "brute_force_antisym":
         if model_config.antisym_type == "rank_one":
@@ -451,6 +467,8 @@ class FermiNet(flax.linen.Module):
             # Symmetrize the resnet to be sign covariant with respect to each spin.
             sign_cov_det_fn = make_slog_fn_sign_covariant(self._determinant_fn)
             _, log_psi = sign_cov_det_fn(fn_inputs)
+            # Remove degenerate final axis from results
+            log_psi = jax.tree_map(lambda x: jnp.squeeze(x, -1), log_psi)
             return log_psi
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
