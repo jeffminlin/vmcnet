@@ -21,8 +21,8 @@ def test_run_molecule(mocker, tmp_path):
     Unfortunately, mocking sys.argv (which would be slightly more end-to-end) doesn't
     quite work due to some quirks with how flags are registered when not running from
     the command-line, and we'd generally like to avoid using subprocess.run(...) if it's
-    not necessary. Thus here we directly mock the flag parser and return the desired
-    config, then directly call the runner.
+    not necessary. Thus here we directly mock FLAGS to have the desired config, then
+    directly call the runner.
 
     This test mostly exists to check that no top-level errors are raised during the call
     to the runner with default configs, and that there is some potentially reasonable
@@ -36,20 +36,18 @@ def test_run_molecule(mocker, tmp_path):
     eval_nchains = 20
     eval_nepochs = 3
 
-    def _mock_flag_parser():
-        config = train.default_config.get_default_config()
-        config.vmc.nchains = vmc_nchains
-        config.vmc.nepochs = vmc_nepochs
-        config.vmc.checkpoint_every = vmc_checkpoint_every
-        config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
-        config.eval.nchains = eval_nchains
-        config.eval.nepochs = eval_nepochs
-        config.model = train.default_config.choose_model_type_in_config(config.model)
-        config.lock()
-        return config
-
-    mocker.patch.object(train.runners, "_parse_flags", _mock_flag_parser)
     mocker.patch("os.curdir", tmp_path)
+
+    config = train.default_config.get_default_config()
+    config.vmc.nchains = vmc_nchains
+    config.vmc.nepochs = vmc_nepochs
+    config.vmc.checkpoint_every = vmc_checkpoint_every
+    config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
+    config.eval.nchains = eval_nchains
+    config.eval.nepochs = eval_nepochs
+
+    mocker.patch("vmcnet.train.runners.FLAGS")
+    mocker.patch("vmcnet.train.runners.FLAGS.config", config)
     train.runners.run_molecule()
 
     parent_logdir = tmp_path / "logs"
@@ -62,7 +60,6 @@ def test_run_molecule(mocker, tmp_path):
 
     # Check that the config is saved
     assert (inner_logdir / "config.json").exists()
-    config = _mock_flag_parser()
     config.logdir = os.path.normpath(inner_logdir)
     desired_config_json_str = config.to_json(indent=4)
     assert (inner_logdir / "config.json").read_text() == desired_config_json_str
