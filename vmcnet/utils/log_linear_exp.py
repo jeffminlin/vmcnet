@@ -51,10 +51,11 @@ def log_linear_exp(
     # index, which will give a nan. However, we can safely replace it with a zero as we
     # have actually pulled the inf term outside the sum anyway.
     value_is_inf = vals == jnp.inf
+    max_val_is_neg_inf = max_val == -jnp.inf
     single_inf_in_slice = jnp.count_nonzero(value_is_inf, axis=axis, keepdims=True) == 1
     value_is_only_inf_in_slice = jnp.logical_and(value_is_inf, single_inf_in_slice)
     diffs_with_max = jnp.where(
-        value_is_only_inf_in_slice,
+        jnp.logical_or(value_is_only_inf_in_slice, max_val_is_neg_inf),
         0,
         vals - max_val,
     )
