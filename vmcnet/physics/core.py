@@ -246,6 +246,8 @@ def create_value_and_grad_energy_fn(
         # where the local gradient is nan but the wavefunction is not is trickier, and
         # goes back to generally tricky properties of autodiff frameworks, see
         # https://github.com/google/jax/issues/1052
+        # TODO: handle nans better, possibly with defvjp instead of defjvp
+        # TODO: add option to not mask out nans for debugging purposes
         local_grads = jnp.where(
             jnp.isfinite(psi_primals),
             psi_tangents * centered_local_energies,
