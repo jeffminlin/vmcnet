@@ -29,7 +29,7 @@ def get_elec_hyperparams() -> Tuple[
 
 
 def get_input_streams_from_hyperparams(
-    nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int]
+    nchains: int, nelec_total: int, nion: int, d: int, permutation: Sequence[int]
 ) -> Tuple[
     jnp.ndarray,
     Optional[jnp.ndarray],
