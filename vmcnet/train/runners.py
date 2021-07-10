@@ -139,6 +139,7 @@ def _make_initial_distributed_data(
 
 # TODO: add threshold_adjust_std_move options to configs
 # TODO: add more options than just dwpa
+# TODO: remove dependence on exact field names
 def _get_mcmc_fns(
     run_config: ConfigDict, log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray]
 ) -> Tuple[

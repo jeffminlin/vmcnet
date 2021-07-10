@@ -141,7 +141,7 @@ def get_default_eval_config() -> ConfigDict:
             "nchains": 2000,
             "nburn": 5000,
             "nepochs": 20000,
-            "nsteps_per_energy_eval": 10,
+            "nsteps_per_param_update": 10,
             "nmoves_per_width_update": 100,
             "std_move": 0.25,
             # if use_data_from_training=True, nchains, nmoves_per_width_update, and
