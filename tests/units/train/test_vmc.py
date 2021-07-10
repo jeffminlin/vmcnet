@@ -4,6 +4,7 @@ import logging
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.mcmc as mcmc
 import vmcnet.train as train
@@ -18,6 +19,7 @@ def _make_different_pmappable_data(data):
     return jnp.concatenate([data + i for i in range(ndevices)])
 
 
+@pytest.mark.slow
 def test_vmc_loop_logging(caplog):
     """Test vmc_loop logging. Uses pytest's caplog fixture to capture logs."""
     nburn = 4
@@ -76,6 +78,7 @@ def test_vmc_loop_logging(caplog):
         assert len(caplog.records) == 1 + nepochs
 
 
+@pytest.mark.slow
 def test_vmc_loop_number_of_updates():
     """Test number of updates.
 

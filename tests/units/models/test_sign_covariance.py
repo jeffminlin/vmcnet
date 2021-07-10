@@ -3,6 +3,7 @@ import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.models.sign_covariance as sign_cov
 from vmcnet.utils.slog_helpers import (
@@ -96,6 +97,7 @@ def test_get_sign_orbit_slog_array_list():
     np.testing.assert_allclose(sym_signs, expected_sym_signs)
 
 
+@pytest.mark.slow
 def test_make_slog_fn_sign_covariant():
     """Test making a fn of several spins sign covariant with respect to each spin."""
     nbatch = 5

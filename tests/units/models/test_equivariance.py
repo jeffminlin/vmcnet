@@ -3,6 +3,7 @@ import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.models as models
 import vmcnet.physics as physics
@@ -31,6 +32,7 @@ def test_electron_electron_add_norm():
     )
 
 
+@pytest.mark.slow
 def test_ferminet_one_electron_layer_shape_and_equivariance():
     """Test the equivariance of the one-electron layer in the FermiNet."""
     nchains, nelec_total, nion, d, permutation, spin_split, _ = get_elec_hyperparams()
@@ -76,6 +78,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
         np.testing.assert_allclose(output[:, permutation, :], perm_output, atol=1e-5)
 
 
+@pytest.mark.slow
 def test_ferminet_two_electron_layer_shape_and_equivariance():
     """Test that the two-electron stream is doubly equivariant."""
     nchains, nelec_total, nion, d, permutation, _, _ = get_elec_hyperparams()
@@ -111,6 +114,7 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
     )
 
 
+@pytest.mark.slow
 def test_split_dense_shape():
     """Test the output shape of the SplitDense layer."""
     nchains = 8

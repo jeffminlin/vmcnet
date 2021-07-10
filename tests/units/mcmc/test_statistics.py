@@ -2,9 +2,12 @@
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
 import vmcnet.mcmc.statistics as statistics
 
 
+@pytest.mark.slow
 def test_alternating_autocorr_per_chain():
     """Test per chain autocorrelation on alternating chains of +-n."""
     ntiles = 100
@@ -25,6 +28,7 @@ def test_alternating_autocorr_per_chain():
     np.testing.assert_allclose(autocorr, expected_autocorr, 1e-5)
 
 
+@pytest.mark.slow
 def test_alternating_multi_chain_autocorr():
     """Test multi chain autocorrelation on alternating chains of +-n."""
     nsamples = 20

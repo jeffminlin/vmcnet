@@ -2,12 +2,15 @@
 import chex
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
 
+@pytest.mark.slow
 def test_slog_cofactor_output_with_batches():
     """Test slog_cofactor_antieq outputs correct value on simple inputs."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
@@ -29,6 +32,7 @@ def test_slog_cofactor_output_with_batches():
     np.testing.assert_allclose(y[1], full_expected_logs, rtol=1e-6)
 
 
+@pytest.mark.slow
 def test_slog_cofactor_antiequivarance():
     """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
@@ -45,6 +49,7 @@ def test_slog_cofactor_antiequivarance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
+@pytest.mark.slow
 def test_orbital_cofactor_layer_antiequivariance():
     """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
     # Generate example hyperparams and input streams

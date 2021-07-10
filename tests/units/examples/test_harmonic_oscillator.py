@@ -2,12 +2,14 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.examples.harmonic_oscillator as qho
 
 from tests.test_utils import make_dummy_log_f
 
 
+@pytest.mark.slow
 def test_harmonic_osc_orbital_shape():
     """Test that putting in a pytree of inputs gives a pytree of orbitals."""
     orbital_model = qho.HarmonicOscillatorOrbitals(4.0)
