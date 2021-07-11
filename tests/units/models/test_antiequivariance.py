@@ -60,7 +60,7 @@ def test_slog_cofactor_antiequivariance():
 
 @pytest.mark.slow
 def _test_layer_antiequivariance(
-    build_layer: Callable[[SpinSplit], flax.linen.module]
+    build_layer: Callable[[SpinSplit], flax.linen.Module], rtol: float = 1e-7
 ) -> None:
     """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
@@ -112,7 +112,7 @@ def _test_layer_antiequivariance(
         expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
         expected_perm_logs = logs[:, split_perm[i], :]
         np.testing.assert_allclose(perm_signs, expected_perm_signs)
-        np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=1e-6)
+        np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
 
 
 def test_orbital_cofactor_layer_antiequivariance():
@@ -146,4 +146,4 @@ def test_per_particle_determinant_antiequivariance():
             bias_initializer,
         )
 
-    _test_layer_antiequivariance(build_per_particle_determinant_layer)
+    _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-6)
