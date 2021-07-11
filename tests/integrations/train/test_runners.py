@@ -2,6 +2,7 @@
 import os
 
 import numpy as np
+import pytest
 
 import vmcnet.train as train
 
@@ -15,6 +16,7 @@ def _check_length_and_finiteness_of_metrics(nepochs, inner_logdir, metric_files)
         assert np.all(np.isfinite(metric))
 
 
+@pytest.mark.slow
 def test_run_molecule(mocker, tmp_path):
     """End-to-end test of the molecular runner (with smaller nchains/nepochs).
 

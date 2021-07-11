@@ -2,12 +2,14 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.utils as utils
 
 
+@pytest.mark.slow
 def test_vmc_loop_newtons_x_squared():
     """Test Newton's method to find the min of f(x) = (x - a)^2 + (x - a)^4.
 

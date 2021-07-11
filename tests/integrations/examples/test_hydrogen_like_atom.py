@@ -1,6 +1,8 @@
 """Test a hydrogen-like atom."""
 import jax
 import numpy as np
+import pytest
+
 import vmcnet.examples.hydrogen_like_atom as hla
 from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude_data
 
@@ -56,6 +58,7 @@ def _setup_hla_hyperparams_and_model():
     )
 
 
+@pytest.mark.slow
 def test_hydrogen_like_sgd_vmc(caplog):
     """Test the wavefn exp(-a * r) converges (in 3-D) to a = nuclear charge with SGD."""
     (
@@ -92,6 +95,7 @@ def test_hydrogen_like_sgd_vmc(caplog):
     np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
 
 
+@pytest.mark.slow
 def test_hydrogen_like_kfac_vmc(caplog):
     """Test exp(-a * r) converges (in 3-D) to a = nuclear charge with KFAC."""
     (

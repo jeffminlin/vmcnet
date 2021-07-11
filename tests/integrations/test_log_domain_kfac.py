@@ -2,6 +2,7 @@
 import kfac_ferminet_alpha
 import jax
 import jax.numpy as jnp
+import pytest
 from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.models as models
@@ -80,6 +81,7 @@ def _train(nsteps, loss_and_grad, model_params, batch, key, logdomain=False):
     return training_results
 
 
+@pytest.mark.slow
 def test_log_domain_dense_kfac_matches_dense_kfac():
     """Test that KFAC trains LogDomainDense in the same way as Dense.
 

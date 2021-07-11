@@ -4,6 +4,8 @@ import jax
 import jax.numpy as jnp
 import jax.random as random
 import numpy as np
+import pytest
+
 import vmcnet.mcmc.statistics as statistics
 
 
@@ -11,6 +13,7 @@ def _get_sample_size():
     return (1000000, 5)
 
 
+@pytest.mark.slow
 def test_independent_samples():
     """Test statistics on a chain with independent samples."""
     (nsamples, nchains) = _get_sample_size()
@@ -47,6 +50,7 @@ def _construct_correlated_samples(nsamples, nchains, decay_factor):
     return correlated_samples
 
 
+@pytest.mark.slow
 def test_correlated_samples():
     """Test statistics on sample chains with exponentially decaying autocorrelation."""
     (nsamples, nchains) = _get_sample_size()

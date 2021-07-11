@@ -5,13 +5,16 @@ import os
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
 import vmcnet.examples.harmonic_oscillator as qho
-from tests.test_utils import assert_pytree_allclose
 from vmcnet.mcmc.simple_position_amplitude import (
     make_simple_position_amplitude_data,
 )
 from vmcnet.utils.distribute import distribute_vmc_state_from_checkpoint
 from vmcnet.utils.io import reload_vmc_state
+
+from tests.test_utils import assert_pytree_allclose
 
 from .sgd_train import sgd_vmc_loop_with_logging
 
@@ -30,6 +33,7 @@ def _make_initial_params_and_data(model_omega, nchains):
     return log_psi_model, params, random_particle_positions, amplitudes, key
 
 
+@pytest.mark.slow
 def test_five_particle_ground_state_harmonic_oscillator():
     """Test five non-interacting harmonic oscillators with two spins."""
     omega = 2.0
@@ -51,6 +55,7 @@ def test_five_particle_ground_state_harmonic_oscillator():
     )
 
 
+@pytest.mark.slow
 def test_harmonic_oscillator_vmc(caplog):
     """Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
 
@@ -105,6 +110,7 @@ def test_harmonic_oscillator_vmc(caplog):
     )
 
 
+@pytest.mark.slow
 def test_reload_reproduces_results(caplog, tmp_path):
     """Test that we can reproduce behavior by reloading vmc state from a checkpoint."""
     # Checkpoint directory info

@@ -1,9 +1,12 @@
 """Test core model building parts."""
 import jax
 import jax.numpy as jnp
+import pytest
+
 import vmcnet.models as models
 from vmcnet.utils.slog_helpers import array_to_slog
 from vmcnet.utils.typing import SLArray
+
 from tests.test_utils import (
     get_dense_and_log_domain_dense_same_params,
     get_resnet_and_log_domain_resnet_same_params,
@@ -11,6 +14,7 @@ from tests.test_utils import (
 )
 
 
+@pytest.mark.slow
 def test_dense_in_regular_and_log_domain_match():
     """Test that LogDomainDense does the same thing as Dense in the log domain."""
     nfeatures = 4
@@ -32,6 +36,7 @@ def test_dense_in_regular_and_log_domain_match():
     assert_pytree_allclose(slog_out, array_to_slog(out), rtol=1e-6)
 
 
+@pytest.mark.slow
 def test_resnet_in_regular_and_log_domain_match():
     """Test that LogDomainResnet does the same thing as SimpleResnet."""
     ninner = 4

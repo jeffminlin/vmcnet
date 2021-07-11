@@ -4,6 +4,7 @@ import functools
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import vmcnet.models as models
 import vmcnet.train as train
@@ -68,16 +69,10 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
     return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
 
 
-def _jit_eval_model(key, init_pos, log_psi):
-    key, subkey = jax.random.split(key)
-    params = log_psi.init(subkey, init_pos)
-    jax.jit(log_psi.apply)(params, init_pos)
-
-
-def test_ferminet_can_be_constructed():
-    """Make sure basic construction of the FermiNet does not raise exceptions."""
+def _make_ferminet():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
+    log_psis = []
     for cyclic_spins in [True, False]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.FermiNet(
@@ -89,14 +84,15 @@ def test_ferminet_can_be_constructed():
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
         )
+        log_psis.append(log_psi)
 
-        _jit_eval_model(key, init_pos, log_psi)
+    return key, init_pos, log_psis
 
 
-def test_split_antisymmetry_can_be_constructed():
-    """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
+def _make_split_antisymmetry():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
+    log_psis = []
     for cyclic_spins in [True, False]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
@@ -109,14 +105,15 @@ def test_split_antisymmetry_can_be_constructed():
             models.weights.get_bias_initializer("uniform"),
             jnp.tanh,
         )
+        log_psis.append(log_psi)
 
-        _jit_eval_model(key, init_pos, log_psi)
+    return key, init_pos, log_psis
 
 
-def test_composed_antisymmetry_can_be_constructed():
-    """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+def _make_double_antisymmetry():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
+    log_psis = []
     for cyclic_spins in [True, False]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
@@ -129,8 +126,52 @@ def test_composed_antisymmetry_can_be_constructed():
             models.weights.get_bias_initializer("uniform"),
             jnp.tanh,
         )
+        log_psis.append(log_psi)
 
-        _jit_eval_model(key, init_pos, log_psi)
+    return key, init_pos, log_psis
+
+
+def _jit_eval_models(key, init_pos, log_psis):
+    for log_psi in log_psis:
+        key, subkey = jax.random.split(key)
+        params = log_psi.init(subkey, init_pos)
+        jax.jit(log_psi.apply)(params, init_pos)
+
+
+def test_ferminet_can_be_constructed():
+    """Check construction of FermiNet does not fail."""
+    _make_ferminet()
+
+
+@pytest.mark.slow
+def test_ferminet_can_be_evaluated():
+    """Check evaluation of FermiNet does not fail."""
+    key, init_pos, log_psis = _make_ferminet()
+    _jit_eval_models(key, init_pos, log_psis)
+
+
+def test_split_antisymmetry_can_be_constructed():
+    """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
+    _make_split_antisymmetry()
+
+
+@pytest.mark.slow
+def test_split_antisymmetry_can_be_evaluated():
+    """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
+    key, init_pos, log_psis = _make_split_antisymmetry()
+    _jit_eval_models(key, init_pos, log_psis)
+
+
+def test_composed_antisymmetry_can_be_constructed():
+    """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+    _make_double_antisymmetry()
+
+
+@pytest.mark.slow
+def test_ferminet_composed_antisymmetry_can_be_evaluated():
+    """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+    key, init_pos, log_psis = _make_double_antisymmetry()
+    _jit_eval_models(key, init_pos, log_psis)
 
 
 def test_get_model_from_default_config(mocker):
