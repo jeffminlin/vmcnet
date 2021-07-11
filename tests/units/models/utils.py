@@ -1,5 +1,5 @@
 """Helper functions for model tests."""
-from typing import Sequence, Optional, Tuple
+from typing import Sequence, Optional, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -14,7 +14,7 @@ def get_elec_hyperparams() -> Tuple[
     int,
     Sequence[int],
     Sequence[int],
-    Sequence[Sequence[int]],
+    List[Sequence[int]],
 ]:
     """Get hyperparameters for electron data."""
     nchains = 25
@@ -23,7 +23,9 @@ def get_elec_hyperparams() -> Tuple[
     d = 3
     permutation = (1, 0, 2, 5, 6, 3, 4)
     spin_split = (3,)
-    split_perm = [(1, 0, 2), (2, 3, 0, 1)]
+    # Mypy assigns split_perm a more specific type, and complains below, if we don't
+    # type it explicitly here.
+    split_perm: List[Sequence[int]] = [(1, 0, 2), (2, 3, 0, 1)]
 
     return nchains, nelec_total, nion, d, permutation, spin_split, split_perm
 

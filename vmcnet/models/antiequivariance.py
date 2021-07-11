@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from vmcnet.utils.typing import SLArray, SLArrayList, SpinSplit
+from vmcnet.utils.slog_helpers import array_list_to_slog, slog_multiply
 from .weights import WeightInitializer
 
 
@@ -85,14 +86,11 @@ def _multiply_eq_inputs_by_split_slog_antisym(
     split_slog_antisym = jax.tree_map(
         lambda c: jnp.expand_dims(c, -1), split_slog_antisym
     )
-    # Calculate signs and logs and split results each to shape [(..., nelec[i], d)]
-    sign_inputs = jnp.split(jnp.sign(eq_inputs), spin_split, axis=-2)
-    log_inputs = jnp.split(jnp.log(jnp.abs(eq_inputs)), spin_split, axis=-2)
+    split_slog_inputs = array_list_to_slog(jnp.split(eq_inputs, spin_split, axis=-2))
 
     return jax.tree_map(
-        lambda si, li, c: (si * c[0], li + c[1]),
-        sign_inputs,
-        log_inputs,
+        slog_multiply,
+        split_slog_inputs,
         split_slog_antisym,
         is_leaf=is_tuple_of_arrays,
     )

@@ -1,7 +1,8 @@
 """Test model antiequivariances."""
-from typing import Any, Callable
+from typing import Callable
 
 import chex
+import flax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -35,8 +36,12 @@ def test_slog_cofactor_output_with_batches():
     np.testing.assert_allclose(y[1], full_expected_logs, rtol=1e-6)
 
 
+<<<<<<< HEAD
 @pytest.mark.slow
 def test_slog_cofactor_antiequivarance():
+=======
+def test_slog_cofactor_antiequivariance():
+>>>>>>> d83e908 (More feedback)
     """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     permutation = jnp.array([1, 0, 2])
@@ -52,8 +57,11 @@ def test_slog_cofactor_antiequivarance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
+
 @pytest.mark.slow
-def _test_layer_antiequivariance(build_layer: Callable[[SpinSplit], Any]) -> None:
+def _test_layer_antiequivariance(
+    build_layer: Callable[[SpinSplit], flax.linen.module]
+) -> None:
     """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
     (

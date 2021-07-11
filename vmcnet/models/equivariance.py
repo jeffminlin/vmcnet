@@ -913,9 +913,10 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             matrices, say in order to be able to take antiequivariant per-particle
             determinants, nelec[i] should be equal to self.norbitals_per_spin[i].
         """
-        # List of nspins arrays of shape (..., nelec[i], d)]
+        # split_x is a list of nspins arrays of shape (..., nelec[i], d)]
         split_x = jnp.split(x, self.spin_split, -2)
-        # List of nspins arrays of shape (..., nelec[i], nelec[i], norbitals[i])
+        # orbs is a list of nspins arrays of shape
+        # (..., nelec[i], nelec[i], norbitals[i])
         orbs = [
             self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
             for (i, x) in enumerate(split_x)
