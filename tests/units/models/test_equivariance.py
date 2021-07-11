@@ -142,8 +142,8 @@ def test_split_dense_shape():
         chex.assert_shape(output, (nchains, nelec_per_spin[i], ndense[i]))
 
 
-def test_equivariant_orbital_layer_shape_and_equivariance():
-    """Test that the equivariant orbital layer has the correct shape and symmetry.
+def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
+    """Test that the output of the layer has the correct shape and symmetry.
 
     The output should have shape [nspins: (nchains, nelec, nelec, norbitals)].
     Furthermore, the -2 and -3 axes of each array should both be equivariant.
@@ -173,7 +173,7 @@ def test_equivariant_orbital_layer_shape_and_equivariance():
     kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
     bias_initializer = models.weights.get_bias_initializer("uniform")
 
-    equivariant_orbital_layer = models.equivariance.EquivariantOrbitalLayer(
+    equivariant_orbital_layer = models.equivariance.DoublyEquivariantOrbitalLayer(
         spin_split,
         norbitals_per_spin,
         kernel_initializer,
@@ -202,3 +202,39 @@ def test_equivariant_orbital_layer_shape_and_equivariance():
         expected_perm_out_i = out_i[:, perm_i, :, :][:, :, perm_i, :]
 
         np.testing.assert_allclose(perm_out_i, expected_perm_out_i)
+
+
+def test_doubly_equivariant_orbital_layer_no_batch_dims():
+    """Test that the layer can be evaluated on inputs with no batch dimensions.
+
+    An initial implementation of this layer did not satisfy this criterion; hence the
+    regression test.
+    """
+    _, nelec_total, nion, d, permutation, spin_split, _ = get_elec_hyperparams()
+    # Set nchains to 1 to get effectively batchless inputs
+    nchains = 1
+    input_1e, _, input_ei, _, _, _, key = get_input_streams_from_hyperparams(
+        nchains, nelec_total, nion, d, permutation
+    )
+    # Delete length 1 batch dim from inputs to get truly batchless inputs.
+    input_1e = jnp.squeeze(input_1e, 0)
+    input_ei - jnp.squeeze(input_ei, 0)
+
+    nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
+    norbitals_per_spin = [2 * n for n in nelec_per_spin]
+    kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
+    bias_initializer = models.weights.get_bias_initializer("uniform")
+
+    equivariant_orbital_layer = models.equivariance.DoublyEquivariantOrbitalLayer(
+        spin_split,
+        norbitals_per_spin,
+        kernel_initializer,
+        kernel_initializer,
+        kernel_initializer,
+        bias_initializer,
+    )
+
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    output, _ = equivariant_orbital_layer.init_with_output(subkey, input_1e, input_ei)

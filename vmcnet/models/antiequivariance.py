@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
-from .equivariance import EquivariantOrbitalLayer, FermiNetOrbitalLayer
+from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from vmcnet.utils.typing import SLArray, SLArrayList, SpinSplit
 from .weights import WeightInitializer
 
@@ -250,7 +250,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-        equivariant_orbital_layer = EquivariantOrbitalLayer(
+        equivariant_orbital_layer = DoublyEquivariantOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
             self.orbital_kernel_initializer_linear,

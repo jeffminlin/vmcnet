@@ -638,7 +638,7 @@ class SplitDense(flax.linen.Module):
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
 
-def _compute_exponential_envelopes_one_spin(
+def _compute_exponential_envelopes_on_leaf(
     r_ei_leaf: jnp.ndarray,
     norbitals: int,
     kernel_initializer_dim: WeightInitializer,
@@ -686,7 +686,7 @@ def _compute_exponential_envelopes_all_spins(
     r_ei_split = jnp.split(r_ei, spin_split, axis=-3)
     return jax.tree_map(
         functools.partial(
-            _compute_exponential_envelopes_one_spin,
+            _compute_exponential_envelopes_on_leaf,
             kernel_initializer_dim=kernel_initializer_dim,
             kernel_initializer_ion=kernel_initializer_ion,
             isotropic=isotropic,
@@ -785,7 +785,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return orbs
 
 
-class EquivariantOrbitalLayer(flax.linen.Module):
+class DoublyEquivariantOrbitalLayer(flax.linen.Module):
     """Equivariantly generate an orbital matrix corresponding to each input stream.
 
     The calculation being done here is a bit subtle, so it's worth explaining here
@@ -876,14 +876,16 @@ class EquivariantOrbitalLayer(flax.linen.Module):
         # generate the orbitals. The below lines build up these combinations so that,
         # for example, if x is [[1, 2],[3,4]], then dense_inputs will be equal to
         # [[[1,2,1,2],[3,4,1,2]], [[1,2,3,4],[3,4,3,4]].
-        per_column_dense_inputs = jnp.reshape(
-            jnp.repeat(x, nelec, axis=-3), dense_input_piece_shape
-        )
-        per_matrix_dense_inputs = jnp.reshape(
+        axis_2_repeated_inputs = jnp.reshape(
             jnp.repeat(x, nelec, axis=-2), dense_input_piece_shape
         )
+        axis_3_repeated_inputs = jnp.reshape(
+            # Expand dim of x here to handle case where there are no batch dimensions
+            jnp.repeat(jnp.expand_dims(x, -3), nelec, axis=-3),
+            dense_input_piece_shape,
+        )
         dense_inputs = jnp.concatenate(
-            [per_column_dense_inputs, per_matrix_dense_inputs], axis=-1
+            [axis_2_repeated_inputs, axis_3_repeated_inputs], axis=-1
         )
 
         return Dense(
