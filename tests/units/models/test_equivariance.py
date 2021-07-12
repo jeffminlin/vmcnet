@@ -142,6 +142,7 @@ def test_split_dense_shape():
         chex.assert_shape(output, (nchains, nelec_per_spin[i], ndense[i]))
 
 
+@pytest.mark.slow
 def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
     """Test that the output of the layer has the correct shape and symmetry.
 
@@ -204,6 +205,7 @@ def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
         np.testing.assert_allclose(perm_out_i, expected_perm_out_i)
 
 
+@pytest.mark.slow
 def test_doubly_equivariant_orbital_layer_no_batch_dims():
     """Test that the layer can be evaluated on inputs with no batch dimensions.
 

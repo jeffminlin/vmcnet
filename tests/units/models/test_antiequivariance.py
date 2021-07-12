@@ -36,12 +36,8 @@ def test_slog_cofactor_output_with_batches():
     np.testing.assert_allclose(y[1], full_expected_logs, rtol=1e-6)
 
 
-<<<<<<< HEAD
 @pytest.mark.slow
-def test_slog_cofactor_antiequivarance():
-=======
 def test_slog_cofactor_antiequivariance():
->>>>>>> d83e908 (More feedback)
     """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     permutation = jnp.array([1, 0, 2])
@@ -57,8 +53,6 @@ def test_slog_cofactor_antiequivariance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
-
-@pytest.mark.slow
 def _test_layer_antiequivariance(
     build_layer: Callable[[SpinSplit], flax.linen.Module], rtol: float = 1e-7
 ) -> None:
@@ -115,6 +109,7 @@ def _test_layer_antiequivariance(
         np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
 
 
+@pytest.mark.slow
 def test_orbital_cofactor_layer_antiequivariance():
     """Test orbital cofactor antiequivariance."""
 
@@ -132,6 +127,7 @@ def test_orbital_cofactor_layer_antiequivariance():
     _test_layer_antiequivariance(build_orbital_cofactor_layer)
 
 
+@pytest.mark.slow
 def test_per_particle_determinant_antiequivariance():
     """Test per particle determinant antiequivariance."""
 
