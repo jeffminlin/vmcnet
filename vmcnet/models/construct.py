@@ -328,7 +328,7 @@ def get_resnet_determinant_fn_for_ferminet(
         ndense (int): the number of neurons in the dense layers
             of the ResNet.
         nlayers (int): the number of layers in the ResNet.
-        activation (SLActivation): the activation function to use for the  resnet.
+        activation (Activation): the activation function to use for the  resnet.
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
         bias_initializer (WeightInitializer): bias initializer for the resnet.
         use_bias(bool): Whether to use a bias in the ResNet. Defaults to True.
@@ -463,9 +463,7 @@ class FermiNet(flax.linen.Module):
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
             # Symmetrize the resnet to be sign covariant with respect to each spin.
             sign_cov_det_fn = make_array_list_fn_sign_covariant(self._determinant_fn)
-            psi = sign_cov_det_fn(fn_inputs)
-            # Remove degenerate final axis from results
-            psi = jnp.squeeze(psi, -1)
+            psi = jnp.squeeze(sign_cov_det_fn(fn_inputs), -1)
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
