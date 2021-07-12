@@ -1,11 +1,15 @@
 """Test model antiequivariances."""
+from typing import Callable
+
 import chex
+import flax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
+from vmcnet.utils.typing import SpinSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
@@ -33,7 +37,7 @@ def test_slog_cofactor_output_with_batches():
 
 
 @pytest.mark.slow
-def test_slog_cofactor_antiequivarance():
+def test_slog_cofactor_antiequivariance():
     """Test slog_cofactor_antieq is antiequivariant."""
     input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
     permutation = jnp.array([1, 0, 2])
@@ -49,9 +53,10 @@ def test_slog_cofactor_antiequivarance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
-@pytest.mark.slow
-def test_orbital_cofactor_layer_antiequivariance():
-    """Test evaluation and antiequivariance of orbital cofactor equivariance layer."""
+def _test_layer_antiequivariance(
+    build_layer: Callable[[SpinSplit], flax.linen.Module], rtol: float = 1e-7
+) -> None:
+    """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
     (
         nchains,
@@ -73,20 +78,12 @@ def test_orbital_cofactor_layer_antiequivariance():
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     # Set up antiequivariant layer
-    kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
-    bias_initializer = models.weights.get_bias_initializer("normal")
-    orbital_cofactor_antieq = antieq.OrbitalCofactorAntiequivarianceLayer(
-        spin_split,
-        kernel_initializer,
-        kernel_initializer,
-        kernel_initializer,
-        bias_initializer,
-    )
-    params = orbital_cofactor_antieq.init(key, input_1e, input_ei)
+    antieq_layer = build_layer(spin_split)
+    params = antieq_layer.init(key, input_1e, input_ei)
 
     # Evaluate layer on original and permuted inputs
-    output = orbital_cofactor_antieq.apply(params, input_1e, input_ei)
-    perm_output = orbital_cofactor_antieq.apply(params, perm_input_1e, perm_input_ei)
+    output = antieq_layer.apply(params, input_1e, input_ei)
+    perm_output = antieq_layer.apply(params, perm_input_1e, perm_input_ei)
 
     # Verify output shape and verify all signs values are  +-1
     nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
@@ -109,4 +106,40 @@ def test_orbital_cofactor_layer_antiequivariance():
         expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
         expected_perm_logs = logs[:, split_perm[i], :]
         np.testing.assert_allclose(perm_signs, expected_perm_signs)
-        np.testing.assert_allclose(perm_logs, expected_perm_logs)
+        np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
+
+
+@pytest.mark.slow
+def test_orbital_cofactor_layer_antiequivariance():
+    """Test orbital cofactor antiequivariance."""
+
+    def build_orbital_cofactor_layer(spin_split):
+        kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
+        bias_initializer = models.weights.get_bias_initializer("normal")
+        return antieq.OrbitalCofactorAntiequivarianceLayer(
+            spin_split,
+            kernel_initializer,
+            kernel_initializer,
+            kernel_initializer,
+            bias_initializer,
+        )
+
+    _test_layer_antiequivariance(build_orbital_cofactor_layer)
+
+
+@pytest.mark.slow
+def test_per_particle_determinant_antiequivariance():
+    """Test per particle determinant antiequivariance."""
+
+    def build_per_particle_determinant_layer(spin_split):
+        kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
+        bias_initializer = models.weights.get_bias_initializer("normal")
+        return antieq.PerParticleDeterminantAntiequivarianceLayer(
+            spin_split,
+            kernel_initializer,
+            kernel_initializer,
+            kernel_initializer,
+            bias_initializer,
+        )
+
+    _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-6)

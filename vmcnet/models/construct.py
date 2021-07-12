@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from vmcnet.utils.typing import SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -194,7 +195,7 @@ class ComposedModel(flax.linen.Module):
 
 
 def _get_residual_blocks_for_ferminet_backflow(
-    spin_split: Union[int, Sequence[int]],
+    spin_split: SpinSplit,
     ndense_list: List[Tuple[int, ...]],
     kernel_initializer_unmixed: WeightInitializer,
     kernel_initializer_mixed: WeightInitializer,
@@ -295,7 +296,7 @@ class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -393,7 +394,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -424,7 +425,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNets. Defaults to True.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndense_resnet: int
     nlayers_resnet: int
@@ -486,7 +487,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -516,7 +517,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNet. Defaults to True.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndense_resnet: int
     nlayers_resnet: int

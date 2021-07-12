@@ -1,5 +1,5 @@
 """Helper functions for model tests."""
-from typing import Sequence, Optional, Tuple
+from typing import Optional, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -12,9 +12,9 @@ def get_elec_hyperparams() -> Tuple[
     int,
     int,
     int,
-    Sequence[int],
-    Sequence[int],
-    Sequence[Sequence[int]],
+    Tuple[int, ...],
+    Tuple[int, ...],
+    List[Tuple[int, ...]],
 ]:
     """Get hyperparameters for electron data."""
     nchains = 25
@@ -29,7 +29,7 @@ def get_elec_hyperparams() -> Tuple[
 
 
 def get_input_streams_from_hyperparams(
-    nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int]
+    nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int, ...]
 ) -> Tuple[
     jnp.ndarray,
     Optional[jnp.ndarray],

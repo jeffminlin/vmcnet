@@ -1,5 +1,5 @@
 """Core model building parts."""
-from typing import Callable, Sequence, Tuple, Union, cast
+from typing import Callable, Tuple, cast
 
 import flax
 import jax
@@ -13,7 +13,7 @@ from vmcnet.models.weights import (
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import SLArray, PyTree
+from vmcnet.utils.typing import SLArray, PyTree, SpinSplit
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
@@ -29,9 +29,7 @@ def get_alternating_signs(n: int) -> jnp.ndarray:
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
 
-def get_nelec_per_spin(
-    spin_split: Union[int, Sequence[int]], nelec_total: int
-) -> Tuple[int, ...]:
+def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:
     """From a spin_split and nelec_total, get the number of particles per spin.
 
     If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then

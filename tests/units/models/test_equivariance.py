@@ -118,8 +118,8 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
 def test_split_dense_shape():
     """Test the output shape of the SplitDense layer."""
     nchains = 8
-    nspins = jnp.array([3, 1, 4, 2])
-    nspins_total = jnp.sum(nspins)
+    nelec_per_spin = jnp.array([3, 1, 4, 2])
+    nelec_total = jnp.sum(nelec_per_spin)
     d = 5
 
     spin_split = (3, 4, 8)  # = jnp.cumsum(nspins)[:-1], locations to split at
@@ -133,10 +133,110 @@ def test_split_dense_shape():
 
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
-    inputs = jax.random.normal(subkey, (nchains, nspins_total, d))
+    inputs = jax.random.normal(subkey, (nchains, nelec_total, d))
 
     key, subkey = jax.random.split(key)
     outputs, _ = split_dense_layer.init_with_output(subkey, inputs)
 
     for i, output in enumerate(outputs):
-        chex.assert_shape(output, (nchains, nspins[i], ndense[i]))
+        chex.assert_shape(output, (nchains, nelec_per_spin[i], ndense[i]))
+
+
+@pytest.mark.slow
+def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
+    """Test that the output of the layer has the correct shape and symmetry.
+
+    The output should have shape [nspins: (nchains, nelec, nelec, norbitals)].
+    Furthermore, the -2 and -3 axes of each array should both be equivariant.
+    """
+    (
+        nchains,
+        nelec_total,
+        nion,
+        d,
+        permutation,
+        spin_split,
+        split_perm,
+    ) = get_elec_hyperparams()
+    (
+        input_1e,
+        _,
+        input_ei,
+        perm_input_1e,
+        _,
+        perm_input_ei,
+        key,
+    ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+
+    nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
+    norbitals_per_spin = [2 * n for n in nelec_per_spin]
+    nspins = len(nelec_per_spin)
+    kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
+    bias_initializer = models.weights.get_bias_initializer("uniform")
+
+    equivariant_orbital_layer = models.equivariance.DoublyEquivariantOrbitalLayer(
+        spin_split,
+        norbitals_per_spin,
+        kernel_initializer,
+        kernel_initializer,
+        kernel_initializer,
+        bias_initializer,
+    )
+
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    output, params = equivariant_orbital_layer.init_with_output(
+        subkey, input_1e, input_ei
+    )
+    perm_output = equivariant_orbital_layer.apply(params, perm_input_1e, perm_input_ei)
+
+    for i in range(nspins):
+        nelec = nelec_per_spin[i]
+        norbitals = norbitals_per_spin[i]
+        out_i = output[i]
+        chex.assert_shape(out_i, (nchains, nelec, nelec, norbitals))
+
+        perm_out_i = perm_output[i]
+        perm_i = jnp.array(split_perm[i])
+        # Both the orbital matrix index and the particle index should be permuted
+        expected_perm_out_i = out_i[:, perm_i, :, :][:, :, perm_i, :]
+
+        np.testing.assert_allclose(perm_out_i, expected_perm_out_i)
+
+
+@pytest.mark.slow
+def test_doubly_equivariant_orbital_layer_no_batch_dims():
+    """Test that the layer can be evaluated on inputs with no batch dimensions.
+
+    An initial implementation of this layer did not satisfy this criterion; hence the
+    regression test.
+    """
+    _, nelec_total, nion, d, permutation, spin_split, _ = get_elec_hyperparams()
+    # Set nchains to 1 to get effectively batchless inputs
+    nchains = 1
+    input_1e, _, input_ei, _, _, _, key = get_input_streams_from_hyperparams(
+        nchains, nelec_total, nion, d, permutation
+    )
+    # Delete length 1 batch dim from inputs to get truly batchless inputs.
+    input_1e = jnp.squeeze(input_1e, 0)
+    input_ei - jnp.squeeze(input_ei, 0)
+
+    nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
+    norbitals_per_spin = [2 * n for n in nelec_per_spin]
+    kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
+    bias_initializer = models.weights.get_bias_initializer("uniform")
+
+    equivariant_orbital_layer = models.equivariance.DoublyEquivariantOrbitalLayer(
+        spin_split,
+        norbitals_per_spin,
+        kernel_initializer,
+        kernel_initializer,
+        kernel_initializer,
+        bias_initializer,
+    )
+
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+
+    output, _ = equivariant_orbital_layer.init_with_output(subkey, input_1e, input_ei)

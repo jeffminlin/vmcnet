@@ -1,6 +1,6 @@
 """Permutation equivariant functions."""
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import flax
 import jax
@@ -10,12 +10,12 @@ from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
 
 
 def _split_mean(
     x: jnp.ndarray,
-    splits: Union[int, Sequence[int]],
+    splits: SpinSplit,
     axis: int = -2,
     keepdims: bool = True,
 ) -> List[jnp.ndarray]:
@@ -169,7 +169,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -209,7 +209,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             true spin equivariance. Defaults to False (original FermiNet).
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     ndense: int
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
@@ -568,7 +568,7 @@ class SplitDense(flax.linen.Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split the input equally,
+        spin_split (SpinSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -590,7 +590,7 @@ class SplitDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     ndense_per_spin: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -638,11 +638,69 @@ class SplitDense(flax.linen.Module):
         return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
 
 
+def _compute_exponential_envelopes_on_leaf(
+    r_ei_leaf: jnp.ndarray,
+    norbitals: int,
+    kernel_initializer_dim: WeightInitializer,
+    kernel_initializer_ion: WeightInitializer,
+    isotropic: bool = False,
+) -> jnp.ndarray:
+    """Calculate exponential envelopes for orbitals of a single spin."""
+    if isotropic:
+        scale_out = _isotropy_on_leaf(
+            r_ei_leaf,
+            norbitals,
+            kernel_initializer_dim,
+            register_kfac=False,
+        )
+    else:
+        scale_out = _anisotropy_on_leaf(
+            r_ei_leaf,
+            norbitals,
+            kernel_initializer_dim,
+            register_kfac=True,
+        )
+    # scale_out has shape (..., nelec, norbitals, nion, d)
+    distances = jnp.linalg.norm(scale_out, axis=-1)
+    inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
+
+    lin_comb_nion = Dense(
+        1,
+        kernel_init=kernel_initializer_ion,
+        use_bias=False,
+        register_kfac=False,
+    )(inv_exp_distances)
+
+    return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
+
+
+def _compute_exponential_envelopes_all_spins(
+    r_ei: jnp.ndarray,
+    spin_split: SpinSplit,
+    norbitals_per_spin: Sequence[int],
+    kernel_initializer_dim: WeightInitializer,
+    kernel_initializer_ion: WeightInitializer,
+    isotropic: bool = False,
+) -> ArrayList:
+    """Calculate exponential envelopes for all spins."""
+    r_ei_split = jnp.split(r_ei, spin_split, axis=-3)
+    return jax.tree_map(
+        functools.partial(
+            _compute_exponential_envelopes_on_leaf,
+            kernel_initializer_dim=kernel_initializer_dim,
+            kernel_initializer_ion=kernel_initializer_ion,
+            isotropic=isotropic,
+        ),
+        r_ei_split,
+        list(norbitals_per_spin),
+    )
+
+
 class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
-        spin_split (int or Sequence[int]): number of spins to split inputs equally,
+        spin_split (SpinSplit): number of spins to split inputs equally,
             or specified sequence of locations to split along the electron axis. E.g.,
             if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
@@ -674,7 +732,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
@@ -690,39 +748,8 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _compute_exponential_envelopes_on_leaf(
-        self, r_ei_leaf: jnp.ndarray, norbitals: int, isotropic: bool = False
-    ) -> jnp.ndarray:
-        """Pick a type of exp envelope and multiply by the linear part element-wise."""
-        if isotropic:
-            scale_out = _isotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=False,
-            )
-        else:
-            scale_out = _anisotropy_on_leaf(
-                r_ei_leaf,
-                norbitals,
-                self._kernel_initializer_envelope_dim,
-                register_kfac=True,
-            )
-        # scale_out has shape (..., nelec, norbitals, nion, d)
-        distances = jnp.linalg.norm(scale_out, axis=-1)
-        inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
-
-        lin_comb_nion = Dense(
-            1,
-            kernel_init=self.kernel_initializer_envelope_ion,
-            use_bias=False,
-            register_kfac=False,
-        )(inv_exp_distances)
-
-        return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
-
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> List[jnp.ndarray]:
+    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
 
         Args:
@@ -746,14 +773,167 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             use_bias=self.use_bias,
         )(x)
         if r_ei is not None:
-            r_ei_split = jnp.split(r_ei, self.spin_split, axis=-3)
+            exp_envelopes = _compute_exponential_envelopes_all_spins(
+                r_ei,
+                self.spin_split,
+                self.norbitals_per_spin,
+                self._kernel_initializer_envelope_dim,
+                self._kernel_initializer_envelope_ion,
+                self.isotropic_decay,
+            )
+            orbs = _tree_prod(orbs, exp_envelopes)
+        return orbs
+
+
+class DoublyEquivariantOrbitalLayer(flax.linen.Module):
+    """Equivariantly generate an orbital matrix corresponding to each input stream.
+
+    The calculation being done here is a bit subtle, so it's worth explaining here
+    in some detail. Let the equivariant input vectors to this layer be y_i. Then, this
+    layer will generate an orbital matrix M_p for each particle P, such that the
+    (i,j)th element of M_p satisfies M_(p,i,j) = phi_j(y_p, y_i). This is essentially
+    the usual orbital matrix formula M_(i,j) = phi_j(y_i), except with an added
+    dependence on the particle index p which allows us to generate a distinct matrix
+    for each input particle. This construction allows us to generate a unique
+    antisymmetric determinant D_p = det(M_p) for each input particle, which can then
+    be the basis for an expressive antiequivariant layer.
+
+    If r_ei is provided in addition to the main inputs y_i, then an exponentially
+    decaying envelope is also applied equally to every orbital matrix M_p in order to
+    ensure that the orbital values decay to zero far from the ions.
+
+    Attributes:
+        spin_split (SpinSplit): number of spins to split inputs equally,
+            or specified sequence of locations to split along the electron axis. E.g.,
+            if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each spin. This determines the output shapes for
+            each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
+        kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
+            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
+            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
+            this initializes a single decay rate number per ion and orbital. If
+            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
+            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
+            linear combination over the ions of exponential envelopes. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_linear (WeightInitializer): bias initializer for the linear
+            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+        use_bias (bool, optional): whether to add a bias term to the linear part of the
+            orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should be
+            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
+            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
+            exp(-||a(r - R||)) for a number a.
+    """
+
+    spin_split: SpinSplit
+    norbitals_per_spin: Sequence[int]
+    kernel_initializer_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_linear: WeightInitializer
+    use_bias: bool = True
+    isotropic_decay: bool = False
+
+    def setup(self):
+        """Setup envelope kernel initializers."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
+        self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
+
+    def _get_orbital_matrices_one_spin(
+        self, x: jnp.ndarray, norbitals: int
+    ) -> jnp.ndarray:
+        """Get the equivariant orbital matrices for a single spin.
+
+        Args:
+            x (jnp.ndarray): input array of shape (..., nelec[i], d).
+            norbitals (int): number of orbitals to generate. For square matrices,
+                norbitals should equal nelec[i]
+
+        Returns:
+            (jnp.ndarray): the equivariant orbitals for this spin block, as an array
+                of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
+                are equivariant with respect to the input particles.
+        """
+        batch_dims = x.shape[:-2]
+        nelec = x.shape[-2]
+        d = x.shape[-1]
+        dense_input_piece_shape = (*batch_dims, nelec, nelec, d)
+
+        # Since the goal is to calculate M_(p,i,j) = phi_j(y_p, y_i), we need to create
+        # the right combinations (y_p, y_i) before we can apply a dense layer to
+        # generate the orbitals. The below lines build up these combinations so that,
+        # for example, if x is [[1, 2],[3,4]], then dense_inputs will be equal to
+        # [[[1,2,1,2],[3,4,1,2]], [[1,2,3,4],[3,4,3,4]].
+        axis_2_repeated_inputs = jnp.reshape(
+            jnp.repeat(x, nelec, axis=-2), dense_input_piece_shape
+        )
+        axis_3_repeated_inputs = jnp.reshape(
+            # Expand dim of x here to handle case where there are no batch dimensions
+            jnp.repeat(jnp.expand_dims(x, -3), nelec, axis=-3),
+            dense_input_piece_shape,
+        )
+        dense_inputs = jnp.concatenate(
+            [axis_2_repeated_inputs, axis_3_repeated_inputs], axis=-1
+        )
+
+        return Dense(
+            norbitals,
+            self.kernel_initializer_linear,
+            self.bias_initializer_linear,
+            use_bias=self.use_bias,
+        )(dense_inputs)
+
+    @flax.linen.compact
+    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
+        """Calculate an equivariant orbital matrix for each input particle.
+
+        Args:
+            x (jnp.ndarray): array of shape (..., nelec, d)
+            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+
+        Returns:
+            (ArrayList): list of length nspins of arrays of shape
+            (..., nelec[i], nelec[i], self.norbitals_per_spin[i]). Here nelec[i] is the
+            number of particles in the ith split. The output arrays have both their -2
+            and -3 axes equivariant with respect to the input particles. The exponential
+            envelopes are computed only when r_ei is not None (so, when connected to
+            FermiNetBackflow, when ion locations are specified). To output square
+            matrices, say in order to be able to take antiequivariant per-particle
+            determinants, nelec[i] should be equal to self.norbitals_per_spin[i].
+        """
+        # split_x is a list of nspins arrays of shape (..., nelec[i], d)]
+        split_x = jnp.split(x, self.spin_split, -2)
+        # orbs is a list of nspins arrays of shape
+        # (..., nelec[i], nelec[i], norbitals[i])
+        orbs = [
+            self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
+            for (i, x) in enumerate(split_x)
+        ]
+
+        if r_ei is not None:
+            exp_envelopes = _compute_exponential_envelopes_all_spins(
+                r_ei,
+                self.spin_split,
+                self.norbitals_per_spin,
+                self._kernel_initializer_envelope_dim,
+                self._kernel_initializer_envelope_ion,
+                self.isotropic_decay,
+            )
+            # Envelope must be expanded to apply equally to each per-particle matrix.
             exp_envelopes = jax.tree_map(
-                functools.partial(
-                    self._compute_exponential_envelopes_on_leaf,
-                    isotropic=self.isotropic_decay,
-                ),
-                r_ei_split,
-                list(self.norbitals_per_spin),
+                lambda x: jnp.expand_dims(x, axis=-3), exp_envelopes
             )
             orbs = _tree_prod(orbs, exp_envelopes)
         return orbs
