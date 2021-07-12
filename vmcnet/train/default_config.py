@@ -84,6 +84,7 @@ def get_default_model_config() -> ConfigDict:
                             "nlayers": 3,
                             "activation": "log_domain_tanh_like",
                             "kernel_init": {"type": "orthogonal", "scale": 2.0},
+                            "bias_init": normal_init,
                             "use_bias": True,
                         }
                     ),

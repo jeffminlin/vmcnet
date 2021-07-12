@@ -12,6 +12,7 @@ from vmcnet.models.sign_covariance import make_slog_fn_sign_covariant
 from vmcnet.models.weights import get_kernel_initializer, get_bias_initializer
 from vmcnet.utils.slog_helpers import slog_sum_over_axis, slog_array_list_concat
 from vmcnet.utils.typing import SLArray, SLArrayList
+from vmcnet.utils.typing import ArrayList
 
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
@@ -20,8 +21,6 @@ from .antisymmetry import (
 )
 from .core import (
     Activation,
-    SLActivation,
-    LogDomainResNet,
     SimpleResNet,
     get_nelec_per_spin,
 )
@@ -33,7 +32,7 @@ from .equivariance import (
     FermiNetTwoElectronLayer,
 )
 from .jastrow import IsotropicAtomicExpDecay
-from .sign_covariance import make_sl_array_list_fn_sign_covariant
+from .sign_covariance import make_array_list_fn_sign_covariant
 from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
@@ -74,6 +73,7 @@ def get_model_from_config(
                 resnet_config.nlayers,
                 _get_named_activation_fn(resnet_config.activation),
                 get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
+                get_bias_init_from_config(resnet_config.bias_init, dtype=dtype),
                 resnet_config.use_bias,
             )
         return FermiNet(
@@ -314,10 +314,11 @@ def _get_residual_blocks_for_ferminet_backflow(
 def get_resnet_determinant_fn_for_ferminet(
     ndense: int,
     nlayers: int,
-    activation: SLActivation,
+    activation: Activation,
     kernel_initializer: WeightInitializer,
+    bias_initializer: WeightInitializer,
     use_bias: bool = True,
-) -> Callable[[SLArrayList], SLArray]:
+) -> Callable[[ArrayList], jnp.ndarray]:
     """Get a resnet-based determinant function for FermiNet construction.
 
     This is used as a more general way to combine the determinant outputs into the
@@ -327,25 +328,26 @@ def get_resnet_determinant_fn_for_ferminet(
         ndense (int): the number of neurons in the dense layers
             of the ResNet.
         nlayers (int): the number of layers in the ResNet.
-        activation (SLActivation): the log-domain activation
-            function to use for the  resnet.
+        activation (SLActivation): the activation function to use for the  resnet.
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
-        use_bias(bool)): Whether to use a bias in the ResNet. Defaults to True.
+        bias_initializer (WeightInitializer): bias initializer for the resnet.
+        use_bias(bool): Whether to use a bias in the ResNet. Defaults to True.
 
     Returns:
-        (Callable[[SLArrayList, SLArray]): A resnet-based function which takes as input
-        a list of nspins SLArrays, each of shape (..., ndeterminants) and outputs a
-        single SLArray of shape (..., 1).
+        (Callable[[ArrayList, jnp.ndarray]): A resnet-based function which takes as
+        input a list of nspins arrays of shape (..., ndeterminants) and outputs a
+        single array of shape (..., 1).
     """
 
-    def fn(det_values: SLArrayList) -> SLArray:
-        concat_values = slog_array_list_concat(det_values, axis=-1)
-        return LogDomainResNet(
+    def fn(det_values: ArrayList) -> jnp.ndarray:
+        concat_values = jnp.concatenate(det_values, axis=-1)
+        return SimpleResNet(
             ndense,
             1,
             nlayers,
             activation,
             kernel_initializer,
+            bias_initializer,
             use_bias,
         )(concat_values)
 
@@ -391,9 +393,9 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn (Callable[[SLArrayList], SLArray], optional): An arbitrary
-            function that can map an SLArrayList of nspins determinant outputs of shape
-            (..., ndeterminants) to a single output SLArray of shape (..., 1). If
+        determinant_fn (Callable[[ArrayList], jnp.ndarray], optional): An arbitrary
+            function that can map an ArrayList of nspins determinant outputs of shape
+            (..., ndeterminants) to a single output array of shape (..., 1). If
             provided, this function will be symmetrized to be sign-covariant (odd) with
             respect to each spin, and will then be used to combine the orbital
             determinants into the final wavefunction value. If not provided, the final
@@ -411,7 +413,7 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    determinant_fn: Optional[Callable[[SLArrayList], SLArray]] = None
+    determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
     def setup(self):
         """Setup backflow."""
@@ -455,16 +457,16 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
         if self._determinant_fn is not None:
-            # slogdets is SLArrayList of shape [nspins: (ndeterminants, ...)]
-            slogdets = jax.tree_map(jnp.linalg.slogdet, orbitals)
+            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+            dets = jax.tree_map(jnp.linalg.det, orbitals)
             # Swap axes to get shape [nspins: (..., ndeterminants)]
-            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), slogdets)
+            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
             # Symmetrize the resnet to be sign covariant with respect to each spin.
-            sign_cov_det_fn = make_sl_array_list_fn_sign_covariant(self._determinant_fn)
-            _, log_psi = sign_cov_det_fn(fn_inputs)
+            sign_cov_det_fn = make_array_list_fn_sign_covariant(self._determinant_fn)
+            psi = sign_cov_det_fn(fn_inputs)
             # Remove degenerate final axis from results
-            log_psi = jax.tree_map(lambda x: jnp.squeeze(x, -1), log_psi)
-            return log_psi
+            psi = jnp.squeeze(psi, -1)
+            return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)

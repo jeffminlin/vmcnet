@@ -73,7 +73,9 @@ def _get_det_resnet():
     return models.construct.get_resnet_determinant_fn_for_ferminet(
         6,
         3,
+        jnp.tanh,
         models.weights.get_kernel_initializer("orthogonal"),
+        models.weights.get_bias_initializer("uniform"),
     )
 
 
@@ -86,7 +88,7 @@ def _make_ferminet():
     # false and both true to cover our bases without making the test too slow.
     for (cyclic_spins, use_det_resnet) in [(False, False), (True, True)]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-        det_resnet = _get_det_resnet() if use_det_resnet else None
+        resnet_det_fn = _get_det_resnet() if use_det_resnet else None
         log_psi = models.construct.FermiNet(
             spin_split,
             backflow,
@@ -95,7 +97,7 @@ def _make_ferminet():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
-            determinant_fn=det_resnet,
+            determinant_fn=resnet_det_fn,
         )
         log_psis.append(log_psi)
 
@@ -187,7 +189,7 @@ def test_ferminet_composed_antisymmetry_can_be_evaluated():
     _jit_eval_models(key, init_pos, log_psis)
 
 
-def test_get_model_from_default_config(mocker):
+def test_get_model_from_default_config():
     """Test that construction using the default model config does not raise an error."""
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
     nelec = jnp.array([4, 3])
