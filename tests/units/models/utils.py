@@ -1,5 +1,5 @@
 """Helper functions for model tests."""
-from typing import Sequence, Optional, List, Tuple
+from typing import Optional, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -12,9 +12,9 @@ def get_elec_hyperparams() -> Tuple[
     int,
     int,
     int,
-    Sequence[int],
-    Sequence[int],
-    List[Sequence[int]],
+    Tuple[int, ...],
+    Tuple[int, ...],
+    List[Tuple[int, ...]],
 ]:
     """Get hyperparameters for electron data."""
     nchains = 25
@@ -23,15 +23,13 @@ def get_elec_hyperparams() -> Tuple[
     d = 3
     permutation = (1, 0, 2, 5, 6, 3, 4)
     spin_split = (3,)
-    # Mypy assigns split_perm a more specific type, and complains below, if we don't
-    # type it explicitly here.
-    split_perm: List[Sequence[int]] = [(1, 0, 2), (2, 3, 0, 1)]
+    split_perm = [(1, 0, 2), (2, 3, 0, 1)]
 
     return nchains, nelec_total, nion, d, permutation, spin_split, split_perm
 
 
 def get_input_streams_from_hyperparams(
-    nchains: int, nelec_total: int, nion: int, d: int, permutation: Sequence[int]
+    nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int, ...]
 ) -> Tuple[
     jnp.ndarray,
     Optional[jnp.ndarray],
