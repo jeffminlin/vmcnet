@@ -46,21 +46,7 @@ def log_linear_exp(
         None, and d' = weights.shape[1] otherwise.
     """
     max_val = jnp.max(vals, axis=axis, keepdims=True)
-    # The below handles the case where there is exactly one inf value in a given slice.
-    # In that case, the subtraction of vals - max_val will be inf - inf at the maximal
-    # index, which will give a nan. However, we can safely replace it with a zero as we
-    # have actually pulled the inf term outside the sum anyway.
-    value_is_inf = vals == jnp.inf
-    max_val_is_neg_inf = max_val == -jnp.inf
-    single_inf_in_slice = jnp.count_nonzero(value_is_inf, axis=axis, keepdims=True) == 1
-    value_is_only_inf_in_slice = jnp.logical_and(value_is_inf, single_inf_in_slice)
-    diffs_with_max = jnp.where(
-        jnp.logical_or(value_is_only_inf_in_slice, max_val_is_neg_inf),
-        0,
-        vals - max_val,
-    )
-
-    terms_divided_by_max = signs * jnp.exp(diffs_with_max)
+    terms_divided_by_max = signs * jnp.exp(vals - max_val)
     if weights is not None:
         # swap axis and -1 to conform to jnp.dot and register_batch_dense api
         terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)

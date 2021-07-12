@@ -67,26 +67,3 @@ def test_log_linear_equals_log_linear_exp_log():
 
     np.testing.assert_allclose(sign_linear_exp_log_out, sign_linear_out)
     np.testing.assert_allclose(log_linear_exp_log_out, log_linear_out, rtol=1e-5)
-
-
-def test_log_linear_exp_inf_values():
-    """Test handling of inf values by log-linear-exp."""
-    original_val = jnp.array(
-        [
-            [10, jnp.inf, 10],
-            [-jnp.inf, 1, 2],
-            [jnp.inf, -jnp.inf, 2],
-            [0, 0, -1],
-            [0, 0, 0],
-            [0, 0, 10],
-        ]
-    )
-    slog_val = slog_helpers.array_to_slog(original_val)
-
-    log_sum_exp = log_linear_exp(slog_val[0], slog_val[1], axis=1)
-    output = slog_helpers.array_from_slog(log_sum_exp)
-
-    # One inf value should give a signed inf result, but two should return a nan.
-    np.testing.assert_allclose(
-        output, jnp.array([[jnp.inf], [-jnp.inf], [jnp.nan], [-1], [0], [10]])
-    )
