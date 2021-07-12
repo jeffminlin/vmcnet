@@ -25,14 +25,14 @@ def _get_sign_array_1d(i: int, nsyms: int) -> jnp.ndarray:
 
 
 def _reshape_sign_array_for_orbit(
-    signs: jnp.ndarray, x: jnp.ndarray, axis: int, nsyms: int
+    signs: jnp.ndarray, x_shape: Tuple[int, ...], axis: int, nsyms: int
 ) -> jnp.ndarray:
     """Reshape 1D sign array to shape (1, 1, ..., nsyms, 1, ..., 1).
 
     Resulting shape has one more axis than x and has dimension 1 on every axis except
     for the specified one, where the dimension is nsyms.
     """
-    sign_shape = [1 for _ in range(len(x[0].shape) + 1)]
+    sign_shape = [1 for _ in range(len(x_shape) + 1)]
     sign_shape[axis] = nsyms
     return jnp.reshape(signs, sign_shape)
 
@@ -65,7 +65,7 @@ def _get_sign_orbit_single_array(
     """
     nsyms = 2 ** n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
-    sym_signs_shaped = _reshape_sign_array_for_orbit(sym_signs_1d, x, axis, nsyms)
+    sym_signs_shaped = _reshape_sign_array_for_orbit(sym_signs_1d, x.shape, axis, nsyms)
     return sym_signs_shaped * jnp.expand_dims(x, axis), sym_signs_1d
 
 
@@ -97,7 +97,9 @@ def _get_sign_orbit_single_sl_array(
     """
     nsyms = 2 ** n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
-    sym_signs_shaped = _reshape_sign_array_for_orbit(sym_signs_1d, x[0], axis, nsyms)
+    sym_signs_shaped = _reshape_sign_array_for_orbit(
+        sym_signs_1d, x[0].shape, axis, nsyms
+    )
 
     sym_logs = jnp.zeros_like(sym_signs_shaped)
     x = jax.tree_map(lambda a: jnp.expand_dims(a, axis), x)
