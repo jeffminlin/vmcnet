@@ -1,6 +1,7 @@
 """Test of train.runners with near-default configs."""
 import os
 
+import jax
 import numpy as np
 import pytest
 
@@ -30,12 +31,12 @@ def test_run_molecule(mocker, tmp_path):
     to the runner with default configs, and that there is some potentially reasonable
     logging occurring. It will not generally catch more subtle bugs.
     """
-    vmc_nchains = 10
+    vmc_nchains = 10 * jax.local_device_count()
     vmc_nepochs = 5
     vmc_checkpoint_every = 2
     vmc_best_checkpoint_every = 4
 
-    eval_nchains = 20
+    eval_nchains = 20 * jax.local_device_count()
     eval_nepochs = 3
 
     mocker.patch("os.curdir", tmp_path)
