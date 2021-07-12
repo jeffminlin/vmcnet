@@ -1,18 +1,16 @@
 """Permutation equivariant functions."""
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple
-from typing import Callable, Optional, Sequence, Tuple, Union
+from typing import Callable, Optional, Sequence, Tuple
 
 import flax
 import jax
 import jax.numpy as jnp
 
+from vmcnet.physics.potential import _compute_displacements
+from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
 from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
-from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
-from vmcnet.utils.typing import ArrayList, PyTree
 
 
 def _split_mean(

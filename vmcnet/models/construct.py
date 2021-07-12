@@ -7,13 +7,7 @@ import jax.numpy as jnp
 from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import SpinSplit
-from vmcnet.models.sign_covariance import make_slog_fn_sign_covariant
-from vmcnet.models.weights import get_kernel_initializer, get_bias_initializer
-from vmcnet.utils.slog_helpers import slog_sum_over_axis, slog_array_list_concat
-from vmcnet.utils.typing import SLArray, SLArrayList
-from vmcnet.utils.typing import ArrayList
-
+from vmcnet.utils.typing import ArrayList, SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
