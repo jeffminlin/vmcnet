@@ -34,7 +34,7 @@ from .equivariance import (
     FermiNetTwoElectronLayer,
 )
 from .jastrow import IsotropicAtomicExpDecay
-from .sign_covariance import make_slog_fn_sign_covariant
+from .sign_covariance import make_sl_array_list_fn_sign_covariant
 from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
@@ -465,7 +465,7 @@ class FermiNet(flax.linen.Module):
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), slogdets)
             # Symmetrize the resnet to be sign covariant with respect to each spin.
-            sign_cov_det_fn = make_slog_fn_sign_covariant(self._determinant_fn)
+            sign_cov_det_fn = make_sl_array_list_fn_sign_covariant(self._determinant_fn)
             _, log_psi = sign_cov_det_fn(fn_inputs)
             # Remove degenerate final axis from results
             log_psi = jax.tree_map(lambda x: jnp.squeeze(x, -1), log_psi)
