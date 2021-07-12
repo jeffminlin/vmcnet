@@ -73,7 +73,6 @@ def _get_det_resnet():
     return models.construct.get_resnet_determinant_fn_for_ferminet(
         6,
         3,
-        models.core.log_domain_tanh_like_activation,
         models.weights.get_kernel_initializer("orthogonal"),
     )
 

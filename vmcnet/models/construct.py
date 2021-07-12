@@ -24,7 +24,6 @@ from .core import (
     LogDomainResNet,
     SimpleResNet,
     get_nelec_per_spin,
-    log_domain_tanh_like_activation,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -46,12 +45,8 @@ from .weights import (
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh
-    elif name == "log_domain_tanh_like":
-        return log_domain_tanh_like_activation
     else:
-        raise ValueError(
-            "Activations besides tanh and log_domain_tanh_like are not yet supported."
-        )
+        raise ValueError("Activations besides tanh are not yet supported.")
 
 
 def get_model_from_config(

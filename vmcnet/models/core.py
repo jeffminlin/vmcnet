@@ -46,17 +46,6 @@ def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ..
         return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
 
 
-def log_domain_tanh_like_activation(x: SLArray) -> SLArray:
-    """Calculates a function shaped roughly like a tanh, but on log domain values.
-
-    The mapping in the log domain is (S, L) -> (S, -log(1 + exp(-L))).
-    The mapping in the non-log domain is to x -> sign(x)/(1 + 1/|x|).
-    """
-    one_over_abs_x = (jnp.ones_like(x[0]), -x[1])
-    result = -slog_sum(slog_ones_like(x), one_over_abs_x)[1]
-    return x[0], result
-
-
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
 
