@@ -80,7 +80,6 @@ def _get_det_resnet():
 
 
 def _make_ferminet():
-    """Make sure basic construction of the FermiNet does not raise exceptions."""
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
@@ -205,9 +204,11 @@ def test_get_model_from_default_config():
                 )
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type == "ferminet":
-            model_config = train.default_config.get_default_model_config()
-            model_config.type = model_type
-            model_config = train.default_config.choose_model_type_in_config(
-                model_config
-            )
-            models.construct.get_model_from_config(model_config, nelec, ion_pos)
+            for use_det_resnet in [False, True]:
+                model_config = train.default_config.get_default_model_config()
+                model_config.type = model_type
+                model_config = train.default_config.choose_model_type_in_config(
+                    model_config
+                )
+                model_config.use_det_resnet = use_det_resnet
+                models.construct.get_model_from_config(model_config, nelec, ion_pos)

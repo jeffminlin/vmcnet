@@ -82,7 +82,7 @@ def get_default_model_config() -> ConfigDict:
                         {
                             "ndense": 10,
                             "nlayers": 3,
-                            "activation": "log_domain_tanh_like",
+                            "activation": "tanh",
                             "kernel_init": {"type": "orthogonal", "scale": 2.0},
                             "bias_init": normal_init,
                             "use_bias": True,
