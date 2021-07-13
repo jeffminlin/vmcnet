@@ -172,6 +172,8 @@ class SimpleResNet(flax.linen.Module):
             jnp.ndarray -> jnp.ndarray (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
+        register_kfac (bool, optional): whether to register the dense layers with KFAC.
+            Defaults to True.
     """
 
     ndense_inner: int
@@ -181,6 +183,7 @@ class SimpleResNet(flax.linen.Module):
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
+    register_kfac: bool = True
 
     def setup(self):
         """Setup dense layers."""
@@ -194,6 +197,7 @@ class SimpleResNet(flax.linen.Module):
                 kernel_init=self.kernel_init,
                 bias_init=self.bias_init,
                 use_bias=self.use_bias,
+                register_kfac=self.register_kfac,
             )
             for _ in range(self.nlayers - 1)
         ]
@@ -202,6 +206,7 @@ class SimpleResNet(flax.linen.Module):
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
             use_bias=False,
+            register_kfac=self.register_kfac,
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:

@@ -38,8 +38,10 @@ from .weights import (
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh
+    elif name == "gelu":
+        return jax.nn.gelu
     else:
-        raise ValueError("Activations besides tanh are not yet supported.")
+        raise ValueError("Activations besides tanh and gelu are not yet supported.")
 
 
 def get_model_from_config(
@@ -343,6 +345,7 @@ def get_resnet_determinant_fn_for_ferminet(
             kernel_initializer,
             bias_initializer,
             use_bias,
+            register_kfac=False,
         )(concat_values)
 
     return fn
