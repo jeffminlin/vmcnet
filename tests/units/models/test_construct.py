@@ -73,7 +73,7 @@ def _get_det_resnet():
     return models.construct.get_resnet_determinant_fn_for_ferminet(
         6,
         3,
-        jnp.tanh,
+        jax.nn.gelu,
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_bias_initializer("uniform"),
     )

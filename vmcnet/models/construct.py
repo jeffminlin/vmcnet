@@ -320,6 +320,14 @@ def get_resnet_determinant_fn_for_ferminet(
     This is used as a more general way to combine the determinant outputs into the
     final wavefunction value, relative to the original method of a sum of products.
 
+    Note: the parameters for this network should be chosen so as to make it not too
+    close to an odd function. If the Resnet were to be perfectly odd, for example by
+    using a tanh activation function and no biases, then the wavefunction would end
+    up being uniformly zero when there are an even number of spins, after the sign
+    covariant symmetrization is applied. This somewhat paradoxical phenomenon comes from
+    the fact that a per-spin odd function is actually even with respect to the inputs as
+    a whole, since for two spins for example f(s1, s2) = -f(-s1, s2) = f(-s1, -s2).
+
     Args:
         ndense (int): the number of neurons in the dense layers
             of the ResNet.
@@ -345,6 +353,10 @@ def get_resnet_determinant_fn_for_ferminet(
             kernel_initializer,
             bias_initializer,
             use_bias,
+            # Params for this ResNet explode to huge values if the ResNet is registered
+            # with KFAC. Reason is not known, but unregistering here empirically keeps
+            # things stable while still getting much better overall optimization
+            # performance with KFAC versus Adam.
             register_kfac=False,
         )(concat_values)
 
