@@ -71,8 +71,9 @@ def _make_simple_nn_layers(
     dinput: int, dout: int, key: jnp.ndarray
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     dhidden = 4
+    key, subkey = jax.random.split(key)
     weights1 = jax.random.normal(key, (dinput, dhidden))
-    weights2 = jax.random.normal(key, (dhidden, dout))
+    weights2 = jax.random.normal(subkey, (dhidden, dout))
 
     def apply_layers(x: jnp.ndarray) -> jnp.ndarray:
         output = jnp.matmul(x, weights1)
