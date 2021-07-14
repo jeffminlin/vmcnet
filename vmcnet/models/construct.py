@@ -71,7 +71,7 @@ def get_model_from_config(
                 get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
                 get_bias_init_from_config(resnet_config.bias_init, dtype=dtype),
                 resnet_config.use_bias,
-                resnet_config.register_kfac
+                resnet_config.register_kfac,
             )
         return FermiNet(
             spin_split,
@@ -431,7 +431,7 @@ class FermiNet(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
-        self._determinant_fn = self.determinant_fn
+        self._sign_cov_det_fn = make_array_list_fn_sign_covariant(self.determinant_fn)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -472,9 +472,7 @@ class FermiNet(flax.linen.Module):
             dets = jax.tree_map(jnp.linalg.det, orbitals)
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-            # Symmetrize the resnet to be sign covariant with respect to each spin.
-            sign_cov_det_fn = make_array_list_fn_sign_covariant(self._determinant_fn)
-            psi = jnp.squeeze(sign_cov_det_fn(fn_inputs), -1)
+            psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
