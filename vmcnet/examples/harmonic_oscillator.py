@@ -1,13 +1,11 @@
 """Harmonic oscillator model."""
-from typing import Callable
-
 import flax
 import jax
 import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
 
 
 def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:
@@ -168,8 +166,8 @@ def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.flo
 
 
 def make_harmonic_oscillator_local_energy(
-    omega: jnp.float32, log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray]
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+    omega: jnp.float32, log_psi_apply: ModelApply[P]
+) -> ModelApply[P]:
     """Factory to create a local energy fn for the harmonic oscillator log|psi|.
 
     Args:

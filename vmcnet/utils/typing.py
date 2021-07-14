@@ -4,7 +4,7 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, List, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, List, Sequence, Tuple, TypeVar, Union
 
 import jax.numpy as jnp
 import kfac_ferminet_alpha.optimizer as kfac_opt
@@ -51,3 +51,5 @@ SLArray = Tuple[jnp.ndarray, jnp.ndarray]
 SLArrayList = List[SLArray]
 
 SpinSplit = Union[int, Sequence[int]]
+
+ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]

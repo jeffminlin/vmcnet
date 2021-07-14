@@ -8,7 +8,7 @@ from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, P, S
+from vmcnet.utils.typing import D, P, S, ModelApply
 
 
 def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
@@ -150,7 +150,7 @@ def create_kfac_update_param_fn(
 
 
 def create_eval_update_param_fn(
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    local_energy_fn: ModelApply,
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,

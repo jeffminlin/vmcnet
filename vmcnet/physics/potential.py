@@ -1,9 +1,9 @@
 """Potential energy terms."""
-from typing import Callable
+from typing import Any
 
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import ModelApply
 
 
 def _compute_displacements(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
@@ -45,7 +45,7 @@ def create_electron_ion_coulomb_potential(
     ion_charges: jnp.ndarray,
     strength: jnp.float32 = 1.0,
     softening_term: jnp.float32 = 0.0,
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+) -> ModelApply[Any]:
     """Computes the total coulomb potential attraction between electron and ion.
 
     Args:
@@ -66,7 +66,7 @@ def create_electron_ion_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
+    def potential_fn(params: Any, x: jnp.ndarray) -> jnp.ndarray:
         del params
         electron_ion_displacements = _compute_displacements(x, ion_locations)
         electron_ion_distances = _compute_soft_norm(
@@ -80,7 +80,7 @@ def create_electron_ion_coulomb_potential(
 
 def create_electron_electron_coulomb_potential(
     strength: jnp.float32 = 1.0, softening_term: jnp.float32 = 0.0
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+) -> ModelApply[Any]:
     """Computes the total coulomb potential repulsion between pairs of electrons.
 
     Args:
@@ -97,7 +97,7 @@ def create_electron_electron_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
+    def potential_fn(params: Any, x: jnp.ndarray) -> jnp.ndarray:
         del params
         electron_electron_displacements = _compute_displacements(x, x)
         electron_electron_distances = _compute_soft_norm(
@@ -112,7 +112,7 @@ def create_electron_electron_coulomb_potential(
 
 def create_ion_ion_coulomb_potential(
     ion_locations: jnp.ndarray, ion_charges: jnp.ndarray
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+) -> ModelApply[Any]:
     """Computes the total coulomb potential repulsion between stationary ions.
 
     Args:
@@ -134,7 +134,7 @@ def create_ion_ion_coulomb_potential(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )
 
-    def potential_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
+    def potential_fn(params: Any, x: jnp.ndarray) -> jnp.ndarray:
         del params, x
         return constant_potential
 

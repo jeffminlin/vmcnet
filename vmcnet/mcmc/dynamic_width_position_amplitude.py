@@ -1,5 +1,5 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
-from typing import Callable, TypedDict
+from typing import Callable, Tuple, TypedDict
 
 import jax
 import jax.numpy as jnp
@@ -10,7 +10,7 @@ from .position_amplitude_core import (
     PositionAmplitudeWalkerData,
 )
 from vmcnet.utils.distribute import mean_all_local_devices
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
 
 
 class MoveMetadata(TypedDict):
@@ -172,13 +172,16 @@ def make_update_move_metadata_fn(
 
 
 def make_dynamic_pos_amp_gaussian_step(
-    model_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
+    model_apply: ModelApply[P],
     nmoves_per_update: jnp.int32 = 10,
     adjust_std_move_fn: Callable[
         [jnp.float32, jnp.float32], jnp.float32
     ] = make_threshold_adjust_std_move(),
     logabs: bool = True,
-):
+) -> Callable[
+    [P, DynamicWidthPositionAmplitudeData, jnp.ndarray],
+    Tuple[jnp.float32, DynamicWidthPositionAmplitudeData, jnp.ndarray],
+]:
     """Create a metropolis step with dynamic gaussian step width.
 
     Args:
