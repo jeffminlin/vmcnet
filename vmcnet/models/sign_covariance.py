@@ -9,7 +9,7 @@ from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
 from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList
 
 # TypeVar used for representing either a jnp.ndarray or a SLArray
-A = TypeVar("A")
+A = TypeVar("A", jnp.ndarray, SLArray)
 
 
 def _get_sign_array_1d(i: int, nsyms: int) -> jnp.ndarray:
@@ -42,26 +42,27 @@ def _get_sign_orbit_single_array(
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Generates the sign orbit of a single array within a larger ArrayList.
 
-    x (jnp.ndarray): input data to be symmetrized.
-    i (int): the index of this data in the ArrayList. This is used to
+    Args:
+        x (jnp.ndarray): input data to be symmetrized.
+        i (int): the index of this data in the ArrayList. This is used to
             decide how often the sign should flip as the orbit is generated. For
             i = 0, the sign will flip every time; for i = 1, it will flip every other
             time; and so forth, flipping every 2**i times in general. This ensures that
             when this operation is applied separately to each element of an ArrayList,
             the overall result is to generate the full orbit of the ArrayList with
             respect to the sign of each array entry.
-    n_total (int): the total number of arrays involved. There will always be
-        2**n_total symmetries generated, regardless of i.
-    axis (int): the axis along which to insert the symmetries. For example, if axis
-        is -2, n_total is 5, and the shape of x is (3,2,4), the output shape will be
-        (3,2,32,4).
+        n_total (int): the total number of arrays involved. There will always be
+            2**n_total symmetries generated, regardless of i.
+        axis (int): the axis along which to insert the symmetries. For example, if axis
+            is -2, n_total is 5, and the shape of x is (3,2,4), the output shape will be
+            (3,2,32,4).
 
     Returns:
-        (Tuple[jnp.ndarray, jnp.ndarray]): First entry is the resulting orbit of x as a
-            jnp array. This will look something like [x, x, -x, -x, x, x, ...]
-            (if i=2), but stacked along the specified axis. Second entry is the
-            associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
-            returned so that downstream functions don't have to recompute it.
+        (jnp.ndarray, jnp.ndarray): First entry is the resulting orbit of x as a
+        jnp array. This will look something like [x, x, -x, -x, x, x, ...]
+        (if i=2), but stacked along the specified axis. Second entry is the
+        associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
+        returned so that downstream functions don't have to recompute it.
     """
     nsyms = 2 ** n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
@@ -74,26 +75,27 @@ def _get_sign_orbit_single_sl_array(
 ) -> Tuple[SLArray, jnp.ndarray]:
     """Generates the sign orbit of a single SLArray within a larger SLArrayList.
 
-    x (SLArray): input data to be symmetrized.
-    i (int): the index of this data in the SLArrayList. This is used to
+    Args:
+        x (SLArray): input data to be symmetrized.
+        i (int): the index of this data in the SLArrayList. This is used to
             decide how often the sign should flip as the orbit is generated. For
             i = 0, the sign will flip every time; for i = 1, it will flip every other
             time; and so forth, flipping every 2**i times in general. This ensures that
             when this operation is applied separately to each element of an SLArrayList,
             the overall result is to generate the full orbit of the SLArrayList with
             respect to the sign of each SLArray entry.
-    n_total (int): the total number of SLArrays involved. There will always be
-        2**n_total symmetries generated, regardless of i.
-    axis (int): the axis along which to insert the symmetries. For example, if axis
-        is -2, n_total is 5, and the shape of x is (3,2,4), the output shape will be
-        (3,2,32,4).
+        n_total (int): the total number of SLArrays involved. There will always be
+            2**n_total symmetries generated, regardless of i.
+        axis (int): the axis along which to insert the symmetries. For example, if axis
+            is -2, n_total is 5, and the shape of x is (3,2,4), the output shape will be
+            (3,2,32,4).
 
     Returns:
-        (Tuple[SLArray, jnp.ndarray]): First entry is the resulting orbit of x as an
-            SLArray. This will look something like [x, x, -x, -x, x, x, ...]
-            (if i=2), but stacked along the specified axis. Second entry is the
-            associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
-            returned so that downstream functions don't have to recompute it.
+        (SLArray, jnp.ndarray): First entry is the resulting orbit of x as an
+        SLArray. This will look something like [x, x, -x, -x, x, x, ...]
+        (if i=2), but stacked along the specified axis. Second entry is the
+        associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
+        returned so that downstream functions don't have to recompute it.
     """
     nsyms = 2 ** n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
@@ -125,18 +127,19 @@ def _get_sign_orbit_for_list(
     multiplying together the individual sign arrays for each input.
 
     Args:
-        x (A): the original data, as a list of either arrays or SLArrays.
-        get_one_orbit_fn (Callable): function for getting the orbit of a single input
-            in the input list. Signature should be (x_in, i, n_total, axis) ->
-            (x_syms, signs).
+        x (List[jnp.ndarray or SLArray]): the original data, as a list of either arrays
+            or SLArrays.
+        get_one_orbit_fn (Callable): function for getting the orbit of a
+            single input in the input list. Signature should be
+            (x_in, i, n_total, axis) -> (x_syms, signs).
         axis (int): the location of the new axis which will index the generated
             symmetries.
 
     Returns:
-        (Tuple[A, jnp.ndarray]): First entry is a new list of arrays or SLArrays that
-        contains the orbit of the input values with respect to the sign group, applied
-        separately to each input entry. Second entry is the associated signs of each
-        symmetry in the orbit, as a single 1D array.
+        (List[jnp.ndarray or SLArray], jnp.ndarray): First entry is a new list of arrays
+        or SLArrays that contains the orbit of the input values with respect to the sign
+        group, applied separately to each input entry. Second entry is the associated
+        signs of each symmetry in the orbit, as a single 1D array.
     """
     n_total = len(x)
     syms_and_signs = [get_one_orbit_fn(x[i], i, n_total, axis) for i in range(n_total)]
@@ -191,8 +194,8 @@ def make_fn_sign_covariant(
             SLArrays with leaves of shape (..., d), and outputs a single array or
             SLArray of shape (..., d').
         get_signs_and_syms (Callable): a function which gets the signs and symmetries
-            for a single array or SLArray in the input list. Returns a tuple of the
-            symmetries plus the associated signs as a 1D array.
+            for the input array. Returns a tuple of the symmetries plus the associated
+            signs as a 1D array.
         apply_output_signs (Callable): function for applying signs to the outputs of
             the symmetrized function. For example, if the outputs are jnp.ndarrays, this
             would simply multiply the arrays by the signs along the appropriate axis.
@@ -201,9 +204,9 @@ def make_fn_sign_covariant(
             or the slog_sum function for SLArrays.
 
     Returns:
-        fn (Callable): a function with the same signature as the input function, but
-            which has been symmetrized so that its output will be covariant with respect
-            to the sign of each input, or in other words, will be odd.
+        Callable: a function with the same signature as the input function, but
+        which has been symmetrized so that its output will be covariant with respect
+        to the sign of each input, or in other words, will be odd.
     """
 
     def sign_covariant_fn(x: List[A]) -> A:
@@ -227,9 +230,9 @@ def make_sl_array_list_fn_sign_covariant(
             shape (..., d), and outputs a single array of shape (..., d').
 
     Returns:
-        fn (Callable): a function with the same signature as the input function, but
-            which has been symmetrized so that its output will be covariant with respect
-            to the sign of each input, or in other words, will be odd.
+        Callable: a function with the same signature as the input function, but
+        which has been symmetrized so that its output will be covariant with respect
+        to the sign of each input, or in other words, will be odd.
     """
     return make_fn_sign_covariant(
         fn,
@@ -251,9 +254,9 @@ def make_array_list_fn_sign_covariant(
         with leaves of shape (..., d), and outputs a single SLArray of shape (..., d').
 
     Returns:
-        fn (Callable): a function with the same signature as the input function, but
-            which has been symmetrized so that its output will be covariant with respect
-            to the sign of each input, or in other words, will be odd.
+        Callable: a function with the same signature as the input function, but
+        which has been symmetrized so that its output will be covariant with respect
+        to the sign of each input, or in other words, will be odd.
     """
     return make_fn_sign_covariant(
         fn,
