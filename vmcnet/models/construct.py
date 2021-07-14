@@ -71,6 +71,7 @@ def get_model_from_config(
                 get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
                 get_bias_init_from_config(resnet_config.bias_init, dtype=dtype),
                 resnet_config.use_bias,
+                resnet_config.register_kfac
             )
         return FermiNet(
             spin_split,
@@ -314,6 +315,7 @@ def get_resnet_determinant_fn_for_ferminet(
     kernel_initializer: WeightInitializer,
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
+    register_kfac: bool = False,
 ) -> Callable[[ArrayList], jnp.ndarray]:
     """Get a resnet-based determinant function for FermiNet construction.
 
@@ -336,6 +338,10 @@ def get_resnet_determinant_fn_for_ferminet(
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
         bias_initializer (WeightInitializer): bias initializer for the resnet.
         use_bias(bool): Whether to use a bias in the ResNet. Defaults to True.
+        register_kfac (bool): Whether to register the ResNet Dense layers with KFAC.
+            Currently, params for this ResNet explode to huge values and cause nans
+            if register_kfac is True, so this flag defaults to false and should only be
+            overridden with care. The reason for the instability is not known.
 
     Returns:
         (Callable[[ArrayList, jnp.ndarray]): A resnet-based function which takes as
@@ -353,11 +359,7 @@ def get_resnet_determinant_fn_for_ferminet(
             kernel_initializer,
             bias_initializer,
             use_bias,
-            # Params for this ResNet explode to huge values if the ResNet is registered
-            # with KFAC. Reason is not known, but unregistering here empirically keeps
-            # things stable while still getting much better overall optimization
-            # performance with KFAC versus Adam.
-            register_kfac=False,
+            register_kfac=register_kfac,
         )(concat_values)
 
     return fn

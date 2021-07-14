@@ -86,6 +86,7 @@ def get_default_model_config() -> ConfigDict:
                             "kernel_init": {"type": "orthogonal", "scale": 2.0},
                             "bias_init": normal_init,
                             "use_bias": True,
+                            "register_kfac": False,
                         }
                     ),
                 }
