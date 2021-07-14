@@ -242,7 +242,11 @@ def _get_energy_fns(
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_apply, local_energy_fn, vmc_config.nchains, clipping_fn
+        log_psi_apply,
+        local_energy_fn,
+        vmc_config.nchains,
+        clipping_fn,
+        nan_safe=vmc_config.nan_safe,
     )
 
     return local_energy_fn, energy_data_val_and_grad
@@ -324,11 +328,23 @@ def _get_kfac_update_fn(
 
 
 def _get_adam_update_fn(
-    vmc_config: ConfigDict,
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     params: P,
     get_position_fn: Callable[[D], jnp.ndarray],
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    energy_data_val_and_grad: Callable[
+        [P, jnp.ndarray],
+        Tuple[
+            Tuple[
+                jnp.float32,
+                Tuple[
+                    jnp.float32,
+                    jnp.ndarray,
+                    Optional[jnp.float32],
+                    Optional[jnp.float32],
+                ],
+            ],
+            P,
+        ],
+    ],
     learning_rate_schedule: Callable[[int], jnp.float32],
 ) -> Tuple[
     Callable[
@@ -346,9 +362,7 @@ def _get_adam_update_fn(
         return params, optimizer_state
 
     update_param_fn = updates.params.create_grad_energy_update_param_fn(
-        log_psi_apply,
-        local_energy_fn,
-        vmc_config.nchains,
+        energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
     )
@@ -358,11 +372,9 @@ def _get_adam_update_fn(
 
 def _get_update_fn_and_init_optimizer(
     vmc_config: ConfigDict,
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
     params: P,
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     energy_data_val_and_grad: Callable[
         [P, jnp.ndarray],
         Tuple[
@@ -401,11 +413,9 @@ def _get_update_fn_and_init_optimizer(
         )
     elif vmc_config.optimizer_type == "adam":
         update_param_fn, optimizer_state = _get_adam_update_fn(
-            vmc_config,
-            log_psi_apply,
             params,
             get_position_fn,
-            local_energy_fn,
+            energy_data_val_and_grad,
             learning_rate_schedule,
         )
         return update_param_fn, optimizer_state, sharded_key
@@ -478,11 +488,9 @@ def _setup_distributed_vmc(
     sharded_key = utils.distribute.make_different_rng_key_on_all_devices(key)
     update_param_fn, optimizer_state, sharded_key = _get_update_fn_and_init_optimizer(
         config.vmc,
-        log_psi.apply,
         params,
         data,
         pacore.get_position_from_data,
-        local_energy_fn,
         energy_data_val_and_grad,
         sharded_key,
     )

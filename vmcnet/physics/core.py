@@ -139,9 +139,23 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
-def _get_statistics_from_local_energy(
+def get_statistics_from_local_energy(
     local_energies: jnp.ndarray, nchains: int, nan_safe: bool = True
 ) -> Tuple[jnp.float32, jnp.float32]:
+    """Collectively reduce local energies to an average energy and variance.
+
+    Args:
+        local_energies (jnp.ndarray): local energies of shape (nchains,), possibly
+            distributed across multiple devices via utils.distribute.pmap.
+        nchains (int): total number of chains across all devices, used to compute a
+            sample variance estimate of the local energy
+        nan_safe (bool, optional): flag which controls if jnp.nanmean is used instead of
+            jnp.mean. Can be set to False when debugging if trying to find the source of
+            unexpected nans. Defaults to True.
+
+    Returns:
+        (jnp.float32, jnp.float32): local energy average, local energy (sample) variance
+    """
     # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
     # compiled version of these two computations, since the quality of the gradients
     # is fairly crucial to the success of the algorithm
@@ -152,8 +166,7 @@ def _get_statistics_from_local_energy(
     energy = allreduce_mean(local_energies)
     variance = (
         allreduce_mean(jnp.square(local_energies - energy)) * nchains / (nchains - 1)
-    )
-    # adjust by n / (n - 1) to get an unbiased estimator
+    )  # adjust by n / (n - 1) to get an unbiased estimator
     return energy, variance
 
 
@@ -163,6 +176,7 @@ def create_value_and_grad_energy_fn(
     local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
     nchains: int,
     clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
+    nan_safe: bool = True,
 ) -> Callable[
     [P, jnp.ndarray],
     Tuple[
@@ -194,6 +208,14 @@ def create_value_and_grad_energy_fn(
             (params, x) -> (Hpsi / psi)(x)
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
+        clipping_fn (Callable, optional): post-processing function on the local energy,
+            e.g. a function which clips the values to be within some multiple of the
+            total variation from the median. The post-processed values are used for
+            the gradient calculation, if available. Defaults to None.
+        nan_safe (bool, optional): flag which controls if jnp.nanmean and jnp.nansum are
+            used instead of jnp.mean and jnp.sum for the terms in the gradient
+            calculation. Can be set to False when debugging if trying to find the source
+            of unexpected nans. Defaults to True.
 
     Returns:
         Callable: function which computes the clipped energy value and gradient. Has the
@@ -204,7 +226,7 @@ def create_value_and_grad_energy_fn(
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 
-    @jax.custom_jvp
+    @jax.custom_vjp
     def compute_energy_data(
         params: P, positions: jnp.ndarray
     ) -> Tuple[
@@ -214,47 +236,50 @@ def create_value_and_grad_energy_fn(
         local_energies_noclip = local_energy_fn(params, positions)
         if clipping_fn is not None:
             local_energies = clipping_fn(local_energies_noclip)
-            energy, variance = _get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=True
+            energy, variance = get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=nan_safe
             )
-            energy_noclip, variance_noclip = _get_statistics_from_local_energy(
+
+            # for the unclipped metrics, which are not used in the gradient, don't
+            # do these in a nan-safe way
+            energy_noclip, variance_noclip = get_statistics_from_local_energy(
                 local_energies_noclip, nchains, nan_safe=False
             )
+
             aux_data = (variance, local_energies, energy_noclip, variance_noclip)
         else:
             local_energies = local_energies_noclip
-            energy, variance = _get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=True
+            energy, variance = get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=nan_safe
             )
             aux_data = (variance, local_energies, None, None)
         return energy, aux_data
 
-    @compute_energy_data.defjvp
-    def compute_energy_data_jvp(primals, tangents):
-        params, positions = primals
-        energy, aux_data = compute_energy_data(params, positions)
-        _, local_energies, _, _ = aux_data
+    def energy_fwd(params: P, positions: jnp.ndarray):
+        output = compute_energy_data(params, positions)
+        energy = output[0]
+        local_energies = output[1][1]
+        return output, (energy, local_energies, params, positions)
 
-        psi_primals, psi_tangents = jax.jvp(log_psi_apply, primals, tangents)
-        loss_functions.register_normal_predictive_distribution(psi_primals[:, None])
-        primals_out = (energy, aux_data)
+    if nan_safe:
+        sum_grad_fn = jnp.nansum
+    else:
+        sum_grad_fn = jnp.sum
 
+    def scaled_by_local_e(params, positions, centered_local_energies):
+        log_psi = log_psi_apply(params, positions)
+        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
+        return 2.0 * sum_grad_fn(centered_local_energies * log_psi)
+
+    get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
+
+    def energy_bwd(res, cotangents):
+        energy, local_energies, params, positions = res
         centered_local_energies = local_energies - energy
+        gradient = get_energy_grad(params, positions, centered_local_energies)
+        return jax.tree_map(lambda x: x * cotangents[0], gradient), None
 
-        # at a minimum, zero out contributions to the gradient from places where the
-        # wavefunction value is not defined. zeroing out contributions to the gradient
-        # where the local gradient is nan but the wavefunction is not is trickier, and
-        # goes back to generally tricky properties of autodiff frameworks, see
-        # https://github.com/google/jax/issues/1052
-        # TODO: handle nans better, possibly with defvjp instead of defjvp
-        # TODO: add option to not mask out nans for debugging purposes
-        local_grads = jnp.where(
-            jnp.isfinite(psi_primals),
-            psi_tangents * centered_local_energies,
-            jnp.zeros_like(psi_primals),
-        )
-        tangents_out = (2.0 * jnp.sum(local_grads), aux_data)
-        return primals_out, tangents_out
+    compute_energy_data.defvjp(energy_fwd, energy_bwd)
 
     energy_data_val_and_grad = jax.value_and_grad(
         compute_energy_data, argnums=0, has_aux=True

@@ -1,5 +1,5 @@
 """Routines which handle model parameter updating."""
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -36,9 +36,21 @@ def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
 
 
 def create_grad_energy_update_param_fn(
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
-    nchains: int,
+    energy_data_val_and_grad: Callable[
+        [P, jnp.ndarray],
+        Tuple[
+            Tuple[
+                jnp.float32,
+                Tuple[
+                    jnp.float32,
+                    jnp.ndarray,
+                    Optional[jnp.float32],
+                    Optional[jnp.float32],
+                ],
+            ],
+            P,
+        ],
+    ],
     optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
@@ -48,12 +60,12 @@ def create_grad_energy_update_param_fn(
     See :func:`~vmcnet.train.vmc.vmc_loop` for its usage.
 
     Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
-            (params, x) -> (Hpsi / psi)(x)
-        nchains (int): total number of chains across all devices, used to compute a
-            sample variance estimate of the local energy
+        energy_data_val_and_grad (Callable): function which computes the clipped energy
+            value and gradient. Has the signature
+                (params, x)
+                -> ((expected_energy, auxilliary_energy_data), grad_energy),
+            where auxilliary_energy_data is the tuple
+            (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         optimizer_apply (Callable): applies an update to the parameters. Has signature
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
         get_position_fn (Callable): gets the walker positions from the MCMC data
@@ -68,9 +80,6 @@ def create_grad_energy_update_param_fn(
         The function is pmapped if apply_pmap is True, and jitted if apply_pmap is
         False.
     """
-    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_apply, local_energy_fn, nchains
-    )
 
     def update_param_fn(data, params, optimizer_state, key):
         position = get_position_fn(data)
@@ -164,12 +173,9 @@ def create_eval_update_param_fn(
 
     def eval_update_param_fn(data, params, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
-        energy = utils.distribute.mean_all_local_devices(local_energies)
-        variance = (
-            utils.distribute.mean_all_local_devices(jnp.square(local_energies - energy))
-            * nchains
-            / (nchains - 1)
-        )  # adjust by n / (n - 1) to get an unbiased estimator
+        energy, variance = physics.core.get_statistics_from_local_energy(
+            local_energies, nchains, nan_safe=False
+        )
         metrics = {"energy": energy, "variance": variance}
         return params, optimizer_state, metrics, key
 
