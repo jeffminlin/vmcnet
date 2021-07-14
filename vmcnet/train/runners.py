@@ -296,7 +296,7 @@ def _get_kfac_update_fn(
     learning_rate_schedule: Callable[[int], jnp.float32],
 ) -> Tuple[
     Callable[
-        [D, P, kfac_opt.State, jnp.ndarray],
+        [P, D, kfac_opt.State, jnp.ndarray],
         Tuple[P, kfac_opt.State, Dict, jnp.ndarray],
     ],
     kfac_opt.State,
@@ -348,7 +348,7 @@ def _get_adam_update_fn(
     learning_rate_schedule: Callable[[int], jnp.float32],
 ) -> Tuple[
     Callable[
-        [D, P, optax.OptState, jnp.ndarray],
+        [P, D, optax.OptState, jnp.ndarray],
         Tuple[P, optax.OptState, Dict, jnp.ndarray],
     ],
     optax.OptState,
@@ -393,7 +393,7 @@ def _get_update_fn_and_init_optimizer(
     sharded_key: jnp.ndarray,
 ) -> Tuple[
     Callable[
-        [D, P, OptimizerState, jnp.ndarray],
+        [P, D, OptimizerState, jnp.ndarray],
         Tuple[P, OptimizerState, Dict, jnp.ndarray],
     ],
     OptimizerState,

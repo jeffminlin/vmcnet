@@ -15,7 +15,7 @@ def vmc_loop(
     nchains: int,
     nepochs: int,
     walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    update_param_fn: Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     key: jnp.ndarray,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,
@@ -102,7 +102,7 @@ def vmc_loop(
             accept_ratio, data, key = walker_fn(params, data, key)
 
             params, optimizer_state, metrics, key = update_param_fn(
-                data, params, optimizer_state, key
+                params, data, optimizer_state, key
             )
 
             if metrics is None:  # don't checkpoint if no metrics to checkpoint

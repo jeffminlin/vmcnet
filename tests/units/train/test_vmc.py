@@ -33,7 +33,7 @@ def test_vmc_loop_logging(caplog):
         "variance_noclip": np.pi,
     }
 
-    def update_param_fn(data, params, optimizer_state, key):
+    def update_param_fn(params, data, optimizer_state, key):
         del data
         return params, optimizer_state, fixed_metrics, key
 
@@ -109,7 +109,7 @@ def test_vmc_loop_number_of_updates():
         nsteps_per_param_update, metrop_step_fn
     )
 
-    def update_param_fn(data, params, optimizer_state, key):
+    def update_param_fn(params, data, optimizer_state, key):
         del data
         optimizer_state += 1
         return params, optimizer_state, None, key
