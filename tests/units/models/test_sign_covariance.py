@@ -113,8 +113,8 @@ def test_make_array_list_fn_sign_covariant():
     flip_sign_result = covariant_fn(flip_sign_inputs)
     same_sign_result = covariant_fn(same_sign_inputs)
 
-    assert_pytree_allclose(flip_sign_result, -result, rtol=1e-5)
-    assert_pytree_allclose(same_sign_result, result, rtol=1e-5)
+    assert_pytree_allclose(flip_sign_result, -result, atol=1e-6, rtol=0)
+    assert_pytree_allclose(same_sign_result, result, atol=1e-6, rtol=0)
 
 
 @pytest.mark.slow
@@ -135,14 +135,14 @@ def test_make_sl_array_list_fn_sign_covariant():
     same_slog_inputs = array_list_to_slog(same_sign_inputs)
 
     dout = 3
-    nn_layers = _make_simple_nn_layers(nelec_total * d, dout, subkey)
+    nn_layers = _make_simple_nn_layers(2 * nelec_total * d, dout, subkey)
 
     def fn(x: SLArrayList) -> SLArray:
         all_signs = jnp.concatenate([s[0] for s in x], axis=-1)
         all_logs = jnp.concatenate([s[1] for s in x], axis=-1)
-        all_vals = array_from_slog((all_signs, all_logs))
+        all_vals = jnp.concatenate([all_signs, all_logs], axis=-1)
         all_vals = jnp.reshape(
-            all_vals, (all_vals.shape[0], all_vals.shape[1], nelec_total * d)
+            all_vals, (all_vals.shape[0], all_vals.shape[1], 2 * nelec_total * d)
         )
         output = nn_layers(all_vals)
         return array_to_slog(output)
@@ -154,5 +154,5 @@ def test_make_sl_array_list_fn_sign_covariant():
     same_sign_result = covariant_fn(same_slog_inputs)
 
     expected_neg_result = (-result[0], result[1])
-    assert_pytree_allclose(flip_sign_result, expected_neg_result, rtol=1e-5)
-    assert_pytree_allclose(same_sign_result, result, rtol=1e-5)
+    assert_pytree_allclose(flip_sign_result, expected_neg_result, atol=1e-6, rtol=0)
+    assert_pytree_allclose(same_sign_result, result, atol=1e-6, rtol=0)
