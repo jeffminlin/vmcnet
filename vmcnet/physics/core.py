@@ -8,6 +8,19 @@ from kfac_ferminet_alpha import loss_functions
 import vmcnet.utils as utils
 from vmcnet.utils.typing import P, ModelApply
 
+ValueGradEnergyFn = Callable[
+    [P, jnp.ndarray],
+    Tuple[
+        Tuple[
+            jnp.float32,
+            Tuple[
+                jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
+            ],
+        ],
+        P,
+    ],
+]
+
 
 def initialize_molecular_pos(
     key: jnp.ndarray,
@@ -177,18 +190,7 @@ def create_value_and_grad_energy_fn(
     nchains: int,
     clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
     nan_safe: bool = True,
-) -> Callable[
-    [P, jnp.ndarray],
-    Tuple[
-        Tuple[
-            jnp.float32,
-            Tuple[
-                jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
-            ],
-        ],
-        P,
-    ],
-]:
+) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
     Due to the Hermiticity of the Hamiltonian, we can get an unbiased lower variance

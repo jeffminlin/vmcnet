@@ -1,5 +1,5 @@
 """Routines which handle model parameter updating."""
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -38,21 +38,7 @@ def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
 
 
 def create_grad_energy_update_param_fn(
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,

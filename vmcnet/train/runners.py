@@ -4,7 +4,7 @@ import functools
 import logging
 import os
 import sys
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Optional, Tuple
 import flax
 
 import jax
@@ -215,24 +215,7 @@ def _get_energy_fns(
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
     log_psi_apply: ModelApply[P],
-) -> Tuple[
-    ModelApply[P],
-    Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
-]:
+) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
@@ -271,24 +254,10 @@ def _get_kfac_update_fn(
     params: P,
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
-) -> Tuple[updates.params.UpdateParamFn[P, D, S], kfac_opt.State, jnp.ndarray,]:
+) -> Tuple[updates.params.UpdateParamFn[P, D, S], kfac_opt.State, jnp.ndarray]:
     optimizer = kfac_ferminet_alpha.Optimizer(
         energy_data_val_and_grad,
         l2_reg=0.0,
@@ -317,21 +286,7 @@ def _get_kfac_update_fn(
 def _get_adam_update_fn(
     params: P,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
 ) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule)
@@ -356,21 +311,7 @@ def _get_update_fn_and_init_optimizer(
     params: P,
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, OptimizerState],

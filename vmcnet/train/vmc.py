@@ -1,5 +1,5 @@
 """Main VMC loop."""
-from typing import Callable, Dict, Tuple, Optional
+from typing import Tuple, Optional
 
 import jax.numpy as jnp
 
