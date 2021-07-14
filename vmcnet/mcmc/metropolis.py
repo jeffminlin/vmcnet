@@ -8,12 +8,19 @@ import jax.numpy as jnp
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P
 
+MetropolisStep = Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]
+# WalkerFunction and MetropolisStep are the same type currently, but it seems prudent
+# to have separately aliases for them and the generic types don't flow through properly
+# if you simply set WalkerFunction = MetropolisStep. Hence, we define separately.
+WalkerFunction = Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]
+BurningStep = Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]]
+
 
 def make_metropolis_step(
     proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
     acceptance_fn: Callable[[P, D, D], jnp.ndarray],
     update_data_fn: Callable[[D, D, jnp.ndarray], D],
-) -> Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]:
+) -> MetropolisStep[P, D]:
     """Factory to create a function which takes a single metropolis step.
 
     Following Metropolis-Hastings Markov Chain Monte Carlo, a transition from one data
@@ -67,7 +74,7 @@ def walk_data(
     params: P,
     data: D,
     key: jnp.ndarray,
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    metrop_step_fn: MetropolisStep[P, D],
 ) -> Tuple[jnp.float32, D, jnp.ndarray]:
     """Take multiple Metropolis-Hastings steps.
 
@@ -110,9 +117,9 @@ def walk_data(
 
 
 def make_jitted_burning_step(
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    metrop_step_fn: MetropolisStep[P, D],
     apply_pmap: bool = True,
-) -> Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]]:
+) -> BurningStep[P, D]:
     """Factory to create a burning step, which is an optionally pmapped Metropolis step.
 
     This provides the functionality to optionally apply jax.pmap to a single Metropolis
@@ -147,9 +154,9 @@ def make_jitted_burning_step(
 
 def make_jitted_walker_fn(
     nsteps: int,
-    metrop_step_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    metrop_step_fn: MetropolisStep[P, D],
     apply_pmap: bool = True,
-) -> Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]:
+) -> WalkerFunction[P, D]:
     """Factory to create a function which takes multiple Metropolis steps.
 
     This provides the functionality to optionally apply jax.pmap to a jax.lax.scan loop
@@ -196,7 +203,7 @@ def make_jitted_walker_fn(
 
 
 def burn_data(
-    burning_step: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    burning_step: BurningStep[P, D],
     nsteps_to_burn: int,
     params: P,
     data: D,
@@ -205,7 +212,7 @@ def burn_data(
     """Repeatedly apply a burning step.
 
     Args:
-        metrop_step_fn (Callable): function which does a burning step. Has the
+        burning_step (BurningStep): function which does a burning step. Has the
             signature (data, params, key) -> (new data, new key)
         nsteps_to_burn (int): number of times to call burning_step
         data (pytree-like): initial data

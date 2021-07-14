@@ -143,14 +143,8 @@ def _make_initial_distributed_data(
 def _get_mcmc_fns(
     run_config: ConfigDict, log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray]
 ) -> Tuple[
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[
-        [P, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
+    mcmc.metropolis.BurningStep[P, dwpa.DynamicWidthPositionAmplitudeData],
+    mcmc.metropolis.WalkerFunction[P, dwpa.DynamicWidthPositionAmplitudeData],
 ]:
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
         log_psi_apply,
@@ -442,13 +436,11 @@ def _setup_distributed_vmc(
 ) -> Tuple[
     flax.linen.Module,
     Callable[[flax.core.FrozenDict, jnp.ndarray], jnp.ndarray],
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, flax.core.FrozenDict, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
+    mcmc.metropolis.BurningStep[
+        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData
     ],
-    Callable[
-        [flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
+    mcmc.metropolis.WalkerFunction[
+        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData
     ],
     Callable[[flax.core.FrozenDict, jnp.ndarray], jnp.ndarray],
     Callable[
@@ -517,17 +509,11 @@ def _setup_distributed_eval(
     get_position_fn: Callable[[dwpa.DynamicWidthPositionAmplitudeData], jnp.ndarray],
 ) -> Tuple[
     Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, S, jnp.ndarray],
+        [P, dwpa.DynamicWidthPositionAmplitudeData, S, jnp.ndarray],
         Tuple[P, S, Dict, jnp.ndarray],
     ],
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[
-        [P, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
+    mcmc.metropolis.BurningStep[P, dwpa.DynamicWidthPositionAmplitudeData],
+    mcmc.metropolis.WalkerFunction[P, dwpa.DynamicWidthPositionAmplitudeData],
 ]:
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn, config.eval.nchains, get_position_fn
@@ -542,8 +528,8 @@ def _burn_and_run_vmc(
     params: P,
     optimizer_state: S,
     data: D,
-    burning_step: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
+    burning_step: mcmc.metropolis.BurningStep[P, D],
+    walker_fn: mcmc.metropolis.WalkerFunction[P, D],
     update_param_fn: Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     sharded_key: jnp.ndarray,
     should_checkpoint: bool = True,
