@@ -542,9 +542,9 @@ def _burn_and_run_vmc(
     params: P,
     optimizer_state: S,
     data: D,
-    burning_step: Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]],
+    burning_step: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
     walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    update_param_fn: Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
     sharded_key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
@@ -562,7 +562,7 @@ def _burn_and_run_vmc(
         nhistory_max = 0
 
     data, sharded_key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, data, params, sharded_key
+        burning_step, run_config.nburn, params, data, sharded_key
     )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
         params,

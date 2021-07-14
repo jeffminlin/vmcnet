@@ -37,7 +37,7 @@ def test_metropolis_step():
     data, params, key = make_dummy_data_params_and_key()
     metrop_step_fn = make_dummy_metropolis_fn()
 
-    accept_prob, new_data, _ = metrop_step_fn(data, params, key)
+    accept_prob, new_data, _ = metrop_step_fn(params, data, key)
 
     np.testing.assert_allclose(accept_prob, 0.5)
     np.testing.assert_allclose(new_data, jnp.array([1, 0, 3, 0]))
@@ -55,7 +55,7 @@ def test_walk_data():
     data, params, key = make_dummy_data_params_and_key()
     metrop_step_fn = make_dummy_metropolis_fn()
     accept_prob, new_data, _ = mcmc.metropolis.walk_data(
-        nsteps, data, params, key, metrop_step_fn
+        nsteps, params, data, key, metrop_step_fn
     )
 
     np.testing.assert_allclose(accept_prob, 0.5)
