@@ -288,14 +288,7 @@ def _get_kfac_update_fn(
     ],
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
-) -> Tuple[
-    Callable[
-        [P, D, kfac_opt.State, jnp.ndarray],
-        Tuple[P, kfac_opt.State, Dict, jnp.ndarray],
-    ],
-    kfac_opt.State,
-    jnp.ndarray,
-]:
+) -> Tuple[updates.params.UpdateParamFn[P, D, S], kfac_opt.State, jnp.ndarray,]:
     optimizer = kfac_ferminet_alpha.Optimizer(
         energy_data_val_and_grad,
         l2_reg=0.0,
@@ -340,13 +333,7 @@ def _get_adam_update_fn(
         ],
     ],
     learning_rate_schedule: Callable[[int], jnp.float32],
-) -> Tuple[
-    Callable[
-        [P, D, optax.OptState, jnp.ndarray],
-        Tuple[P, optax.OptState, Dict, jnp.ndarray],
-    ],
-    optax.OptState,
-]:
+) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule)
     optimizer_state = utils.distribute.pmap(optimizer.init)(params)
 
@@ -386,10 +373,7 @@ def _get_update_fn_and_init_optimizer(
     ],
     sharded_key: jnp.ndarray,
 ) -> Tuple[
-    Callable[
-        [P, D, OptimizerState, jnp.ndarray],
-        Tuple[P, OptimizerState, Dict, jnp.ndarray],
-    ],
+    updates.params.UpdateParamFn[P, D, OptimizerState],
     OptimizerState,
     jnp.ndarray,
 ]:
@@ -443,14 +427,8 @@ def _setup_distributed_vmc(
         flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData
     ],
     ModelApply[flax.core.FrozenDict],
-    Callable[
-        [
-            dwpa.DynamicWidthPositionAmplitudeData,
-            flax.core.FrozenDict,
-            OptimizerState,
-            jnp.ndarray,
-        ],
-        Tuple[flax.core.FrozenDict, OptimizerState, Dict, jnp.ndarray],
+    updates.params.UpdateParamFn[
+        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData, OptimizerState
     ],
     flax.core.FrozenDict,
     dwpa.DynamicWidthPositionAmplitudeData,
@@ -508,10 +486,7 @@ def _setup_distributed_eval(
     local_energy_fn: ModelApply[P],
     get_position_fn: Callable[[dwpa.DynamicWidthPositionAmplitudeData], jnp.ndarray],
 ) -> Tuple[
-    Callable[
-        [P, dwpa.DynamicWidthPositionAmplitudeData, S, jnp.ndarray],
-        Tuple[P, S, Dict, jnp.ndarray],
-    ],
+    updates.params.UpdateParamFn[P, dwpa.DynamicWidthPositionAmplitudeData, S],
     mcmc.metropolis.BurningStep[P, dwpa.DynamicWidthPositionAmplitudeData],
     mcmc.metropolis.WalkerFunction[P, dwpa.DynamicWidthPositionAmplitudeData],
 ]:
@@ -530,7 +505,7 @@ def _burn_and_run_vmc(
     data: D,
     burning_step: mcmc.metropolis.BurningStep[P, D],
     walker_fn: mcmc.metropolis.WalkerFunction[P, D],
-    update_param_fn: Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    update_param_fn: updates.params.UpdateParamFn[P, D, S],
     sharded_key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:

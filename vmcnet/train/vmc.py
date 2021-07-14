@@ -3,6 +3,8 @@ from typing import Callable, Dict, Tuple, Optional
 
 import jax.numpy as jnp
 
+from vmcnet.mcmc.metropolis import WalkerFunction
+from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
@@ -14,8 +16,8 @@ def vmc_loop(
     data: D,
     nchains: int,
     nepochs: int,
-    walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    walker_fn: WalkerFunction[P, D],
+    update_param_fn: UpdateParamFn[P, D, S],
     key: jnp.ndarray,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,

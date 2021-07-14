@@ -1,5 +1,5 @@
 """Routines which handle model parameter updating."""
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -9,6 +9,8 @@ from kfac_ferminet_alpha import utils as kfac_utils
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S, ModelApply
+
+UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
 
 def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
@@ -54,7 +56,7 @@ def create_grad_energy_update_param_fn(
     optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
-) -> Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
+) -> UpdateParamFn[P, D, S]:
     """Create the `update_param_fn` based on the gradient of the total energy.
 
     See :func:`~vmcnet.train.vmc.vmc_loop` for its usage.
@@ -103,7 +105,9 @@ def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
     get_position_fn: Callable[[D], jnp.ndarray],
-) -> Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
+) -> UpdateParamFn[
+    kfac_ferminet_alpha.optimizer.Parameters, D, kfac_ferminet_alpha.optimizer.State
+]:
     """Create momentum-less KFAC update step function.
 
     Args:
@@ -150,11 +154,11 @@ def create_kfac_update_param_fn(
 
 
 def create_eval_update_param_fn(
-    local_energy_fn: ModelApply,
+    local_energy_fn: ModelApply[P],
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
-):
+) -> UpdateParamFn[P, D, Any]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
     Can be used to do simple unclipped MCMC with :func:`~vmcnet.train.vmc.vmc_loop`.
