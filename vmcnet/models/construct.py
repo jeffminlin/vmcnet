@@ -431,7 +431,11 @@ class FermiNet(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
-        self._sign_cov_det_fn = make_array_list_fn_sign_covariant(self.determinant_fn)
+        self._sign_cov_det_fn = None
+        if self.determinant_fn is not None:
+            self._sign_cov_det_fn = make_array_list_fn_sign_covariant(
+                self.determinant_fn
+            )
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -467,7 +471,7 @@ class FermiNet(flax.linen.Module):
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
-        if self._determinant_fn is not None:
+        if self._sign_cov_det_fn is not None:
             # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
             dets = jax.tree_map(jnp.linalg.det, orbitals)
             # Swap axes to get shape [nspins: (..., ndeterminants)]

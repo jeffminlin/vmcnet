@@ -9,7 +9,6 @@ from typing import Callable
 import vmcnet.models.sign_covariance as sign_cov
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
-    array_from_slog,
     array_list_to_slog,
 )
 from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList
@@ -113,8 +112,8 @@ def test_make_array_list_fn_sign_covariant():
     flip_sign_result = covariant_fn(flip_sign_inputs)
     same_sign_result = covariant_fn(same_sign_inputs)
 
-    assert_pytree_allclose(flip_sign_result, -result, atol=1e-6, rtol=0)
-    assert_pytree_allclose(same_sign_result, result, atol=1e-6, rtol=0)
+    assert_pytree_allclose(flip_sign_result, -result, atol=1e-5)
+    assert_pytree_allclose(same_sign_result, result, atol=1e-5)
 
 
 @pytest.mark.slow
@@ -154,5 +153,5 @@ def test_make_sl_array_list_fn_sign_covariant():
     same_sign_result = covariant_fn(same_slog_inputs)
 
     expected_neg_result = (-result[0], result[1])
-    assert_pytree_allclose(flip_sign_result, expected_neg_result, atol=1e-6, rtol=0)
-    assert_pytree_allclose(same_sign_result, result, atol=1e-6, rtol=0)
+    assert_pytree_allclose(flip_sign_result, expected_neg_result, atol=1e-5)
+    assert_pytree_allclose(same_sign_result, result, atol=1e-5)
