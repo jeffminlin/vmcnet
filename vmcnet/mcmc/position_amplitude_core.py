@@ -240,10 +240,7 @@ def make_position_amplitude_gaussian_metropolis_step(
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
     update_move_metadata_fn: Optional[Callable[[M, jnp.ndarray], M]] = None,
     logabs: bool = True,
-) -> Callable[
-    [P, PositionAmplitudeData, jnp.ndarray],
-    Tuple[jnp.float32, PositionAmplitudeData, jnp.ndarray],
-]:
+) -> metropolis.MetropolisStep[P, PositionAmplitudeData]:
     """Make a gaussian proposal with Metropolis acceptance for PositionAmplitudeData.
 
     Args:

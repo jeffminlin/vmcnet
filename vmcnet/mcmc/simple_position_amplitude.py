@@ -1,9 +1,10 @@
 """Helper functions for position amplitude data with fixed-width gaussian steps."""
 
-from typing import Callable, Tuple, TypedDict
+from typing import TypedDict
 
 import jax.numpy as jnp
 
+from .metropolis import MetropolisStep
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
@@ -22,7 +23,9 @@ class SimplePositionAmplitudeData(TypedDict):
 SPAData = SimplePositionAmplitudeData
 
 
-def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.ndarray):
+def make_simple_position_amplitude_data(
+    position: jnp.ndarray, amplitude: jnp.ndarray
+) -> SPAData:
     """Create SimplePositionAmplitudeData from position and amplitude.
 
     Args:
@@ -39,7 +42,7 @@ def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
     std_move: jnp.float32,
     logabs: bool = True,
-) -> Callable[[P, SPAData, jnp.ndarray], Tuple[jnp.float32, SPAData, jnp.ndarray]]:
+) -> MetropolisStep[P, SPAData]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
     Args:

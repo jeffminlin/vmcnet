@@ -1,9 +1,10 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
-from typing import Callable, Tuple, TypedDict
+from typing import Callable, TypedDict
 
 import jax
 import jax.numpy as jnp
 
+from .metropolis import MetropolisStep
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
@@ -181,7 +182,7 @@ def make_dynamic_pos_amp_gaussian_step(
         [jnp.float32, jnp.float32], jnp.float32
     ] = make_threshold_adjust_std_move(),
     logabs: bool = True,
-) -> Callable[[P, DWPAData, jnp.ndarray], Tuple[jnp.float32, DWPAData, jnp.ndarray]]:
+) -> MetropolisStep:
     """Create a metropolis step with dynamic gaussian step width.
 
     Args:
