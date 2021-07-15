@@ -40,13 +40,16 @@ class DynamicWidthPositionAmplitudeData(TypedDict):
     move_metadata: MoveMetadata
 
 
+DWPAData = DynamicWidthPositionAmplitudeData
+
+
 def make_dynamic_width_position_amplitude_data(
     position: jnp.ndarray,
     amplitude: jnp.ndarray,
     std_move: jnp.float32,
     move_acceptance_sum: jnp.float32 = 0.0,
     moves_since_update: jnp.int32 = 0,
-) -> DynamicWidthPositionAmplitudeData:
+) -> DWPAData:
     """Create instance of DynamicWidthPositionAmplitudeData.
 
     Args:
@@ -61,7 +64,7 @@ def make_dynamic_width_position_amplitude_data(
             for initial data.
 
     Returns:
-        DynamicWidthPositionAmplitudeData
+        DWPAData
     """
     return make_position_amplitude_data(
         position,
@@ -178,10 +181,7 @@ def make_dynamic_pos_amp_gaussian_step(
         [jnp.float32, jnp.float32], jnp.float32
     ] = make_threshold_adjust_std_move(),
     logabs: bool = True,
-) -> Callable[
-    [P, DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    Tuple[jnp.float32, DynamicWidthPositionAmplitudeData, jnp.ndarray],
-]:
+) -> Callable[[P, DWPAData, jnp.ndarray], Tuple[jnp.float32, DWPAData, jnp.ndarray]]:
     """Create a metropolis step with dynamic gaussian step width.
 
     Args:
@@ -196,8 +196,8 @@ def make_dynamic_pos_amp_gaussian_step(
 
     Returns:
         Callable: function which runs a metropolis step. Has the signature
-            (params, DynamicWidthPositionAmplitudeData, key)
-            -> (mean acceptance probability, DynamicWidthPositionAmplitudeData, new_key)
+            (params, DWPAData, key)
+            -> (mean acceptance probability, DWPAData, new_key)
     """
     update_move_metadata_fn = make_update_move_metadata_fn(
         nmoves_per_update, adjust_std_move_fn

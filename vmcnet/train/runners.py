@@ -143,8 +143,8 @@ def _make_initial_distributed_data(
 def _get_mcmc_fns(
     run_config: ConfigDict, log_psi_apply: ModelApply[P]
 ) -> Tuple[
-    mcmc.metropolis.BurningStep[P, dwpa.DynamicWidthPositionAmplitudeData],
-    mcmc.metropolis.WalkerFunction[P, dwpa.DynamicWidthPositionAmplitudeData],
+    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFunction[P, dwpa.DWPAData],
 ]:
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
         log_psi_apply,
@@ -361,18 +361,12 @@ def _setup_distributed_vmc(
 ) -> Tuple[
     flax.linen.Module,
     ModelApply[flax.core.FrozenDict],
-    mcmc.metropolis.BurningStep[
-        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData
-    ],
-    mcmc.metropolis.WalkerFunction[
-        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData
-    ],
+    mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFunction[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
-    updates.params.UpdateParamFn[
-        flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData, OptimizerState
-    ],
+    updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     flax.core.FrozenDict,
-    dwpa.DynamicWidthPositionAmplitudeData,
+    dwpa.DWPAData,
     OptimizerState,
     jnp.ndarray,
 ]:
@@ -425,11 +419,11 @@ def _setup_distributed_eval(
     config: ConfigDict,
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
-    get_position_fn: Callable[[dwpa.DynamicWidthPositionAmplitudeData], jnp.ndarray],
+    get_position_fn: Callable[[dwpa.DWPAData], jnp.ndarray],
 ) -> Tuple[
-    updates.params.UpdateParamFn[P, dwpa.DynamicWidthPositionAmplitudeData, S],
-    mcmc.metropolis.BurningStep[P, dwpa.DynamicWidthPositionAmplitudeData],
-    mcmc.metropolis.WalkerFunction[P, dwpa.DynamicWidthPositionAmplitudeData],
+    updates.params.UpdateParamFn[P, dwpa.DWPAData, S],
+    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFunction[P, dwpa.DWPAData],
 ]:
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn, config.eval.nchains, get_position_fn
