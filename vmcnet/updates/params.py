@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Tuple
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import utils as kfac_utils
+from kfac_ferminet_alpha import utils as kfac_utils, optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
@@ -91,9 +91,7 @@ def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
     get_position_fn: Callable[[D], jnp.ndarray],
-) -> UpdateParamFn[
-    kfac_ferminet_alpha.optimizer.Parameters, D, kfac_ferminet_alpha.optimizer.State
-]:
+) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
 
     Args:
