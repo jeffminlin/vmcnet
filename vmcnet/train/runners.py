@@ -144,7 +144,7 @@ def _get_mcmc_fns(
     run_config: ConfigDict, log_psi_apply: ModelApply[P]
 ) -> Tuple[
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
-    mcmc.metropolis.WalkerFunction[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
         log_psi_apply,
@@ -362,7 +362,7 @@ def _setup_distributed_vmc(
     flax.linen.Module,
     ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
-    mcmc.metropolis.WalkerFunction[flax.core.FrozenDict, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     flax.core.FrozenDict,
@@ -423,7 +423,7 @@ def _setup_distributed_eval(
 ) -> Tuple[
     updates.params.UpdateParamFn[P, dwpa.DWPAData, S],
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
-    mcmc.metropolis.WalkerFunction[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn, config.eval.nchains, get_position_fn
@@ -439,7 +439,7 @@ def _burn_and_run_vmc(
     optimizer_state: S,
     data: D,
     burning_step: mcmc.metropolis.BurningStep[P, D],
-    walker_fn: mcmc.metropolis.WalkerFunction[P, D],
+    walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
     sharded_key: jnp.ndarray,
     should_checkpoint: bool = True,

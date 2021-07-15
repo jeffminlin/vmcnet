@@ -9,10 +9,7 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P
 
 MetropolisStep = Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]
-# WalkerFunction and MetropolisStep are the same type currently, but it seems prudent
-# to have separately aliases for them and the generic types don't flow through properly
-# if you simply set WalkerFunction = MetropolisStep. Hence, we define separately.
-WalkerFunction = Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]
+WalkerFn = MetropolisStep[P, D]
 BurningStep = Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]]
 
 
@@ -156,7 +153,7 @@ def make_jitted_walker_fn(
     nsteps: int,
     metrop_step_fn: MetropolisStep[P, D],
     apply_pmap: bool = True,
-) -> WalkerFunction[P, D]:
+) -> WalkerFn[P, D]:
     """Factory to create a function which takes multiple Metropolis steps.
 
     This provides the functionality to optionally apply jax.pmap to a jax.lax.scan loop

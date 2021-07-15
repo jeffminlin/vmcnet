@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 
 import jax.numpy as jnp
 
-from vmcnet.mcmc.metropolis import WalkerFunction
+from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
@@ -16,7 +16,7 @@ def vmc_loop(
     data: D,
     nchains: int,
     nepochs: int,
-    walker_fn: WalkerFunction[P, D],
+    walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
     key: jnp.ndarray,
     logdir: str = None,
