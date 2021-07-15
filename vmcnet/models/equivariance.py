@@ -1,16 +1,16 @@
 """Permutation equivariant functions."""
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 import flax
 import jax
 import jax.numpy as jnp
 
+from vmcnet.physics.potential import _compute_displacements
+from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
 from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
-from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
 
 
 def _split_mean(
@@ -18,7 +18,7 @@ def _split_mean(
     splits: SpinSplit,
     axis: int = -2,
     keepdims: bool = True,
-) -> List[jnp.ndarray]:
+) -> ArrayList:
     """Split x on an axis and take the mean over that axis in each of the splits."""
     split_x = jnp.split(x, splits, axis=axis)
     split_x_mean = jax.tree_map(
@@ -27,7 +27,7 @@ def _split_mean(
     return split_x_mean
 
 
-def _rolled_concat(arrays: List[jnp.ndarray], n: int, axis: int = -1) -> jnp.ndarray:
+def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
     """Concatenate a list of arrays starting from the nth and wrapping back around.
 
     The input list of arrays must all have the same shapes, except for along `axis`.
@@ -239,9 +239,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
-    def _compute_transformed_1e_means(
-        self, split_means: List[jnp.ndarray]
-    ) -> List[jnp.ndarray]:
+    def _compute_transformed_1e_means(self, split_means: ArrayList) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 1e stream.
 
         The mixing of the one-electron part of the one-electron stream takes the form
@@ -285,7 +283,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
-    def _compute_transformed_2e_means(self, in_2e: jnp.ndarray) -> List[jnp.ndarray]:
+    def _compute_transformed_2e_means(self, in_2e: jnp.ndarray) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 2e stream.
 
         The mixing of the two-electron part of the one-electron stream takes the form
@@ -622,7 +620,7 @@ class SplitDense(flax.linen.Module):
             for i in range(nspins)
         ]
 
-    def __call__(self, x: jnp.ndarray) -> List[jnp.ndarray]:
+    def __call__(self, x: jnp.ndarray) -> ArrayList:
         """Split the input and apply a dense layer to each split.
 
         Args:

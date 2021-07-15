@@ -5,15 +5,15 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.models.weights import (
+from vmcnet.utils.kfac import register_batch_dense
+from vmcnet.utils.log_linear_exp import log_linear_exp
+from vmcnet.utils.slog_helpers import slog_sum
+from vmcnet.utils.typing import SLArray, SpinSplit, PyTree
+from .weights import (
     WeightInitializer,
     get_bias_initializer,
     get_kernel_initializer,
 )
-from vmcnet.utils.log_linear_exp import log_linear_exp
-from vmcnet.utils.kfac import register_batch_dense
-from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import SLArray, PyTree, SpinSplit
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
@@ -172,6 +172,8 @@ class SimpleResNet(flax.linen.Module):
             jnp.ndarray -> jnp.ndarray (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
+        register_kfac (bool, optional): whether to register the dense layers with KFAC.
+            Defaults to True.
     """
 
     ndense_inner: int
@@ -181,6 +183,7 @@ class SimpleResNet(flax.linen.Module):
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
+    register_kfac: bool = True
 
     def setup(self):
         """Setup dense layers."""
@@ -194,6 +197,7 @@ class SimpleResNet(flax.linen.Module):
                 kernel_init=self.kernel_init,
                 bias_init=self.bias_init,
                 use_bias=self.use_bias,
+                register_kfac=self.register_kfac,
             )
             for _ in range(self.nlayers - 1)
         ]
@@ -202,6 +206,7 @@ class SimpleResNet(flax.linen.Module):
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
             use_bias=False,
+            register_kfac=self.register_kfac,
         )
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -232,11 +237,12 @@ class LogDomainResNet(flax.linen.Module):
             the final Dense call.
         nlayers (int): number of dense layers applied to the input, including the final
             layer. If this is 0, the final dense layer will still be applied.
-        kernel_init (WeightInitializer, optional): initializer function for the weight
-            matrices of each layer. Defaults to orthogonal initialization.
         activation_fn (SLActivation): activation function between intermediate layers
             (is not applied after the final dense layer). Has the signature
             SLArray -> SLArray (shape is preserved).
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrices of each layer. Defaults to orthogonal initialization.
+
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
     """

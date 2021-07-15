@@ -69,12 +69,25 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
     return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
 
 
+def _get_det_resnet():
+    return models.construct.get_resnet_determinant_fn_for_ferminet(
+        6,
+        3,
+        jax.nn.gelu,
+        models.weights.get_kernel_initializer("orthogonal"),
+        models.weights.get_bias_initializer("uniform"),
+    )
+
+
 def _make_ferminet():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
-    for cyclic_spins in [True, False]:
+    # No need for combinatorial testing over these flags; just test with both
+    # false and both true to cover our bases without making the test too slow.
+    for (cyclic_spins, use_det_resnet) in [(False, False), (True, True)]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+        resnet_det_fn = _get_det_resnet() if use_det_resnet else None
         log_psi = models.construct.FermiNet(
             spin_split,
             backflow,
@@ -83,6 +96,7 @@ def _make_ferminet():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
+            determinant_fn=resnet_det_fn,
         )
         log_psis.append(log_psi)
 
@@ -174,7 +188,7 @@ def test_ferminet_composed_antisymmetry_can_be_evaluated():
     _jit_eval_models(key, init_pos, log_psis)
 
 
-def test_get_model_from_default_config(mocker):
+def test_get_model_from_default_config():
     """Test that construction using the default model config does not raise an error."""
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
     nelec = jnp.array([4, 3])
@@ -190,9 +204,11 @@ def test_get_model_from_default_config(mocker):
                 )
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type == "ferminet":
-            model_config = train.default_config.get_default_model_config()
-            model_config.type = model_type
-            model_config = train.default_config.choose_model_type_in_config(
-                model_config
-            )
-            models.construct.get_model_from_config(model_config, nelec, ion_pos)
+            for use_det_resnet in [False, True]:
+                model_config = train.default_config.get_default_model_config()
+                model_config.type = model_type
+                model_config = train.default_config.choose_model_type_in_config(
+                    model_config
+                )
+                model_config.use_det_resnet = use_det_resnet
+                models.construct.get_model_from_config(model_config, nelec, ion_pos)

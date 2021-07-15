@@ -78,6 +78,6 @@ def slog_array_list_sum(x: SLArrayList) -> SLArray:
     return slog_sum_over_axis(stacked_vals)
 
 
-def slog_sum(x: SLArray, y: SLArray):
+def slog_sum(x: SLArray, y: SLArray) -> SLArray:
     """Take the sum of two SLArrays which are of the same shape."""
     return slog_array_list_sum([x, y])

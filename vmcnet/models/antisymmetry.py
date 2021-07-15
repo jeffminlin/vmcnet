@@ -7,7 +7,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import PyTree
+from vmcnet.utils.typing import SLArray, PyTree
 from .core import get_alternating_signs, is_tuple_of_arrays
 
 
@@ -19,7 +19,7 @@ def _reduce_prod_over_leaves(xs: PyTree) -> jnp.ndarray:
     return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
 
 
-def slogdet_product(xs: PyTree) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def slogdet_product(xs: PyTree) -> SLArray:
     """Compute the (sign, log) of the product of determinants of the leaves of a pytree.
 
     Args:

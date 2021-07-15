@@ -1,5 +1,5 @@
 """Combine pieces to form full models."""
-from typing import Callable, List, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import flax
 import jax
@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from ml_collections import ConfigDict
 
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import SpinSplit
+from vmcnet.utils.typing import ArrayList, SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -25,8 +25,9 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
-from vmcnet.models.jastrow import IsotropicAtomicExpDecay
-from vmcnet.models.weights import (
+from .jastrow import IsotropicAtomicExpDecay
+from .sign_covariance import make_array_list_fn_sign_covariant
+from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
     get_kernel_init_from_config,
@@ -37,8 +38,10 @@ from vmcnet.models.weights import (
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh
+    elif name == "gelu":
+        return jax.nn.gelu
     else:
-        raise ValueError("Activations besides tanh are not yet supported.")
+        raise ValueError("Activations besides tanh and gelu are not yet supported.")
 
 
 def get_model_from_config(
@@ -58,6 +61,18 @@ def get_model_from_config(
     )
 
     if model_config.type == "ferminet":
+        determinant_fn = None
+        if model_config.use_det_resnet:
+            resnet_config = model_config.det_resnet
+            determinant_fn = get_resnet_determinant_fn_for_ferminet(
+                resnet_config.ndense,
+                resnet_config.nlayers,
+                _get_named_activation_fn(resnet_config.activation),
+                get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
+                get_bias_init_from_config(resnet_config.bias_init, dtype=dtype),
+                resnet_config.use_bias,
+                resnet_config.register_kfac,
+            )
         return FermiNet(
             spin_split,
             backflow,
@@ -76,6 +91,7 @@ def get_model_from_config(
             ),
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
+            determinant_fn=determinant_fn,
         )
     elif model_config.type == "brute_force_antisym":
         if model_config.antisym_type == "rank_one":
@@ -292,6 +308,63 @@ def _get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
+def get_resnet_determinant_fn_for_ferminet(
+    ndense: int,
+    nlayers: int,
+    activation: Activation,
+    kernel_initializer: WeightInitializer,
+    bias_initializer: WeightInitializer,
+    use_bias: bool = True,
+    register_kfac: bool = False,
+) -> Callable[[ArrayList], jnp.ndarray]:
+    """Get a resnet-based determinant function for FermiNet construction.
+
+    This is used as a more general way to combine the determinant outputs into the
+    final wavefunction value, relative to the original method of a sum of products.
+
+    Note: the parameters for this network should be chosen so as to make it not too
+    close to an odd function. If the Resnet were to be perfectly odd, for example by
+    using a tanh activation function and no biases, then the wavefunction would end
+    up being uniformly zero when there are an even number of spins, after the sign
+    covariant symmetrization is applied. This somewhat paradoxical phenomenon comes from
+    the fact that a per-spin odd function is actually even with respect to the inputs as
+    a whole, since for two spins for example f(s1, s2) = -f(-s1, s2) = f(-s1, -s2).
+
+    Args:
+        ndense (int): the number of neurons in the dense layers
+            of the ResNet.
+        nlayers (int): the number of layers in the ResNet.
+        activation (Activation): the activation function to use for the  resnet.
+        kernel_initializer (WeightInitializer): kernel initializer for the resnet.
+        bias_initializer (WeightInitializer): bias initializer for the resnet.
+        use_bias(bool): Whether to use a bias in the ResNet. Defaults to True.
+        register_kfac (bool): Whether to register the ResNet Dense layers with KFAC.
+            Currently, params for this ResNet explode to huge values and cause nans
+            if register_kfac is True, so this flag defaults to false and should only be
+            overridden with care. The reason for the instability is not known.
+
+    Returns:
+        (Callable[[ArrayList, jnp.ndarray]): A resnet-based function which takes as
+        input a list of nspins arrays of shape (..., ndeterminants) and outputs a
+        single array of shape (..., 1).
+    """
+
+    def fn(det_values: ArrayList) -> jnp.ndarray:
+        concat_values = jnp.concatenate(det_values, axis=-1)
+        return SimpleResNet(
+            ndense,
+            1,
+            nlayers,
+            activation,
+            kernel_initializer,
+            bias_initializer,
+            use_bias,
+            register_kfac=register_kfac,
+        )(concat_values)
+
+    return fn
+
+
 class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
@@ -331,6 +404,15 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
+        determinant_fn (Callable[[ArrayList], jnp.ndarray], optional): An arbitrary
+            function that can map an ArrayList of nspins determinant outputs of shape
+            (..., ndeterminants) to a single output array of shape (..., 1). If
+            provided, this function will be symmetrized to be sign-covariant (odd) with
+            respect to each spin, and will then be used to combine the orbital
+            determinants into the final wavefunction value. If not provided, the final
+            wavefunction value is calculated as the sum of the product of the
+            determinants, where the product is taken across the nspins spins and the sum
+            is taken across the ndeterminants determinants. Defaults to None.
     """
 
     spin_split: Union[int, Sequence[int]]
@@ -342,12 +424,18 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
+    determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
     def setup(self):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
+        self._sign_cov_det_fn = None
+        if self.determinant_fn is not None:
+            self._sign_cov_det_fn = make_array_list_fn_sign_covariant(
+                self.determinant_fn
+            )
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -380,10 +468,20 @@ class FermiNet(flax.linen.Module):
             )(stream_1e, r_ei)
             for _ in range(self.ndeterminants)
         ]
-        orbitals = jax.tree_map(lambda *args: jnp.stack(args, axis=0), *orbitals)
+        # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
+        orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
-        slog_dets = slogdet_product(orbitals)
-        _, log_psi = slog_sum_over_axis(slog_dets)
+        if self._sign_cov_det_fn is not None:
+            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+            dets = jax.tree_map(jnp.linalg.det, orbitals)
+            # Swap axes to get shape [nspins: (..., ndeterminants)]
+            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
+            psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
+            return jnp.log(jnp.abs(psi))
+
+        # slog_det_prods is SLArray of shape (ndeterminants, ...)
+        slog_det_prods = slogdet_product(orbitals)
+        _, log_psi = slog_sum_over_axis(slog_det_prods)
         return log_psi
 
 

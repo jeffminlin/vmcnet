@@ -77,6 +77,18 @@ def get_default_model_config() -> ConfigDict:
                     "bias_init_orbital_linear": normal_init,
                     "orbitals_use_bias": True,
                     "isotropic_decay": True,
+                    "use_det_resnet": False,
+                    "det_resnet": ConfigDict(
+                        {
+                            "ndense": 10,
+                            "nlayers": 3,
+                            "activation": "gelu",
+                            "kernel_init": {"type": "orthogonal", "scale": 2.0},
+                            "bias_init": normal_init,
+                            "use_bias": True,
+                            "register_kfac": False,
+                        }
+                    ),
                 }
             ),
             "brute_force_antisym": ConfigDict(
