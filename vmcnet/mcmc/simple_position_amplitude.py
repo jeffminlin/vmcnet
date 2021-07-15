@@ -39,7 +39,7 @@ def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
     std_move: jnp.float32,
     logabs: bool = True,
-) -> Callable[[P, SPAData, jnp.ndarray], Tuple[jnp.float32, SPAData, jnp.ndarray],]:
+) -> Callable[[P, SPAData, jnp.ndarray], Tuple[jnp.float32, SPAData, jnp.ndarray]]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
     Args:

@@ -423,7 +423,7 @@ def _setup_distributed_eval(
     local_energy_fn: ModelApply[P],
     get_position_fn: Callable[[dwpa.DWPAData], jnp.ndarray],
 ) -> Tuple[
-    updates.params.UpdateParamFn[P, dwpa.DWPAData, S],
+    updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
@@ -485,7 +485,7 @@ def _burn_and_run_vmc(
 # TODO: add integration test which runs this runner with a close-to-default config
 # (probably use smaller nchains and smaller nepochs) to make sure it doesn't raise
 # top-level errors
-def run_molecule():
+def run_molecule() -> None:
     """Run VMC on a molecule."""
     config = _parse_flags()
 

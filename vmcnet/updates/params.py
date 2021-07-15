@@ -1,5 +1,5 @@
 """Routines which handle model parameter updating."""
-from typing import Any, Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -8,7 +8,7 @@ from kfac_ferminet_alpha import utils as kfac_utils, optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, P, S, ModelApply
+from vmcnet.utils.typing import D, P, S, ModelApply, OptimizerState
 
 UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
@@ -142,7 +142,7 @@ def create_eval_update_param_fn(
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
-) -> UpdateParamFn[P, D, Any]:
+) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
     Can be used to do simple unclipped MCMC with :func:`~vmcnet.train.vmc.vmc_loop`.
