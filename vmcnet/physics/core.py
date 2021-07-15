@@ -8,18 +8,11 @@ from kfac_ferminet_alpha import loss_functions
 import vmcnet.utils as utils
 from vmcnet.utils.typing import P, ModelApply
 
-ValueGradEnergyFn = Callable[
-    [P, jnp.ndarray],
-    Tuple[
-        Tuple[
-            jnp.float32,
-            Tuple[
-                jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
-            ],
-        ],
-        P,
-    ],
+EnergyAuxData = Tuple[
+    jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
 ]
+EnergyData = Tuple[jnp.float32, EnergyAuxData]
+ValueGradEnergyFn = Callable[[P, jnp.ndarray], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
