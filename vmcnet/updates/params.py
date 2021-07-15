@@ -1,14 +1,19 @@
 """Routines which handle model parameter updating."""
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Tuple
 
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import utils as kfac_utils
+from kfac_ferminet_alpha import (
+    utils as kfac_utils,
+    optimizer as kfac_opt,
+)
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, P, S
+from vmcnet.utils.typing import D, P, S, ModelApply, OptimizerState
+
+UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
 
 def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
@@ -25,9 +30,9 @@ def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
 
     pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
 
-    def pmapped_update_param_fn_with_single_metrics(data, params, optimizer_state, key):
+    def pmapped_update_param_fn_with_single_metrics(params, data, optimizer_state, key):
         params, optimizer_state, metrics, key = pmapped_update_param_fn(
-            data, params, optimizer_state, key
+            params, data, optimizer_state, key
         )
         metrics = utils.distribute.get_first(metrics)
         return params, optimizer_state, metrics, key
@@ -36,25 +41,11 @@ def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
 
 
 def create_grad_energy_update_param_fn(
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
-) -> Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
+) -> UpdateParamFn[P, D, S]:
     """Create the `update_param_fn` based on the gradient of the total energy.
 
     See :func:`~vmcnet.train.vmc.vmc_loop` for its usage.
@@ -81,7 +72,7 @@ def create_grad_energy_update_param_fn(
         False.
     """
 
-    def update_param_fn(data, params, optimizer_state, key):
+    def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
         energy_data, grad_energy = energy_data_val_and_grad(params, position)
         energy, aux_energy_data = energy_data
@@ -103,7 +94,7 @@ def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
     get_position_fn: Callable[[D], jnp.ndarray],
-) -> Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]:
+) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
 
     Args:
@@ -122,7 +113,7 @@ def create_kfac_update_param_fn(
     momentum = kfac_utils.replicate_all_local_devices(jnp.zeros([]))
     damping = kfac_utils.replicate_all_local_devices(jnp.asarray(damping))
 
-    def update_param_fn(data, params, optimizer_state, key):
+    def update_param_fn(params, data, optimizer_state, key):
         key, subkey = utils.distribute.p_split(key)
         params, optimizer_state, stats = optimizer.step(
             params=params,
@@ -150,11 +141,11 @@ def create_kfac_update_param_fn(
 
 
 def create_eval_update_param_fn(
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    local_energy_fn: ModelApply[P],
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
-):
+) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
     Can be used to do simple unclipped MCMC with :func:`~vmcnet.train.vmc.vmc_loop`.
@@ -171,7 +162,7 @@ def create_eval_update_param_fn(
         updating the parameters
     """
 
-    def eval_update_param_fn(data, params, optimizer_state, key):
+    def eval_update_param_fn(params, data, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
         energy, variance = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=False

@@ -5,12 +5,12 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.physics as physics
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
 
 
 def create_continuous_kinetic_energy(
     log_psi_apply: Callable[[P, jnp.ndarray], Union[jnp.float32, jnp.ndarray]]
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
     Args:

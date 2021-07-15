@@ -4,7 +4,7 @@ import functools
 import logging
 import os
 import sys
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Optional, Tuple
 import flax
 
 import jax
@@ -24,7 +24,7 @@ import vmcnet.physics as physics
 import vmcnet.updates as updates
 import vmcnet.utils as utils
 import vmcnet.train as train
-from vmcnet.utils.typing import P, D, S, OptimizerState
+from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
 
 
 FLAGS = flags.FLAGS
@@ -118,7 +118,7 @@ def _get_and_init_model(
 #
 # which creates a Generic class called ModelApply with only the first argument typed
 def _make_initial_distributed_data(
-    distributed_log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
+    distributed_log_psi_apply: ModelApply[P],
     run_config: ConfigDict,
     init_pos: jnp.ndarray,
     params: P,
@@ -141,16 +141,10 @@ def _make_initial_distributed_data(
 # TODO: add more options than just dwpa
 # TODO: remove dependence on exact field names
 def _get_mcmc_fns(
-    run_config: ConfigDict, log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray]
+    run_config: ConfigDict, log_psi_apply: ModelApply[P]
 ) -> Tuple[
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[
-        [P, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
+    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
     metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
         log_psi_apply,
@@ -169,8 +163,8 @@ def _get_mcmc_fns(
 def _assemble_mol_local_energy_fn(
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+    log_psi_apply: ModelApply[P],
+) -> ModelApply[P]:
     # Define parameter updates
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
@@ -220,25 +214,8 @@ def _get_energy_fns(
     vmc_config: ConfigDict,
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
-) -> Tuple[
-    Callable[[P, jnp.ndarray], jnp.ndarray],
-    Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
-]:
+    log_psi_apply: ModelApply[P],
+) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
@@ -277,30 +254,11 @@ def _get_kfac_update_fn(
     params: P,
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
 ) -> Tuple[
-    Callable[
-        [D, P, kfac_opt.State, jnp.ndarray],
-        Tuple[P, kfac_opt.State, Dict, jnp.ndarray],
-    ],
-    kfac_opt.State,
-    jnp.ndarray,
+    updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray
 ]:
     optimizer = kfac_ferminet_alpha.Optimizer(
         energy_data_val_and_grad,
@@ -330,29 +288,9 @@ def _get_kfac_update_fn(
 def _get_adam_update_fn(
     params: P,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
-) -> Tuple[
-    Callable[
-        [D, P, optax.OptState, jnp.ndarray],
-        Tuple[P, optax.OptState, Dict, jnp.ndarray],
-    ],
-    optax.OptState,
-]:
+) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule)
     optimizer_state = utils.distribute.pmap(optimizer.init)(params)
 
@@ -375,27 +313,10 @@ def _get_update_fn_and_init_optimizer(
     params: P,
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
-    energy_data_val_and_grad: Callable[
-        [P, jnp.ndarray],
-        Tuple[
-            Tuple[
-                jnp.float32,
-                Tuple[
-                    jnp.float32,
-                    jnp.ndarray,
-                    Optional[jnp.float32],
-                    Optional[jnp.float32],
-                ],
-            ],
-            P,
-        ],
-    ],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
 ) -> Tuple[
-    Callable[
-        [D, P, OptimizerState, jnp.ndarray],
-        Tuple[P, OptimizerState, Dict, jnp.ndarray],
-    ],
+    updates.params.UpdateParamFn[P, D, OptimizerState],
     OptimizerState,
     jnp.ndarray,
 ]:
@@ -441,27 +362,13 @@ def _setup_distributed_vmc(
     dtype=jnp.float32,
 ) -> Tuple[
     flax.linen.Module,
-    Callable[[flax.core.FrozenDict, jnp.ndarray], jnp.ndarray],
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, flax.core.FrozenDict, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[
-        [flax.core.FrozenDict, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[[flax.core.FrozenDict, jnp.ndarray], jnp.ndarray],
-    Callable[
-        [
-            dwpa.DynamicWidthPositionAmplitudeData,
-            flax.core.FrozenDict,
-            OptimizerState,
-            jnp.ndarray,
-        ],
-        Tuple[flax.core.FrozenDict, OptimizerState, Dict, jnp.ndarray],
-    ],
+    ModelApply[flax.core.FrozenDict],
+    mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
+    ModelApply[flax.core.FrozenDict],
+    updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     flax.core.FrozenDict,
-    dwpa.DynamicWidthPositionAmplitudeData,
+    dwpa.DWPAData,
     OptimizerState,
     jnp.ndarray,
 ]:
@@ -512,22 +419,13 @@ def _setup_distributed_vmc(
 # TODO: update output type hints when _get_mcmc_fns is made more general
 def _setup_distributed_eval(
     config: ConfigDict,
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
-    get_position_fn: Callable[[dwpa.DynamicWidthPositionAmplitudeData], jnp.ndarray],
+    log_psi_apply: ModelApply[P],
+    local_energy_fn: ModelApply[P],
+    get_position_fn: Callable[[dwpa.DWPAData], jnp.ndarray],
 ) -> Tuple[
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, S, jnp.ndarray],
-        Tuple[P, S, Dict, jnp.ndarray],
-    ],
-    Callable[
-        [dwpa.DynamicWidthPositionAmplitudeData, P, jnp.ndarray],
-        Tuple[dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
-    Callable[
-        [P, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-        Tuple[jnp.float32, dwpa.DynamicWidthPositionAmplitudeData, jnp.ndarray],
-    ],
+    updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
+    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
+    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn, config.eval.nchains, get_position_fn
@@ -542,9 +440,9 @@ def _burn_and_run_vmc(
     params: P,
     optimizer_state: S,
     data: D,
-    burning_step: Callable[[D, P, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    burning_step: mcmc.metropolis.BurningStep[P, D],
+    walker_fn: mcmc.metropolis.WalkerFn[P, D],
+    update_param_fn: updates.params.UpdateParamFn[P, D, S],
     sharded_key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
@@ -562,7 +460,7 @@ def _burn_and_run_vmc(
         nhistory_max = 0
 
     data, sharded_key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, data, params, sharded_key
+        burning_step, run_config.nburn, params, data, sharded_key
     )
     params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
         params,
@@ -587,7 +485,7 @@ def _burn_and_run_vmc(
 # TODO: add integration test which runs this runner with a close-to-default config
 # (probably use smaller nchains and smaller nepochs) to make sure it doesn't raise
 # top-level errors
-def run_molecule():
+def run_molecule() -> None:
     """Run VMC on a molecule."""
     config = _parse_flags()
 

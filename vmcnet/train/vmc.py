@@ -1,8 +1,10 @@
 """Main VMC loop."""
-from typing import Callable, Dict, Tuple, Optional
+from typing import Tuple, Optional
 
 import jax.numpy as jnp
 
+from vmcnet.mcmc.metropolis import WalkerFn
+from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
@@ -14,8 +16,8 @@ def vmc_loop(
     data: D,
     nchains: int,
     nepochs: int,
-    walker_fn: Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]],
-    update_param_fn: Callable[[D, P, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]],
+    walker_fn: WalkerFn[P, D],
+    update_param_fn: UpdateParamFn[P, D, S],
     key: jnp.ndarray,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,
@@ -102,7 +104,7 @@ def vmc_loop(
             accept_ratio, data, key = walker_fn(params, data, key)
 
             params, optimizer_state, metrics, key = update_param_fn(
-                data, params, optimizer_state, key
+                params, data, optimizer_state, key
             )
 
             if metrics is None:  # don't checkpoint if no metrics to checkpoint

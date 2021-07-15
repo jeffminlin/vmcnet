@@ -6,7 +6,13 @@ import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
+
+EnergyAuxData = Tuple[
+    jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
+]
+EnergyData = Tuple[jnp.float32, EnergyAuxData]
+ValueGradEnergyFn = Callable[[P, jnp.ndarray], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
@@ -54,8 +60,8 @@ def initialize_molecular_pos(
 
 
 def combine_local_energy_terms(
-    local_energy_terms: Sequence[Callable[[P, jnp.ndarray], jnp.ndarray]]
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+    local_energy_terms: Sequence[ModelApply[P]],
+) -> ModelApply[P]:
     """Combine a sequence of local energy terms by adding them.
 
     Args:
@@ -78,7 +84,7 @@ def combine_local_energy_terms(
 
 
 def laplacian_psi_over_psi(
-    grad_log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
+    grad_log_psi_apply: ModelApply,
     params: P,
     x: jnp.ndarray,
 ) -> jnp.float32:
@@ -172,23 +178,12 @@ def get_statistics_from_local_energy(
 
 # TODO: make output type hint cleaner
 def create_value_and_grad_energy_fn(
-    log_psi_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
-    local_energy_fn: Callable[[P, jnp.ndarray], jnp.ndarray],
+    log_psi_apply: ModelApply[P],
+    local_energy_fn: ModelApply[P],
     nchains: int,
     clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
     nan_safe: bool = True,
-) -> Callable[
-    [P, jnp.ndarray],
-    Tuple[
-        Tuple[
-            jnp.float32,
-            Tuple[
-                jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
-            ],
-        ],
-        P,
-    ],
-]:
+) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
     Due to the Hermiticity of the Hamiltonian, we can get an unbiased lower variance
@@ -227,12 +222,7 @@ def create_value_and_grad_energy_fn(
     """
 
     @jax.custom_vjp
-    def compute_energy_data(
-        params: P, positions: jnp.ndarray
-    ) -> Tuple[
-        jnp.float32,
-        Tuple[jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]],
-    ]:
+    def compute_energy_data(params: P, positions: jnp.ndarray) -> EnergyData:
         local_energies_noclip = local_energy_fn(params, positions)
         if clipping_fn is not None:
             local_energies = clipping_fn(local_energies_noclip)

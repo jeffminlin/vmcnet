@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 import vmcnet.physics as physics
 import vmcnet.models as models
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
 
 
 class HydrogenLikeWavefunction(flax.linen.Module):
@@ -52,7 +52,7 @@ def make_hydrogen_like_local_energy(
     log_psi_apply: Callable[[P, jnp.ndarray], Union[jnp.float32, jnp.ndarray]],
     charge: jnp.float32,
     d: int = 3,
-) -> Callable[[P, jnp.ndarray], jnp.ndarray]:
+) -> ModelApply[P]:
     """Local energy calculation for the hydrogen-like atom in general dimension d.
 
     Args:

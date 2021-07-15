@@ -4,13 +4,14 @@ from typing import Callable, TypedDict
 import jax
 import jax.numpy as jnp
 
+from .metropolis import MetropolisStep
 from .position_amplitude_core import (
     make_position_amplitude_data,
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
 from vmcnet.utils.distribute import mean_all_local_devices
-from vmcnet.utils.typing import P
+from vmcnet.utils.typing import P, ModelApply
 
 
 class MoveMetadata(TypedDict):
@@ -40,13 +41,16 @@ class DynamicWidthPositionAmplitudeData(TypedDict):
     move_metadata: MoveMetadata
 
 
+DWPAData = DynamicWidthPositionAmplitudeData
+
+
 def make_dynamic_width_position_amplitude_data(
     position: jnp.ndarray,
     amplitude: jnp.ndarray,
     std_move: jnp.float32,
     move_acceptance_sum: jnp.float32 = 0.0,
     moves_since_update: jnp.int32 = 0,
-) -> DynamicWidthPositionAmplitudeData:
+) -> DWPAData:
     """Create instance of DynamicWidthPositionAmplitudeData.
 
     Args:
@@ -61,7 +65,7 @@ def make_dynamic_width_position_amplitude_data(
             for initial data.
 
     Returns:
-        DynamicWidthPositionAmplitudeData
+        DWPAData
     """
     return make_position_amplitude_data(
         position,
@@ -172,13 +176,13 @@ def make_update_move_metadata_fn(
 
 
 def make_dynamic_pos_amp_gaussian_step(
-    model_apply: Callable[[P, jnp.ndarray], jnp.ndarray],
+    model_apply: ModelApply[P],
     nmoves_per_update: jnp.int32 = 10,
     adjust_std_move_fn: Callable[
         [jnp.float32, jnp.float32], jnp.float32
     ] = make_threshold_adjust_std_move(),
     logabs: bool = True,
-):
+) -> MetropolisStep:
     """Create a metropolis step with dynamic gaussian step width.
 
     Args:
@@ -193,8 +197,8 @@ def make_dynamic_pos_amp_gaussian_step(
 
     Returns:
         Callable: function which runs a metropolis step. Has the signature
-            (params, DynamicWidthPositionAmplitudeData, key)
-            -> (mean acceptance probability, DynamicWidthPositionAmplitudeData, new_key)
+            (params, DWPAData, key)
+            -> (mean acceptance probability, DWPAData, new_key)
     """
     update_move_metadata_fn = make_update_move_metadata_fn(
         nmoves_per_update, adjust_std_move_fn

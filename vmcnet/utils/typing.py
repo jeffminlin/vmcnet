@@ -4,8 +4,9 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, List, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, List, Sequence, Tuple, TypeVar, Union
 
+import flax.core.frozen_dict as frozen_dict
 import jax.numpy as jnp
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
@@ -33,7 +34,12 @@ P = TypeVar("P", bound=PyTree)
 S = TypeVar("S", bound=PyTree)
 
 # Actual optimizer states currently used
+# TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
 OptimizerState = Union[kfac_opt.State, optax.OptState]
+
+# Union type of all possible model parameter types. For now just FrozenDict.
+# TODO: figure out how to make FrozenDict not be interpretted by mypy as Any
+ModelParams = frozen_dict.FrozenDict
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch
@@ -51,3 +57,5 @@ SLArray = Tuple[jnp.ndarray, jnp.ndarray]
 SLArrayList = List[SLArray]
 
 SpinSplit = Union[int, Sequence[int]]
+
+ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
