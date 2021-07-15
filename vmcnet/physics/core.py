@@ -222,12 +222,7 @@ def create_value_and_grad_energy_fn(
     """
 
     @jax.custom_vjp
-    def compute_energy_data(
-        params: P, positions: jnp.ndarray
-    ) -> Tuple[
-        jnp.float32,
-        Tuple[jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]],
-    ]:
+    def compute_energy_data(params: P, positions: jnp.ndarray) -> EnergyData:
         local_energies_noclip = local_energy_fn(params, positions)
         if clipping_fn is not None:
             local_energies = clipping_fn(local_energies_noclip)

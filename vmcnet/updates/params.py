@@ -4,7 +4,10 @@ from typing import Callable, Dict, Tuple
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import utils as kfac_utils, optimizer as kfac_opt
+from kfac_ferminet_alpha import (
+    utils as kfac_utils,
+    optimizer as kfac_opt,
+)
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
