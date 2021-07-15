@@ -257,7 +257,7 @@ def _get_kfac_update_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
-) -> Tuple[updates.params.UpdateParamFn[P, D, S], kfac_opt.State, jnp.ndarray]:
+) -> Tuple[updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray]:
     optimizer = kfac_ferminet_alpha.Optimizer(
         energy_data_val_and_grad,
         l2_reg=0.0,
