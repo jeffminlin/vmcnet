@@ -1,5 +1,5 @@
 """Test model antiequivariances."""
-from typing import Callable
+from typing import Callable, Tuple
 
 import chex
 import flax
@@ -14,10 +14,42 @@ from vmcnet.utils.typing import SpinSplit
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
 
+def _get_singular_matrix():
+    return jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
+
+
+def _get_nonsingular_matrix():
+    return jnp.array([[1, 4, 7], [2, 5, 8], [3, 5, 4]])
+
+
+@pytest.mark.slow
+def test_cofactor_output_with_batches():
+    """Test slog_cofactor_antieq outputs correct value on simple inputs."""
+    input = _get_singular_matrix()
+    negative_input = -input
+    doubled_input = input * 2
+    full_input = jnp.stack([input, negative_input, doubled_input])
+
+    expected_out = jnp.array([-3, 12, -9])
+    full_expected_out = jnp.stack([expected_out, -expected_out, 8 * expected_out])
+
+    y = antieq.cofactor_antieq(full_input)
+
+    np.testing.assert_allclose(y, full_expected_out, rtol=1e-6)
+
+
+@pytest.mark.slow
+def test_sum_cofactor_equals_nonzero_det():
+    """Test that the sum of the cofactors along the first col give the determinant."""
+    nonsing_in = _get_nonsingular_matrix()
+    y = antieq.cofactor_antieq(nonsing_in)
+    np.testing.assert_allclose(jnp.sum(y), jnp.linalg.det(nonsing_in))
+
+
 @pytest.mark.slow
 def test_slog_cofactor_output_with_batches():
     """Test slog_cofactor_antieq outputs correct value on simple inputs."""
-    input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
+    input = _get_singular_matrix()
     negative_input = -input
     doubled_input = input * 2
     full_input = jnp.stack([input, negative_input, doubled_input])
@@ -39,7 +71,7 @@ def test_slog_cofactor_output_with_batches():
 @pytest.mark.slow
 def test_slog_cofactor_antiequivariance():
     """Test slog_cofactor_antieq is antiequivariant."""
-    input = jnp.array([[1, 4, 7], [2, 5, 8], [3, 6, 9]])
+    input = _get_singular_matrix()
     permutation = jnp.array([1, 0, 2])
     perm_input = input[permutation, :]
 
@@ -53,8 +85,39 @@ def test_slog_cofactor_antiequivariance():
     np.testing.assert_allclose(perm_logs, expected_perm_logs)
 
 
+def _assert_slogabs_signs_allclose_to_one(
+    nchains: int,
+    d_input_1e: int,
+    output_i: Tuple[jnp.ndarray, jnp.ndarray],
+    nelec_i: int,
+):
+    assert len(output_i) == 2
+    np.testing.assert_allclose(
+        jnp.abs(output_i[0]),
+        jnp.ones((nchains, nelec_i, d_input_1e)),
+    )
+    chex.assert_shape(output_i, (nchains, nelec_i, d_input_1e))
+
+
+def _assert_permuted_slog_values_allclose(
+    split_perm_i: Tuple[int, ...],
+    output_i: Tuple[jnp.ndarray, jnp.ndarray],
+    perm_output_i: Tuple[jnp.ndarray, jnp.ndarray],
+    flips_i: int,
+    rtol: float = 1e-7,
+):
+    signs, logs = output_i
+    perm_signs, perm_logs = perm_output_i
+    expected_perm_signs = signs[:, split_perm_i, :] * flips_i
+    expected_perm_logs = logs[:, split_perm_i, :]
+    np.testing.assert_allclose(perm_signs, expected_perm_signs)
+    np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
+
+
 def _test_layer_antiequivariance(
-    build_layer: Callable[[SpinSplit], flax.linen.Module], rtol: float = 1e-7
+    build_layer: Callable[[SpinSplit], flax.linen.Module],
+    logabs: bool = False,
+    rtol: float = 1e-7,
 ) -> None:
     """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
@@ -76,6 +139,7 @@ def _test_layer_antiequivariance(
         perm_input_ei,
         key,
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
+    d_input_1e = input_1e.shape[-1]
 
     # Set up antiequivariant layer
     antieq_layer = build_layer(spin_split)
@@ -89,24 +153,23 @@ def _test_layer_antiequivariance(
     nelec_per_spin = models.core.get_nelec_per_spin(spin_split, nelec_total)
     nspins = len(nelec_per_spin)
     assert len(output) == nspins
-    for i in range(nspins):
-        assert len(output[i]) == 2
-        d_input_1e = input_1e.shape[-1]
-        np.testing.assert_allclose(
-            jnp.abs(output[i][0]),
-            jnp.ones((nchains, nelec_per_spin[i], d_input_1e)),
-        )
-        chex.assert_shape(output[i][1], (nchains, nelec_per_spin[i], d_input_1e))
 
     # Verify that permutation has generated appropriate antiequivariant transformation
     flips = [-1, 1]  # First spin permutation is odd; second is even
+
     for i in range(nspins):
-        signs, logs = output[i]
-        perm_signs, perm_logs = perm_output[i]
-        expected_perm_signs = signs[:, split_perm[i], :] * flips[i]
-        expected_perm_logs = logs[:, split_perm[i], :]
-        np.testing.assert_allclose(perm_signs, expected_perm_signs)
-        np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
+        if logabs:
+            _assert_slogabs_signs_allclose_to_one(
+                nchains, d_input_1e, output[i], nelec_per_spin[i]
+            )
+            _assert_permuted_slog_values_allclose(
+                split_perm[i], output[i], perm_output[i], flips[i], rtol=rtol
+            )
+        else:
+            chex.assert_shape(output[i], (nchains, nelec_per_spin[i], d_input_1e))
+            np.testing.assert_allclose(
+                output[i], perm_output[i][:, split_perm[i], :] * flips[i]
+            )
 
 
 @pytest.mark.slow
@@ -128,6 +191,24 @@ def test_orbital_cofactor_layer_antiequivariance():
 
 
 @pytest.mark.slow
+def test_slog_orbital_cofactor_layer_antiequivariance():
+    """Test orbital cofactor antiequivariance."""
+
+    def build_orbital_cofactor_layer(spin_split):
+        kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
+        bias_initializer = models.weights.get_bias_initializer("normal")
+        return antieq.SLogOrbitalCofactorAntiequivarianceLayer(
+            spin_split,
+            kernel_initializer,
+            kernel_initializer,
+            kernel_initializer,
+            bias_initializer,
+        )
+
+    _test_layer_antiequivariance(build_orbital_cofactor_layer, logabs=True)
+
+
+@pytest.mark.slow
 def test_per_particle_determinant_antiequivariance():
     """Test per particle determinant antiequivariance."""
 
@@ -143,3 +224,23 @@ def test_per_particle_determinant_antiequivariance():
         )
 
     _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-6)
+
+
+@pytest.mark.slow
+def test_slog_per_particle_determinant_antiequivariance():
+    """Test per particle determinant antiequivariance."""
+
+    def build_per_particle_determinant_layer(spin_split):
+        kernel_initializer = models.weights.get_kernel_initializer("orthogonal")
+        bias_initializer = models.weights.get_bias_initializer("normal")
+        return antieq.SLogPerParticleDeterminantAntiequivarianceLayer(
+            spin_split,
+            kernel_initializer,
+            kernel_initializer,
+            kernel_initializer,
+            bias_initializer,
+        )
+
+    _test_layer_antiequivariance(
+        build_per_particle_determinant_layer, logabs=True, rtol=1e-6
+    )
