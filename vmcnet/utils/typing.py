@@ -6,6 +6,7 @@ otherwise they are intended for documentation and clarity.
 """
 from typing import Any, Callable, List, Sequence, Tuple, TypeVar, Union
 
+import flax.core.frozen_dict as frozen_dict
 import jax.numpy as jnp
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
@@ -33,7 +34,12 @@ P = TypeVar("P", bound=PyTree)
 S = TypeVar("S", bound=PyTree)
 
 # Actual optimizer states currently used
+# TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
 OptimizerState = Union[kfac_opt.State, optax.OptState]
+
+# Union type of all possible model parameter types. For now just FrozenDict.
+# TODO: figure out how to make FrozenDict not be interpretted by mypy as Any
+ModelParams = frozen_dict.FrozenDict
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch
