@@ -19,6 +19,9 @@ class SimplePositionAmplitudeData(TypedDict):
     move_metadata: None
 
 
+SPAData = SimplePositionAmplitudeData
+
+
 def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.ndarray):
     """Create SimplePositionAmplitudeData from position and amplitude.
 
@@ -27,7 +30,7 @@ def make_simple_position_amplitude_data(position: jnp.ndarray, amplitude: jnp.nd
         amplitude (jnp.ndarray): the wavefunction amplitudes
 
     Returns:
-        SimplePositionAmplitudeData
+        SPAData
     """
     return make_position_amplitude_data(position, amplitude, None)
 
@@ -36,10 +39,7 @@ def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
     std_move: jnp.float32,
     logabs: bool = True,
-) -> Callable[
-    [P, SimplePositionAmplitudeData, jnp.ndarray],
-    Tuple[jnp.float32, SimplePositionAmplitudeData, jnp.ndarray],
-]:
+) -> Callable[[P, SPAData, jnp.ndarray], Tuple[jnp.float32, SPAData, jnp.ndarray],]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
     Args:
