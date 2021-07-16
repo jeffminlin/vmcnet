@@ -415,7 +415,7 @@ class FermiNet(flax.linen.Module):
             is taken across the ndeterminants determinants. Defaults to None.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -483,6 +483,14 @@ class FermiNet(flax.linen.Module):
         slog_det_prods = slogdet_product(orbitals)
         _, log_psi = slog_sum_over_axis(slog_det_prods)
         return log_psi
+
+
+class AntiequivarianceNet(flax.linen.Module):
+    """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance."""
+
+    spin_split: SpinSplit
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
