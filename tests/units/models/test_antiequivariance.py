@@ -9,6 +9,7 @@ import pytest
 
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
+from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from vmcnet.utils.typing import SpinSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
@@ -24,7 +25,7 @@ def _get_nonsingular_matrix():
 
 @pytest.mark.slow
 def test_cofactor_output_with_batches():
-    """Test slog_cofactor_antieq outputs correct value on simple inputs."""
+    """Test cofactor_antieq outputs correct value on simple inputs."""
     input = _get_singular_matrix()
     negative_input = -input
     doubled_input = input * 2
@@ -36,14 +37,6 @@ def test_cofactor_output_with_batches():
     y = antieq.cofactor_antieq(full_input)
 
     np.testing.assert_allclose(y, full_expected_out, rtol=1e-6)
-
-
-@pytest.mark.slow
-def test_sum_cofactor_equals_nonzero_det():
-    """Test that the sum of the cofactors along the first col give the determinant."""
-    nonsing_in = _get_nonsingular_matrix()
-    y = antieq.cofactor_antieq(nonsing_in)
-    np.testing.assert_allclose(jnp.sum(y), jnp.linalg.det(nonsing_in))
 
 
 @pytest.mark.slow
@@ -66,6 +59,40 @@ def test_slog_cofactor_output_with_batches():
 
     np.testing.assert_allclose(y[0], full_expected_signs)
     np.testing.assert_allclose(y[1], full_expected_logs, rtol=1e-6)
+
+
+@pytest.mark.slow
+def test_sum_cofactor_equals_nonzero_det():
+    """Test that the sum of the cofactors along the first col give the determinant."""
+    nonsing_in = _get_nonsingular_matrix()
+    y = antieq.cofactor_antieq(nonsing_in)
+    np.testing.assert_allclose(jnp.sum(y), jnp.linalg.det(nonsing_in))
+
+
+@pytest.mark.slow
+def test_sum_slog_cofactor_equals_nonzero_slogdet():
+    """Test that the slog_sum of the slog cofactors along the first col give slogdet."""
+    nonsing_in = _get_nonsingular_matrix()
+    y = antieq.slog_cofactor_antieq(nonsing_in)
+    expected_signs, expected_logs = jnp.linalg.slogdet(nonsing_in)
+    signs, logs = slog_sum_over_axis(y)
+
+    np.testing.assert_allclose(signs, expected_signs)
+    np.testing.assert_allclose(logs, expected_logs)
+
+
+@pytest.mark.slow
+def test_cofactor_antiequivariance():
+    """Test cofactor_antieq is antiequivariant."""
+    input = _get_singular_matrix()
+    permutation = jnp.array([1, 0, 2])
+    perm_input = input[permutation, :]
+
+    output = antieq.cofactor_antieq(input)
+    perm_output = antieq.cofactor_antieq(perm_input)
+    expected_perm_output = -output[permutation]
+
+    np.testing.assert_allclose(perm_output, expected_perm_output)
 
 
 @pytest.mark.slow
@@ -92,11 +119,11 @@ def _assert_slogabs_signs_allclose_to_one(
     nelec_i: int,
 ):
     assert len(output_i) == 2
+    chex.assert_shape(output_i, (nchains, nelec_i, d_input_1e))
     np.testing.assert_allclose(
         jnp.abs(output_i[0]),
         jnp.ones((nchains, nelec_i, d_input_1e)),
     )
-    chex.assert_shape(output_i, (nchains, nelec_i, d_input_1e))
 
 
 def _assert_permuted_slog_values_allclose(
