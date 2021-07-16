@@ -106,7 +106,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
     return signs_and_logs
 
 
-def _multiply_eq_inputs_by_split_antisym(
+def _multiply_eq_inputs_by_split_antieq(
     eq_inputs: jnp.ndarray,
     split_antieq: ArrayList,
     spin_split: SpinSplit,
@@ -241,7 +241,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = ferminet_orbital_layer(eq_inputs, r_ei)
         # Calculate cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
         cofactors = jax.tree_map(cofactor_antieq, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_antisym(
+        return _multiply_eq_inputs_by_split_antieq(
             eq_inputs, cofactors, self.spin_split
         )
 
@@ -412,7 +412,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = equivariant_orbital_layer(eq_inputs, r_ei)
         # ArrayList of nspins arrays of shape (..., nelec[i])
         dets = jax.tree_map(jnp.linalg.det, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_antisym(eq_inputs, dets, self.spin_split)
+        return _multiply_eq_inputs_by_split_antieq(eq_inputs, dets, self.spin_split)
 
 
 class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
