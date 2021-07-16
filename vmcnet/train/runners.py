@@ -63,11 +63,17 @@ def _get_logdir_and_save_config(config: ConfigDict) -> str:
 
 
 def _get_dtype(config: ConfigDict) -> jnp.dtype:
-    dtype_to_use = jnp.float32
-    if config.dtype == "float64":
-        dtype_to_use = jnp.float64
+    if config.dtype == "float32":
+        return jnp.float32
+    elif config.dtype == "float64":
         jax.config.update("jax_enable_x64", True)
-    return dtype_to_use
+        return jnp.float64
+
+    raise ValueError(
+        "dtype other than float32, float64 not supported; {} was requested".format(
+            config.dtype
+        )
+    )
 
 
 def _get_electron_ion_config_as_arrays(
