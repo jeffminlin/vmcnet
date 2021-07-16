@@ -146,7 +146,7 @@ def _multiply_eq_inputs_by_split_slog_antieq(
         (SLArrayList): list of per-spin slog arrays of shape (..., nelec[i], d) which
         represent the product of the equivariant inputs with the antiequivariance.
     """
-    # Expand determinants to shape (..., nelec[i], 1)] to allow broadcasting with inputs
+    # Expand antiequivariance to shape (..., nelec[i], 1)] to broadcast with inputs
     split_slog_antieq = jax.tree_map(
         lambda c: jnp.expand_dims(c, -1), split_slog_antieq
     )
