@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.slog_helpers import array_list_to_slog, slog_multiply
-from vmcnet.utils.typing import SLArray, SLArrayList, SpinSplit
+from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, SpinSplit
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import (
     DoublyEquivariantOrbitalLayer,
@@ -109,9 +109,9 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
 
 def _multiply_eq_inputs_by_split_antisym(
     eq_inputs: jnp.ndarray,
-    split_antisym: SLArrayList,
+    split_antisym: ArrayList,
     spin_split: SpinSplit,
-) -> SLArrayList:
+) -> ArrayList:
     """Multiply equivariant input array with a spin-split antisymmetry.
 
     Args:
@@ -205,7 +205,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     orbital_isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
+    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
@@ -222,7 +222,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
                 as an extra input to the orbital layer.
 
         Returns:
-            (SLArrayList): per-spin list where each list entry is an slog array of
+            (ArrayList): per-spin list where each list entry is an slog array of
             shape (..., nelec, d).
         """
         nelec_total = eq_inputs.shape[-2]
@@ -378,7 +378,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     orbital_isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
+    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the equivariant inputs are y_p, and the orbital matrix for
