@@ -218,8 +218,12 @@ def make_fn_sign_covariant(
     return sign_covariant_fn
 
 
+def _multiply_sign_along_axis(x, s, axis):
+    return jnp.swapaxes(s * jnp.swapaxes(x, axis, -1), axis, -1)
+
+
 def make_sl_array_list_fn_sign_covariant(
-    fn: Callable[[SLArrayList], SLArray]
+    fn: Callable[[SLArrayList], SLArray], axis: int = -2
 ) -> Callable[[SLArrayList], SLArray]:
     """Make a function of an SLArrayList sign-covariant in the sign of each SLArray.
 
@@ -236,14 +240,14 @@ def make_sl_array_list_fn_sign_covariant(
     """
     return make_fn_sign_covariant(
         fn,
-        functools.partial(_get_sign_orbit_sl_array_list, axis=-2),
-        lambda x, s: (x[0] * jnp.expand_dims(s, axis=-1), x[1]),
-        functools.partial(slog_sum_over_axis, axis=-2),
+        functools.partial(_get_sign_orbit_sl_array_list, axis=axis),
+        lambda x, s: (_multiply_sign_along_axis(x[0], s, axis), x[1]),
+        functools.partial(slog_sum_over_axis, axis=axis),
     )
 
 
 def make_array_list_fn_sign_covariant(
-    fn: Callable[[ArrayList], jnp.ndarray]
+    fn: Callable[[ArrayList], jnp.ndarray], axis: int = -2
 ) -> Callable[[ArrayList], jnp.ndarray]:
     """Make a function of an ArrayList sign-covariant in the sign of each array.
 
@@ -260,7 +264,7 @@ def make_array_list_fn_sign_covariant(
     """
     return make_fn_sign_covariant(
         fn,
-        functools.partial(_get_sign_orbit_array_list, axis=-2),
-        lambda x, s: jnp.expand_dims(s, axis=-1) * x,
-        functools.partial(jnp.sum, axis=-2),
+        functools.partial(_get_sign_orbit_array_list, axis=axis),
+        functools.partial(_multiply_sign_along_axis, axis=axis),
+        functools.partial(jnp.sum, axis=axis),
     )

@@ -8,12 +8,8 @@ import jax.numpy as jnp
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import SLArray, SpinSplit, PyTree
-from .weights import (
-    WeightInitializer,
-    get_bias_initializer,
-    get_kernel_initializer,
-)
+from vmcnet.utils.typing import PyTree, SLArray, SpinSplit
+from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
