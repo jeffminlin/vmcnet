@@ -59,7 +59,7 @@ def get_model_from_config(
     """Get a model from a hyperparameter config."""
     spin_split = tuple(jnp.cumsum(nelec)[:-1])
 
-    backflow = get_backflow_from_model_config(
+    backflow = get_backflow_from_config(
         model_config.backflow,
         ion_pos,
         spin_split,
@@ -141,7 +141,7 @@ def get_model_from_config(
 
         def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
             concat_x = jnp.concatenate(x, axis=-2)
-            return get_backflow_from_model_config(
+            return get_backflow_from_config(
                 model_config.invariance,
                 ion_pos=None,
                 spin_split=spin_split,
@@ -202,12 +202,12 @@ def get_model_from_config(
         )
 
 
-def get_backflow_from_model_config(
+def get_backflow_from_config(
     backflow_config,
     ion_pos,
     spin_split,
     dtype=jnp.float32,
-):
+) -> flax.linen.Module:
     """Get a FermiNet backflow from a model configuration."""
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
@@ -550,15 +550,16 @@ class AntiequivarianceNet(flax.linen.Module):
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
             (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+                -> (stream_1e of shape (..., n, d_backflow),
+                    r_ei of shape (..., n, nion, d))
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
-            (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
-                -> (antieqs of shapes [spin: (..., n[spin], d'')])
+            (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
+                -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
         array_list_equivariance (Callable): function which is equivariant-per-spin. Has
             the signature
-            (list of arrays of shapes [spin: (..., n[spin], d'')])
-                -> (array of shape (..., n, d'''))
+            (list of arrays of shapes [spin: (..., n[spin], d_antieq)])
+                -> (array of shape (..., n, d_equiv))
             All outputs of this function are made covariant with respect to each input
             sign, and an odd invariance is created by summing over the last two
             dimensions of the output.
@@ -586,9 +587,9 @@ class AntiequivarianceNet(flax.linen.Module):
             elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
 
         Returns:
-            jnp.ndarray: general odd invariance of anti-equivariant backflow. If the
-            inputs have shape (batch_dims, nelec, d), then the output has shape
-            (batch_dims,).
+            jnp.ndarray: log(abs(psi)), where psi is a general odd invariance of an
+            anti-equivariant backflow. If the inputs have shape (batch_dims, nelec, d),
+            then the output has shape (batch_dims,).
         """
         backflow_out, r_ei = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
