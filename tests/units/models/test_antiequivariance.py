@@ -78,7 +78,7 @@ def test_sum_slog_cofactor_equals_nonzero_slogdet():
     signs, logs = slog_sum_over_axis(y)
 
     np.testing.assert_allclose(signs, expected_signs)
-    np.testing.assert_allclose(logs, expected_logs)
+    np.testing.assert_allclose(logs, expected_logs, rtol=1e-6)
 
 
 @pytest.mark.slow

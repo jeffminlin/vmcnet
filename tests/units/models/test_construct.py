@@ -5,9 +5,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
 import vmcnet.models as models
 import vmcnet.train as train
+from vmcnet.utils.typing import ArrayList
 
 
 def test_compose_negative_with_three_body_antisymmetry():
@@ -79,7 +79,7 @@ def _get_det_resnet():
     )
 
 
-def _make_ferminet():
+def _make_ferminets():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
@@ -103,65 +103,144 @@ def _make_ferminet():
     return key, init_pos, log_psis
 
 
-def _make_split_antisymmetry():
+def _make_antiequivariance_net(
+    spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
+):
+    backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins=cyclic_spins, ion_pos=ion_pos
+    )
+
+    def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
+        concat_x = jnp.concatenate(x, axis=-2)
+        return _get_backflow(
+            spin_split, ((9,), (2,), (1,)), cyclic_spins=True, ion_pos=None
+        )(concat_x)[0]
+
+    log_psi = models.construct.AntiequivarianceNet(
+        backflow, antiequivariance, array_list_equivariance
+    )
+
+    return log_psi
+
+
+def _make_orbital_cofactor_net():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
-    log_psis = []
-    for cyclic_spins in [True, False]:
-        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-        log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
+    antiequivariance = models.antiequivariance.OrbitalCofactorAntiequivarianceLayer(
+        spin_split,
+        models.weights.get_kernel_initializer("he_normal"),
+        models.weights.get_kernel_initializer("lecun_normal"),
+        models.weights.get_kernel_initializer("ones"),
+        models.weights.get_bias_initializer("uniform"),
+    )
+
+    log_psi = _make_antiequivariance_net(
+        spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
+    )
+
+    return key, init_pos, log_psi
+
+
+def _make_per_particle_dets_net():
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+
+    antiequivariance = (
+        models.antiequivariance.PerParticleDeterminantAntiequivarianceLayer(
             spin_split,
-            backflow,
-            32,
-            3,
+            models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
-            jnp.tanh,
         )
-        log_psis.append(log_psi)
+    )
 
-    return key, init_pos, log_psis
+    log_psi = _make_antiequivariance_net(
+        spin_split, ndense_list, antiequivariance, cyclic_spins=False, ion_pos=ion_pos
+    )
+
+    return key, init_pos, log_psi
+
+
+def _make_split_antisymmetry():
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+
+    backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins=False, ion_pos=ion_pos
+    )
+    log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
+        spin_split,
+        backflow,
+        32,
+        3,
+        models.weights.get_kernel_initializer("lecun_normal"),
+        models.weights.get_kernel_initializer("ones"),
+        models.weights.get_bias_initializer("uniform"),
+        jnp.tanh,
+    )
+
+    return key, init_pos, log_psi
 
 
 def _make_double_antisymmetry():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
-    log_psis = []
-    for cyclic_spins in [True, False]:
-        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-        log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
-            spin_split,
-            backflow,
-            32,
-            3,
-            models.weights.get_kernel_initializer("lecun_normal"),
-            models.weights.get_kernel_initializer("ones"),
-            models.weights.get_bias_initializer("uniform"),
-            jnp.tanh,
-        )
-        log_psis.append(log_psi)
+    backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins=True, ion_pos=ion_pos
+    )
+    log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
+        spin_split,
+        backflow,
+        32,
+        3,
+        models.weights.get_kernel_initializer("lecun_normal"),
+        models.weights.get_kernel_initializer("ones"),
+        models.weights.get_bias_initializer("uniform"),
+        jnp.tanh,
+    )
 
-    return key, init_pos, log_psis
+    return key, init_pos, log_psi
 
 
-def _jit_eval_models(key, init_pos, log_psis):
-    for log_psi in log_psis:
-        key, subkey = jax.random.split(key)
-        params = log_psi.init(subkey, init_pos)
-        jax.jit(log_psi.apply)(params, init_pos)
+def _jit_eval_model(key, init_pos, log_psi):
+    key, subkey = jax.random.split(key)
+    params = log_psi.init(subkey, init_pos)
+    jax.jit(log_psi.apply)(params, init_pos)
 
 
 def test_ferminet_can_be_constructed():
     """Check construction of FermiNet does not fail."""
-    _make_ferminet()
+    _make_ferminets()
 
 
 @pytest.mark.slow
 def test_ferminet_can_be_evaluated():
     """Check evaluation of FermiNet does not fail."""
-    key, init_pos, log_psis = _make_ferminet()
-    _jit_eval_models(key, init_pos, log_psis)
+    key, init_pos, log_psis = _make_ferminets()
+    (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
+
+
+def test_orbital_cofactor_net_can_be_constructed():
+    """Check construction of the orbital cofactor AntiequivarianceNet does not fail."""
+    _make_orbital_cofactor_net()
+
+
+@pytest.mark.slow
+def test_orbital_cofactor_net_can_be_evaluated():
+    """Check evaluation of the orbital cofactor AntiequivarianceNet."""
+    key, init_pos, log_psi = _make_orbital_cofactor_net()
+    _jit_eval_model(key, init_pos, log_psi)
+
+
+def test_per_particle_dets_net_can_be_constructed():
+    """Check construction of the per-particle dets AntiequivarianceNet does not fail."""
+    _make_per_particle_dets_net()
+
+
+@pytest.mark.slow
+def test_per_particle_dets_net_can_be_evaluated():
+    """Check evaluation of the per-particle dets AntiequivarianceNet."""
+    key, init_pos, log_psi = _make_per_particle_dets_net()
+    _jit_eval_model(key, init_pos, log_psi)
 
 
 def test_split_antisymmetry_can_be_constructed():
@@ -172,8 +251,8 @@ def test_split_antisymmetry_can_be_constructed():
 @pytest.mark.slow
 def test_split_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, log_psis = _make_split_antisymmetry()
-    _jit_eval_models(key, init_pos, log_psis)
+    key, init_pos, log_psi = _make_split_antisymmetry()
+    _jit_eval_model(key, init_pos, log_psi)
 
 
 def test_composed_antisymmetry_can_be_constructed():
@@ -184,8 +263,17 @@ def test_composed_antisymmetry_can_be_constructed():
 @pytest.mark.slow
 def test_ferminet_composed_antisymmetry_can_be_evaluated():
     """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, log_psis = _make_double_antisymmetry()
-    _jit_eval_models(key, init_pos, log_psis)
+    key, init_pos, log_psi = _make_double_antisymmetry()
+    _jit_eval_model(key, init_pos, log_psi)
+
+
+def _get_default_config_with_chosen_model(model_type, subtype="rank_one"):
+    model_config = train.default_config.get_default_model_config()
+    model_config.type = model_type
+    model_config.brute_force_antisym.antisym_type = subtype
+    model_config = train.default_config.choose_model_type_in_config(model_config)
+
+    return model_config
 
 
 def test_get_model_from_default_config():
@@ -193,22 +281,23 @@ def test_get_model_from_default_config():
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
     nelec = jnp.array([4, 3])
 
-    for model_type in ["ferminet", "brute_force_antisym"]:
+    for model_type in [
+        "ferminet",
+        "orbital_cofactor_net",
+        "per_particle_dets_net",
+        "brute_force_antisym",
+    ]:
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
-                model_config = train.default_config.get_default_model_config()
-                model_config.type = model_type
-                model_config.brute_force_antisym.antisym_type = subtype
-                model_config = train.default_config.choose_model_type_in_config(
-                    model_config
+                model_config = _get_default_config_with_chosen_model(
+                    model_type, subtype=subtype
                 )
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type == "ferminet":
             for use_det_resnet in [False, True]:
-                model_config = train.default_config.get_default_model_config()
-                model_config.type = model_type
-                model_config = train.default_config.choose_model_type_in_config(
-                    model_config
-                )
+                model_config = _get_default_config_with_chosen_model(model_type)
                 model_config.use_det_resnet = use_det_resnet
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
+        elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
+            model_config = _get_default_config_with_chosen_model(model_type)
+            models.construct.get_model_from_config(model_config, nelec, ion_pos)

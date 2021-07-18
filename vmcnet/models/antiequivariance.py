@@ -65,8 +65,9 @@ def cofactor_antieq(x: jnp.ndarray) -> jnp.ndarray:
             particle dimension, and the last is the orbital dimension.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): tuple of arrays, each of shape (..., n). The first
-        is sign(result), and the second is log(abs(result)).
+        (jnp.ndarray): array of shape (..., n), with the ith output (along the last
+        axis) given by the ith term in the cofactor expansion of det(x) along the first
+        entry of the last axis
     """
     first_orbital_vals = x[..., 0]
     n, stacked_submatrices = get_submatrices_along_first_col(x)
@@ -173,35 +174,35 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        orbital_kernel_initializer_linear (WeightInitializer): kernel initializer for
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
             orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
             signature (key, shape, dtype) -> jnp.ndarray
-        orbital_bias_initializer_linear (WeightInitializer): bias initializer for the
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_use_bias (bool, optional): whether to add a bias term to the linear part
-            of the orbitals. Defaults to True.
-        orbital_isotropic_decay (bool, optional): whether the decay for each ion should
+        orbitals_use_bias (bool, optional): whether to add a bias term to the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should
             be anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
     """
 
     spin_split: SpinSplit
-    orbital_kernel_initializer_linear: WeightInitializer
-    orbital_kernel_initializer_envelope_dim: WeightInitializer
-    orbital_kernel_initializer_envelope_ion: WeightInitializer
-    orbital_bias_initializer_linear: WeightInitializer
-    orbital_use_bias: bool = True
-    orbital_isotropic_decay: bool = False
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool = True
+    isotropic_decay: bool = False
 
     @flax.linen.compact
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
@@ -229,17 +230,17 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         ferminet_orbital_layer = FermiNetOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
-            self.orbital_kernel_initializer_linear,
-            self.orbital_kernel_initializer_envelope_dim,
-            self.orbital_kernel_initializer_envelope_ion,
-            self.orbital_bias_initializer_linear,
-            self.orbital_use_bias,
-            self.orbital_isotropic_decay,
+            self.kernel_initializer_orbital_linear,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            self.bias_initializer_orbital_linear,
+            self.orbitals_use_bias,
+            self.isotropic_decay,
         )
 
         # Calculate orbital matrices as list of shape [(..., nelec[i], nelec[i])]
         orbital_matrix_list = ferminet_orbital_layer(eq_inputs, r_ei)
-        # Calculate cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
+        # Calculate cofactors as list of shape [(..., nelec[i])]
         cofactors = jax.tree_map(cofactor_antieq, orbital_matrix_list)
         return _multiply_eq_inputs_by_split_antieq(
             eq_inputs, cofactors, self.spin_split
@@ -259,35 +260,35 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        orbital_kernel_initializer_linear (WeightInitializer): kernel initializer for
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
             orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
             signature (key, shape, dtype) -> jnp.ndarray
-        orbital_bias_initializer_linear (WeightInitializer): bias initializer for the
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_use_bias (bool, optional): whether to add a bias term to the linear part
-            of the orbitals. Defaults to True.
-        orbital_isotropic_decay (bool, optional): whether the decay for each ion should
+        orbitals_use_bias (bool, optional): whether to add a bias term to the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should
             be anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
     """
 
     spin_split: SpinSplit
-    orbital_kernel_initializer_linear: WeightInitializer
-    orbital_kernel_initializer_envelope_dim: WeightInitializer
-    orbital_kernel_initializer_envelope_ion: WeightInitializer
-    orbital_bias_initializer_linear: WeightInitializer
-    orbital_use_bias: bool = True
-    orbital_isotropic_decay: bool = False
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool = True
+    isotropic_decay: bool = False
 
     @flax.linen.compact
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
@@ -315,12 +316,12 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         ferminet_orbital_layer = FermiNetOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
-            self.orbital_kernel_initializer_linear,
-            self.orbital_kernel_initializer_envelope_dim,
-            self.orbital_kernel_initializer_envelope_ion,
-            self.orbital_bias_initializer_linear,
-            self.orbital_use_bias,
-            self.orbital_isotropic_decay,
+            self.kernel_initializer_orbital_linear,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            self.bias_initializer_orbital_linear,
+            self.orbitals_use_bias,
+            self.isotropic_decay,
         )
 
         # Calculate orbital matrices as list of shape [(..., nelec[i], nelec[i])]
@@ -345,35 +346,35 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        orbital_kernel_initializer_linear (WeightInitializer): kernel initializer for
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
             orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
             signature (key, shape, dtype) -> jnp.ndarray
-        orbital_bias_initializer_linear (WeightInitializer): bias initializer for the
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_use_bias (bool, optional): whether to add a bias term to the linear part
-            of the orbitals. Defaults to True.
-        orbital_isotropic_decay (bool, optional): whether the decay for each ion should
+        orbitals_use_bias (bool, optional): whether to add a bias term to the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should
             be anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
     """
 
     spin_split: SpinSplit
-    orbital_kernel_initializer_linear: WeightInitializer
-    orbital_kernel_initializer_envelope_dim: WeightInitializer
-    orbital_kernel_initializer_envelope_ion: WeightInitializer
-    orbital_bias_initializer_linear: WeightInitializer
-    orbital_use_bias: bool = True
-    orbital_isotropic_decay: bool = False
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool = True
+    isotropic_decay: bool = False
 
     @flax.linen.compact
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
@@ -400,12 +401,12 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         equivariant_orbital_layer = DoublyEquivariantOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
-            self.orbital_kernel_initializer_linear,
-            self.orbital_kernel_initializer_envelope_dim,
-            self.orbital_kernel_initializer_envelope_ion,
-            self.orbital_bias_initializer_linear,
-            self.orbital_use_bias,
-            self.orbital_isotropic_decay,
+            self.kernel_initializer_orbital_linear,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            self.bias_initializer_orbital_linear,
+            self.orbitals_use_bias,
+            self.isotropic_decay,
         )
 
         # ArrayList of shape (..., nelec[i], nelec[i], nelec[i])
@@ -428,35 +429,35 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        orbital_kernel_initializer_linear (WeightInitializer): kernel initializer for
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
             orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        orbital_kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
             signature (key, shape, dtype) -> jnp.ndarray
-        orbital_bias_initializer_linear (WeightInitializer): bias initializer for the
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbital_use_bias (bool, optional): whether to add a bias term to the linear part
-            of the orbitals. Defaults to True.
-        orbital_isotropic_decay (bool, optional): whether the decay for each ion should
+        orbitals_use_bias (bool, optional): whether to add a bias term to the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should
             be anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
     """
 
     spin_split: SpinSplit
-    orbital_kernel_initializer_linear: WeightInitializer
-    orbital_kernel_initializer_envelope_dim: WeightInitializer
-    orbital_kernel_initializer_envelope_ion: WeightInitializer
-    orbital_bias_initializer_linear: WeightInitializer
-    orbital_use_bias: bool = True
-    orbital_isotropic_decay: bool = False
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool = True
+    isotropic_decay: bool = False
 
     @flax.linen.compact
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
@@ -483,12 +484,12 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         equivariant_orbital_layer = DoublyEquivariantOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
-            self.orbital_kernel_initializer_linear,
-            self.orbital_kernel_initializer_envelope_dim,
-            self.orbital_kernel_initializer_envelope_ion,
-            self.orbital_bias_initializer_linear,
-            self.orbital_use_bias,
-            self.orbital_isotropic_decay,
+            self.kernel_initializer_orbital_linear,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            self.bias_initializer_orbital_linear,
+            self.orbitals_use_bias,
+            self.isotropic_decay,
         )
 
         # ArrayList of shape (..., nelec[i], nelec[i], nelec[i])

@@ -181,18 +181,16 @@ def make_fn_sign_covariant(
 
     Inputs are assumed to be either jnp.ndarrays or SLArrays, so that in either case the
     required symmetries can be stacked along a new axis of the underlying array values.
-    This method additionally assumes the output of the function is a single array or
-    SLArray, and that the function only applies to the last axis of its inputs, so
-    that the previous axes can all be treated as batch dimensions. Essentially, the
-    function must be a map from inputs of shape (..., d) to outputs of shape
-    (..., d'). This allows us to insert the orbit symmetries along axis -2 and then
-    remove the extra dimension by summing over the inserted axis at the end, which
-    considerably simplifies the implementation relative to handling a more general case.
+    The function `fn` is assumed to support the injection of a batch dimension, done in
+    `get_signs_and_syms`, and pass it through to the output (e.g., a function which
+    flattens the input would not be supported). The extra dimension is removed at the
+    end via `add_up_results`.
 
     Args:
-        fn (Callable): the function to symmetrize, which takes in a list of arrays or
-            SLArrays with leaves of shape (..., d), and outputs a single array or
-            SLArray of shape (..., d').
+        fn (Callable): the function to symmetrize. The given axis is injected into the
+            inputs and the sign orbit is computed, so this function should be able to
+            treat the given sign orbit axis as a batch dimension, and the overall tensor
+            rank should not change (len(input.shape) == len(output.shape))
         get_signs_and_syms (Callable): a function which gets the signs and symmetries
             for the input array. Returns a tuple of the symmetries plus the associated
             signs as a 1D array.
@@ -218,16 +216,22 @@ def make_fn_sign_covariant(
     return sign_covariant_fn
 
 
+def _multiply_sign_along_axis(x, s, axis):
+    return jnp.swapaxes(s * jnp.swapaxes(x, axis, -1), axis, -1)
+
+
 def make_sl_array_list_fn_sign_covariant(
-    fn: Callable[[SLArrayList], SLArray]
+    fn: Callable[[SLArrayList], SLArray], axis: int = -2
 ) -> Callable[[SLArrayList], SLArray]:
     """Make a function of an SLArrayList sign-covariant in the sign of each SLArray.
 
     Shallow wrapper around the generic make_fn_sign_covariant.
 
     Args:
-        fn (Callable): the function to symmetrize, which takes in a list of arrays of
-            shape (..., d), and outputs a single array of shape (..., d').
+        fn (Callable): the function to symmetrize. The given axis is injected into the
+            inputs and the sign orbit is computed, so this function should be able to
+            treat the given sign orbit axis as a batch dimension, and the overall tensor
+            rank should not change (len(input.shape) == len(output.shape))
 
     Returns:
         Callable: a function with the same signature as the input function, but
@@ -236,22 +240,24 @@ def make_sl_array_list_fn_sign_covariant(
     """
     return make_fn_sign_covariant(
         fn,
-        functools.partial(_get_sign_orbit_sl_array_list, axis=-2),
-        lambda x, s: (x[0] * jnp.expand_dims(s, axis=-1), x[1]),
-        functools.partial(slog_sum_over_axis, axis=-2),
+        functools.partial(_get_sign_orbit_sl_array_list, axis=axis),
+        lambda x, s: (_multiply_sign_along_axis(x[0], s, axis), x[1]),
+        functools.partial(slog_sum_over_axis, axis=axis),
     )
 
 
 def make_array_list_fn_sign_covariant(
-    fn: Callable[[ArrayList], jnp.ndarray]
+    fn: Callable[[ArrayList], jnp.ndarray], axis: int = -2
 ) -> Callable[[ArrayList], jnp.ndarray]:
     """Make a function of an ArrayList sign-covariant in the sign of each array.
 
     Shallow wrapper around the generic make_fn_sign_covariant.
 
     Args:
-        fn (Callable): the function to symmetrize, which takes in a list of SLArrays
-        with leaves of shape (..., d), and outputs a single SLArray of shape (..., d').
+        fn (Callable): the function to symmetrize. The given axis is injected into the
+            inputs and the sign orbit is computed, so this function should be able to
+            treat the given sign orbit axis as a batch dimension, and the overall tensor
+            rank should not change (len(input.shape) == len(output.shape))
 
     Returns:
         Callable: a function with the same signature as the input function, but
@@ -260,7 +266,7 @@ def make_array_list_fn_sign_covariant(
     """
     return make_fn_sign_covariant(
         fn,
-        functools.partial(_get_sign_orbit_array_list, axis=-2),
-        lambda x, s: jnp.expand_dims(s, axis=-1) * x,
-        functools.partial(jnp.sum, axis=-2),
+        functools.partial(_get_sign_orbit_array_list, axis=axis),
+        functools.partial(_multiply_sign_along_axis, axis=axis),
+        functools.partial(jnp.sum, axis=axis),
     )

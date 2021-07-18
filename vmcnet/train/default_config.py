@@ -1,7 +1,7 @@
 """Create configuration of hyperparameters."""
 import os
 
-from ml_collections import ConfigDict
+from ml_collections import ConfigDict, FieldReference
 
 
 def get_default_config() -> ConfigDict:
@@ -46,6 +46,11 @@ def get_default_model_config() -> ConfigDict:
     """Get a default model configuration from a model type."""
     orthogonal_init = ConfigDict({"type": "orthogonal", "scale": 1.0})
     normal_init = ConfigDict({"type": "normal"})
+
+    # tie together the values of ferminet_backflow.cyclic_spins and
+    # invariance.cyclic_spins
+    cyclic_spins = FieldReference(False)
+
     ferminet_backflow = ConfigDict(
         {
             "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
@@ -61,7 +66,28 @@ def get_default_model_config() -> ConfigDict:
             "include_ee_norm": True,
             "use_bias": True,
             "skip_connection": True,
-            "cyclic_spins": False,
+            "cyclic_spins": cyclic_spins,
+        }
+    )
+    invariance = ConfigDict(
+        {
+            "ndense_list": ((256,), (256,), (1,)),
+            "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
+            "kernel_init_mixed": orthogonal_init,
+            "kernel_init_2e_1e_stream": orthogonal_init,
+            "kernel_init_2e_2e_stream": {
+                "type": "orthogonal",
+                "scale": 2.0,
+            },
+            "bias_init_1e_stream": normal_init,
+            "bias_init_2e_stream": normal_init,
+            "activation_fn": "tanh",
+            "include_2e_stream": False,
+            "include_ei_norm": False,
+            "include_ee_norm": False,
+            "use_bias": True,
+            "skip_connection": True,
+            "cyclic_spins": cyclic_spins,
         }
     )
     config = ConfigDict(
@@ -89,6 +115,30 @@ def get_default_model_config() -> ConfigDict:
                             "register_kfac": False,
                         }
                     ),
+                }
+            ),
+            "orbital_cofactor_net": ConfigDict(
+                {
+                    "backflow": ferminet_backflow,
+                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+                    "kernel_init_envelope_dim": {"type": "ones"},
+                    "kernel_init_envelope_ion": {"type": "ones"},
+                    "bias_init_orbital_linear": normal_init,
+                    "orbitals_use_bias": True,
+                    "isotropic_decay": True,
+                    "invariance": invariance,
+                }
+            ),
+            "per_particle_dets_net": ConfigDict(
+                {
+                    "backflow": ferminet_backflow,
+                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+                    "kernel_init_envelope_dim": {"type": "ones"},
+                    "kernel_init_envelope_ion": {"type": "ones"},
+                    "bias_init_orbital_linear": normal_init,
+                    "orbitals_use_bias": True,
+                    "isotropic_decay": True,
+                    "invariance": invariance,
                 }
             ),
             "brute_force_antisym": ConfigDict(

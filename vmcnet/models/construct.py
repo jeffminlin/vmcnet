@@ -1,4 +1,5 @@
 """Combine pieces to form full models."""
+import functools
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import flax
@@ -6,6 +7,7 @@ import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
+from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from vmcnet.utils.typing import ArrayList, SpinSplit
 from .antisymmetry import (
@@ -13,11 +15,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import (
-    Activation,
-    SimpleResNet,
-    get_nelec_per_spin,
-)
+from .core import Activation, SimpleResNet, get_nelec_per_spin
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -44,6 +42,14 @@ def _get_named_activation_fn(name):
         raise ValueError("Activations besides tanh and gelu are not yet supported.")
 
 
+def _get_dtype_init_constructors(dtype):
+    kernel_init_constructor = functools.partial(
+        get_kernel_init_from_config, dtype=dtype
+    )
+    bias_init_constructor = functools.partial(get_bias_init_from_config, dtype=dtype)
+    return kernel_init_constructor, bias_init_constructor
+
+
 def get_model_from_config(
     model_config: ConfigDict,
     nelec: jnp.ndarray,
@@ -53,12 +59,14 @@ def get_model_from_config(
     """Get a model from a hyperparameter config."""
     spin_split = tuple(jnp.cumsum(nelec)[:-1])
 
-    backflow = get_backflow_from_model_config(
-        model_config,
+    backflow = get_backflow_from_config(
+        model_config.backflow,
         ion_pos,
         spin_split,
         dtype=dtype,
     )
+
+    kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type == "ferminet":
         determinant_fn = None
@@ -68,8 +76,8 @@ def get_model_from_config(
                 resnet_config.ndense,
                 resnet_config.nlayers,
                 _get_named_activation_fn(resnet_config.activation),
-                get_kernel_init_from_config(resnet_config.kernel_init, dtype=dtype),
-                get_bias_init_from_config(resnet_config.bias_init, dtype=dtype),
+                kernel_init_constructor(resnet_config.kernel_init),
+                bias_init_constructor(resnet_config.bias_init),
                 resnet_config.use_bias,
                 resnet_config.register_kfac,
             )
@@ -77,22 +85,70 @@ def get_model_from_config(
             spin_split,
             backflow,
             model_config.ndeterminants,
-            kernel_initializer_orbital_linear=get_kernel_init_from_config(
-                model_config.kernel_init_orbital_linear, dtype=dtype
+            kernel_initializer_orbital_linear=kernel_init_constructor(
+                model_config.kernel_init_orbital_linear
             ),
-            kernel_initializer_envelope_dim=get_kernel_init_from_config(
-                model_config.kernel_init_envelope_dim, dtype=dtype
+            kernel_initializer_envelope_dim=kernel_init_constructor(
+                model_config.kernel_init_envelope_dim
             ),
-            kernel_initializer_envelope_ion=get_kernel_init_from_config(
-                model_config.kernel_init_envelope_ion, dtype=dtype
+            kernel_initializer_envelope_ion=kernel_init_constructor(
+                model_config.kernel_init_envelope_ion
             ),
-            bias_initializer_orbital_linear=get_bias_init_from_config(
-                model_config.bias_init_orbital_linear, dtype=dtype
+            bias_initializer_orbital_linear=bias_init_constructor(
+                model_config.bias_init_orbital_linear
             ),
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
             determinant_fn=determinant_fn,
         )
+    elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
+        if model_config.type == "orbital_cofactor_net":
+            antieq_layer = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
+                spin_split,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+            )
+        elif model_config.type == "per_particle_dets_net":
+            antieq_layer = antiequivariance.PerParticleDeterminantAntiequivarianceLayer(
+                spin_split,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+            )
+
+        def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
+            concat_x = jnp.concatenate(x, axis=-2)
+            return get_backflow_from_config(
+                model_config.invariance,
+                ion_pos=None,
+                spin_split=spin_split,
+                dtype=dtype,
+            )(concat_x)[0]
+
+        return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
     elif model_config.type == "brute_force_antisym":
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
@@ -100,14 +156,14 @@ def get_model_from_config(
                 backflow,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
-                kernel_initializer_resnet=get_kernel_init_from_config(
-                    model_config.kernel_init_resnet, dtype=dtype
+                kernel_initializer_resnet=kernel_init_constructor(
+                    model_config.kernel_init_resnet
                 ),
-                kernel_initializer_jastrow=get_kernel_init_from_config(
-                    model_config.kernel_init_jastrow, dtype=dtype
+                kernel_initializer_jastrow=kernel_init_constructor(
+                    model_config.kernel_init_jastrow
                 ),
-                bias_initializer_resnet=get_bias_init_from_config(
-                    model_config.bias_init_resnet, dtype=dtype
+                bias_initializer_resnet=bias_init_constructor(
+                    model_config.bias_init_resnet
                 ),
                 activation_fn_resnet=_get_named_activation_fn(
                     model_config.activation_fn_resnet
@@ -120,14 +176,14 @@ def get_model_from_config(
                 backflow,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
-                kernel_initializer_resnet=get_kernel_init_from_config(
-                    model_config.kernel_init_resnet, dtype=dtype
+                kernel_initializer_resnet=kernel_init_constructor(
+                    model_config.kernel_init_resnet
                 ),
-                kernel_initializer_jastrow=get_kernel_init_from_config(
-                    model_config.kernel_init_jastrow, dtype=dtype
+                kernel_initializer_jastrow=kernel_init_constructor(
+                    model_config.kernel_init_jastrow
                 ),
-                bias_initializer_resnet=get_bias_init_from_config(
-                    model_config.bias_init_resnet, dtype=dtype
+                bias_initializer_resnet=bias_init_constructor(
+                    model_config.bias_init_resnet
                 ),
                 activation_fn_resnet=_get_named_activation_fn(
                     model_config.activation_fn_resnet
@@ -146,46 +202,48 @@ def get_model_from_config(
         )
 
 
-def get_backflow_from_model_config(
-    model_config,
+def get_backflow_from_config(
+    backflow_config,
     ion_pos,
     spin_split,
     dtype=jnp.float32,
-):
+) -> flax.linen.Module:
     """Get a FermiNet backflow from a model configuration."""
+    kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
+
     residual_blocks = _get_residual_blocks_for_ferminet_backflow(
         spin_split,
-        model_config.backflow.ndense_list,
-        kernel_initializer_unmixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_unmixed, dtype=dtype
+        backflow_config.ndense_list,
+        kernel_initializer_unmixed=kernel_init_constructor(
+            backflow_config.kernel_init_unmixed
         ),
-        kernel_initializer_mixed=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_mixed, dtype=dtype
+        kernel_initializer_mixed=kernel_init_constructor(
+            backflow_config.kernel_init_mixed
         ),
-        kernel_initializer_2e_1e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_1e_stream, dtype=dtype
+        kernel_initializer_2e_1e_stream=kernel_init_constructor(
+            backflow_config.kernel_init_2e_1e_stream
         ),
-        kernel_initializer_2e_2e_stream=get_kernel_init_from_config(
-            model_config.backflow.kernel_init_2e_2e_stream, dtype=dtype
+        kernel_initializer_2e_2e_stream=kernel_init_constructor(
+            backflow_config.kernel_init_2e_2e_stream
         ),
-        bias_initializer_1e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_1e_stream, dtype=dtype
+        bias_initializer_1e_stream=bias_init_constructor(
+            backflow_config.bias_init_1e_stream
         ),
-        bias_initializer_2e_stream=get_bias_init_from_config(
-            model_config.backflow.bias_init_2e_stream, dtype=dtype
+        bias_initializer_2e_stream=bias_init_constructor(
+            backflow_config.bias_init_2e_stream
         ),
-        activation_fn=_get_named_activation_fn(model_config.backflow.activation_fn),
-        use_bias=model_config.backflow.use_bias,
-        skip_connection=model_config.backflow.skip_connection,
-        cyclic_spins=model_config.backflow.cyclic_spins,
+        activation_fn=_get_named_activation_fn(backflow_config.activation_fn),
+        use_bias=backflow_config.use_bias,
+        skip_connection=backflow_config.skip_connection,
+        cyclic_spins=backflow_config.cyclic_spins,
     )
 
     backflow = FermiNetBackflow(
         residual_blocks,
         ion_pos=ion_pos,
-        include_2e_stream=model_config.backflow.include_2e_stream,
-        include_ei_norm=model_config.backflow.include_ei_norm,
-        include_ee_norm=model_config.backflow.include_ee_norm,
+        include_2e_stream=backflow_config.include_2e_stream,
+        include_ei_norm=backflow_config.include_ei_norm,
+        include_ee_norm=backflow_config.include_ee_norm,
     )
 
     return backflow
@@ -415,7 +473,7 @@ class FermiNet(flax.linen.Module):
             is taken across the ndeterminants determinants. Defaults to None.
     """
 
-    spin_split: Union[int, Sequence[int]]
+    spin_split: SpinSplit
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -483,6 +541,60 @@ class FermiNet(flax.linen.Module):
         slog_det_prods = slogdet_product(orbitals)
         _, log_psi = slog_sum_over_axis(slog_det_prods)
         return log_psi
+
+
+class AntiequivarianceNet(flax.linen.Module):
+    """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
+
+    Attributes:
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d_backflow),
+                    r_ei of shape (..., n, nion, d))
+        antiequivariant_layer (Callable): function which computes antiequivariances-per-
+            spin. Has the signature
+            (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
+                -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
+        array_list_equivariance (Callable): function which is equivariant-per-spin. Has
+            the signature
+            (list of arrays of shapes [spin: (..., n[spin], d_antieq)])
+                -> (array of shape (..., n, d_equiv))
+            All outputs of this function are made covariant with respect to each input
+            sign, and an odd invariance is created by summing over the last two
+            dimensions of the output.
+    """
+
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
+    array_list_equivariance: Callable[[ArrayList], jnp.ndarray]
+
+    def setup(self):
+        """Setup backflow."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._backflow = self.backflow
+        self._antiequivariant_layer = self.antiequivariant_layer
+        self._sign_cov_equivariance = make_array_list_fn_sign_covariant(
+            self.array_list_equivariance, axis=-3
+        )
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        """Compose backflow -> antiequivariance -> sign covariant equivariance -> sum.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: log(abs(psi)), where psi is a general odd invariance of an
+            anti-equivariant backflow. If the inputs have shape (batch_dims, nelec, d),
+            then the output has shape (batch_dims,).
+        """
+        backflow_out, r_ei = self._backflow(elec_pos)
+        antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
+        transformed_out = self._sign_cov_equivariance(antiequivariant_out)
+        return jnp.log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
