@@ -538,6 +538,25 @@ def run_molecule() -> None:
         dtype=dtype_to_use,
     )
 
+    reload_checkpoint_path = config.eval.checkpoint_to_reload_from
+    reload_from_checkpoint = (
+        reload_checkpoint_path != train.default_config.NO_RELOAD_CHECKPOINT
+    )
+
+    if reload_from_checkpoint:
+        directory, filename = os.path.split(reload_checkpoint_path)
+        _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
+            directory, filename
+        )
+        (
+            data,
+            params,
+            optimizer_state,
+            sharded_key,
+        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+            data, params, optimizer_state, key
+        )
+
     params, optimizer_state, data, sharded_key = _burn_and_run_vmc(
         config.vmc,
         logdir,

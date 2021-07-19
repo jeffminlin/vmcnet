@@ -3,6 +3,8 @@ import os
 
 from ml_collections import ConfigDict, FieldReference
 
+NO_RELOAD_CHECKPOINT = "NONE"
+
 
 def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
@@ -22,6 +24,7 @@ def get_default_config() -> ConfigDict:
             "logging_level": "WARNING",
             "dtype": "float32",
             "initial_seed": 0,
+            "checkpoint_to_reload_from": NO_RELOAD_CHECKPOINT,
         }
     )
     return config
