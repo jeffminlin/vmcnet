@@ -145,6 +145,7 @@ def create_eval_update_param_fn(
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
+    nan_safe: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
@@ -165,7 +166,7 @@ def create_eval_update_param_fn(
     def eval_update_param_fn(params, data, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
         energy, variance = physics.core.get_statistics_from_local_energy(
-            local_energies, nchains, nan_safe=False
+            local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
         return params, optimizer_state, metrics, key

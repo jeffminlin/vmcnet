@@ -434,7 +434,10 @@ def _setup_distributed_eval(
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
-        local_energy_fn, config.eval.nchains, get_position_fn
+        local_energy_fn,
+        config.eval.nchains,
+        get_position_fn,
+        nan_safe=config.eval.nan_safe,
     )
     eval_burning_step, eval_walker_fn = _get_mcmc_fns(config.eval, log_psi_apply)
     return eval_update_param_fn, eval_burning_step, eval_walker_fn
