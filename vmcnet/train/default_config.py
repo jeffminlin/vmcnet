@@ -181,17 +181,32 @@ def get_default_vmc_config() -> ConfigDict:
             "nsteps_per_param_update": 10,
             "nmoves_per_width_update": 100,
             "std_move": 0.25,
-            "clip_threshold": 5.0,
-            "optimizer_type": "kfac",
-            "schedule_type": "inverse_time",
-            "learning_rate": 1e-4,
-            "learning_decay_rate": 1e-4,
             "checkpoint_every": 5000,
             "best_checkpoint_every": 100,
             "checkpoint_dir": "checkpoints",
             "checkpoint_variance_scale": 10,
             "nhistory_max": 200,
+            "clip_threshold": 5.0,
+            "schedule_type": "inverse_time",  # constant or inverse_time
+            "learning_rate": 1e-4,
+            "learning_decay_rate": 1e-4,
             "nan_safe": True,
+            "optimizer_type": "kfac",
+            "optimizer": {
+                "kfac": ConfigDict(
+                    {
+                        "l2_reg": 0.0,
+                        "norm_constraint": 0.001,
+                        "curvature_ema": 0.95,
+                        "inverse_update_period": 1,
+                        "min_damping": 1e-4,
+                        "register_only_generic": False,
+                        "estimation_mode": "fisher_exact",
+                        "damping": 0.001,
+                    }
+                ),
+                "adam": {"b1": 0.9, "b2": 0.999, "eps": 1e-8, "eps_root": 0.0},
+            },
         }
     )
     return vmc_config
