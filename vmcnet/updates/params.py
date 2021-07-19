@@ -145,6 +145,7 @@ def create_eval_update_param_fn(
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
+    nan_safe: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
@@ -156,6 +157,11 @@ def create_eval_update_param_fn(
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
         get_position_fn (Callable): gets the walker positions from the MCMC data
+        nan_safe (bool): whether or not to mask local energy nans in the evaluation
+            process. This option should not be used under normal circumstances, as the
+            energy estimates are of unclear validity if nans are masked. However,
+            it can be used to get a coarse estimate of the energy of a wavefunction even
+            if a few walkers are returning nans for their local energies.
 
     Returns:
         Callable: function which evaluates the local energies and averages them, without
@@ -165,7 +171,7 @@ def create_eval_update_param_fn(
     def eval_update_param_fn(params, data, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
         energy, variance = physics.core.get_statistics_from_local_energy(
-            local_energies, nchains, nan_safe=False
+            local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
         return params, optimizer_state, metrics, key
