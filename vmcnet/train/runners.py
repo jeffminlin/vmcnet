@@ -538,7 +538,7 @@ def run_molecule() -> None:
         dtype=dtype_to_use,
     )
 
-    reload_checkpoint_path = config.eval.checkpoint_to_reload_from
+    reload_checkpoint_path = config.checkpoint_to_reload_from
     reload_from_checkpoint = (
         reload_checkpoint_path != train.default_config.NO_RELOAD_CHECKPOINT
     )
