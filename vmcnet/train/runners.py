@@ -263,21 +263,22 @@ def _get_kfac_update_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
+    optimizer_config: ConfigDict,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray
 ]:
     optimizer = kfac_ferminet_alpha.Optimizer(
         energy_data_val_and_grad,
-        l2_reg=0.0,
-        norm_constraint=0.001,
+        l2_reg=optimizer_config.l2_reg,
+        norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,
         learning_rate_schedule=learning_rate_schedule,
-        curvature_ema=0.95,
-        inverse_update_period=1,
-        min_damping=1e-4,
+        curvature_ema=optimizer_config.curvature_ema,
+        inverse_update_period=optimizer_config.inverse_update_period,
+        min_damping=optimizer_config.min_damping,
         num_burnin_steps=0,
-        register_only_generic=False,
-        estimation_mode="fisher_exact",
+        register_only_generic=optimizer_config.register_only_generic,
+        estimation_mode=optimizer_config.estimation_mode,
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
@@ -285,7 +286,7 @@ def _get_kfac_update_fn(
     optimizer_state = optimizer.init(params, subkeys, get_position_fn(data))
 
     update_param_fn = updates.params.create_kfac_update_param_fn(
-        optimizer, 0.001, pacore.get_position_from_data
+        optimizer, optimizer_config.damping, pacore.get_position_from_data
     )
 
     return update_param_fn, optimizer_state, sharded_key
@@ -296,8 +297,9 @@ def _get_adam_update_fn(
     get_position_fn: Callable[[D], jnp.ndarray],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
+    optimizer_config: ConfigDict,
 ) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    optimizer = optax.adam(learning_rate=learning_rate_schedule)
+    optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
     optimizer_state = utils.distribute.pmap(optimizer.init)(params)
 
     def optimizer_apply(grad, params, optimizer_state):
@@ -337,6 +339,7 @@ def _get_update_fn_and_init_optimizer(
             energy_data_val_and_grad,
             sharded_key,
             learning_rate_schedule,
+            vmc_config.optimizer.kfac,
         )
     elif vmc_config.optimizer_type == "adam":
         update_param_fn, optimizer_state = _get_adam_update_fn(
@@ -344,6 +347,7 @@ def _get_update_fn_and_init_optimizer(
             get_position_fn,
             energy_data_val_and_grad,
             learning_rate_schedule,
+            vmc_config.optimizer.adam,
         )
         return update_param_fn, optimizer_state, sharded_key
     else:
