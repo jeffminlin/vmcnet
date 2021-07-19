@@ -157,6 +157,11 @@ def create_eval_update_param_fn(
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
         get_position_fn (Callable): gets the walker positions from the MCMC data
+        nan_safe (bool): whether or not to mask local energy nans in the evaluation
+            process. This option should not be used under normal circumstances, as the
+            energy estimates are of unclear validity if nans are masked. However,
+            it can be used to get a coarse estimate of the energy of a wavefunction even
+            if a few walkers are returning nans for their local energies.
 
     Returns:
         Callable: function which evaluates the local energies and averages them, without
