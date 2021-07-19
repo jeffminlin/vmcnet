@@ -66,7 +66,7 @@ def test_sum_cofactor_equals_nonzero_det():
     """Test that the sum of the cofactors along the first col give the determinant."""
     nonsing_in = _get_nonsingular_matrix()
     y = antieq.cofactor_antieq(nonsing_in)
-    np.testing.assert_allclose(jnp.sum(y), jnp.linalg.det(nonsing_in))
+    np.testing.assert_allclose(jnp.sum(y), jnp.linalg.det(nonsing_in), rtol=1e-6)
 
 
 @pytest.mark.slow
@@ -195,7 +195,7 @@ def _test_layer_antiequivariance(
         else:
             chex.assert_shape(output[i], (nchains, nelec_per_spin[i], d_input_1e))
             np.testing.assert_allclose(
-                output[i], perm_output[i][:, split_perm[i], :] * flips[i]
+                output[i], perm_output[i][:, split_perm[i], :] * flips[i], rtol=rtol
             )
 
 
