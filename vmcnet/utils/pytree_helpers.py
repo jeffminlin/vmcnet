@@ -1,8 +1,7 @@
 """Helper functions for pytrees."""
-import functools
-
 import jax
 import jax.numpy as jnp
+import jax.flatten_util
 
 from vmcnet.utils.typing import PyTree
 
@@ -19,6 +18,5 @@ def tree_prod(tree1: PyTree, tree2: PyTree) -> PyTree:
 
 def tree_reduce_l1(xs: PyTree) -> jnp.ndarray:
     """L1 norm of a pytree as a flattened vector."""
-    return functools.reduce(
-        lambda a, b: jnp.sum(jnp.abs(a)) + jnp.sum(jnp.abs(b)), jax.tree_leaves(xs)
-    )
+    concat_xs, _ = jax.flatten_util.ravel_pytree(xs)
+    return jnp.sum(jnp.abs(concat_xs))
