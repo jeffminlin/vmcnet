@@ -29,28 +29,24 @@ from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "reload_log_dir",
-    None,
-    "Log directory from a previous run, to reload initial state from",
-)
-
-reload_log_dir = FLAGS.reload_log_dir
-if reload_log_dir is None:
-    config_flags.DEFINE_config_dict(
-        "config", train.default_config.get_default_config(), lock_config=False
-    )
-else:
-    config_path = os.path.join(reload_log_dir, "config.json")
-    with open(config_path) as json_file:
-        config_flags.DEFINE_config_dict(
-            "config", ConfigDict(json.load(json_file)), lock_config=False
-        )
 
 
 def _parse_flags():
     FLAGS(sys.argv)
     config = FLAGS.config
+    logging.info("Initial configuration: \n%s", config)
+    if config.reload.log_dir != train.default_config.NO_RELOAD_LOG_DIR:
+        config_path = os.path.join(
+            config.reload.log_dir, config.reload.config_file_path
+        )
+        with open(config_path) as json_file:
+            config_flags.DEFINE_config_dict(
+                "config", ConfigDict(json.load(json_file)), lock_config=False
+            )
+            FLAGS(sys.argv)
+            config = FLAGS.config
+            logging.info("Configuration  after loading from log dir: \n%s", config)
+
     config.model = train.default_config.choose_model_type_in_config(config.model)
     config.lock()
     return config
