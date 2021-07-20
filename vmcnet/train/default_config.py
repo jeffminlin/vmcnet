@@ -16,7 +16,7 @@ def get_default_reload_config() -> ConfigDict:
             "log_dir": NO_RELOAD_LOG_DIR,
             "use_config_file": True,
             "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
-            "use_checkpoint_file": True,
+            "use_checkpoint_file": False,
             "checkpoint_relative_file_path": CHECKPOINT_FILE_NAME,
         }
     )
