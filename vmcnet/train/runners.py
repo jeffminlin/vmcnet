@@ -534,7 +534,7 @@ def run_molecule() -> None:
 
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
-            reload_config.log_dir, config.reload.checkpoint_relative_file_path
+            reload_config.log_dir, reload_config.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
         _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
