@@ -1,5 +1,4 @@
 """Routines which handle model parameter updating."""
-import functools
 from typing import Callable, Dict, Tuple
 
 import jax
@@ -9,12 +8,15 @@ from kfac_ferminet_alpha import optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
+from vmcnet.utils.pytree_helpers import tree_reduce_l1
 from vmcnet.utils.typing import D, P, S, ModelApply, OptimizerState
 
 UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
 
-def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
+def _update_metrics_with_noclip(
+    energy_noclip: float, variance_noclip: float, metrics: Dict
+) -> Dict:
     if energy_noclip is not None:
         metrics.update({"energy_noclip": energy_noclip})
     if variance_noclip is not None:
@@ -22,7 +24,9 @@ def _update_metrics_with_noclip(energy_noclip, variance_noclip, metrics):
     return metrics
 
 
-def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
+def _make_traced_fn_with_single_metrics(
+    update_param_fn: UpdateParamFn[P, D, S], apply_pmap: bool
+) -> UpdateParamFn[P, D, S]:
     if not apply_pmap:
         return jax.jit(update_param_fn)
 
@@ -36,18 +40,6 @@ def _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap):
         return params, optimizer_state, metrics, key
 
     return pmapped_update_param_fn_with_single_metrics
-
-
-def _tree_reduce_sum(xs):
-    return functools.reduce(
-        lambda a, b: jnp.sum(jnp.abs(a)) + jnp.sum(jnp.abs(b)), jax.tree_leaves(xs)
-    )
-
-
-def compute_param_l1_norm(params):
-    """Compute the sum of the absolute values of the parameters."""
-    l1_norm = _tree_reduce_sum(params)
-    return utils.distribute.pmean_if_pmap(l1_norm)
 
 
 def create_grad_energy_update_param_fn(
@@ -95,7 +87,7 @@ def create_grad_energy_update_param_fn(
             aux_energy_data[2], aux_energy_data[3], metrics
         )
         if record_param_l1_norm:
-            metrics.update({"param_l1_norm": compute_param_l1_norm(params)})
+            metrics.update({"param_l1_norm": tree_reduce_l1(params)})
         return params, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
@@ -126,11 +118,11 @@ def create_kfac_update_param_fn(
     """
     momentum = jnp.asarray(0.0)
     damping = jnp.asarray(damping)
-    traced_compute_param_norm = jax.jit(compute_param_l1_norm)
+    traced_compute_param_norm = jax.jit(tree_reduce_l1)
     if optimizer.multi_device:
         momentum = utils.distribute.replicate_all_local_devices(momentum)
         damping = utils.distribute.replicate_all_local_devices(damping)
-        traced_compute_param_norm = utils.distribute.pmap(compute_param_l1_norm)
+        traced_compute_param_norm = utils.distribute.pmap(tree_reduce_l1)
 
     def update_param_fn(params, data, optimizer_state, key):
         key, subkey = utils.distribute.p_split(key)
