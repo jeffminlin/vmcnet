@@ -32,7 +32,9 @@ FLAGS = flags.FLAGS
 
 
 def get_config_from_reload(reload_config: ConfigDict):
-    config_path = os.path.join(reload_config.log_dir, reload_config.config_file_path)
+    config_path = os.path.join(
+        reload_config.log_dir, reload_config.config_relative_file_path
+    )
     with open(config_path) as json_file:
         config_flags.DEFINE_config_dict(
             "config", ConfigDict(json.load(json_file)), lock_config=True
@@ -574,14 +576,14 @@ def run_molecule() -> None:
         dtype=dtype_to_use,
     )
 
-    reload_checkpoint_dir = config.reload.logdir
     reload_from_checkpoint = (
-        reload_checkpoint_dir != train.default_config.NO_RELOAD_LOG_DIR
+        reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_checkpoint_file
     )
 
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
-            reload_checkpoint_dir, config.reload.checkpoint_file_path
+            reload_config.log_dir, config.reload.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
         _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
