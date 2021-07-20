@@ -9,6 +9,7 @@ import flax
 
 import jax
 import jax.numpy as jnp
+import json
 import kfac_ferminet_alpha
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
@@ -28,11 +29,23 @@ from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
 
 
 FLAGS = flags.FLAGS
-
-# TODO: add support for config_flags.DEFINE_config_file
-config_flags.DEFINE_config_dict(
-    "config", train.default_config.get_default_config(), lock_config=False
+flags.DEFINE_string(
+    "reload_log_dir",
+    None,
+    "Log directory from a previous run, to reload initial state from",
 )
+
+reload_log_dir = FLAGS.reload_log_dir
+if reload_log_dir is None:
+    config_flags.DEFINE_config_dict(
+        "config", train.default_config.get_default_config(), lock_config=False
+    )
+else:
+    config_path = os.path.join(reload_log_dir, "config.json")
+    with open(config_path) as json_file:
+        config_flags.DEFINE_config_dict(
+            "config", ConfigDict(json.load(json_file)), lock_config=False
+        )
 
 
 def _parse_flags():
