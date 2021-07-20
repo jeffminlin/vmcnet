@@ -1,9 +1,11 @@
 """Test parsing config flags from command line."""
 from absl import flags
+import os
 import pytest
 
 from vmcnet.train.parse_config_flags import parse_flags
 import vmcnet.train.default_config as default_config
+import vmcnet.utils as utils
 
 
 def test_parse_default_config(mocker):
@@ -50,3 +52,35 @@ def test_parse_config_with_invalid_model_type_flag(mocker):
     mocker.patch("sys.argv", ["vmcnet", "--config.model.type=not_a_real_model"])
     with pytest.raises(KeyError):
         parse_flags(flagValues)
+
+
+def _write_fake_config_json(logdir_path, config_filename):
+    fake_config = default_config.get_default_config()
+    fake_config.model = default_config.choose_model_type_in_config(fake_config.model)
+    fake_config.vmc.nepochs = 20
+    fake_config.model.ndeterminants = 3
+    fake_config.lock()
+
+    with utils.io.open_or_create(logdir_path, config_filename, "w") as json_writer:
+        json_writer.write(fake_config.to_json())
+
+    return fake_config
+
+
+def test_parse_config_with_reload_log_dir(mocker, tmp_path):
+    """Test for expected config when a valid reload log dir is provided."""
+    flagValues = flags.FlagValues()
+
+    logdir_name = "logs"
+    logdir_path = os.path.join(tmp_path, logdir_name)
+
+    expected_config = _write_fake_config_json(logdir_path, "config.json")
+
+    mocker.patch(
+        "sys.argv", ["vmcnet", "--reload_config.log_dir={}".format(logdir_path)]
+    )
+
+    reload_config, config = parse_flags(flagValues)
+    assert expected_config.to_dict() == config.to_dict()
+    # print(config)
+    # print(expected_config)
