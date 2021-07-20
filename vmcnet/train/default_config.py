@@ -10,6 +10,7 @@ CONFIG_FILE_NAME = "config.json"
 
 
 def get_default_reload_config() -> ConfigDict:
+    """Make a default reload configuration (no log_dir but valid defaults otherwise)."""
     return ConfigDict(
         {
             "log_dir": NO_RELOAD_LOG_DIR,
