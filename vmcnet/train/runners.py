@@ -31,28 +31,48 @@ from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
 FLAGS = flags.FLAGS
 
 
-def _parse_flags():
-    FLAGS(sys.argv)
-    config = FLAGS.config
-    logging.info("Initial configuration: \n%s", config)
-    if config.reload.log_dir != train.default_config.NO_RELOAD_LOG_DIR:
-        config_path = os.path.join(
-            config.reload.log_dir, config.reload.config_file_path
+def get_config_from_reload(reload_config: ConfigDict):
+    config_path = os.path.join(reload_config.log_dir, reload_config.config_file_path)
+    with open(config_path) as json_file:
+        config_flags.DEFINE_config_dict(
+            "config", ConfigDict(json.load(json_file)), lock_config=True
         )
-        with open(config_path) as json_file:
-            config_flags.DEFINE_config_dict(
-                "config", ConfigDict(json.load(json_file)), lock_config=False
-            )
-            FLAGS(sys.argv)
-            config = FLAGS.config
-            logging.info("Configuration  after loading from log dir: \n%s", config)
+        FLAGS(sys.argv, True)
+        return FLAGS.config
 
+
+def _get_config_from_default_config():
+    config_flags.DEFINE_config_dict(
+        "config", train.default_config.get_default_config(), lock_config=False
+    )
+    FLAGS(sys.argv, True)
+    config = FLAGS.config
     config.model = train.default_config.choose_model_type_in_config(config.model)
     config.lock()
     return config
 
 
-def _get_logdir_and_save_config(config: ConfigDict) -> str:
+def _parse_flags():
+    config_flags.DEFINE_config_dict(
+        "reload_config",
+        train.default_config.get_default_reload_config(),
+        lock_config=True,
+    )
+    FLAGS(sys.argv, True)
+    reload_config = FLAGS.reload_config
+    logging.info("Reload configuration: \n%s", reload_config)
+
+    if (
+        reload_config.use_config_file
+        and reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+    ):
+        return reload_config, get_config_from_reload(reload_config)
+    else:
+        return reload_config, _get_config_from_default_config()
+
+
+def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
+    logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
@@ -61,9 +81,16 @@ def _get_logdir_and_save_config(config: ConfigDict) -> str:
             )
 
         logdir = config.logdir
+        reload_config_filename = utils.io.add_suffix_for_uniqueness(
+            "reload_config", logdir, trailing_suffix=".json"
+        )
         config_filename = utils.io.add_suffix_for_uniqueness(
             "config", logdir, trailing_suffix=".json"
         )
+        with utils.io.open_or_create(
+            logdir, reload_config_filename + ".json", "w"
+        ) as f:
+            f.write(reload_config.to_json(indent=4))
         with utils.io.open_or_create(logdir, config_filename + ".json", "w") as f:
             f.write(config.to_json(indent=4))
     else:
@@ -509,11 +536,11 @@ def _burn_and_run_vmc(
 # top-level errors
 def run_molecule() -> None:
     """Run VMC on a molecule."""
-    config = _parse_flags()
+    reload_config, config = _parse_flags()
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
-    logdir = _get_logdir_and_save_config(config)
+    logdir = _get_logdir_and_save_config(reload_config, config)
 
     dtype_to_use = _get_dtype(config)
 

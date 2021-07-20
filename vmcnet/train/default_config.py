@@ -9,6 +9,18 @@ NO_RELOAD_LOG_DIR = "NONE"
 CONFIG_FILE_NAME = "config.json"
 
 
+def get_default_reload_config() -> ConfigDict:
+    return ConfigDict(
+        {
+            "log_dir": NO_RELOAD_LOG_DIR,
+            "use_config_file": True,
+            "config_file_path": CONFIG_FILE_NAME,
+            "use_checkpoint_file": True,
+            "checkpoint_file_path": CHECKPOINT_FILE_NAME,
+        }
+    )
+
+
 def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
     config = ConfigDict(
@@ -27,11 +39,6 @@ def get_default_config() -> ConfigDict:
             "logging_level": "WARNING",
             "dtype": "float32",
             "initial_seed": 0,
-            "reload": {
-                "log_dir": NO_RELOAD_LOG_DIR,
-                "config_file_path": CONFIG_FILE_NAME,
-                "checkpoint_file_path": CHECKPOINT_FILE_NAME,
-            },
         }
     )
     return config
