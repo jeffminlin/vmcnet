@@ -82,5 +82,43 @@ def test_parse_config_with_reload_log_dir(mocker, tmp_path):
 
     reload_config, config = parse_flags(flagValues)
     assert expected_config.to_dict() == config.to_dict()
-    # print(config)
-    # print(expected_config)
+
+
+def test_parse_config_with_invalid_reload_param(mocker, tmp_path):
+    """Test for expected config when a valid reload log dir is provided."""
+    flagValues = flags.FlagValues()
+
+    logdir_name = "logs"
+    logdir_path = os.path.join(tmp_path, logdir_name)
+
+    _write_fake_config_json(logdir_path, "config.json")
+
+    mocker.patch(
+        "sys.argv", ["vmcnet", "--reload_config.log_dir_typo={}".format(logdir_path)]
+    )
+
+    with pytest.raises(AttributeError):
+        parse_flags(flagValues)
+
+
+def test_parse_config_with_reload_log_dir_and_override_params(mocker, tmp_path):
+    """Test for expected config when reloading config with override flags."""
+    flagValues = flags.FlagValues()
+
+    logdir_name = "logs"
+    logdir_path = os.path.join(tmp_path, logdir_name)
+
+    expected_config = _write_fake_config_json(logdir_path, "config.json")
+    expected_config.model.ndeterminants = 5
+
+    mocker.patch(
+        "sys.argv",
+        [
+            "vmcnet",
+            "--reload_config.log_dir={}".format(logdir_path),
+            "--config.model.ndeterminants=5",
+        ],
+    )
+
+    reload_config, config = parse_flags(flagValues)
+    assert expected_config.to_dict() == config.to_dict()
