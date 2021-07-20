@@ -3,18 +3,14 @@ import datetime
 import functools
 import logging
 import os
-import sys
 from typing import Callable, Optional, Tuple
 import flax
 
 import jax
 import jax.numpy as jnp
-import json
 import kfac_ferminet_alpha
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
-from absl import flags
-from ml_collections.config_flags import config_flags
 from ml_collections import ConfigDict
 
 import vmcnet.mcmc as mcmc
@@ -26,51 +22,6 @@ import vmcnet.updates as updates
 import vmcnet.utils as utils
 import vmcnet.train as train
 from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
-
-
-FLAGS = flags.FLAGS
-
-
-def get_config_from_reload(reload_config: ConfigDict):
-    config_path = os.path.join(
-        reload_config.log_dir, reload_config.config_relative_file_path
-    )
-    with open(config_path) as json_file:
-        config_flags.DEFINE_config_dict(
-            "config", ConfigDict(json.load(json_file)), lock_config=True
-        )
-        FLAGS(sys.argv, True)
-        return FLAGS.config
-
-
-def _get_config_from_default_config():
-    config_flags.DEFINE_config_dict(
-        "config", train.default_config.get_default_config(), lock_config=False
-    )
-    FLAGS(sys.argv, True)
-    config = FLAGS.config
-    config.model = train.default_config.choose_model_type_in_config(config.model)
-    config.lock()
-    return config
-
-
-def _parse_flags():
-    config_flags.DEFINE_config_dict(
-        "reload_config",
-        train.default_config.get_default_reload_config(),
-        lock_config=True,
-    )
-    FLAGS(sys.argv, True)
-    reload_config = FLAGS.reload_config
-    logging.info("Reload configuration: \n%s", reload_config)
-
-    if (
-        reload_config.use_config_file
-        and reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
-    ):
-        return reload_config, get_config_from_reload(reload_config)
-    else:
-        return reload_config, _get_config_from_default_config()
 
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
@@ -538,7 +489,7 @@ def _burn_and_run_vmc(
 # top-level errors
 def run_molecule() -> None:
     """Run VMC on a molecule."""
-    reload_config, config = _parse_flags()
+    reload_config, config = train.parse_config_flags.parse_flags()
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
