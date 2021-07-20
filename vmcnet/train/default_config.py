@@ -6,7 +6,7 @@ from ml_collections import ConfigDict, FieldReference
 from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
 
 NO_RELOAD_LOG_DIR = "NONE"
-CONFIG_FILE_NAME = "config.json"
+DEFAULT_CONFIG_FILE_NAME = "config.json"
 
 
 def get_default_reload_config() -> ConfigDict:
@@ -15,7 +15,7 @@ def get_default_reload_config() -> ConfigDict:
         {
             "log_dir": NO_RELOAD_LOG_DIR,
             "use_config_file": True,
-            "config_relative_file_path": CONFIG_FILE_NAME,
+            "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
             "use_checkpoint_file": True,
             "checkpoint_relative_file_path": CHECKPOINT_FILE_NAME,
         }

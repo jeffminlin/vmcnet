@@ -62,10 +62,11 @@ def test_run_molecule(mocker, tmp_path):
     inner_logdir = datetime_dirs[0]
 
     # Check that the config is saved
-    assert (inner_logdir / "config.json").exists()
+    config_file_name = train.default_config.DEFAULT_CONFIG_FILE_NAME
+    assert (inner_logdir / config_file_name).exists()
     config.logdir = os.path.normpath(inner_logdir)
     desired_config_json_str = config.to_json(indent=4)
-    assert (inner_logdir / "config.json").read_text() == desired_config_json_str
+    assert (inner_logdir / config_file_name).read_text() == desired_config_json_str
 
     # Check that there are nepochs finite metrics being saved
     vmc_metric_files = [

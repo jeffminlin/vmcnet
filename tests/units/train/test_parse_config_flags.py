@@ -84,7 +84,9 @@ def test_parse_config_with_valid_reload_log_dir(mocker, tmp_path):
     mocker.patch(
         "sys.argv", ["vmcnet", "--reload_config.log_dir={}".format(logdir_path)]
     )
-    expected_config = _write_fake_config_json(logdir_path, "config.json")
+    expected_config = _write_fake_config_json(
+        logdir_path, default_config.DEFAULT_CONFIG_FILE_NAME
+    )
 
     _, config = parse_flags(flag_values)
 
@@ -105,7 +107,9 @@ def test_parse_config_with_reload_log_dir_and_override_params(mocker, tmp_path):
             "--config.vmc.nburn=100000",
         ],
     )
-    expected_config = _write_fake_config_json(logdir_path, "config.json")
+    expected_config = _write_fake_config_json(
+        logdir_path, default_config.DEFAULT_CONFIG_FILE_NAME
+    )
     expected_config.model.ndeterminants = 5
     expected_config.vmc.nburn = 100000
 
