@@ -48,6 +48,16 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
 def parse_flags(flag_values: flags.FlagValues = FLAGS) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
+    Supports two cases. In the first, a global default ConfigDict is used as a
+    starting point, and changed only where the user overrides it via command line
+    flags such as --config.vmc-nburn=100. In the second, the default ConfigDict is
+    loaded from a previous run by specifying the log directory for that run. The user
+    can still override settings from the previous run by providing command-line flags.
+    However, to override model-related flags, some care must be taken since the
+    structure of the ConfigDict loaded from the json snapshot is not identical to the
+    structure of the default ConfigDict. The main difference is due to
+    :func:`~vmcnet.train.choose_model_type_in_model_config`.
+
     Args:
         flag_values (FlagValues): a FlagValues object used to manage the command line
             flags. Can generally be left to its default, but it's useful to be able to
@@ -69,8 +79,8 @@ def parse_flags(flag_values: flags.FlagValues = FLAGS) -> Tuple[ConfigDict, Conf
     reload_config = flag_values.reload_config
 
     if (
-        reload_config.use_config_file
-        and reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+        reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_config_file
     ):
         return reload_config, _get_config_from_reload(reload_config, flag_values)
     else:
