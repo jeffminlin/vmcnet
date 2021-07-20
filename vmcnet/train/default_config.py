@@ -45,7 +45,7 @@ def get_default_config() -> ConfigDict:
     return config
 
 
-def choose_model_type_in_config(model_config):
+def choose_model_type_in_model_config(model_config):
     """Given a model config with a specified type, select the specified model.
 
     The default config contains architecture hyperparameters for several types of models

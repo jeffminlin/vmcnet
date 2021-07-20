@@ -40,7 +40,7 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
     )
     flag_values(sys.argv, True)
     config = flag_values.config
-    config.model = train.default_config.choose_model_type_in_config(config.model)
+    config.model = train.default_config.choose_model_type_in_model_config(config.model)
     config.lock()
     return config
 
