@@ -59,7 +59,7 @@ def test_parse_config_with_valid_model_flags(mocker):
 def test_parse_config_with_invalid_reload_param(mocker):
     """Verify that error is thrown when an invalid reload flag is passed."""
     flag_values = flags.FlagValues()
-    mocker.patch("sys.argv", ["vmcnet", "--reload_config.logdir_typo=log_dir_path"])
+    mocker.patch("sys.argv", ["vmcnet", "--reload.logdir_typo=log_dir_path"])
 
     with pytest.raises(AttributeError):
         parse_flags(flag_values)
@@ -82,7 +82,7 @@ def test_parse_config_with_valid_reload_log_dir(mocker, tmp_path):
     logdir_name = "logs"
     logdir_path = os.path.join(tmp_path, logdir_name)
     mocker.patch(
-        "sys.argv", ["vmcnet", "--reload_config.logdir={}".format(logdir_path)]
+        "sys.argv", ["vmcnet", "--reload.logdir={}".format(logdir_path)]
     )
     expected_config = _write_fake_config_json(
         logdir_path, default_config.DEFAULT_CONFIG_FILE_NAME
@@ -102,7 +102,7 @@ def test_parse_config_with_reload_log_dir_and_override_params(mocker, tmp_path):
         "sys.argv",
         [
             "vmcnet",
-            "--reload_config.logdir={}".format(logdir_path),
+            "--reload.logdir={}".format(logdir_path),
             "--config.model.ndeterminants=5",
             "--config.vmc.nburn=100000",
         ],
@@ -127,8 +127,8 @@ def test_parse_config_with_use_config_file_false(mocker, tmp_path):
         "sys.argv",
         [
             "vmcnet",
-            "--reload_config.logdir={}".format(logdir_path),
-            "--reload_config.use_config_file=False",
+            "--reload.logdir={}".format(logdir_path),
+            "--reload.use_config_file=False",
             "--config.vmc.nburn=100000",
         ],
     )
