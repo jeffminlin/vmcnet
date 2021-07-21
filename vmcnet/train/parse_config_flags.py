@@ -10,23 +10,20 @@ from ml_collections import ConfigDict
 from ml_collections.config_flags import config_flags
 
 import vmcnet.train as train
+import vmcnet.utils.io as io
 
 
 def _get_config_from_reload(
     reload_config: ConfigDict, flag_values: flags.FlagValues
 ) -> ConfigDict:
-    config_path = os.path.join(
+    reloaded_config = io.load_config_dict(
         reload_config.logdir, reload_config.config_relative_file_path
     )
-    with open(config_path) as json_file:
-        config_flags.DEFINE_config_dict(
-            "config",
-            ConfigDict(json.load(json_file)),
-            lock_config=True,
-            flag_values=flag_values,
-        )
-        flag_values(sys.argv, True)
-        return flag_values.config
+    config_flags.DEFINE_config_dict(
+        "config", reloaded_config, lock_config=True, flag_values=flag_values
+    )
+    flag_values(sys.argv, True)
+    return flag_values.config
 
 
 def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict:
@@ -78,7 +75,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         flag_values=flag_values,
     )
     flag_values(sys.argv, True)
-    reload_config = flag_values.reload_config
+    reload_config = flag_values.reload
 
     if (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR

@@ -70,9 +70,7 @@ def _write_fake_config_json(logdir_path: str, config_filename: str) -> ConfigDic
     fake_config.vmc.nepochs = 20
     fake_config.model.ndeterminants = 3
 
-    with utils.io.open_or_create(logdir_path, config_filename, "w") as json_writer:
-        json_writer.write(fake_config.to_json())
-
+    utils.io.save_config_dict(fake_config, logdir_path, config_filename)
     return fake_config
 
 
@@ -81,12 +79,8 @@ def test_parse_config_with_valid_reload_log_dir(mocker, tmp_path):
     flag_values = flags.FlagValues()
     logdir_name = "logs"
     logdir_path = os.path.join(tmp_path, logdir_name)
-    mocker.patch(
-        "sys.argv", ["vmcnet", "--reload.logdir={}".format(logdir_path)]
-    )
-    expected_config = _write_fake_config_json(
-        logdir_path, default_config.DEFAULT_CONFIG_FILE_NAME
-    )
+    mocker.patch("sys.argv", ["vmcnet", "--reload.logdir={}".format(logdir_path)])
+    expected_config = _write_fake_config_json(logdir_path, "config")
 
     _, config = parse_flags(flag_values)
 
@@ -107,9 +101,7 @@ def test_parse_config_with_reload_log_dir_and_override_params(mocker, tmp_path):
             "--config.vmc.nburn=100000",
         ],
     )
-    expected_config = _write_fake_config_json(
-        logdir_path, default_config.DEFAULT_CONFIG_FILE_NAME
-    )
+    expected_config = _write_fake_config_json(logdir_path, "config")
     expected_config.model.ndeterminants = 5
     expected_config.vmc.nburn = 100000
 

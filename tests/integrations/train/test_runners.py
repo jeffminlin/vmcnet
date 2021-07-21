@@ -51,7 +51,7 @@ def test_run_molecule(mocker, tmp_path):
 
     mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
     mock_flags.config = config
-    mock_flags.reload_config = train.default_config.get_default_reload_config()
+    mock_flags.reload = train.default_config.get_default_reload_config()
 
     train.runners.run_molecule()
 

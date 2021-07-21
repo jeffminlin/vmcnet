@@ -38,18 +38,8 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
             )
 
         logdir = config.logdir
-        reload_config_filename = utils.io.add_suffix_for_uniqueness(
-            "reload_config", logdir, trailing_suffix=".json"
-        )
-        config_filename = utils.io.add_suffix_for_uniqueness(
-            "config", logdir, trailing_suffix=".json"
-        )
-        with utils.io.open_or_create(
-            logdir, reload_config_filename + ".json", "w"
-        ) as f:
-            f.write(reload_config.to_json(indent=4))
-        with utils.io.open_or_create(logdir, config_filename + ".json", "w") as f:
-            f.write(config.to_json(indent=4))
+        utils.io.save_config_dict(config, logdir, "config")
+        utils.io.save_config_dict(reload_config, logdir, "reload_config")
     else:
         logdir = None
     return logdir

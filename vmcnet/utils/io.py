@@ -1,7 +1,11 @@
 """Input/output utilities."""
 import os
+from typing import Any, Dict
 
 import flax.core.frozen_dict as frozen_dict
+import jax
+import json
+from ml_collections import ConfigDict
 import numpy as np
 
 from .distribute import get_first, is_distributed
@@ -21,6 +25,36 @@ def append_metric_to_file(new_metric, logdir, name):
 
     with open_or_create(logdir, name + ".txt", "a") as outfile:
         np.savetxt(outfile, dumped_metric)
+
+
+def save_config_dict(config: ConfigDict, logdir: str, base_filename: str):
+    unique_filename = add_suffix_for_uniqueness(
+        base_filename, logdir, trailing_suffix=".json"
+    )
+    with open_or_create(logdir, unique_filename + ".json", "w") as f:
+        f.write(config.to_json(indent=4))
+
+
+def _convert_to_tuple_if_list(l: Any) -> Any:
+    if isinstance(l, list):
+        return tuple(_convert_to_tuple_if_list(entry) for entry in l)
+    return l
+
+
+def _convert_dict_lists_to_tuples(d: Dict) -> Dict:
+    return jax.tree_map(
+        _convert_to_tuple_if_list,
+        d,
+        is_leaf=lambda l: isinstance(l, list),
+    )
+
+
+def load_config_dict(logdir: str, relative_path: str):
+    config_path = os.path.join(logdir, relative_path)
+    with open(config_path) as json_file:
+        raw_dict = json.load(json_file)
+        dict_with_tuples = _convert_dict_lists_to_tuples(raw_dict)
+        return ConfigDict(dict_with_tuples)
 
 
 def process_checkpoint_data_for_saving(checkpoint_data: CheckpointData):
