@@ -28,6 +28,7 @@ def append_metric_to_file(new_metric, logdir, name):
 
 
 def save_config_dict(config: ConfigDict, logdir: str, base_filename: str):
+    """Save a config dict to a json file, ensuring the filename is unique."""
     unique_filename = add_suffix_for_uniqueness(
         base_filename, logdir, trailing_suffix=".json"
     )
@@ -35,10 +36,10 @@ def save_config_dict(config: ConfigDict, logdir: str, base_filename: str):
         f.write(config.to_json(indent=4))
 
 
-def _convert_to_tuple_if_list(l: Any) -> Any:
-    if isinstance(l, list):
-        return tuple(_convert_to_tuple_if_list(entry) for entry in l)
-    return l
+def _convert_to_tuple_if_list(leaf: Any) -> Any:
+    if isinstance(leaf, list):
+        return tuple(_convert_to_tuple_if_list(entry) for entry in leaf)
+    return leaf
 
 
 def _convert_dict_lists_to_tuples(d: Dict) -> Dict:
@@ -50,6 +51,11 @@ def _convert_dict_lists_to_tuples(d: Dict) -> Dict:
 
 
 def load_config_dict(logdir: str, relative_path: str):
+    """Load a ConfigDict from a json file.
+
+    JSON will automatically have converted all tuples in the ConfigDict to lists, so
+    when we reload here, we have to convert any lists we find back to tuples.
+    """
     config_path = os.path.join(logdir, relative_path)
     with open(config_path) as json_file:
         raw_dict = json.load(json_file)
