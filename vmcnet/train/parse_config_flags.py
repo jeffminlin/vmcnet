@@ -11,8 +11,6 @@ from ml_collections.config_flags import config_flags
 
 import vmcnet.train as train
 
-FLAGS = flags.FLAGS
-
 
 def _get_config_from_reload(
     reload_config: ConfigDict, flag_values: flags.FlagValues
@@ -45,7 +43,7 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
     return config
 
 
-def parse_flags(flag_values: flags.FlagValues = FLAGS) -> Tuple[ConfigDict, ConfigDict]:
+def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
     Supports two cases. In the first, a global default ConfigDict is used as a
@@ -64,9 +62,9 @@ def parse_flags(flag_values: flags.FlagValues = FLAGS) -> Tuple[ConfigDict, Conf
 
     Args:
         flag_values (FlagValues): a FlagValues object used to manage the command line
-            flags. Can generally be left to its default, but it's useful to be able to
-            override this for testing, since an error will be thrown if multiple tests
-            define configs for the same FlagValues object. Defaults to global FLAGS.
+            flags. Should generally use the global flags.FLAGS, but it's useful to be
+            able to override this for testing, since an error will be thrown if multiple
+            tests define configs for the same FlagValues object.
 
     Returns:
         (reload_config, config): Two ConfigDicts. The first holds settings for the

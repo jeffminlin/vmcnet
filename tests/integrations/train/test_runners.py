@@ -49,10 +49,10 @@ def test_run_molecule(mocker, tmp_path):
     config.eval.nchains = eval_nchains
     config.eval.nepochs = eval_nepochs
 
-    mock_flags = mocker.patch("vmcnet.train.parse_config_flags.FLAGS")
-
+    mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
     mock_flags.config = config
     mock_flags.reload_config = train.default_config.get_default_reload_config()
+
     train.runners.run_molecule()
 
     parent_logdir = tmp_path / "logs"

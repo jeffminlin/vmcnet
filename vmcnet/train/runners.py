@@ -6,6 +6,7 @@ import os
 from typing import Callable, Optional, Tuple
 import flax
 
+from absl import flags
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
@@ -22,6 +23,9 @@ import vmcnet.updates as updates
 import vmcnet.utils as utils
 import vmcnet.train as train
 from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
+
+
+FLAGS = flags.FLAGS
 
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
@@ -489,7 +493,7 @@ def _burn_and_run_vmc(
 # top-level errors
 def run_molecule() -> None:
     """Run VMC on a molecule."""
-    reload_config, config = train.parse_config_flags.parse_flags()
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
