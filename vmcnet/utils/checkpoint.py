@@ -275,6 +275,7 @@ def save_metrics_and_handle_checkpoints(
     best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
+    nans_checkpoint: bool = False,
 ) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
     """Checkpoint the current state of the VMC loop.
 
@@ -349,6 +350,7 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
+        nans_checkpoint=nans_checkpoint,
     )
 
     (
@@ -484,6 +486,7 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
+    nans_checkpoint: bool = False,
 ) -> str:
     """Save current metrics to file, and save model state regularly.
 
@@ -531,6 +534,20 @@ def save_metrics_and_regular_checkpoint(
                 ),
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
+
+    if nans_checkpoint:
+        checkpoint_writer.save_data(
+            os.path.join(logdir, checkpoint_dir),
+            "energy_nans_" + str(epoch + 1) + ".npz",
+            (
+                epoch,
+                data,
+                params,
+                optimizer_state,
+                key,
+            ),
+        )
+        checkpoint_str = checkpoint_str + ", nans ckpt saved"
 
     return checkpoint_str
 
