@@ -16,7 +16,7 @@ def _get_config_from_reload(
     reload_config: ConfigDict, flag_values: flags.FlagValues
 ) -> ConfigDict:
     config_path = os.path.join(
-        reload_config.log_dir, reload_config.config_relative_file_path
+        reload_config.logdir, reload_config.config_relative_file_path
     )
     with open(config_path) as json_file:
         config_flags.DEFINE_config_dict(
@@ -52,7 +52,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
 
     In the second, the default ConfigDict is loaded from a previous run by specifying
     the log directory for that run, as well as several other options. These options are
-    provided using `--reload_config..`, for example `--reload_config.log_dir=./logs`.
+    provided using `--reload_config..`, for example `--reload_config.logdir=./logs`.
     The user can still override settings from the previous run by providing regular
     command-line flags via `--config..`, as described above. However, to override
     model-related flags, some care must be taken since the structure of the ConfigDict
@@ -81,7 +81,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     reload_config = flag_values.reload_config
 
     if (
-        reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     ):
         return reload_config, _get_config_from_reload(reload_config, flag_values)

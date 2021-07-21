@@ -532,13 +532,13 @@ def run_molecule() -> None:
     )
 
     reload_from_checkpoint = (
-        reload_config.log_dir != train.default_config.NO_RELOAD_LOG_DIR
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_checkpoint_file
     )
 
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
-            reload_config.log_dir, reload_config.checkpoint_relative_file_path
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
         _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
