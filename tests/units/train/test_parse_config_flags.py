@@ -28,7 +28,7 @@ def test_parse_default_config(mocker):
     _assert_configs_equal(config, expected_config)
 
 
-def test_parse_config_with_invalid_model_flag(mocker):
+def test_parse_config_with_invalid_flag(mocker):
     """Test that invalid model type throws an error."""
     flag_values = flags.FlagValues()
     mocker.patch("sys.argv", ["vmcnet", "--config.model.type=not_a_real_model"])
@@ -37,7 +37,7 @@ def test_parse_config_with_invalid_model_flag(mocker):
         parse_flags(flag_values)
 
 
-def test_parse_config_with_valid_model_flags(mocker):
+def test_parse_config_with_valid_flags_including_tuple(mocker):
     """Test that valid model flags produce the correct config."""
     flag_values = flags.FlagValues()
     mocker.patch(
@@ -46,10 +46,14 @@ def test_parse_config_with_valid_model_flags(mocker):
             "vmcnet",
             "--config.model.type=orbital_cofactor_net",
             "--config.model.orbital_cofactor_net.isotropic_decay=False",
+            # On the command line setting a tuple value requires extra quotes like
+            # '((0.,0.,0.),)', but in testing the extra quotes cause a type error.
+            "--config.problem.ion_pos=((0.,0.,0.),)",
         ],
     )
     expected_config = get_default_config_with_chosen_model("orbital_cofactor_net")
     expected_config.model.isotropic_decay = False
+    expected_config.problem.ion_pos = ((0.0, 0.0, 0.0),)
 
     _, config = parse_flags(flag_values)
 
