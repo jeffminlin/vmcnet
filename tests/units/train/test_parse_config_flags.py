@@ -37,6 +37,15 @@ def test_parse_config_with_invalid_flag(mocker):
         parse_flags(flag_values)
 
 
+def test_parse_config_with_invalid_top_level_flag(mocker):
+    """Test that invalid top level flag throws an error."""
+    flag_values = flags.FlagValues()
+    mocker.patch("sys.argv", ["vmcnet", "--not_a_config.has_truth=True"])
+
+    with pytest.raises(flags.UnrecognizedFlagError):
+        parse_flags(flag_values)
+
+
 def test_parse_config_with_valid_flags_including_tuple(mocker):
     """Test that valid model flags produce the correct config."""
     flag_values = flags.FlagValues()
