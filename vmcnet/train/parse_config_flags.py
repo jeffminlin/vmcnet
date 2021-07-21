@@ -20,7 +20,7 @@ def _get_config_from_reload(
     config_flags.DEFINE_config_dict(
         "config", reloaded_config, lock_config=True, flag_values=flag_values
     )
-    flag_values(sys.argv, True)
+    flag_values(sys.argv)
     return flag_values.config
 
 
@@ -31,7 +31,7 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
         lock_config=False,
         flag_values=flag_values,
     )
-    flag_values(sys.argv, True)
+    flag_values(sys.argv)
     config = flag_values.config
     config.model = train.default_config.choose_model_type_in_model_config(config.model)
     config.lock()
