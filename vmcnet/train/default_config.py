@@ -186,6 +186,7 @@ def get_default_vmc_config() -> ConfigDict:
             "checkpoint_dir": "checkpoints",
             "checkpoint_variance_scale": 10,
             "nhistory_max": 200,
+            "record_param_l1_norm": False,
             "clip_threshold": 5.0,
             "schedule_type": "inverse_time",  # constant or inverse_time
             "learning_rate": 1e-4,

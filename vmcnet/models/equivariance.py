@@ -7,7 +7,8 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.typing import ArrayList, PyTree, SpinSplit
+from vmcnet.utils.pytree_helpers import tree_sum, tree_prod
+from vmcnet.utils.typing import ArrayList, SpinSplit
 from .core import Activation, Dense, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
@@ -33,16 +34,6 @@ def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
     The input list of arrays must all have the same shapes, except for along `axis`.
     """
     return jnp.concatenate(arrays[n:] + arrays[:n], axis=axis)
-
-
-def _tree_sum(tree1: PyTree, tree2: PyTree) -> PyTree:
-    """Leaf-wise sum of two pytrees with the same structure."""
-    return jax.tree_map(lambda a, b: a + b, tree1, tree2)
-
-
-def _tree_prod(tree1: PyTree, tree2: PyTree) -> PyTree:
-    """Leaf-wise product of two pytrees with the same structure."""
-    return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
 def compute_input_streams(
@@ -378,11 +369,11 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         # adds the unmixed [i: (..., n[i], d')] to the mixed [i: (..., 1, d')] to get
         # an equivariant function. Without the two-electron mixing, this is a spinful
         # version of DeepSet's Lemma 3: https://arxiv.org/pdf/1703.06114.pdf
-        dense_out = _tree_sum(dense_unmixed_split, dense_mixed_split)
+        dense_out = tree_sum(dense_unmixed_split, dense_mixed_split)
 
         if in_2e is not None:
             dense_2e_split = self._compute_transformed_2e_means(in_2e)
-            dense_out = _tree_sum(dense_out, dense_2e_split)
+            dense_out = tree_sum(dense_out, dense_2e_split)
 
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
@@ -779,7 +770,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
             )
-            orbs = _tree_prod(orbs, exp_envelopes)
+            orbs = tree_prod(orbs, exp_envelopes)
         return orbs
 
 
@@ -933,5 +924,5 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             exp_envelopes = jax.tree_map(
                 lambda x: jnp.expand_dims(x, axis=-3), exp_envelopes
             )
-            orbs = _tree_prod(orbs, exp_envelopes)
+            orbs = tree_prod(orbs, exp_envelopes)
         return orbs

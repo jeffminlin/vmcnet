@@ -264,6 +264,7 @@ def _get_kfac_update_fn(
     sharded_key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
+    record_param_l1_norm: bool = False,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray
 ]:
@@ -286,7 +287,10 @@ def _get_kfac_update_fn(
     optimizer_state = optimizer.init(params, subkeys, get_position_fn(data))
 
     update_param_fn = updates.params.create_kfac_update_param_fn(
-        optimizer, optimizer_config.damping, pacore.get_position_from_data
+        optimizer,
+        optimizer_config.damping,
+        pacore.get_position_from_data,
+        record_param_l1_norm=record_param_l1_norm,
     )
 
     return update_param_fn, optimizer_state, sharded_key
@@ -298,6 +302,7 @@ def _get_adam_update_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
+    record_param_l1_norm: bool = False,
 ) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
     optimizer_state = utils.distribute.pmap(optimizer.init)(params)
@@ -311,6 +316,7 @@ def _get_adam_update_fn(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
+        record_param_l1_norm=record_param_l1_norm,
     )
 
     return update_param_fn, optimizer_state
@@ -340,6 +346,7 @@ def _get_update_fn_and_init_optimizer(
             sharded_key,
             learning_rate_schedule,
             vmc_config.optimizer.kfac,
+            vmc_config.record_param_l1_norm,
         )
     elif vmc_config.optimizer_type == "adam":
         update_param_fn, optimizer_state = _get_adam_update_fn(
@@ -348,6 +355,7 @@ def _get_update_fn_and_init_optimizer(
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.adam,
+            vmc_config.record_param_l1_norm,
         )
         return update_param_fn, optimizer_state, sharded_key
     else:

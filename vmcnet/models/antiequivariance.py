@@ -6,13 +6,10 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
+from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, SpinSplit
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
-from .equivariance import (
-    DoublyEquivariantOrbitalLayer,
-    FermiNetOrbitalLayer,
-    _tree_prod,
-)
+from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
 
 
@@ -127,7 +124,7 @@ def _multiply_eq_inputs_by_split_antieq(
     # Expand antiequivariance to shape (..., nelec[i], 1) to broadcast with inputs
     split_antieq = jax.tree_map(lambda c: jnp.expand_dims(c, -1), split_antieq)
     split_inputs = jnp.split(eq_inputs, spin_split, axis=-2)
-    return _tree_prod(split_inputs, split_antieq)
+    return tree_prod(split_inputs, split_antieq)
 
 
 def _multiply_eq_inputs_by_split_slog_antieq(
