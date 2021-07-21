@@ -16,7 +16,7 @@ def tree_prod(tree1: PyTree, tree2: PyTree) -> PyTree:
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
-def tree_reduce_l1(xs: PyTree) -> jnp.ndarray:
+def tree_reduce_l1(xs: PyTree) -> jnp.float32:
     """L1 norm of a pytree as a flattened vector."""
     concat_xs, _ = jax.flatten_util.ravel_pytree(xs)
     return jnp.sum(jnp.abs(concat_xs))

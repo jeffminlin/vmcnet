@@ -9,7 +9,7 @@ from kfac_ferminet_alpha import optimizer as kfac_opt
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import tree_reduce_l1
-from vmcnet.utils.typing import D, P, S, ModelApply, OptimizerState
+from vmcnet.utils.typing import D, P, PyTree, S, ModelApply, OptimizerState
 
 UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
@@ -95,6 +95,15 @@ def create_grad_energy_update_param_fn(
     return traced_fn
 
 
+def _get_traced_compute_param_norm(
+    apply_pmap: bool = True,
+) -> Callable[[PyTree], jnp.ndarray]:
+    if not apply_pmap:
+        return jax.jit(tree_reduce_l1)
+
+    return utils.distribute.pmap(tree_reduce_l1)
+
+
 def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
@@ -118,11 +127,11 @@ def create_kfac_update_param_fn(
     """
     momentum = jnp.asarray(0.0)
     damping = jnp.asarray(damping)
-    traced_compute_param_norm = jax.jit(tree_reduce_l1)
     if optimizer.multi_device:
         momentum = utils.distribute.replicate_all_local_devices(momentum)
         damping = utils.distribute.replicate_all_local_devices(damping)
-        traced_compute_param_norm = utils.distribute.pmap(tree_reduce_l1)
+
+    traced_compute_param_norm = _get_traced_compute_param_norm(optimizer.multi_device)
 
     def update_param_fn(params, data, optimizer_state, key):
         key, subkey = utils.distribute.p_split(key)
