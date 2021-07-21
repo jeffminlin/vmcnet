@@ -49,7 +49,8 @@ def test_run_molecule(mocker, tmp_path):
     config.eval.nchains = eval_nchains
     config.eval.nepochs = eval_nepochs
 
-    mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
+    mock_flags = mocker.patch("vmcnet.train.parse_config_flags.FLAGS")
+
     mock_flags.config = config
     train.runners.run_molecule()
 
