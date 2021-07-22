@@ -4,26 +4,25 @@ import functools
 import logging
 import os
 from typing import Callable, Optional, Tuple
-import flax
 
-from absl import flags
+import flax
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
+from absl import flags
 from ml_collections import ConfigDict
 
 import vmcnet.mcmc as mcmc
-import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
+import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
 import vmcnet.physics as physics
+import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
-import vmcnet.train as train
 from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
-
 
 FLAGS = flags.FLAGS
 
@@ -76,13 +75,15 @@ def _get_and_init_model(
     init_pos: jnp.ndarray,
     key: jnp.ndarray,
     dtype=jnp.float32,
+    apply_pmap: bool = True,
 ) -> Tuple[flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
     log_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, dtype=dtype
     )
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos[0:1])
-    params = utils.distribute.replicate_all_local_devices(params)
+    if apply_pmap:
+        params = utils.distribute.replicate_all_local_devices(params)
     return log_psi, params, key
 
 
@@ -111,7 +112,9 @@ def _make_initial_distributed_data(
     run_config: ConfigDict,
     init_pos: jnp.ndarray,
     params: P,
-):
+) -> dwpa.DWPAData:
+    # Need to use distributed_log_psi_apply here, in the case where there is not enough
+    # memory to form the initial amplitudes on a single device
     sharded_init_pos = utils.distribute.default_distribute_data(init_pos)
     sharded_amplitudes = distributed_log_psi_apply(params, sharded_init_pos)
     move_metadata = utils.distribute.replicate_all_local_devices(
@@ -119,18 +122,49 @@ def _make_initial_distributed_data(
             std_move=run_config.std_move, move_acceptance_sum=0.0, moves_since_update=0
         )
     )
-    data = pacore.make_position_amplitude_data(
+    return pacore.make_position_amplitude_data(
         sharded_init_pos, sharded_amplitudes, move_metadata
     )
 
-    return data
+
+def _make_initial_single_device_data(
+    log_psi_apply: ModelApply[P],
+    run_config: ConfigDict,
+    init_pos: jnp.ndarray,
+    params: P,
+) -> dwpa.DWPAData:
+    amplitudes = log_psi_apply(params, init_pos)
+    return dwpa.make_dynamic_width_position_amplitude_data(
+        init_pos,
+        amplitudes,
+        std_move=run_config.std_move,
+        move_acceptance_sum=0.0,
+        moves_since_update=0,
+    )
+
+
+def _make_initial_data(
+    log_psi_apply: ModelApply[P],
+    run_config: ConfigDict,
+    init_pos: jnp.ndarray,
+    params: P,
+    apply_pmap: bool = True,
+) -> dwpa.DWPAData:
+    if apply_pmap:
+        return _make_initial_distributed_data(
+            utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
+        )
+    else:
+        return _make_initial_single_device_data(
+            log_psi_apply, run_config, init_pos, params
+        )
 
 
 # TODO: add threshold_adjust_std_move options to configs
 # TODO: add more options than just dwpa
 # TODO: remove dependence on exact field names
 def _get_mcmc_fns(
-    run_config: ConfigDict, log_psi_apply: ModelApply[P]
+    run_config: ConfigDict, log_psi_apply: ModelApply[P], apply_pmap: bool = True
 ) -> Tuple[
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
@@ -140,9 +174,11 @@ def _get_mcmc_fns(
         run_config.nmoves_per_width_update,
         dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
     )
-    burning_step = mcmc.metropolis.make_jitted_burning_step(metrop_step_fn)
+    burning_step = mcmc.metropolis.make_jitted_burning_step(
+        metrop_step_fn, apply_pmap=apply_pmap
+    )
     walker_fn = mcmc.metropolis.make_jitted_walker_fn(
-        run_config.nsteps_per_param_update, metrop_step_fn
+        run_config.nsteps_per_param_update, metrop_step_fn, apply_pmap=apply_pmap
     )
 
     return burning_step, walker_fn
@@ -244,10 +280,11 @@ def _get_kfac_update_fn(
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    sharded_key: jnp.ndarray,
+    key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray
 ]:
@@ -263,11 +300,15 @@ def _get_kfac_update_fn(
         num_burnin_steps=0,
         register_only_generic=optimizer_config.register_only_generic,
         estimation_mode=optimizer_config.estimation_mode,
-        multi_device=True,
+        multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
-    sharded_key, subkeys = utils.distribute.p_split(sharded_key)
-    optimizer_state = optimizer.init(params, subkeys, get_position_fn(data))
+    if not apply_pmap:
+        key_splitter = jax.random.split
+    else:
+        key_splitter = utils.distribute.p_split
+    key, subkey = key_splitter(key)
+    optimizer_state = optimizer.init(params, subkey, get_position_fn(data))
 
     update_param_fn = updates.params.create_kfac_update_param_fn(
         optimizer,
@@ -276,7 +317,7 @@ def _get_kfac_update_fn(
         record_param_l1_norm=record_param_l1_norm,
     )
 
-    return update_param_fn, optimizer_state, sharded_key
+    return update_param_fn, optimizer_state, key
 
 
 def _get_adam_update_fn(
@@ -286,9 +327,9 @@ def _get_adam_update_fn(
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    apply_pmap: bool = True,
 ) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
-    optimizer_state = utils.distribute.pmap(optimizer.init)(params)
 
     def optimizer_apply(grad, params, optimizer_state):
         updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
@@ -300,7 +341,13 @@ def _get_adam_update_fn(
         optimizer_apply,
         get_position_fn=get_position_fn,
         record_param_l1_norm=record_param_l1_norm,
+        apply_pmap=apply_pmap,
     )
+
+    optimizer_init = optimizer.init
+    if apply_pmap:
+        optimizer_init = utils.distribute.pmap(optimizer_init)
+    optimizer_state = optimizer_init(params)
 
     return update_param_fn, optimizer_state
 
@@ -312,6 +359,7 @@ def _get_update_fn_and_init_optimizer(
     get_position_fn: Callable[[D], jnp.ndarray],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     sharded_key: jnp.ndarray,
+    apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, OptimizerState],
     OptimizerState,
@@ -330,6 +378,7 @@ def _get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.kfac,
             vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "adam":
         update_param_fn, optimizer_state = _get_adam_update_fn(
@@ -339,6 +388,7 @@ def _get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.adam,
             vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, sharded_key
     else:
@@ -353,7 +403,7 @@ def _get_update_fn_and_init_optimizer(
 # _make_initial_distributed_data is more general
 # TODO: along with many of the other... intense type hints in this file, this should
 # probably be cleaned up -- it's probably not really serving the readability goal atm
-def _setup_distributed_vmc(
+def _setup_vmc(
     config: ConfigDict,
     init_pos: jnp.ndarray,
     ion_pos: jnp.ndarray,
@@ -361,9 +411,9 @@ def _setup_distributed_vmc(
     nelec: jnp.ndarray,
     key: jnp.ndarray,
     dtype=jnp.float32,
+    apply_pmap: bool = True,
 ) -> Tuple[
     flax.linen.Module,
-    ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
@@ -376,36 +426,38 @@ def _setup_distributed_vmc(
 
     # Make the model
     log_psi, params, key = _get_and_init_model(
-        config.model, ion_pos, nelec, init_pos, key, dtype=dtype
+        config.model, ion_pos, nelec, init_pos, key, dtype=dtype, apply_pmap=apply_pmap
     )
-    distributed_log_psi_apply = utils.distribute.pmap(log_psi.apply)
 
     # Make initial data
-    data = _make_initial_distributed_data(
-        distributed_log_psi_apply, config.vmc, init_pos, params
+    data = _make_initial_data(
+        log_psi.apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
 
     # Setup metropolis step
-    burning_step, walker_fn = _get_mcmc_fns(config.vmc, log_psi.apply)
+    burning_step, walker_fn = _get_mcmc_fns(
+        config.vmc, log_psi.apply, apply_pmap=apply_pmap
+    )
 
     local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
         config.vmc, ion_pos, ion_charges, log_psi.apply
     )
 
     # Setup parameter updates
-    sharded_key = utils.distribute.make_different_rng_key_on_all_devices(key)
-    update_param_fn, optimizer_state, sharded_key = _get_update_fn_and_init_optimizer(
+    if apply_pmap:
+        key = utils.distribute.make_different_rng_key_on_all_devices(key)
+    update_param_fn, optimizer_state, key = _get_update_fn_and_init_optimizer(
         config.vmc,
         params,
         data,
         pacore.get_position_from_data,
         energy_data_val_and_grad,
-        sharded_key,
+        key,
+        apply_pmap=apply_pmap,
     )
 
     return (
         log_psi,
-        distributed_log_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -413,16 +465,17 @@ def _setup_distributed_vmc(
         params,
         data,
         optimizer_state,
-        sharded_key,
+        key,
     )
 
 
 # TODO: update output type hints when _get_mcmc_fns is made more general
-def _setup_distributed_eval(
+def _setup_eval(
     config: ConfigDict,
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     get_position_fn: Callable[[dwpa.DWPAData], jnp.ndarray],
+    apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
@@ -433,8 +486,11 @@ def _setup_distributed_eval(
         config.eval.nchains,
         get_position_fn,
         nan_safe=config.eval.nan_safe,
+        apply_pmap=apply_pmap,
     )
-    eval_burning_step, eval_walker_fn = _get_mcmc_fns(config.eval, log_psi_apply)
+    eval_burning_step, eval_walker_fn = _get_mcmc_fns(
+        config.eval, log_psi_apply, apply_pmap=apply_pmap
+    )
     return eval_update_param_fn, eval_burning_step, eval_walker_fn
 
 
@@ -447,7 +503,7 @@ def _burn_and_run_vmc(
     burning_step: mcmc.metropolis.BurningStep[P, D],
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
-    sharded_key: jnp.ndarray,
+    key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
     if should_checkpoint:
@@ -463,10 +519,10 @@ def _burn_and_run_vmc(
         checkpoint_variance_scale = 0
         nhistory_max = 0
 
-    data, sharded_key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, params, data, sharded_key
+    data, key = mcmc.metropolis.burn_data(
+        burning_step, run_config.nburn, params, data, key
     )
-    params, optimizer_state, data, sharded_key = train.vmc.vmc_loop(
+    params, optimizer_state, data, key = train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,
@@ -474,7 +530,7 @@ def _burn_and_run_vmc(
         run_config.nepochs,
         walker_fn,
         update_param_fn,
-        sharded_key,
+        key,
         logdir=logdir,
         checkpoint_every=checkpoint_every,
         best_checkpoint_every=best_checkpoint_every,
@@ -483,7 +539,7 @@ def _burn_and_run_vmc(
         nhistory_max=nhistory_max,
     )
 
-    return params, optimizer_state, data, sharded_key
+    return params, optimizer_state, data, key
 
 
 # TODO: add integration test which runs this runner with a close-to-default config
@@ -492,6 +548,10 @@ def _burn_and_run_vmc(
 def run_molecule() -> None:
     """Run VMC on a molecule."""
     reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+
+    if config.debug_nans:
+        config.distribute = False
+        jax.config.update("jax_debug_nans", True)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
@@ -510,7 +570,6 @@ def run_molecule() -> None:
 
     (
         log_psi,
-        distributed_log_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -519,7 +578,7 @@ def run_molecule() -> None:
         data,
         optimizer_state,
         sharded_key,
-    ) = _setup_distributed_vmc(
+    ) = _setup_vmc(
         config,
         init_pos,
         ion_pos,
@@ -527,6 +586,7 @@ def run_molecule() -> None:
         nelec,
         key,
         dtype=dtype_to_use,
+        apply_pmap=config.distribute,
     )
 
     reload_from_checkpoint = (
@@ -571,14 +631,18 @@ def run_molecule() -> None:
     # evaluation
     eval_logdir = os.path.join(logdir, "eval")
 
-    eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_distributed_eval(
-        config, log_psi.apply, local_energy_fn, pacore.get_position_from_data
+    eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
+        config,
+        log_psi.apply,
+        local_energy_fn,
+        pacore.get_position_from_data,
+        apply_pmap=config.distribute,
     )
     optimizer_state = None
 
     if not config.eval.use_data_from_training:
-        data = _make_initial_distributed_data(
-            distributed_log_psi_apply, config.eval, init_pos, params
+        data = _make_initial_data(
+            log_psi.apply, config.eval, init_pos, params, apply_pmap=config.distribute
         )
 
     _burn_and_run_vmc(

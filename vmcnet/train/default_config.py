@@ -39,6 +39,8 @@ def get_default_config() -> ConfigDict:
             "save_to_current_datetime_subfolder": True,
             "logging_level": "WARNING",
             "dtype": "float32",
+            "distribute": True,
+            "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
             "initial_seed": 0,
         }
     )
