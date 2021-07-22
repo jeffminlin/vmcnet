@@ -3,6 +3,24 @@ import os
 
 from ml_collections import ConfigDict, FieldReference
 
+from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
+
+NO_RELOAD_LOG_DIR = "NONE"
+DEFAULT_CONFIG_FILE_NAME = "config.json"
+
+
+def get_default_reload_config() -> ConfigDict:
+    """Make a default reload configuration (no logdir but valid defaults otherwise)."""
+    return ConfigDict(
+        {
+            "logdir": NO_RELOAD_LOG_DIR,
+            "use_config_file": True,
+            "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
+            "use_checkpoint_file": True,
+            "checkpoint_relative_file_path": CHECKPOINT_FILE_NAME,
+        }
+    )
+
 
 def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
@@ -27,7 +45,7 @@ def get_default_config() -> ConfigDict:
     return config
 
 
-def choose_model_type_in_config(model_config):
+def choose_model_type_in_model_config(model_config):
     """Given a model config with a specified type, select the specified model.
 
     The default config contains architecture hyperparameters for several types of models

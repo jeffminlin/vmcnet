@@ -6,8 +6,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 import vmcnet.models as models
-import vmcnet.train as train
 from vmcnet.utils.typing import ArrayList
+
+from tests.test_utils import get_default_config_with_chosen_model
 
 
 def test_compose_negative_with_three_body_antisymmetry():
@@ -267,15 +268,6 @@ def test_ferminet_composed_antisymmetry_can_be_evaluated():
     _jit_eval_model(key, init_pos, log_psi)
 
 
-def _get_default_config_with_chosen_model(model_type, subtype="rank_one"):
-    model_config = train.default_config.get_default_model_config()
-    model_config.type = model_type
-    model_config.brute_force_antisym.antisym_type = subtype
-    model_config = train.default_config.choose_model_type_in_config(model_config)
-
-    return model_config
-
-
 def test_get_model_from_default_config():
     """Test that construction using the default model config does not raise an error."""
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
@@ -289,15 +281,15 @@ def test_get_model_from_default_config():
     ]:
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
-                model_config = _get_default_config_with_chosen_model(
-                    model_type, subtype=subtype
-                )
+                model_config = get_default_config_with_chosen_model(
+                    model_type, brute_force_subtype=subtype
+                ).model
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type == "ferminet":
             for use_det_resnet in [False, True]:
-                model_config = _get_default_config_with_chosen_model(model_type)
+                model_config = get_default_config_with_chosen_model(model_type).model
                 model_config.use_det_resnet = use_det_resnet
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
-            model_config = _get_default_config_with_chosen_model(model_type)
+            model_config = get_default_config_with_chosen_model(model_type).model
             models.construct.get_model_from_config(model_config, nelec, ion_pos)

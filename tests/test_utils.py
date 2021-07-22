@@ -8,7 +8,18 @@ import numpy as np
 
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
+import vmcnet.train.default_config as default_config
 from vmcnet.utils.typing import PyTree
+
+
+def get_default_config_with_chosen_model(model_type, brute_force_subtype=None):
+    """Get default ConfigDict for a particule model type."""
+    config = default_config.get_default_config()
+    config.model.type = model_type
+    if brute_force_subtype:
+        config.model.brute_force_antisym.antisym_type = brute_force_subtype
+    config.model = default_config.choose_model_type_in_model_config(config.model)
+    return config
 
 
 def make_dummy_log_f():

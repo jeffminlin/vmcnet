@@ -3,17 +3,15 @@ import datetime
 import functools
 import logging
 import os
-import sys
 from typing import Callable, Optional, Tuple
 import flax
 
+from absl import flags
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
-from absl import flags
-from ml_collections.config_flags import config_flags
 from ml_collections import ConfigDict
 
 import vmcnet.mcmc as mcmc
@@ -29,21 +27,9 @@ from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
 
 FLAGS = flags.FLAGS
 
-# TODO: add support for config_flags.DEFINE_config_file
-config_flags.DEFINE_config_dict(
-    "config", train.default_config.get_default_config(), lock_config=False
-)
 
-
-def _parse_flags():
-    FLAGS(sys.argv)
-    config = FLAGS.config
-    config.model = train.default_config.choose_model_type_in_config(config.model)
-    config.lock()
-    return config
-
-
-def _get_logdir_and_save_config(config: ConfigDict) -> str:
+def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
+    logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
@@ -52,11 +38,8 @@ def _get_logdir_and_save_config(config: ConfigDict) -> str:
             )
 
         logdir = config.logdir
-        config_filename = utils.io.add_suffix_for_uniqueness(
-            "config", logdir, trailing_suffix=".json"
-        )
-        with utils.io.open_or_create(logdir, config_filename + ".json", "w") as f:
-            f.write(config.to_json(indent=4))
+        utils.io.save_config_dict(config, logdir, "config")
+        utils.io.save_config_dict(reload_config, logdir, "reload_config")
     else:
         logdir = None
     return logdir
@@ -508,11 +491,11 @@ def _burn_and_run_vmc(
 # top-level errors
 def run_molecule() -> None:
     """Run VMC on a molecule."""
-    config = _parse_flags()
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
-    logdir = _get_logdir_and_save_config(config)
+    logdir = _get_logdir_and_save_config(reload_config, config)
 
     dtype_to_use = _get_dtype(config)
 
@@ -545,6 +528,28 @@ def run_molecule() -> None:
         key,
         dtype=dtype_to_use,
     )
+
+    reload_from_checkpoint = (
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_checkpoint_file
+    )
+
+    if reload_from_checkpoint:
+        checkpoint_file_path = os.path.join(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
+        )
+        directory, filename = os.path.split(checkpoint_file_path)
+        _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
+            directory, filename
+        )
+        (
+            data,
+            params,
+            optimizer_state,
+            sharded_key,
+        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+            data, params, optimizer_state, key
+        )
 
     params, optimizer_state, data, sharded_key = _burn_and_run_vmc(
         config.vmc,
