@@ -242,7 +242,11 @@ def create_value_and_grad_energy_fn(
             energy, variance = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )
-            aux_data = (variance, local_energies, None, None)
+
+            energy_noclip, variance_noclip = get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=False
+            )
+            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
         return energy, aux_data
 
     def energy_fwd(params: P, positions: jnp.ndarray):

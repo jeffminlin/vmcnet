@@ -275,7 +275,7 @@ def save_metrics_and_handle_checkpoints(
     best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
-    nans_checkpoint: bool = False,
+    save_nans_checkpoint: bool = False,
 ) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
     """Checkpoint the current state of the VMC loop.
 
@@ -350,7 +350,7 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
-        nans_checkpoint=nans_checkpoint,
+        save_nans_checkpoint=save_nans_checkpoint,
     )
 
     (
@@ -486,7 +486,7 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
-    nans_checkpoint: bool = False,
+    save_nans_checkpoint: bool = False,
 ) -> str:
     """Save current metrics to file, and save model state regularly.
 
@@ -519,33 +519,22 @@ def save_metrics_and_regular_checkpoint(
         did checkpointing
     """
     metrics_writer.save_data(logdir, "", metrics)
+    checkpoint_data = (epoch, data, params, optimizer_state, key)
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
             checkpoint_writer.save_data(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
-                (
-                    epoch,
-                    data,
-                    params,
-                    optimizer_state,
-                    key,
-                ),
+                checkpoint_data,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
-    if nans_checkpoint:
+    if save_nans_checkpoint:
         checkpoint_writer.save_data(
             os.path.join(logdir, checkpoint_dir),
             "energy_nans_" + str(epoch + 1) + ".npz",
-            (
-                epoch,
-                data,
-                params,
-                optimizer_state,
-                key,
-            ),
+            checkpoint_data,
         )
         checkpoint_str = checkpoint_str + ", nans ckpt saved"
 
