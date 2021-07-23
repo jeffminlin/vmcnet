@@ -112,6 +112,9 @@ def vmc_loop(
 
             metrics["accept_ratio"] = accept_ratio
 
+            local_energies = metrics["local_energies"]
+            energy_nancount = int(jnp.count_nonzero(jnp.isnan(local_energies)))
+
             (
                 checkpoint_metric,
                 checkpoint_str,
@@ -134,7 +137,7 @@ def vmc_loop(
                 best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
-                nans_checkpoint= energy_nancount>0
+                nans_checkpoint=energy_nancount > 0,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
