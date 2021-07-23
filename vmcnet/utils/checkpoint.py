@@ -194,7 +194,7 @@ def initialize_checkpointing(
     best checkpoint data is initialized to None.
     """
     if logdir is not None:
-        logging.info("Saving to " + logdir)
+        logging.info("Saving to %s", logdir)
         os.makedirs(logdir, exist_ok=True)
         if checkpoint_every is not None:
             checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
@@ -537,19 +537,20 @@ def save_metrics_and_regular_checkpoint(
 
 def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
-    epoch_str = "Epoch {:5d}".format(epoch + 1)
-    energy_str = "Energy: {:.5e}".format(float(metrics["energy"]))
-    variance_str = "Variance: {:.5e}".format(float(metrics["variance"]))
-    accept_ratio_str = "Accept ratio: {:.5f}".format(float(metrics["accept_ratio"]))
+    epoch_str = "Epoch %(epoch)5d"
+    energy_str = "Energy: %(energy).5e"
+    variance_str = "Variance: %(variance).5e"
+    accept_ratio_str = "Accept ratio: %(accept_ratio).5f"
 
     if "energy_noclip" in metrics:
-        energy_str = energy_str + " ({:.5e})".format(float(metrics["energy_noclip"]))
+        energy_str = energy_str + " (%(energy_noclip).5e)"
 
     if "variance_noclip" in metrics:
-        variance_str = variance_str + " ({:.5e})".format(
-            float(metrics["variance_noclip"])
-        )
+        variance_str = variance_str + " (%(variance_noclip).5e)"
 
     info_out = ", ".join([epoch_str, energy_str, variance_str, accept_ratio_str])
     info_out = info_out + checkpoint_str
-    logging.info(info_out)
+
+    logged_metrics = {"epoch": epoch + 1}
+    logged_metrics.update(metrics)
+    logging.info(info_out, logged_metrics)
