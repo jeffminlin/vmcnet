@@ -25,6 +25,7 @@ def vmc_loop(
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     checkpoint_if_nans: bool = False,
+    only_checkpoint_first_nans: bool = True,
     nhistory_max: int = 200,
 ) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
@@ -86,6 +87,7 @@ def vmc_loop(
         checkpoint_metric,
         running_energy_and_variance,
         best_checkpoint_data,
+        saved_nans_checkpoint,
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
@@ -112,15 +114,12 @@ def vmc_loop(
                 continue
 
             metrics["accept_ratio"] = accept_ratio
-            save_nans_checkpoint = checkpoint_if_nans and (
-                jnp.isnan(metrics["energy_noclip"])
-                or jnp.isnan(metrics["variance_noclip"])
-            )
 
             (
                 checkpoint_metric,
                 checkpoint_str,
                 best_checkpoint_data,
+                saved_nans_checkpoint,
             ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
                 epoch,
                 old_params,
@@ -139,7 +138,9 @@ def vmc_loop(
                 best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
-                save_nans_checkpoint=save_nans_checkpoint,
+                checkpoint_if_nans=checkpoint_if_nans,
+                only_checkpoint_first_nans=only_checkpoint_first_nans,
+                saved_nans_checkpoint=saved_nans_checkpoint,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 

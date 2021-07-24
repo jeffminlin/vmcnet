@@ -183,7 +183,7 @@ def initialize_checkpointing(
     nhistory_max: int,
     logdir: str = None,
     checkpoint_every: int = None,
-) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData]]:
+) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData], bool]:
     """Initialize checkpointing objects.
 
     A suffix is added to the checkpointing directory if one with the same name already
@@ -191,7 +191,8 @@ def initialize_checkpointing(
 
     The checkpointing metric (error-adjusted running energy average) is initialized to
     infinity, and empty arrays are initialized in running_energy_and_variance. The
-    best checkpoint data is initialized to None.
+    best checkpoint data is initialized to None, and saved_nan_checkpoint is initialized
+    to False.
     """
     if logdir is not None:
         logging.info("Saving to %s", logdir)
@@ -205,12 +206,14 @@ def initialize_checkpointing(
         RunningMetric(nhistory_max), RunningMetric(nhistory_max)
     )
     best_checkpoint_data = None
+    saved_nan_checkpoint = False
 
     return (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
         best_checkpoint_data,
+        saved_nan_checkpoint,
     )
 
 
@@ -257,6 +260,21 @@ def get_checkpoint_metric(
     return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
+def _should_save_nans_checkpoint(
+    metrics: Dict,
+    checkpoint_if_nans: bool,
+    only_checkpoint_first_nans: bool,
+    saved_nans_checkpoint: bool,
+) -> bool:
+    is_nan = jnp.isnan(metrics["energy_noclip"]) or jnp.isnan(
+        metrics["variance_noclip"]
+    )
+    if is_nan and checkpoint_if_nans:
+        return not only_checkpoint_first_nans or not saved_nans_checkpoint
+
+    return False
+
+
 def save_metrics_and_handle_checkpoints(
     epoch: int,
     params: P,
@@ -275,8 +293,10 @@ def save_metrics_and_handle_checkpoints(
     best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
-    save_nans_checkpoint: bool = False,
-) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
+    checkpoint_if_nans: bool = False,
+    only_checkpoint_first_nans: bool = True,
+    saved_nans_checkpoint: bool = False,
+) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]], bool]:
     """Checkpoint the current state of the VMC loop.
 
     There are two situations to checkpoint:
@@ -335,9 +355,14 @@ def save_metrics_and_handle_checkpoints(
     checkpoint_str = ""
     if logdir is None or metrics is None:
         # do nothing
-        return checkpoint_metric, checkpoint_str, best_checkpoint_data
+        return (
+            checkpoint_metric,
+            checkpoint_str,
+            best_checkpoint_data,
+            saved_nans_checkpoint,
+        )
 
-    checkpoint_str = save_metrics_and_regular_checkpoint(
+    checkpoint_str, saved_nans_checkpoint = save_metrics_and_regular_checkpoint(
         epoch,
         params,
         optimizer_state,
@@ -350,7 +375,9 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
-        save_nans_checkpoint=save_nans_checkpoint,
+        checkpoint_if_nans=checkpoint_if_nans,
+        only_checkpoint_first_nans=only_checkpoint_first_nans,
+        saved_nans_checkpoint=saved_nans_checkpoint,
     )
 
     (
@@ -379,6 +406,7 @@ def save_metrics_and_handle_checkpoints(
         jnp.minimum(error_adjusted_running_avg, checkpoint_metric),
         checkpoint_str,
         new_best_checkpoint_data,
+        saved_nans_checkpoint,
     )
 
 
@@ -486,8 +514,10 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
-    save_nans_checkpoint: bool = False,
-) -> str:
+    checkpoint_if_nans: bool = False,
+    only_checkpoint_first_nans: bool = True,
+    saved_nans_checkpoint: bool = False,
+) -> Tuple[str, bool]:
     """Save current metrics to file, and save model state regularly.
 
     This currently touches the disk repeatedly, once for each metric, which is probably
@@ -515,8 +545,8 @@ def save_metrics_and_regular_checkpoint(
             None, this function doesn't save the model state. Defaults to None.
 
     Returns:
-        str: previous checkpointing string, with additional info if this function
-        did checkpointing
+        (str, bool): previous checkpointing string, with additional info if this
+        function did checkpointing; followed by updated value of saved_nans_checkpoint.
     """
     metrics_writer.save_data(logdir, "", metrics)
     checkpoint_data = (epoch, data, params, optimizer_state, key)
@@ -530,6 +560,13 @@ def save_metrics_and_regular_checkpoint(
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
+    save_nans_checkpoint = _should_save_nans_checkpoint(
+        metrics,
+        checkpoint_if_nans,
+        only_checkpoint_first_nans,
+        saved_nans_checkpoint,
+    )
+
     if save_nans_checkpoint:
         checkpoint_writer.save_data(
             os.path.join(logdir, checkpoint_dir),
@@ -537,8 +574,9 @@ def save_metrics_and_regular_checkpoint(
             checkpoint_data,
         )
         checkpoint_str = checkpoint_str + ", nans ckpt saved"
+        saved_nans_checkpoint = True
 
-    return checkpoint_str
+    return checkpoint_str, saved_nans_checkpoint
 
 
 def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
