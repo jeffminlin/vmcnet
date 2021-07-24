@@ -1,5 +1,6 @@
 """Testing io routines."""
 import os
+from typing import List
 
 import jax
 import jax.numpy as jnp
@@ -8,7 +9,10 @@ import vmcnet.utils.checkpoint as checkpoint
 
 from tests.test_utils import make_dummy_data_params_and_key
 
-
+# These are defined as constants here so that simple equality checks can be done
+# between mocker.call_args_list values and reconstructed lists of mocker.call() values.
+# This doesn't feel ideal but I haven't yet found a better way to make these tests work
+# without going deep into the structures of the arguments to compare individual values.
 (_, PARAMS, KEY) = make_dummy_data_params_and_key()
 DATA = {"position": jnp.arange(jax.local_device_count() * 2)}
 OPT_STATE = {"momentum": 2.0}
@@ -112,19 +116,20 @@ def test_save_best_checkpoint(mocker):
         ),
     ]
     assert mock_save_checkpoint.call_args_list == expected_calls
-    # call_args = [x.args[2] for x in mock_save_checkpoint.call_args_list]
-    # assert_pytree_allclose(call_args, expected_calls)
 
 
 def _test_nans_checkpointing(
-    mocker, checkpoint_if_nans, only_checkpoint_first_nans, metric_nans, expected_calls
-):
-    # Create fake data
+    mocker,
+    checkpoint_if_nans: bool,
+    only_checkpoint_first_nans: bool,
+    metric_nans: List[bool],
+    expected_calls: List,
+) -> None:
     (_, data, params, opt_state, key) = _get_fake_checkpoint_data(0)
     log_dir, checkpoint_dir_name, _ = _get_fake_filepaths()
 
     # Pull out simple helper function since only a few args will change during the test
-    def save_checkpoints(
+    def save_regular_checkpoints(
         epoch,
         checkpoint_writer,
         metrics_writer,
@@ -148,7 +153,6 @@ def _test_nans_checkpointing(
             saved_nans_checkpoint=saved_nans_checkpoint,
         )
 
-    saved_nans_checkpoint = False
     no_nans_met = {"energy_noclip": 2.0, "variance_noclip": 3.0}
     nans_met = {"energy_noclip": jnp.nan, "variance_noclip": 4.0}
     metrics_list = [nans_met if is_nan else no_nans_met for is_nan in metric_nans]
@@ -157,8 +161,10 @@ def _test_nans_checkpointing(
         with checkpoint.CheckpointWriter() as checkpoint_writer:
             mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_data")
             mocker.patch.object(metrics_writer, "save_data")
+            saved_nans_checkpoint = False
+
             for epoch in range(len(metrics_list)):
-                _, saved_nans_checkpoint = save_checkpoints(
+                _, saved_nans_checkpoint = save_regular_checkpoints(
                     epoch,
                     checkpoint_writer,
                     metrics_writer,
@@ -166,7 +172,7 @@ def _test_nans_checkpointing(
                     saved_nans_checkpoint,
                 )
 
-            assert mock_save_checkpoint.call_args_list == expected_calls
+    assert mock_save_checkpoint.call_args_list == expected_calls
 
 
 def test_nans_checkpointing_when_off(mocker):
@@ -202,7 +208,7 @@ def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
     )
 
 
-def test_nans_checkpointing_when_only_checkpointing_all_nans(mocker):
+def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
     """Test multiple checkpoints are written if checkpointing all nans."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]

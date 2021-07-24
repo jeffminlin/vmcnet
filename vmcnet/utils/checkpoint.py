@@ -346,11 +346,22 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir (str, optional): name of subdirectory to save the regular
             checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
             Defaults to "checkpoints".
+        checkpoint_if_nans (bool, optional): whether to save checkpoints when
+            nan energy values are recorded. Defaults to False.
+        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
+            first time nans are encountered, or every time. Useful to capture a nan
+            checkpoint without risking writing too many checkpoints if the optimization
+            starts to hit nans most or every epoch after some point. Only relevant if
+            checkpoint_if_nans is True. Defaults to True.
+        saved_nans_checkpoint (bool, optional): whether a nans checkpoint has already
+            been saved. Only relevant if checkpoint_if_nans and
+            only_checkpoint_first_nans are both True, and used in that case to decide
+            whether to save further nans checkpoints or not. Defaults to False.
 
     Returns:
-        (jnp.float32, str, CheckpointData): best error-adjusted energy average, then
-        string indicating if checkpointing has been done, then new best checkpoint data,
-        or None.
+        (jnp.float32, str, CheckpointData, bool): best error-adjusted energy average,
+        then string indicating if checkpointing has been done, then new best checkpoint
+        data (or None), then the updated value of saved_nans_checkpoint.
     """
     checkpoint_str = ""
     if logdir is None or metrics is None:
@@ -543,6 +554,17 @@ def save_metrics_and_regular_checkpoint(
             Defaults to "checkpoints".
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
             None, this function doesn't save the model state. Defaults to None.
+        checkpoint_if_nans (bool, optional): whether to save checkpoints when
+            nan energy values are recorded. Defaults to False.
+        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
+            first time nans are encountered, or every time. Useful to capture a nan
+            checkpoint without risking writing too many checkpoints if the optimization
+            starts to hit nans most or every epoch after some point. Only relevant if
+            checkpoint_if_nans is True. Defaults to True.
+        saved_nans_checkpoint (bool, optional): whether a nans checkpoint has already
+            been saved. Only relevant if checkpoint_if_nans and
+            only_checkpoint_first_nans are both True, and used in that case to decide
+            whether to save further nans checkpoints or not. Defaults to False.
 
     Returns:
         (str, bool): previous checkpointing string, with additional info if this

@@ -75,6 +75,13 @@ def vmc_loop(
             error-adjusted running avg of the energy. Higher means the variance is more
             important, and lower means the energy is more important. See
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
+        checkpoint_if_nans (bool, optional): whether to save checkpoints when
+            nan energy values are recorded. Defaults to False.
+        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
+            first time nans are encountered, or every time. Useful to capture a nan
+            checkpoint without risking writing too many checkpoints if the optimization
+            starts to hit nans most or every epoch after some point. Only relevant if
+            checkpoint_if_nans is True. Defaults to True.
         nhistory_max (int, optional): How much history to keep in the running histories
             of the energy and variance. Defaults to 200.
 
