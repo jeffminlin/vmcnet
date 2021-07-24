@@ -9,36 +9,13 @@ import vmcnet.utils.checkpoint as checkpoint
 from tests.test_utils import make_dummy_data_params_and_key
 
 
-def test_three_calls_to_threaded_writer(mocker):
-    """Test saving three fake checkpoints using the asynchronous ThreadedWriter."""
-    # Create fake data
-    directory = "/fake/directory"
-    file_name1 = "checkpoint_file1.npz"
-    file_name2 = "checkpoint_file2.npz"
-    file_name3 = "checkpoint_file3.npz"
-    epoch = 0
-    (_, params, key) = make_dummy_data_params_and_key()
-    data = {"position": jnp.arange(jax.local_device_count() * 2)}
-    opt_state = {"momentum": 2.0}
-    checkpoint_data = (epoch, data, params, opt_state, key)
+(_, PARAMS, KEY) = make_dummy_data_params_and_key()
+DATA = {"position": jnp.arange(jax.local_device_count() * 2)}
+OPT_STATE = {"momentum": 2.0}
 
-    # Mock out save_vmc_state method
-    mock_write_out_data = mocker.patch(
-        "vmcnet.utils.checkpoint.ThreadedWriter.write_out_data"
-    )
 
-    # Initialize checkpoint writer and save three checkpoints
-    with checkpoint.ThreadedWriter() as threaded_writer:
-        threaded_writer.save_data(directory, file_name1, checkpoint_data)
-        threaded_writer.save_data(directory, file_name2, checkpoint_data)
-        threaded_writer.save_data(directory, file_name3, checkpoint_data)
-
-    expected_calls = [
-        mocker.call(directory, file_name1, checkpoint_data),
-        mocker.call(directory, file_name2, checkpoint_data),
-        mocker.call(directory, file_name3, checkpoint_data),
-    ]
-    assert mock_write_out_data.call_args_list == expected_calls
+def _get_fake_checkpoint_data(epoch: int):
+    return (epoch, DATA, PARAMS, OPT_STATE, KEY)
 
 
 def _get_fake_filepaths():
@@ -48,28 +25,42 @@ def _get_fake_filepaths():
     return log_dir, checkpoint_dir_name, checkpoint_dir
 
 
-def _get_fake_checkpoint_data(epoch: int):
-    (_, params, key) = make_dummy_data_params_and_key()
-    data = {"position": jnp.arange(jax.local_device_count() * 2)}
-    opt_state = {"momentum": 2.0}
-    return (epoch, data, params, opt_state, key)
+def test_three_calls_to_threaded_writer(mocker):
+    """Test saving three fake checkpoints using the asynchronous ThreadedWriter."""
+    # Create fake data
+    log_dir, _, _ = _get_fake_filepaths()
+    file_name1 = "checkpoint_file1.npz"
+    file_name2 = "checkpoint_file2.npz"
+    file_name3 = "checkpoint_file3.npz"
+    checkpoint_data = _get_fake_checkpoint_data(0)
+
+    # Mock out save_vmc_state method
+    mock_write_out_data = mocker.patch(
+        "vmcnet.utils.checkpoint.ThreadedWriter.write_out_data"
+    )
+
+    # Initialize checkpoint writer and save three checkpoints
+    with checkpoint.ThreadedWriter() as threaded_writer:
+        threaded_writer.save_data(log_dir, file_name1, checkpoint_data)
+        threaded_writer.save_data(log_dir, file_name2, checkpoint_data)
+        threaded_writer.save_data(log_dir, file_name3, checkpoint_data)
+
+    expected_calls = [
+        mocker.call(log_dir, file_name1, checkpoint_data),
+        mocker.call(log_dir, file_name2, checkpoint_data),
+        mocker.call(log_dir, file_name3, checkpoint_data),
+    ]
+    assert mock_write_out_data.call_args_list == expected_calls
 
 
 def test_save_best_checkpoint(mocker):
     """Test saving best checkpoints using the asynchronous CheckpointWriter."""
     # Create fake data
-    directory, _, _ = _get_fake_filepaths()
-
-    (_, params, key) = make_dummy_data_params_and_key()
-    data = {"position": jnp.arange(jax.local_device_count() * 2)}
-    opt_state = {"momentum": 2.0}
+    log_dir, _, _ = _get_fake_filepaths()
+    (_, data, params, opt_state, key) = _get_fake_checkpoint_data(0)
     running_energy_and_variance = checkpoint.RunningEnergyVariance(
         checkpoint.RunningMetric(50), checkpoint.RunningMetric(50)
     )
-
-    def get_checkpoint_data(epoch):
-        return (epoch, data, params, opt_state, key)
-
     # Create checkpoint writer and mock out metrics and checkpointing
     mock_get_metrics = mocker.patch("vmcnet.utils.checkpoint.get_checkpoint_metric")
 
@@ -90,7 +81,7 @@ def test_save_best_checkpoint(mocker):
             running_energy_and_variance,
             checkpoint_writer,
             checkpoint_metric,
-            directory,
+            log_dir,
             1.0,
             "",
             best_checkpoint_every,
@@ -113,17 +104,21 @@ def test_save_best_checkpoint(mocker):
 
     # Checkpoints should only be saved from epochs 1 and 5
     expected_calls = [
-        mocker.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(1)),
-        mocker.call(directory, checkpoint.CHECKPOINT_FILE_NAME, get_checkpoint_data(5)),
+        mocker.call(
+            log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(1)
+        ),
+        mocker.call(
+            log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(5)
+        ),
     ]
     assert mock_save_checkpoint.call_args_list == expected_calls
-
+    # call_args = [x.args[2] for x in mock_save_checkpoint.call_args_list]
+    # assert_pytree_allclose(call_args, expected_calls)
 
 
 def _test_nans_checkpointing(
     mocker, checkpoint_if_nans, only_checkpoint_first_nans, metric_nans, expected_calls
 ):
-    """Test saving best checkpoints using the asynchronous CheckpointWriter."""
     # Create fake data
     (_, data, params, opt_state, key) = _get_fake_checkpoint_data(0)
     log_dir, checkpoint_dir_name, _ = _get_fake_filepaths()
@@ -162,7 +157,6 @@ def _test_nans_checkpointing(
         with checkpoint.CheckpointWriter() as checkpoint_writer:
             mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_data")
             mocker.patch.object(metrics_writer, "save_data")
-            only_checkpoint_first_nans = True
             for epoch in range(len(metrics_list)):
                 _, saved_nans_checkpoint = save_checkpoints(
                     epoch,
@@ -176,6 +170,7 @@ def _test_nans_checkpointing(
 
 
 def test_nans_checkpointing_when_off(mocker):
+    """Test no checkpoints are written if nans checkpointing is off."""
     metric_nans = [False, False, True, False, False, True]
     expected_calls = []
     checkpoint_if_nans = False
@@ -190,6 +185,7 @@ def test_nans_checkpointing_when_off(mocker):
 
 
 def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
+    """Test only one checkpoint is written if only checkpointing first nans."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     expected_calls = [
@@ -207,6 +203,7 @@ def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
 
 
 def test_nans_checkpointing_when_only_checkpointing_all_nans(mocker):
+    """Test multiple checkpoints are written if checkpointing all nans."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     expected_calls = [
