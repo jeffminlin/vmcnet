@@ -592,7 +592,7 @@ def save_metrics_and_regular_checkpoint(
     if save_nans_checkpoint:
         checkpoint_writer.save_data(
             os.path.join(logdir, checkpoint_dir),
-            "energy_nans_" + str(epoch + 1) + ".npz",
+            "nans_" + str(epoch + 1) + ".npz",
             checkpoint_data,
         )
         checkpoint_str = checkpoint_str + ", nans ckpt saved"

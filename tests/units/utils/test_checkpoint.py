@@ -195,7 +195,7 @@ def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     expected_calls = [
-        mocker.call(checkpoint_dir, "energy_nans_3.npz", _get_fake_checkpoint_data(2))
+        mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2))
     ]
     checkpoint_if_nans = True
     only_checkpoint_first_nans = True
@@ -213,8 +213,8 @@ def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     expected_calls = [
-        mocker.call(checkpoint_dir, "energy_nans_3.npz", _get_fake_checkpoint_data(2)),
-        mocker.call(checkpoint_dir, "energy_nans_6.npz", _get_fake_checkpoint_data(5)),
+        mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2)),
+        mocker.call(checkpoint_dir, "nans_6.npz", _get_fake_checkpoint_data(5)),
     ]
     checkpoint_if_nans = True
     only_checkpoint_first_nans = False
