@@ -10,26 +10,52 @@ import chex
 import pytest
 
 
+# Markers to apply to tests to skip them in ascending level of slow-ness (how slow and
+# which ones are the slowest will probably be a bit machine dependent)
+SKIP_LEVELS = (
+    (
+        "slow",
+        {"help": "run slow tests", "description": "mark test as slow to run"},
+    ),
+    (
+        "very_slow",
+        {"help": "run very slow tests", "description": "mark test as very slow to run"},
+    ),
+)
+
+
+def _make_flag(marker):
+    return "--run_{}".format(marker)
+
+
 def pytest_addoption(parser):
     """Provide the --chex_n_cpu_devices arg to pytest."""
     parser.addoption("--chex_n_cpu_devices", type=int, default=4)
-    parser.addoption(
-        "--runslow", action="store_true", default=False, help="run slow tests"
-    )
+    for marker, info in SKIP_LEVELS:
+        parser.addoption(
+            _make_flag(marker),
+            action="store_true",
+            default=False,
+            help=info["help"],
+        )
 
 
 def pytest_configure(config):
     """If --chex_n_cpu_devices=N is passed to pytest, run tests on N CPU threads."""
     chex.set_n_cpu_devices(config.getoption("chex_n_cpu_devices"))
-    config.addinivalue_line("markers", "slow: mark test as slow to run")
+    for marker, info in SKIP_LEVELS:
+        config.addinivalue_line("markers", "{}: {}".format(marker, info["description"]))
 
 
 def pytest_collection_modifyitems(config, items):
     """Modify pytest collection to respect the --runslow flag."""
-    if config.getoption("--runslow"):
-        # --runslow given in cli: do not skip slow tests
-        return
-    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
-    for item in items:
-        if "slow" in item.keywords:
-            item.add_marker(skip_slow)
+    for marker, _ in reversed(SKIP_LEVELS):
+        # iterate through the levels in reverse, mark tests to skip until we hit a flag
+        if config.getoption(_make_flag(marker)):
+            return
+        skip_marker = pytest.mark.skip(
+            reason="need {} option to run".format(_make_flag(marker))
+        )
+        for item in items:
+            if marker in item.keywords:
+                item.add_marker(skip_marker)

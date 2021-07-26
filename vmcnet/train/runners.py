@@ -303,11 +303,8 @@ def _get_kfac_update_fn(
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
-    if not apply_pmap:
-        key_splitter = jax.random.split
-    else:
-        key_splitter = utils.distribute.p_split
-    key, subkey = key_splitter(key)
+    key, subkey = utils.distribute.split_key(key, apply_pmap)
+
     optimizer_state = optimizer.init(params, subkey, get_position_fn(data))
 
     update_param_fn = updates.params.create_kfac_update_param_fn(
@@ -358,7 +355,7 @@ def _get_update_fn_and_init_optimizer(
     data: D,
     get_position_fn: Callable[[D], jnp.ndarray],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    sharded_key: jnp.ndarray,
+    key: jnp.ndarray,
     apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, D, OptimizerState],
@@ -374,7 +371,7 @@ def _get_update_fn_and_init_optimizer(
             data,
             get_position_fn,
             energy_data_val_and_grad,
-            sharded_key,
+            key,
             learning_rate_schedule,
             vmc_config.optimizer.kfac,
             vmc_config.record_param_l1_norm,
@@ -390,7 +387,7 @@ def _get_update_fn_and_init_optimizer(
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
         )
-        return update_param_fn, optimizer_state, sharded_key
+        return update_param_fn, optimizer_state, key
     else:
         raise ValueError(
             "Requested optimizer type not supported; {} was requested".format(
@@ -542,16 +539,9 @@ def _burn_and_run_vmc(
     return params, optimizer_state, data, key
 
 
-# TODO: add integration test which runs this runner with a close-to-default config
-# (probably use smaller nchains and smaller nepochs) to make sure it doesn't raise
-# top-level errors
 def run_molecule() -> None:
     """Run VMC on a molecule."""
     reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
-
-    if config.debug_nans:
-        config.distribute = False
-        jax.config.update("jax_debug_nans", True)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
@@ -577,7 +567,7 @@ def run_molecule() -> None:
         params,
         data,
         optimizer_state,
-        sharded_key,
+        key,
     ) = _setup_vmc(
         config,
         init_pos,
@@ -606,12 +596,12 @@ def run_molecule() -> None:
             data,
             params,
             optimizer_state,
-            sharded_key,
+            key,
         ) = utils.distribute.distribute_vmc_state_from_checkpoint(
             data, params, optimizer_state, key
         )
 
-    params, optimizer_state, data, sharded_key = _burn_and_run_vmc(
+    params, optimizer_state, data, key = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
@@ -620,7 +610,7 @@ def run_molecule() -> None:
         burning_step,
         walker_fn,
         update_param_fn,
-        sharded_key,
+        key,
         should_checkpoint=True,
     )
 
@@ -654,6 +644,6 @@ def run_molecule() -> None:
         eval_burning_step,
         eval_walker_fn,
         eval_update_param_fn,
-        sharded_key,
+        key,
         should_checkpoint=False,
     )

@@ -134,7 +134,7 @@ def create_kfac_update_param_fn(
     traced_compute_param_norm = _get_traced_compute_param_norm(optimizer.multi_device)
 
     def update_param_fn(params, data, optimizer_state, key):
-        key, subkey = utils.distribute.p_split(key)
+        key, subkey = utils.distribute.split_key(key, optimizer.multi_device)
         params, optimizer_state, stats = optimizer.step(
             params=params,
             state=optimizer_state,

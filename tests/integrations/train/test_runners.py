@@ -17,38 +17,10 @@ def _check_length_and_finiteness_of_metrics(nepochs, inner_logdir, metric_files)
         assert np.all(np.isfinite(metric))
 
 
-@pytest.mark.slow
-def test_run_molecule(mocker, tmp_path):
-    """End-to-end test of the molecular runner (with smaller nchains/nepochs).
-
-    Unfortunately, mocking sys.argv (which would be slightly more end-to-end) doesn't
-    quite work due to some quirks with how flags are registered when not running from
-    the command-line, and we'd generally like to avoid using subprocess.run(...) if it's
-    not necessary. Thus here we directly mock FLAGS to have the desired config, then
-    directly call the runner.
-
-    This test mostly exists to check that no top-level errors are raised during the call
-    to the runner with default configs, and that there is some potentially reasonable
-    logging occurring. It will not generally catch more subtle bugs.
-    """
-    vmc_nchains = 10 * jax.local_device_count()
-    vmc_nepochs = 5
-    vmc_checkpoint_every = 2
-    vmc_best_checkpoint_every = 4
-
-    eval_nchains = 20 * jax.local_device_count()
-    eval_nepochs = 3
-
-    mocker.patch("os.curdir", tmp_path)
-
-    config = train.default_config.get_default_config()
-    config.vmc.nchains = vmc_nchains
-    config.vmc.nepochs = vmc_nepochs
-    config.vmc.checkpoint_every = vmc_checkpoint_every
-    config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
-    config.eval.nchains = eval_nchains
-    config.eval.nepochs = eval_nepochs
-
+def _run_and_check_output_files(
+    mocker, tmp_path, vmc_nepochs, vmc_checkpoint_every, eval_nepochs, config
+):
+    """Mock flags, run the molecular runner, and check the resulting output files."""
     mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
     mock_flags.config = config
     mock_flags.reload = train.default_config.get_default_reload_config()
@@ -97,4 +69,69 @@ def test_run_molecule(mocker, tmp_path):
     eval_metric_files = ["accept_ratio.txt", "energy.txt", "variance.txt"]
     _check_length_and_finiteness_of_metrics(
         eval_nepochs, inner_logdir / "eval", eval_metric_files
+    )
+
+
+@pytest.mark.very_slow
+def test_run_molecule_pmapped(mocker, tmp_path):
+    """End-to-end test of the molecular runner (with smaller nchains/nepochs).
+
+    Unfortunately, mocking sys.argv (which would be slightly more end-to-end) doesn't
+    quite work due to some quirks with how flags are registered when not running from
+    the command-line, and we'd generally like to avoid using subprocess.run(...) if it's
+    not necessary. Thus here we directly mock FLAGS to have the desired config, then
+    directly call the runner.
+
+    This test mostly exists to check that no top-level errors are raised during the call
+    to the runner with default configs, and that there is some potentially reasonable
+    logging occurring. It will not generally catch more subtle bugs.
+    """
+    vmc_nchains = 10 * jax.local_device_count()
+    vmc_nepochs = 5
+    vmc_checkpoint_every = 2
+    vmc_best_checkpoint_every = 4
+
+    eval_nchains = 20 * jax.local_device_count()
+    eval_nepochs = 3
+
+    mocker.patch("os.curdir", tmp_path)
+
+    config = train.default_config.get_default_config()
+    config.vmc.nchains = vmc_nchains
+    config.vmc.nepochs = vmc_nepochs
+    config.vmc.checkpoint_every = vmc_checkpoint_every
+    config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
+    config.eval.nchains = eval_nchains
+    config.eval.nepochs = eval_nepochs
+
+    _run_and_check_output_files(
+        mocker, tmp_path, vmc_nepochs, vmc_checkpoint_every, eval_nepochs, config
+    )
+
+
+@pytest.mark.very_slow
+def test_run_molecule_jitted(mocker, tmp_path):
+    """End-to-end test of the molecular runner, but only jitted."""
+    vmc_nchains = 7  # use a prime number here to catch if pmapping is trying to happen
+    vmc_nepochs = 5
+    vmc_checkpoint_every = 2
+    vmc_best_checkpoint_every = 4
+
+    eval_nchains = 5
+    eval_nepochs = 3
+
+    mocker.patch("os.curdir", tmp_path)
+
+    config = train.default_config.get_default_config()
+    config.vmc.nchains = vmc_nchains
+    config.vmc.nepochs = vmc_nepochs
+    config.vmc.checkpoint_every = vmc_checkpoint_every
+    config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
+    config.eval.nchains = eval_nchains
+    config.eval.nepochs = eval_nepochs
+
+    config.distribute = False
+
+    _run_and_check_output_files(
+        mocker, tmp_path, vmc_nepochs, vmc_checkpoint_every, eval_nepochs, config
     )
