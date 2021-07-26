@@ -221,7 +221,7 @@ def burn_data(
     Returns:
         (pytree-like, jnp.ndarray): new data, new key
     """
-    logging.info("Burning data for %u steps", nsteps_to_burn)
+    logging.info("Burning data for %d steps", nsteps_to_burn)
     for _ in range(nsteps_to_burn):
         data, key = burning_step(params, data, key)
     return data, key
