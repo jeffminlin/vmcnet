@@ -303,7 +303,7 @@ def _get_kfac_update_fn(
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
     )
-    key, subkey = utils.distribute.split_key(key, apply_pmap)
+    key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)
 
     optimizer_state = optimizer.init(params, subkey, get_position_fn(data))
 
