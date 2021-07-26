@@ -3,6 +3,7 @@
 import sys
 from typing import Tuple
 
+import jax
 from absl import flags
 from ml_collections import ConfigDict
 from ml_collections.config_flags import config_flags
@@ -79,6 +80,12 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     ):
-        return reload_config, _get_config_from_reload(reload_config, flag_values)
+        config = _get_config_from_reload(reload_config, flag_values)
     else:
-        return reload_config, _get_config_from_default_config(flag_values)
+        config = _get_config_from_default_config(flag_values)
+
+    if config.debug_nans:
+        config.distribute = False
+        jax.config.update("jax_debug_nans", True)
+
+    return reload_config, config

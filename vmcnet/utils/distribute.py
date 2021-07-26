@@ -74,6 +74,13 @@ def nanmean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
 p_split = pmap(lambda key: tuple(jax.random.split(key)))
 
 
+def split_or_psplit_key(
+    key: jnp.ndarray, multi_device: bool = True
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Split PRNG key, potentially on multiple devices."""
+    return p_split(key) if multi_device else jax.random.split(key)
+
+
 def reshape_data_leaves_for_distribution(data_leaf: jnp.ndarray) -> jnp.ndarray:
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
     num_devices = jax.local_device_count()
