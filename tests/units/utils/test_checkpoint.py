@@ -1,25 +1,34 @@
 """Testing io routines."""
 import os
-from typing import List
+from typing import List, Tuple
 
 import jax
 import jax.numpy as jnp
 
 import vmcnet.utils.checkpoint as checkpoint
+from vmcnet.utils.typing import CheckpointData
 
-from tests.test_utils import make_dummy_data_params_and_key
-
-# These are defined as constants here so that simple equality checks can be done
-# between mocker.call_args_list values and reconstructed lists of mocker.call() values.
-# This doesn't feel ideal but I haven't yet found a better way to make these tests work
-# without going deep into the structures of the arguments to compare individual values.
-(_, PARAMS, KEY) = make_dummy_data_params_and_key()
-DATA = {"position": jnp.arange(jax.local_device_count() * 2)}
-OPT_STATE = {"momentum": 2.0}
+from tests.test_utils import assert_pytree_allclose, make_dummy_data_params_and_key
 
 
 def _get_fake_checkpoint_data(epoch: int):
-    return (epoch, DATA, PARAMS, OPT_STATE, KEY)
+    (_, params, key) = make_dummy_data_params_and_key()
+    data = {"position": jnp.arange(jax.local_device_count() * 2)}
+    opt_state = {"momentum": 2.0}
+
+    return (epoch, data, params, opt_state, key)
+
+
+def _assert_checkpoint_save_calls_equal(
+    call_args_list: List, expected_calls: List[Tuple[str, str, CheckpointData]]
+):
+    assert len(call_args_list) == len(expected_calls)
+    for i in range(len(call_args_list)):
+        call = call_args_list[i]
+        expected_call = expected_calls[i]
+        assert call.args[0] == expected_call[0]
+        assert call.args[1] == expected_call[1]
+        assert_pytree_allclose(call.args[2], expected_call[2])
 
 
 def _get_fake_filepaths():
@@ -50,11 +59,13 @@ def test_three_calls_to_threaded_writer(mocker):
         threaded_writer.save_data(log_dir, file_name3, checkpoint_data)
 
     expected_calls = [
-        mocker.call(log_dir, file_name1, checkpoint_data),
-        mocker.call(log_dir, file_name2, checkpoint_data),
-        mocker.call(log_dir, file_name3, checkpoint_data),
+        (log_dir, file_name1, checkpoint_data),
+        (log_dir, file_name2, checkpoint_data),
+        (log_dir, file_name3, checkpoint_data),
     ]
-    assert mock_write_out_data.call_args_list == expected_calls
+    _assert_checkpoint_save_calls_equal(
+        mock_write_out_data.call_args_list, expected_calls
+    )
 
 
 def test_save_best_checkpoint(mocker):
@@ -108,14 +119,12 @@ def test_save_best_checkpoint(mocker):
 
     # Checkpoints should only be saved from epochs 1 and 5
     expected_calls = [
-        mocker.call(
-            log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(1)
-        ),
-        mocker.call(
-            log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(5)
-        ),
+        (log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(1)),
+        (log_dir, checkpoint.CHECKPOINT_FILE_NAME, _get_fake_checkpoint_data(5)),
     ]
-    assert mock_save_checkpoint.call_args_list == expected_calls
+    _assert_checkpoint_save_calls_equal(
+        mock_save_checkpoint.call_args_list, expected_calls
+    )
 
 
 def _test_nans_checkpointing(
@@ -184,7 +193,9 @@ def _test_nans_checkpointing(
                     saved_nans_checkpoint,
                 )
 
-    assert mock_save_checkpoint.call_args_list == expected_calls
+    _assert_checkpoint_save_calls_equal(
+        mock_save_checkpoint.call_args_list, expected_calls
+    )
 
 
 def test_nans_checkpointing_when_off(mocker):
@@ -209,9 +220,7 @@ def test_checkpoint_first_nans_for_metric_nans(mocker):
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     new_param_nans = [False, False, False, False, True, False]
-    expected_calls = [
-        mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2))
-    ]
+    expected_calls = [(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2))]
     checkpoint_if_nans = True
     only_checkpoint_first_nans = True
     _test_nans_checkpointing(
@@ -229,9 +238,7 @@ def test_checkpoint_first_nans_for_param_nans(mocker):
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, False, True, False, True]
     new_param_nans = [False, True, True, False, True, False]
-    expected_calls = [
-        mocker.call(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1))
-    ]
+    expected_calls = [(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1))]
     checkpoint_if_nans = True
     only_checkpoint_first_nans = True
     _test_nans_checkpointing(
@@ -250,10 +257,10 @@ def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
     metric_nans = [False, False, True, False, False, True]
     new_param_nans = [False, True, True, False, True, False]
     expected_calls = [
-        mocker.call(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1)),
-        mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2)),
-        mocker.call(checkpoint_dir, "nans_5.npz", _get_fake_checkpoint_data(4)),
-        mocker.call(checkpoint_dir, "nans_6.npz", _get_fake_checkpoint_data(5)),
+        (checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1)),
+        (checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2)),
+        (checkpoint_dir, "nans_5.npz", _get_fake_checkpoint_data(4)),
+        (checkpoint_dir, "nans_6.npz", _get_fake_checkpoint_data(5)),
     ]
     checkpoint_if_nans = True
     only_checkpoint_first_nans = False
