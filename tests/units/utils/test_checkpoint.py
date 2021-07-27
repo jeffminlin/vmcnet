@@ -1,5 +1,6 @@
 """Testing io routines."""
 import os
+import pytest
 from typing import List, Tuple
 
 import jax
@@ -198,6 +199,7 @@ def _test_nans_checkpointing(
     )
 
 
+@pytest.mark.slow
 def test_nans_checkpointing_when_off(mocker):
     """Test no checkpoints are written if nans checkpointing is off."""
     metric_nans = [False, False, True, False, False, True]
@@ -215,6 +217,7 @@ def test_nans_checkpointing_when_off(mocker):
     )
 
 
+@pytest.mark.slow
 def test_checkpoint_first_nans_for_metric_nans(mocker):
     """Test checkpointing first nans only, when first nans come from metrics."""
     _, _, checkpoint_dir = _get_fake_filepaths()
@@ -233,6 +236,7 @@ def test_checkpoint_first_nans_for_metric_nans(mocker):
     )
 
 
+@pytest.mark.slow
 def test_checkpoint_first_nans_for_param_nans(mocker):
     """Test checkpointing first nans only, when first nans come from params."""
     _, _, checkpoint_dir = _get_fake_filepaths()
@@ -251,6 +255,7 @@ def test_checkpoint_first_nans_for_param_nans(mocker):
     )
 
 
+@pytest.mark.slow
 def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
     """Test all relevant checkpoints are written if checkpointing all nans."""
     _, _, checkpoint_dir = _get_fake_filepaths()
