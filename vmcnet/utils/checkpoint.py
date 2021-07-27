@@ -267,6 +267,10 @@ def _should_save_nans_checkpoint(
     only_checkpoint_first_nans: bool,
     saved_nans_checkpoint: bool,
 ) -> bool:
+    # Be sure to check the checkpoint_if_nans_flag before doing anything else to avoid
+    # extra work looking for param nans, and also to ensure that no error is thrown in
+    # the eval phase when energy_noclip and variance_noclip will not be recorded as
+    # metrics.
     if checkpoint_if_nans:
         metrics_nan = jnp.isnan(metrics["energy_noclip"]) or jnp.isnan(
             metrics["variance_noclip"]
