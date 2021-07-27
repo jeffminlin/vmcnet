@@ -16,6 +16,7 @@ from typing import Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 import jax
 import jax.numpy as jnp
 
+import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
 from vmcnet.utils.typing import CheckpointData, D, P, S
 
@@ -260,6 +261,18 @@ def get_checkpoint_metric(
     return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
+@jax.jit
+def _check_for_nans(metrics: Dict, new_params: P) -> bool:
+    # Jax logical constructs are used here to enable jitting, which hopefully gives
+    # some performance benefit when checkpoint_if_nans is true.
+    metrics_nans = jnp.logical_or(
+        jnp.isnan(metrics["energy_noclip"]), jnp.isnan(metrics["variance_noclip"])
+    )
+    new_params = distribute.get_first_if_distributed(new_params)
+    params_nans = jnp.any(jnp.isnan(jax.flatten_util.ravel_pytree(new_params)[0]))
+    return jnp.logical_or(metrics_nans, params_nans)
+
+
 def _should_save_nans_checkpoint(
     metrics: Dict,
     new_params: P,
@@ -267,19 +280,13 @@ def _should_save_nans_checkpoint(
     only_checkpoint_first_nans: bool,
     saved_nans_checkpoint: bool,
 ) -> bool:
-    # Be sure to check the checkpoint_if_nans_flag before doing anything else to avoid
-    # extra work looking for param nans, and also to ensure that no error is thrown in
-    # the eval phase when energy_noclip and variance_noclip will not be recorded as
-    # metrics.
-    if checkpoint_if_nans:
-        metrics_nan = jnp.isnan(metrics["energy_noclip"]) or jnp.isnan(
-            metrics["variance_noclip"]
-        )
-        params_nan = jnp.any(jnp.isnan(jax.flatten_util.ravel_pytree(new_params)[0]))
-        if metrics_nan or params_nan:
-            return not only_checkpoint_first_nans or not saved_nans_checkpoint
+    # Be sure to check the boolean flags before looking at the metrics and params in
+    # order to avoid extra work and also to ensure that no error is thrown in  the eval
+    # phase when energy_noclip and variance_noclip will not be recorded as metrics.
+    if not checkpoint_if_nans or (only_checkpoint_first_nans and saved_nans_checkpoint):
+        return False
 
-    return False
+    return _check_for_nans(metrics, new_params)
 
 
 def save_metrics_and_handle_checkpoints(

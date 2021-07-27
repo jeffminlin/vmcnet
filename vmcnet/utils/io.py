@@ -8,7 +8,7 @@ import json
 from ml_collections import ConfigDict
 import numpy as np
 
-from .distribute import get_first, is_distributed
+from .distribute import get_first_if_distributed
 from .typing import CheckpointData
 
 
@@ -71,9 +71,8 @@ def process_checkpoint_data_for_saving(checkpoint_data: CheckpointData):
     """
     (epoch, data, params, optimizer_state, key) = checkpoint_data
     params = params.unfreeze()
-    if is_distributed(params):
-        params = get_first(params)
-        optimizer_state = get_first(optimizer_state)
+    params = get_first_if_distributed(params)
+    optimizer_state = get_first_if_distributed(optimizer_state)
     return (epoch, data, params, optimizer_state, key)
 
 
