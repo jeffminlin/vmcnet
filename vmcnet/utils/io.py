@@ -12,11 +12,16 @@ from .distribute import get_first, is_distributed
 from .typing import CheckpointData
 
 
+def open_existing_file(path, filename, option):
+    """Opens a filepath that already exists."""
+    filepath = os.path.join(path, filename)
+    return open(filepath, option)
+
+
 def open_or_create(path, filename, option):
     """Opens or creates a flepath."""
     os.makedirs(path, exist_ok=True)
-    filepath = os.path.join(path, filename)
-    return open(filepath, option)
+    return open_existing_file(path, filename, option)
 
 
 def append_metric_to_file(new_metric, logdir, name):
@@ -104,7 +109,7 @@ def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
 
 def reload_vmc_state(directory: str, name: str) -> CheckpointData:
     """Reload a VMC state from a saved checkpoint."""
-    with open_or_create(directory, name, "rb") as file_handle:
+    with open_existing_file(directory, name, "rb") as file_handle:
         # np.savez wraps non-array objects in arrays for storage, so call
         # tolist() on such objects to get them back to their original type.
         with np.load(file_handle, allow_pickle=True) as npz_data:
