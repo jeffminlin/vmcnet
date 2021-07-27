@@ -234,7 +234,6 @@ def _get_clipping_fn(
     return clipping_fn
 
 
-# TODO: Here and in physics/core.py, clean up the type hinting
 def _get_energy_fns(
     vmc_config: ConfigDict,
     ion_pos: jnp.ndarray,
@@ -398,8 +397,6 @@ def _get_update_fn_and_init_optimizer(
 
 # TODO: don't forget to update type hint to be more general when
 # _make_initial_distributed_data is more general
-# TODO: along with many of the other... intense type hints in this file, this should
-# probably be cleaned up -- it's probably not really serving the readability goal atm
 def _setup_vmc(
     config: ConfigDict,
     init_pos: jnp.ndarray,

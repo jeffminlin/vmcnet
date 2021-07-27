@@ -176,7 +176,6 @@ def get_statistics_from_local_energy(
     return energy, variance
 
 
-# TODO: make output type hint cleaner
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
