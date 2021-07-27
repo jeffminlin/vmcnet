@@ -130,6 +130,7 @@ def vmc_loop(
             ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
                 epoch,
                 old_params,
+                params,
                 old_state,
                 old_data,
                 old_key,

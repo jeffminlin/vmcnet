@@ -123,9 +123,10 @@ def _test_nans_checkpointing(
     checkpoint_if_nans: bool,
     only_checkpoint_first_nans: bool,
     metric_nans: List[bool],
+    new_param_nans: List[bool],
     expected_calls: List,
 ) -> None:
-    (_, data, params, opt_state, key) = _get_fake_checkpoint_data(0)
+    (_, data, old_params, opt_state, key) = _get_fake_checkpoint_data(0)
     log_dir, checkpoint_dir_name, _ = _get_fake_filepaths()
 
     # Pull out simple helper function since only a few args will change during the test
@@ -134,11 +135,13 @@ def _test_nans_checkpointing(
         checkpoint_writer,
         metrics_writer,
         metrics,
+        new_params,
         saved_nans_checkpoint,
     ):
         return checkpoint.save_metrics_and_regular_checkpoint(
             epoch,
-            params,
+            old_params,
+            new_params,
             opt_state,
             data,
             key,
@@ -157,6 +160,14 @@ def _test_nans_checkpointing(
     nans_met = {"energy_noclip": jnp.nan, "variance_noclip": 4.0}
     metrics_list = [nans_met if is_nan else no_nans_met for is_nan in metric_nans]
 
+    no_nans_params = old_params
+    nans_params = {
+        "params": {"a": jnp.ones((2, 2)), "b": jnp.array([2.0, 3.0, jnp.nan])}
+    }
+    new_params_list = [
+        nans_params if is_nan else no_nans_params for is_nan in new_param_nans
+    ]
+
     with checkpoint.MetricsWriter() as metrics_writer:
         with checkpoint.CheckpointWriter() as checkpoint_writer:
             mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_data")
@@ -169,6 +180,7 @@ def _test_nans_checkpointing(
                     checkpoint_writer,
                     metrics_writer,
                     metrics_list[epoch],
+                    new_params_list[epoch],
                     saved_nans_checkpoint,
                 )
 
@@ -178,6 +190,7 @@ def _test_nans_checkpointing(
 def test_nans_checkpointing_when_off(mocker):
     """Test no checkpoints are written if nans checkpointing is off."""
     metric_nans = [False, False, True, False, False, True]
+    new_param_nans = [True, False, False, False, False, True]
     expected_calls = []
     checkpoint_if_nans = False
     only_checkpoint_first_nans = True
@@ -186,14 +199,16 @@ def test_nans_checkpointing_when_off(mocker):
         checkpoint_if_nans,
         only_checkpoint_first_nans,
         metric_nans,
+        new_param_nans,
         expected_calls,
     )
 
 
-def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
-    """Test only one checkpoint is written if only checkpointing first nans."""
+def test_checkpoint_first_nans_for_metric_nans(mocker):
+    """Test checkpointing first nans only, when first nans come from metrics."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
+    new_param_nans = [False, False, False, False, True, False]
     expected_calls = [
         mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2))
     ]
@@ -204,16 +219,40 @@ def test_nans_checkpointing_when_only_checkpointing_first_nans(mocker):
         checkpoint_if_nans,
         only_checkpoint_first_nans,
         metric_nans,
+        new_param_nans,
+        expected_calls,
+    )
+
+
+def test_checkpoint_first_nans_for_param_nans(mocker):
+    """Test checkpointing first nans only, when first nans come from params."""
+    _, _, checkpoint_dir = _get_fake_filepaths()
+    metric_nans = [False, False, False, True, False, True]
+    new_param_nans = [False, True, True, False, True, False]
+    expected_calls = [
+        mocker.call(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1))
+    ]
+    checkpoint_if_nans = True
+    only_checkpoint_first_nans = True
+    _test_nans_checkpointing(
+        mocker,
+        checkpoint_if_nans,
+        only_checkpoint_first_nans,
+        metric_nans,
+        new_param_nans,
         expected_calls,
     )
 
 
 def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
-    """Test multiple checkpoints are written if checkpointing all nans."""
+    """Test all relevant checkpoints are written if checkpointing all nans."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
+    new_param_nans = [False, True, True, False, True, False]
     expected_calls = [
+        mocker.call(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1)),
         mocker.call(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2)),
+        mocker.call(checkpoint_dir, "nans_5.npz", _get_fake_checkpoint_data(4)),
         mocker.call(checkpoint_dir, "nans_6.npz", _get_fake_checkpoint_data(5)),
     ]
     checkpoint_if_nans = True
@@ -223,6 +262,7 @@ def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
         checkpoint_if_nans,
         only_checkpoint_first_nans,
         metric_nans,
+        new_param_nans,
         expected_calls,
     )
 
