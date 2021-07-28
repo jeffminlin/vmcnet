@@ -63,9 +63,7 @@ def test_correlated_samples():
     decay_factor = 0.9
     correlated_samples = _construct_correlated_samples(nsamples, nchains, decay_factor)
 
-    autocorr_curve, variance = statistics.multi_chain_autocorr_and_variance(
-        correlated_samples
-    )
+    autocorr_curve, _ = statistics.multi_chain_autocorr_and_variance(correlated_samples)
     tau = statistics.tau(autocorr_curve)
 
     # Test beginning of autocorrelation curve against a decaying exponential.

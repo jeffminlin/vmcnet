@@ -492,6 +492,37 @@ def _setup_eval(
     return eval_update_param_fn, eval_burning_step, eval_walker_fn
 
 
+def _make_new_data_for_eval(
+    config: ConfigDict,
+    log_psi_apply: ModelApply[P],
+    params: P,
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
+    nelec: jnp.ndarray,
+    key: jnp.ndarray,
+    dtype=jnp.float32,
+) -> Tuple[jnp.ndarray, dwpa.DWPAData]:
+    nelec_total = jnp.sum(nelec)
+    # grab the first key if distributed
+    key = utils.distribute.get_first_if_distributed(key)
+    key, init_pos = physics.core.initialize_molecular_pos(
+        key,
+        config.eval.nchains,
+        ion_pos,
+        ion_charges,
+        nelec_total,
+        dtype=dtype,
+    )
+    # redistribute if needed
+    if config.distribute:
+        key = utils.distribute.make_different_rng_key_on_all_devices(key)
+    data = _make_initial_data(
+        log_psi_apply, config.eval, init_pos, params, apply_pmap=config.distribute
+    )
+
+    return key, data
+
+
 def _burn_and_run_vmc(
     run_config: ConfigDict,
     logdir: str,
@@ -544,6 +575,17 @@ def _burn_and_run_vmc(
     )
 
     return params, optimizer_state, data, key
+
+
+def _compute_and_save_energy_statistics(eval_logdir: str) -> None:
+    local_energies = np.loadtxt(os.path.join(eval_logdir, "local_energies.txt"))
+    eval_statistics = mcmc.statistics.get_stats_summary(local_energies)
+    eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
+    utils.io.save_dict_to_json(
+        eval_statistics,
+        eval_logdir,
+        "statistics",
+    )
 
 
 def run_molecule() -> None:
@@ -635,22 +677,15 @@ def run_molecule() -> None:
 
     eval_and_vmc_nchains_match = config.vmc.nchains == config.eval.nchains
     if not config.eval.use_data_from_training or not eval_and_vmc_nchains_match:
-        nelec_total = jnp.sum(nelec)
-        # grab the first key if distributed
-        key = utils.distribute.get_first_if_distributed(key)
-        key, init_pos = physics.core.initialize_molecular_pos(
-            key,
-            config.eval.nchains,
+        key, data = _make_new_data_for_eval(
+            config,
+            log_psi.apply,
+            params,
             ion_pos,
             ion_charges,
-            nelec_total,
+            nelec,
+            key,
             dtype=dtype_to_use,
-        )
-        # redistribute if needed
-        if config.distribute:
-            key = utils.distribute.make_different_rng_key_on_all_devices(key)
-        data = _make_initial_data(
-            log_psi.apply, config.eval, init_pos, params, apply_pmap=config.distribute
         )
 
     _burn_and_run_vmc(
@@ -667,22 +702,4 @@ def run_molecule() -> None:
     )
 
     if config.eval.record_local_energies:
-        local_energies = np.loadtxt(os.path.join(eval_logdir, "local_energies.txt"))
-        energy = jnp.mean(local_energies)
-        autocorr_curve, variance = mcmc.statistics.multi_chain_autocorr_and_variance(
-            local_energies
-        )
-        iac = mcmc.statistics.tau(autocorr_curve)
-        std_err = jnp.sqrt(iac * variance / jnp.size(local_energies))
-        eval_statistics = {
-            "energy": energy,
-            "variance": variance,
-            "std_err": std_err,
-            "integrated_autocorrelation": iac,
-        }
-        eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
-        utils.io.save_dict_to_json(
-            eval_statistics,
-            eval_logdir,
-            "statistics",
-        )
+        _compute_and_save_energy_statistics(eval_logdir)

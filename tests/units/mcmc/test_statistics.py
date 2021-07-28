@@ -50,7 +50,7 @@ def test_alternating_multi_chain_autocorr():
     expected_even = 1.0
     expected_odd = -1.0 - 2 / (nsamples - 1)
     expected_autocorr = jnp.tile(jnp.array([expected_even, expected_odd]), ntiles)
-    expected_variance = jnp.var(samples)
+    expected_variance = 14 / 3  # 2 * (1^2 + 2^2 + 3^2) / 6
     np.testing.assert_allclose(autocorr, expected_autocorr, 1e-5)
     np.testing.assert_allclose(variance, expected_variance, 1e-6)
 

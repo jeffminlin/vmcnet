@@ -35,17 +35,17 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def config_dict_write(fp: IO[str], config: ConfigDict) -> None:
+def _config_dict_write(fp: IO[str], config: ConfigDict) -> None:
     """Write config dict to json."""
     fp.write(config.to_json(indent=4))
 
 
-def dictionary_write(fp: IO[str], dictionary: Dict) -> None:
+def _dictionary_write(fp: IO[str], dictionary: Dict) -> None:
     """Write dictionary to json."""
     json.dump(dictionary, fp, indent=4)
 
 
-def save_to_unique_json(
+def _save_to_unique_json(
     info: C,
     logdir: str,
     base_filename: str,
@@ -60,10 +60,10 @@ def save_to_unique_json(
 
 
 save_config_dict_to_json: Callable[[ConfigDict, str, str], None] = functools.partial(
-    save_to_unique_json, saving_fn=config_dict_write
+    _save_to_unique_json, saving_fn=_config_dict_write
 )
 save_dict_to_json: Callable[[Dict, str, str], None] = functools.partial(
-    save_to_unique_json, saving_fn=dictionary_write
+    _save_to_unique_json, saving_fn=_dictionary_write
 )
 
 
