@@ -22,7 +22,7 @@ def test_safe_log_output():
     np.testing.assert_allclose(outputs, jnp.array([-jnp.inf, 0.0, -3.0]))
 
 
-def test_safe_log_gradient():
+def test_safe_log_gradient_with_individual_values():
     """Test that safe log gradient is 1/x for x!=0, and 0 for x=0."""
     safe_grad_log = jax.grad(models.core.safe_log)
 
@@ -37,6 +37,20 @@ def test_safe_log_gradient():
     input = jnp.array(jnp.exp(3.0))
     gradient = safe_grad_log(input)
     np.testing.assert_allclose(gradient, jnp.exp(-3.0))
+
+
+def test_safe_log_gradient_with_batch():
+    """Test that safe log gradient works when a batch of inputs is evaluated."""
+
+    def safe_sum_log(x):
+        return jnp.sum(models.core.safe_log(x))
+
+    safe_grad_sum_log = jax.grad(safe_sum_log)
+
+    inputs = jnp.array([0.0, 1.0, jnp.exp(-3.0)])
+    gradients = safe_grad_sum_log(inputs)
+
+    np.testing.assert_allclose(gradients, jnp.array([0.0, 1.0, jnp.exp(3.0)]))
 
 
 @pytest.mark.slow
