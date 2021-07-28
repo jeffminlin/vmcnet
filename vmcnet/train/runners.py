@@ -701,5 +701,10 @@ def run_molecule() -> None:
         should_checkpoint=False,
     )
 
-    if config.eval.record_local_energies:
+    # need to check for local_energy.txt because when config.eval.nepochs=0 the file is
+    # not created regardless of config.eval.record_local_energies
+    local_es_were_recorded = os.path.exists(
+        os.path.join(eval_logdir, "local_energies.txt")
+    )
+    if config.eval.record_local_energies and local_es_were_recorded:
         _compute_and_save_energy_statistics(eval_logdir)
