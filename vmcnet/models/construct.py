@@ -15,7 +15,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_spin
+from .core import Activation, SimpleResNet, get_nelec_per_spin, safe_log
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -535,7 +535,7 @@ class FermiNet(flax.linen.Module):
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
             psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
-            return jnp.log(jnp.abs(psi))
+            return safe_log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
@@ -594,7 +594,7 @@ class AntiequivarianceNet(flax.linen.Module):
         backflow_out, r_ei = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
         transformed_out = self._sign_cov_equivariance(antiequivariant_out)
-        return jnp.log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
+        return safe_log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

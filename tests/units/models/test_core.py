@@ -1,6 +1,7 @@
 """Test core model building parts."""
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import vmcnet.models as models
@@ -12,6 +13,30 @@ from tests.test_utils import (
     get_resnet_and_log_domain_resnet_same_params,
     assert_pytree_allclose,
 )
+
+
+def test_safe_log_output():
+    """Test that safe log behaves just like log when evaluated on several values."""
+    inputs = jnp.array([0.0, 1.0, jnp.exp(-3.0)])
+    outputs = models.core.safe_log(inputs)
+    np.testing.assert_allclose(outputs, jnp.array([-jnp.inf, 0.0, -3.0]))
+
+
+def test_safe_log_gradient():
+    """Test that safe log gradient is 1/x for x!=0, and 0 for x=0."""
+    safe_grad_log = jax.grad(models.core.safe_log)
+
+    input = jnp.array(0.0)
+    gradient = safe_grad_log(input)
+    np.testing.assert_allclose(gradient, 0.0)
+
+    input = jnp.array(1.0)
+    gradient = safe_grad_log(input)
+    np.testing.assert_allclose(gradient, 1.0)
+
+    input = jnp.array(jnp.exp(3.0))
+    gradient = safe_grad_log(input)
+    np.testing.assert_allclose(gradient, jnp.exp(-3.0))
 
 
 @pytest.mark.slow

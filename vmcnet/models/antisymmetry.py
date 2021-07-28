@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import SLArray, PyTree
-from .core import get_alternating_signs, is_tuple_of_arrays
+from .core import get_alternating_signs, is_tuple_of_arrays, safe_log
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> jnp.ndarray:
@@ -168,7 +168,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
-        log_antisyms = jax.tree_map(lambda x: jnp.log(jnp.abs(x)), antisyms)
+        log_antisyms = jax.tree_map(lambda x: safe_log(jnp.abs(x)), antisyms)
         return _reduce_sum_over_leaves(log_antisyms)
 
 
@@ -270,6 +270,6 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             signed_perms_out, axis=tuple(-i for i in range(1, nleaves + 2))
         )
         if self.logabs:
-            return jnp.log(jnp.abs(antisymmetrized_out))
+            return safe_log(jnp.abs(antisymmetrized_out))
 
         return antisymmetrized_out

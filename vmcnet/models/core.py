@@ -47,6 +47,35 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
 
 
+@jax.custom_jvp
+def safe_log(x: jnp.ndarray) -> jnp.ndarray:
+    """Log which returns 0.0 instead of nan for its gradient when the input is 0.0.
+
+    This is useful for models which calculate Psi in the non-log domain, for example
+    by adding up over some set of symmetries, and then explicitly take the log of Psi
+    at the end. In such cases, numerical errors can lead walkers which appear to have
+    Psi!=0 during the MCMC sampling act as if Psi=0 when taking gradients in the
+    local energy calculation and parameter update. This can create nans if the log is
+    taken directly using jnp.log(x), but if safe_log(x) is used instead, the walkers
+    with Psi = 0 will simply be be masked out of any gradient calculations.
+    """
+    return jnp.log(x)
+
+
+@safe_log.defjvp
+def _safe_log_jvp(
+    primals: Tuple[jnp.ndarray], tangents: Tuple[jnp.ndarray]
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    (x,) = primals
+    (x_dot,) = tangents
+    primal_out = jnp.log(x)
+    # It is important to keep the x_dot on the outside of the where clause. For reasons
+    # that are not entirely clear, the function may start giving nans or infs if this
+    # is rewritten as jnp.where(x == 0, 0.0, x_dot /x)
+    tangent_out = jnp.where(x == 0, 0.0, 1 / x) * x_dot
+    return primal_out, tangent_out
+
+
 class Dense(flax.linen.Module):
     """A linear transformation applied over the last dimension of the input.
 
