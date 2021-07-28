@@ -169,6 +169,8 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
         super().save_data(directory, name, checkpoint_data)
 
 
+# TODO: Write metrics out more elegantly (maybe to one csv, if we can get a list of
+# metrics beforehand, or not quite as frequently perhaps)
 class MetricsWriter(ThreadedWriter[Dict]):
     """A ThreadedWriter for saving metrics during training."""
 
