@@ -43,14 +43,16 @@ def test_alternating_multi_chain_autocorr():
         (ntiles, 1),
     )
 
-    autocorr = statistics.multi_chain_autocorr(samples)
+    autocorr, variance = statistics.multi_chain_autocorr_and_variance(samples)
 
     # For even distances, expect perfect correlation of 1.0. For odd distances, a quirk
     # in the estimation formulas makes the value come out to not quite -1.0.
     expected_even = 1.0
     expected_odd = -1.0 - 2 / (nsamples - 1)
     expected_autocorr = jnp.tile(jnp.array([expected_even, expected_odd]), ntiles)
+    expected_variance = jnp.var(samples)
     np.testing.assert_allclose(autocorr, expected_autocorr, 1e-5)
+    np.testing.assert_allclose(variance, expected_variance, 1e-6)
 
 
 def test_tau_exp_decay():

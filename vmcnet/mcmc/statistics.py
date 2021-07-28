@@ -1,6 +1,6 @@
 """Routines for computing statistics related to MCMC time series."""
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -43,10 +43,13 @@ def per_chain_autocorr_fast(
     return G
 
 
-def multi_chain_autocorr(
+def multi_chain_autocorr_and_variance(
     samples: jnp.ndarray, cutoff: Optional[int] = None
-) -> jnp.ndarray:
-    """Calculate multi-chain autocorrelation curve with cutoff.
+) -> Tuple[jnp.ndarray, jnp.float32]:
+    """Calculate multi-chain autocorrelation curve with cutoff and multi-chain variance.
+
+    The variance estimate here is the population variance, sum_i (x_i - mu)^2 / N,
+    and *not* the sample variance, sum_i (x_i - mu)^2 / (N - 1).
 
     See Stan Reference Manual, Version 2.27, Section 16.3-16-4
     https://mc-stan.org/docs/2_27/reference-manual
@@ -57,8 +60,8 @@ def multi_chain_autocorr(
         cutoff (int): hard cut-off for the length of returned curve.
 
     Returns:
-        jnp.ndarray: combined autcorrelation curve using data from all chains,
-        of length C, where C = min(N, cutoff)
+        (jnp.ndarray, jnp.float32): combined autcorrelation curve using data from all
+        chains, of length C, where C = min(N, cutoff); overall variance estimate
     """
     N = len(samples)
 
@@ -70,7 +73,10 @@ def multi_chain_autocorr(
     within_chain_term = jnp.mean(per_chain_var)
     overall_var_estimate = within_chain_term * (N - 1) / N + between_chain_term
 
-    return 1 - (within_chain_term - autocorrelation_term) / overall_var_estimate
+    return (
+        1 - (within_chain_term - autocorrelation_term) / overall_var_estimate,
+        overall_var_estimate,
+    )
 
 
 def tau(autocorr_curve: jnp.ndarray) -> jnp.ndarray:

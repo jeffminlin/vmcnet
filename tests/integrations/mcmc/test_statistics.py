@@ -20,13 +20,19 @@ def test_independent_samples():
     key = random.PRNGKey(0)
     independent_samples = random.normal(key, (nsamples, nchains))
 
-    autocorr_curve = statistics.multi_chain_autocorr(independent_samples)
+    autocorr_curve, variance = statistics.multi_chain_autocorr_and_variance(
+        independent_samples
+    )
     tau = statistics.tau(autocorr_curve)
 
-    # Autocorrelation curve should return sample variance at first index and
+    # Autocorrelation curve should return 1 at first index and
     # 0 everywhere else, due to independence of samples.
-    np.testing.assert_allclose(autocorr_curve[0], 1, 1e-2)
+    np.testing.assert_allclose(autocorr_curve[0], 1)
     np.testing.assert_allclose(autocorr_curve[1:100], 0, atol=1e-2)
+
+    # Variance should be the variance of all samples
+    np.testing.assert_allclose(variance, jnp.var(independent_samples), 1e-4)
+
     # Autocorrelation time should be 1 as each sample is independent.
     np.testing.assert_allclose(tau, 1, 1e-2)
 
@@ -57,7 +63,9 @@ def test_correlated_samples():
     decay_factor = 0.9
     correlated_samples = _construct_correlated_samples(nsamples, nchains, decay_factor)
 
-    autocorr_curve = statistics.multi_chain_autocorr(correlated_samples)
+    autocorr_curve, variance = statistics.multi_chain_autocorr_and_variance(
+        correlated_samples
+    )
     tau = statistics.tau(autocorr_curve)
 
     # Test beginning of autocorrelation curve against a decaying exponential.
