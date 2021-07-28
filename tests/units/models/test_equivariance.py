@@ -202,7 +202,7 @@ def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
         # Both the orbital matrix index and the particle index should be permuted
         expected_perm_out_i = out_i[:, perm_i, :, :][:, :, perm_i, :]
 
-        np.testing.assert_allclose(perm_out_i, expected_perm_out_i)
+        np.testing.assert_allclose(perm_out_i, expected_perm_out_i, 1e-5)
 
 
 @pytest.mark.slow
