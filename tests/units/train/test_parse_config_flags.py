@@ -83,7 +83,7 @@ def _write_fake_config_json(logdir_path: str, config_filename: str) -> ConfigDic
     fake_config.vmc.nepochs = 20
     fake_config.model.ndeterminants = 3
 
-    utils.io.save_config_dict(fake_config, logdir_path, config_filename)
+    utils.io.save_config_dict_to_json(fake_config, logdir_path, config_filename)
     return fake_config
 
 

@@ -250,7 +250,7 @@ def test_per_particle_determinant_antiequivariance():
             bias_initializer,
         )
 
-    _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-6)
+    _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-5)
 
 
 @pytest.mark.slow

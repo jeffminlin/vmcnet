@@ -92,10 +92,19 @@ def _run_and_check_output_files(mocker, tmp_path, config):
 
     # Check that evaluation is being done and metrics are being saved
     assert (inner_logdir / "eval").exists()
-    eval_metric_files = ["accept_ratio.txt", "energy.txt", "variance.txt"]
+    assert (inner_logdir / "eval" / "statistics.json").exists()
+    eval_metric_files = [
+        "accept_ratio.txt",
+        "energy.txt",
+        "variance.txt",
+        "local_energies.txt",
+    ]
     _check_length_and_finiteness_of_metrics(
         config.eval.nepochs, inner_logdir / "eval", eval_metric_files
     )
+    # specially check that shape of local_energies is correct
+    local_es = np.loadtxt(os.path.join(inner_logdir, "eval", "local_energies.txt"))
+    assert local_es.shape == (config.eval.nepochs, config.eval.nchains)
 
 
 @pytest.mark.very_slow
