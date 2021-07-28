@@ -53,11 +53,11 @@ def safe_log(x: jnp.ndarray) -> jnp.ndarray:
 
     This is useful for models which calculate Psi in the non-log domain, for example
     by adding up over some set of symmetries, and then explicitly take the log of Psi
-    at the end. In such cases, numerical errors can lead walkers which appear to have
-    Psi!=0 during the MCMC sampling act as if Psi=0 when taking gradients in the
-    local energy calculation and parameter update. This can create nans if the log is
-    taken directly using jnp.log(x), but if safe_log(x) is used instead, the walkers
-    with Psi = 0 will simply be be masked out of any gradient calculations.
+    at the end. In such cases, numerical errors can lead walkers to yield Psi > 0 during
+    the MCMC sampling, but then act as if Psi = 0 when taking gradients in the local
+    energy calculation and parameter update. This can create nans if the log is taken
+    directly using jnp.log(x), but if safe_log(x) is used instead, the walkers with
+    Psi = 0 will simply be masked out of any gradient calculations.
     """
     return jnp.log(x)
 
@@ -71,7 +71,7 @@ def _safe_log_jvp(
     primal_out = jnp.log(x)
     # It is important to keep the x_dot on the outside of the where clause. For reasons
     # that are not entirely clear, the function may start giving nans or infs if this
-    # is rewritten as jnp.where(x == 0, 0.0, x_dot /x)
+    # is rewritten as jnp.where(x == 0, 0.0, x_dot / x)
     tangent_out = jnp.where(x == 0, 0.0, 1 / x) * x_dot
     return primal_out, tangent_out
 
