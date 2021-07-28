@@ -76,6 +76,14 @@ def _safe_log_jvp(
     return primal_out, tangent_out
 
 
+def log_or_safe_log(x: jnp.ndarray, use_safe_log: bool) -> jnp.ndarray:
+    """Take a log or a safe log depending on a boolean flag."""
+    if use_safe_log:
+        return safe_log(x)
+
+    return jnp.log(x)
+
+
 class Dense(flax.linen.Module):
     """A linear transformation applied over the last dimension of the input.
 

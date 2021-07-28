@@ -15,7 +15,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_spin, safe_log
+from .core import Activation, SimpleResNet, get_nelec_per_spin, log_or_safe_log
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -471,6 +471,10 @@ class FermiNet(flax.linen.Module):
             wavefunction value is calculated as the sum of the product of the
             determinants, where the product is taken across the nspins spins and the sum
             is taken across the ndeterminants determinants. Defaults to None.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Only relevant when determinant_fn is not None; otherwise
+            the log is taken implicitly through jnp.linalg.slogdet. Defaults to True.
     """
 
     spin_split: SpinSplit
@@ -483,6 +487,7 @@ class FermiNet(flax.linen.Module):
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
+    use_safe_log: bool = True
 
     def setup(self):
         """Setup backflow."""
@@ -535,7 +540,7 @@ class FermiNet(flax.linen.Module):
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
             psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
-            return safe_log(jnp.abs(psi))
+            return log_or_safe_log(jnp.abs(psi), self.use_safe_log)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
@@ -563,11 +568,15 @@ class AntiequivarianceNet(flax.linen.Module):
             All outputs of this function are made covariant with respect to each input
             sign, and an odd invariance is created by summing over the last two
             dimensions of the output.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Defaults to True.
     """
 
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
     array_list_equivariance: Callable[[ArrayList], jnp.ndarray]
+    use_safe_log: bool = True
 
     def setup(self):
         """Setup backflow."""
@@ -594,7 +603,9 @@ class AntiequivarianceNet(flax.linen.Module):
         backflow_out, r_ei = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
         transformed_out = self._sign_cov_equivariance(antiequivariant_out)
-        return safe_log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
+        return log_or_safe_log(
+            jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))), self.use_safe_log
+        )
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

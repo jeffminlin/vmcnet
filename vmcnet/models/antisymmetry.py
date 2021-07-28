@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import SLArray, PyTree
-from .core import get_alternating_signs, is_tuple_of_arrays, safe_log
+from .core import get_alternating_signs, is_tuple_of_arrays, log_or_safe_log
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> jnp.ndarray:
@@ -122,10 +122,14 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         logabs (bool, optional): whether to compute sum_i log(abs(psi_i)) if logabs is
             True, or prod_i psi_i if logabs is False, where psi_i is the output from
             antisymmetrizing the ith function on the ith input. Defaults to True.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Only relevant when logabs is True. Defaults to True.
     """
 
     fns_to_antisymmetrize: PyTree  # pytree of Callables with the same treedef as input
     logabs: bool = True
+    use_safe_log: bool = True
 
     def _single_leaf_call(
         self, fn_to_antisymmetrize: Callable[[jnp.ndarray], jnp.ndarray], x: jnp.ndarray
@@ -168,7 +172,9 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
-        log_antisyms = jax.tree_map(lambda x: safe_log(jnp.abs(x)), antisyms)
+        log_antisyms = jax.tree_map(
+            lambda x: log_or_safe_log(jnp.abs(x), self.use_safe_log), antisyms
+        )
         return _reduce_sum_over_leaves(log_antisyms)
 
 
@@ -191,10 +197,14 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         logabs (bool, optional): whether to compute log(abs(psi)) if logabs is True, or
             psi if logabs is False, where psi is the output from antisymmetrizing
             self.fn_to_antisymmetrize. Defaults to True.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Only relevant when logabs is True. Defaults to True.
     """
 
     fn_to_antisymmetrize: Callable[[jnp.ndarray], jnp.ndarray]
     logabs: bool = True
+    use_safe_log: bool = True
 
     def setup(self):
         """Setup the function to antisymmetrize."""
@@ -270,6 +280,6 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             signed_perms_out, axis=tuple(-i for i in range(1, nleaves + 2))
         )
         if self.logabs:
-            return safe_log(jnp.abs(antisymmetrized_out))
+            return log_or_safe_log(jnp.abs(antisymmetrized_out), self.use_safe_log)
 
         return antisymmetrized_out
