@@ -4,10 +4,10 @@ from typing import Callable, Dict, Iterable, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
+from kfac_ferminet_alpha import optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from kfac_ferminet_alpha import optimizer as kfac_opt
 from vmcnet.utils.pytree_helpers import tree_reduce_l1
 from vmcnet.utils.typing import D, ModelApply, OptimizerState, P, PyTree, S
 
