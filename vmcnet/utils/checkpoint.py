@@ -16,6 +16,7 @@ from typing import Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 import jax
 import jax.numpy as jnp
 
+import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
 from vmcnet.utils.typing import CheckpointData, D, P, S
 
@@ -183,7 +184,7 @@ def initialize_checkpointing(
     nhistory_max: int,
     logdir: str = None,
     checkpoint_every: int = None,
-) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData]]:
+) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData], bool]:
     """Initialize checkpointing objects.
 
     A suffix is added to the checkpointing directory if one with the same name already
@@ -191,7 +192,8 @@ def initialize_checkpointing(
 
     The checkpointing metric (error-adjusted running energy average) is initialized to
     infinity, and empty arrays are initialized in running_energy_and_variance. The
-    best checkpoint data is initialized to None.
+    best checkpoint data is initialized to None, and saved_nan_checkpoint is initialized
+    to False.
     """
     if logdir is not None:
         logging.info("Saving to %s", logdir)
@@ -205,12 +207,14 @@ def initialize_checkpointing(
         RunningMetric(nhistory_max), RunningMetric(nhistory_max)
     )
     best_checkpoint_data = None
+    saved_nan_checkpoint = False
 
     return (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
         best_checkpoint_data,
+        saved_nan_checkpoint,
     )
 
 
@@ -257,9 +261,38 @@ def get_checkpoint_metric(
     return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
+@jax.jit
+def _check_for_nans(metrics: Dict, new_params: P) -> bool:
+    # Jax logical constructs are used here to enable jitting, which hopefully gives
+    # some performance benefit when checkpoint_if_nans is true.
+    metrics_nans = jnp.logical_or(
+        jnp.isnan(metrics["energy_noclip"]), jnp.isnan(metrics["variance_noclip"])
+    )
+    new_params = distribute.get_first_if_distributed(new_params)
+    params_nans = jnp.any(jnp.isnan(jax.flatten_util.ravel_pytree(new_params)[0]))
+    return jnp.logical_or(metrics_nans, params_nans)
+
+
+def _should_save_nans_checkpoint(
+    metrics: Dict,
+    new_params: P,
+    checkpoint_if_nans: bool,
+    only_checkpoint_first_nans: bool,
+    saved_nans_checkpoint: bool,
+) -> bool:
+    # Be sure to check the boolean flags before looking at the metrics and params in
+    # order to avoid extra work and also to ensure that no error is thrown in  the eval
+    # phase when energy_noclip and variance_noclip will not be recorded as metrics.
+    if not checkpoint_if_nans or (only_checkpoint_first_nans and saved_nans_checkpoint):
+        return False
+
+    return _check_for_nans(metrics, new_params)
+
+
 def save_metrics_and_handle_checkpoints(
     epoch: int,
-    params: P,
+    old_params: P,
+    new_params: P,
     optimizer_state: S,
     data: D,
     key: jnp.ndarray,
@@ -275,7 +308,10 @@ def save_metrics_and_handle_checkpoints(
     best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
-) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]]]:
+    checkpoint_if_nans: bool = False,
+    only_checkpoint_first_nans: bool = True,
+    saved_nans_checkpoint: bool = False,
+) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]], bool]:
     """Checkpoint the current state of the VMC loop.
 
     There are two situations to checkpoint:
@@ -288,7 +324,9 @@ def save_metrics_and_handle_checkpoints(
 
     Args:
         epoch (int): current epoch number
-        params (pytree-like): model parameters. Needs to be serializable via `np.savez`
+        old_params (pytree-like): model parameters, from before the update function.
+            Needs to be serializable via `np.savez`.
+        new_params (pytree-like): model parameters, from after the update function.
         optimizer_state (pytree-like): running state of the optimizer other than the
             trainable parameters. Needs to be serialiable via `np.savez`
         data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
@@ -325,20 +363,37 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir (str, optional): name of subdirectory to save the regular
             checkpoints. These are saved as "logdir/checkpoint_dir/(epoch + 1).npz".
             Defaults to "checkpoints".
+        checkpoint_if_nans (bool, optional): whether to save checkpoints when
+            nan energy values are recorded. Defaults to False.
+        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
+            first time nans are encountered, or every time. Useful to capture a nan
+            checkpoint without risking writing too many checkpoints if the optimization
+            starts to hit nans most or every epoch after some point. Only relevant if
+            checkpoint_if_nans is True. Defaults to True.
+        saved_nans_checkpoint (bool, optional): whether a nans checkpoint has already
+            been saved. Only relevant if checkpoint_if_nans and
+            only_checkpoint_first_nans are both True, and used in that case to decide
+            whether to save further nans checkpoints or not. Defaults to False.
 
     Returns:
-        (jnp.float32, str, CheckpointData): best error-adjusted energy average, then
-        string indicating if checkpointing has been done, then new best checkpoint data,
-        or None.
+        (jnp.float32, str, CheckpointData, bool): best error-adjusted energy average,
+        then string indicating if checkpointing has been done, then new best checkpoint
+        data (or None), then the updated value of saved_nans_checkpoint.
     """
     checkpoint_str = ""
     if logdir is None or metrics is None:
         # do nothing
-        return checkpoint_metric, checkpoint_str, best_checkpoint_data
+        return (
+            checkpoint_metric,
+            checkpoint_str,
+            best_checkpoint_data,
+            saved_nans_checkpoint,
+        )
 
-    checkpoint_str = save_metrics_and_regular_checkpoint(
+    checkpoint_str, saved_nans_checkpoint = save_metrics_and_regular_checkpoint(
         epoch,
-        params,
+        old_params,
+        new_params,
         optimizer_state,
         data,
         key,
@@ -349,6 +404,9 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
+        checkpoint_if_nans=checkpoint_if_nans,
+        only_checkpoint_first_nans=only_checkpoint_first_nans,
+        saved_nans_checkpoint=saved_nans_checkpoint,
     )
 
     (
@@ -357,7 +415,7 @@ def save_metrics_and_handle_checkpoints(
         new_best_checkpoint_data,
     ) = track_and_save_best_checkpoint(
         epoch,
-        params,
+        old_params,
         optimizer_state,
         data,
         key,
@@ -377,12 +435,13 @@ def save_metrics_and_handle_checkpoints(
         jnp.minimum(error_adjusted_running_avg, checkpoint_metric),
         checkpoint_str,
         new_best_checkpoint_data,
+        saved_nans_checkpoint,
     )
 
 
 def track_and_save_best_checkpoint(
     epoch: int,
-    params: P,
+    old_params: P,
     optimizer_state: S,
     data: D,
     key: jnp.ndarray,
@@ -401,7 +460,8 @@ def track_and_save_best_checkpoint(
 
     Args:
         epoch (int): current epoch number
-        params (pytree-like): model parameters. Needs to be serializable via `np.savez`
+        old_params (pytree-like): model parameters, from before the update function.
+            Needs to be serializable via `np.savez`.
         optimizer_state (pytree-like): running state of the optimizer other than the
             trainable parameters. Needs to be serialiable via `np.savez`
         data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
@@ -453,7 +513,7 @@ def track_and_save_best_checkpoint(
             best_checkpoint_data = (
                 epoch,
                 data,
-                params,
+                old_params,
                 optimizer_state,
                 key,
             )
@@ -473,7 +533,8 @@ def track_and_save_best_checkpoint(
 
 def save_metrics_and_regular_checkpoint(
     epoch: int,
-    params: P,
+    old_params: P,
+    new_params: P,
     optimizer_state: S,
     data: D,
     key: jnp.ndarray,
@@ -484,7 +545,10 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: int = None,
-) -> str:
+    checkpoint_if_nans: bool = False,
+    only_checkpoint_first_nans: bool = True,
+    saved_nans_checkpoint: bool = False,
+) -> Tuple[str, bool]:
     """Save current metrics to file, and save model state regularly.
 
     This currently touches the disk repeatedly, once for each metric, which is probably
@@ -493,7 +557,9 @@ def save_metrics_and_regular_checkpoint(
 
     Args:
         epoch (int): current epoch number
-        params (pytree-like): model parameters. Needs to be serializable via `np.savez`
+        old_params (pytree-like): model parameters, from before the update function.
+            Needs to be serializable via `np.savez`.
+        new_params (pytree-like): model parameters, from after the update function.
         optimizer_state (pytree-like): running state of the optimizer other than the
             trainable parameters. Needs to be serialiable via `np.savez`
         data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
@@ -510,29 +576,52 @@ def save_metrics_and_regular_checkpoint(
             Defaults to "checkpoints".
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
             None, this function doesn't save the model state. Defaults to None.
+        checkpoint_if_nans (bool, optional): whether to save checkpoints when
+            nan energy values are recorded. Defaults to False.
+        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
+            first time nans are encountered, or every time. Useful to capture a nan
+            checkpoint without risking writing too many checkpoints if the optimization
+            starts to hit nans most or every epoch after some point. Only relevant if
+            checkpoint_if_nans is True. Defaults to True.
+        saved_nans_checkpoint (bool, optional): whether a nans checkpoint has already
+            been saved. Only relevant if checkpoint_if_nans and
+            only_checkpoint_first_nans are both True, and used in that case to decide
+            whether to save further nans checkpoints or not. Defaults to False.
 
     Returns:
-        str: previous checkpointing string, with additional info if this function
-        did checkpointing
+        (str, bool): previous checkpointing string, with additional info if this
+        function did checkpointing; followed by updated value of saved_nans_checkpoint.
     """
     metrics_writer.save_data(logdir, "", metrics)
+    checkpoint_data = (epoch, data, old_params, optimizer_state, key)
 
     if checkpoint_every is not None:
         if (epoch + 1) % checkpoint_every == 0:
             checkpoint_writer.save_data(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch + 1) + ".npz",
-                (
-                    epoch,
-                    data,
-                    params,
-                    optimizer_state,
-                    key,
-                ),
+                checkpoint_data,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
-    return checkpoint_str
+    save_nans_checkpoint = _should_save_nans_checkpoint(
+        metrics,
+        new_params,
+        checkpoint_if_nans,
+        only_checkpoint_first_nans,
+        saved_nans_checkpoint,
+    )
+
+    if save_nans_checkpoint:
+        checkpoint_writer.save_data(
+            os.path.join(logdir, checkpoint_dir),
+            "nans_" + str(epoch + 1) + ".npz",
+            checkpoint_data,
+        )
+        checkpoint_str = checkpoint_str + ", nans ckpt saved"
+        saved_nans_checkpoint = True
+
+    return checkpoint_str, saved_nans_checkpoint
 
 
 def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:

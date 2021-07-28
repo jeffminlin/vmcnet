@@ -156,3 +156,10 @@ def distribute_vmc_state_from_checkpoint(
 def is_distributed(data: PyTree) -> bool:
     """Tests whether given data has been distributed using pmap."""
     return isinstance(jax.tree_leaves(data)[0], pxla.ShardedDeviceArray)
+
+
+def get_first_if_distributed(data: PyTree) -> PyTree:
+    """Gets single copy of input data, which may or may not be replicated."""
+    if is_distributed(data):
+        return get_first(data)
+    return data
