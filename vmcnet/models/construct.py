@@ -67,6 +67,7 @@ def get_model_from_config(
     )
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
+    use_safe_log = model_config.use_safe_log
 
     if model_config.type == "ferminet":
         determinant_fn = None
@@ -100,6 +101,7 @@ def get_model_from_config(
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
             determinant_fn=determinant_fn,
+            use_safe_log=use_safe_log,
         )
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
@@ -148,7 +150,12 @@ def get_model_from_config(
                 dtype=dtype,
             )(concat_x)[0]
 
-        return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
+        return AntiequivarianceNet(
+            backflow,
+            antieq_layer,
+            array_list_equivariance,
+            use_safe_log=use_safe_log,
+        )
     elif model_config.type == "brute_force_antisym":
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
@@ -169,6 +176,7 @@ def get_model_from_config(
                     model_config.activation_fn_resnet
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
+                use_safe_log=use_safe_log,
             )
         elif model_config.antisym_type == "double":
             return ComposedBruteForceAntisymmetryWithDecay(
@@ -189,6 +197,7 @@ def get_model_from_config(
                     model_config.activation_fn_resnet
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
+                use_safe_log=use_safe_log,
             )
         else:
             raise ValueError(
@@ -644,6 +653,9 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             ResNets. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNets. Defaults to True.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Defaults to True.
     """
 
     spin_split: SpinSplit
@@ -655,6 +667,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     bias_initializer_resnet: WeightInitializer
     activation_fn_resnet: Activation
     resnet_use_bias: bool = True
+    use_safe_log: bool = True
 
     def setup(self):
         """Setup backflow."""
@@ -691,7 +704,8 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                     use_bias=self.resnet_use_bias,
                 )
                 for _ in split_spins
-            ]
+            ],
+            use_safe_log=self.use_safe_log,
         )(split_spins)
         jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
 
@@ -736,6 +750,9 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             ResNet. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNet. Defaults to True.
+        use_safe_log (bool, optional): whether to use a safe log function that will
+            never return nan or inf gradients, when taking the log at the end of the
+            model evaluation. Defaults to True.
     """
 
     spin_split: SpinSplit
@@ -747,6 +764,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     bias_initializer_resnet: WeightInitializer
     activation_fn_resnet: Activation
     resnet_use_bias: bool = True
+    use_safe_log: bool = True
 
     def setup(self):
         """Setup backflow."""
@@ -780,7 +798,8 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 self.kernel_initializer_resnet,
                 self.bias_initializer_resnet,
                 use_bias=self.resnet_use_bias,
-            )
+            ),
+            use_safe_log=self.use_safe_log,
         )(split_spins)
         jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
 

@@ -113,6 +113,7 @@ def get_default_model_config() -> ConfigDict:
     config = ConfigDict(
         {
             "type": "ferminet",
+            "use_safe_log": True,
             "ferminet": ConfigDict(
                 {
                     "backflow": ferminet_backflow,
