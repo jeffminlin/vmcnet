@@ -1,15 +1,15 @@
 """Routines which handle model parameter updating."""
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
-from kfac_ferminet_alpha import optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
+from kfac_ferminet_alpha import optimizer as kfac_opt
 from vmcnet.utils.pytree_helpers import tree_reduce_l1
-from vmcnet.utils.typing import D, P, PyTree, S, ModelApply, OptimizerState
+from vmcnet.utils.typing import D, ModelApply, OptimizerState, P, PyTree, S
 
 UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
@@ -25,7 +25,9 @@ def _update_metrics_with_noclip(
 
 
 def _make_traced_fn_with_single_metrics(
-    update_param_fn: UpdateParamFn[P, D, S], apply_pmap: bool
+    update_param_fn: UpdateParamFn[P, D, S],
+    apply_pmap: bool,
+    metrics_to_get_first: Optional[Iterable[str]] = None,
 ) -> UpdateParamFn[P, D, S]:
     if not apply_pmap:
         return jax.jit(update_param_fn)
@@ -36,7 +38,14 @@ def _make_traced_fn_with_single_metrics(
         params, optimizer_state, metrics, key = pmapped_update_param_fn(
             params, data, optimizer_state, key
         )
-        metrics = utils.distribute.get_first(metrics)
+        if metrics_to_get_first is None:
+            metrics = utils.distribute.get_first(metrics)
+        else:
+            for metric in metrics_to_get_first:
+                distributed_metric = metrics.get(metric)
+                if distributed_metric is not None:
+                    metrics[metric] = utils.distribute.get_first(distributed_metric)
+
         return params, optimizer_state, metrics, key
 
     return pmapped_update_param_fn_with_single_metrics
@@ -175,6 +184,7 @@ def create_eval_update_param_fn(
     nchains: int,
     get_position_fn: Callable[[D], jnp.ndarray],
     apply_pmap: bool = True,
+    record_local_energies: bool = True,
     nan_safe: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
@@ -204,8 +214,12 @@ def create_eval_update_param_fn(
             local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
+        if record_local_energies:
+            metrics.update({"local_energies": local_energies})
         return params, optimizer_state, metrics, key
 
-    traced_fn = _make_traced_fn_with_single_metrics(eval_update_param_fn, apply_pmap)
+    traced_fn = _make_traced_fn_with_single_metrics(
+        eval_update_param_fn, apply_pmap, {"energy", "variance"}
+    )
 
     return traced_fn

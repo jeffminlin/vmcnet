@@ -1,6 +1,7 @@
 """Input/output utilities."""
+import functools
 import os
-from typing import Any, Dict
+from typing import Any, Callable, Dict, IO, TypeVar
 
 import flax.core.frozen_dict as frozen_dict
 import jax
@@ -10,6 +11,8 @@ import numpy as np
 
 from .distribute import get_first_if_distributed
 from .typing import CheckpointData
+
+C = TypeVar("C", Dict, ConfigDict)
 
 
 def open_existing_file(path, filename, option):
@@ -32,13 +35,36 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
-def save_config_dict(config: ConfigDict, logdir: str, base_filename: str):
-    """Save a config dict to a json file, ensuring the filename is unique."""
+def config_dict_write(fp: IO[str], config: ConfigDict) -> None:
+    """Write config dict to json."""
+    fp.write(config.to_json(indent=4))
+
+
+def dictionary_write(fp: IO[str], dictionary: Dict) -> None:
+    """Write dictionary to json."""
+    json.dump(dictionary, fp, indent=4)
+
+
+def save_to_unique_json(
+    info: C,
+    logdir: str,
+    base_filename: str,
+    saving_fn: Callable[[IO[str], C], None],
+) -> None:
+    """Save a dict or ConfigDict to a json file, ensuring the filename is unique."""
     unique_filename = add_suffix_for_uniqueness(
         base_filename, logdir, trailing_suffix=".json"
     )
     with open_or_create(logdir, unique_filename + ".json", "w") as f:
-        f.write(config.to_json(indent=4))
+        saving_fn(f, info)
+
+
+save_config_dict_to_json: Callable[[ConfigDict, str, str], None] = functools.partial(
+    save_to_unique_json, saving_fn=config_dict_write
+)
+save_dict_to_json: Callable[[Dict, str, str], None] = functools.partial(
+    save_to_unique_json, saving_fn=dictionary_write
+)
 
 
 def _convert_to_tuple_if_list(leaf: Any) -> Any:

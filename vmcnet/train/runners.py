@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import kfac_ferminet_alpha
 import kfac_ferminet_alpha.optimizer as kfac_opt
+import numpy as np
 import optax
 from absl import flags
 from ml_collections import ConfigDict
@@ -37,8 +38,8 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
             )
 
         logdir = config.logdir
-        utils.io.save_config_dict(config, logdir, "config")
-        utils.io.save_config_dict(reload_config, logdir, "reload_config")
+        utils.io.save_config_dict_to_json(config, logdir, "config")
+        utils.io.save_config_dict_to_json(reload_config, logdir, "reload_config")
     else:
         logdir = None
     return logdir
@@ -60,12 +61,11 @@ def _get_dtype(config: ConfigDict) -> jnp.dtype:
 
 def _get_electron_ion_config_as_arrays(
     config: ConfigDict, dtype=jnp.float32
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, int]:
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     ion_pos = jnp.array(config.problem.ion_pos, dtype=dtype)
     ion_charges = jnp.array(config.problem.ion_charges, dtype=dtype)
     nelec = jnp.array(config.problem.nelec)
-    nelec_total = jnp.sum(nelec)
-    return ion_pos, ion_charges, nelec, nelec_total
+    return ion_pos, ion_charges, nelec
 
 
 def _get_and_init_model(
@@ -399,7 +399,6 @@ def _get_update_fn_and_init_optimizer(
 # _make_initial_distributed_data is more general
 def _setup_vmc(
     config: ConfigDict,
-    init_pos: jnp.ndarray,
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
     nelec: jnp.ndarray,
@@ -417,6 +416,10 @@ def _setup_vmc(
     OptimizerState,
     jnp.ndarray,
 ]:
+    nelec_total = jnp.sum(nelec)
+    key, init_pos = physics.core.initialize_molecular_pos(
+        key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
+    )
 
     # Make the model
     log_psi, params, key = _get_and_init_model(
@@ -479,6 +482,7 @@ def _setup_eval(
         local_energy_fn,
         config.eval.nchains,
         get_position_fn,
+        record_local_energies=config.eval.record_local_energies,
         nan_safe=config.eval.nan_safe,
         apply_pmap=apply_pmap,
     )
@@ -552,14 +556,11 @@ def run_molecule() -> None:
 
     dtype_to_use = _get_dtype(config)
 
-    ion_pos, ion_charges, nelec, nelec_total = _get_electron_ion_config_as_arrays(
+    ion_pos, ion_charges, nelec = _get_electron_ion_config_as_arrays(
         config, dtype=dtype_to_use
     )
 
     key = jax.random.PRNGKey(config.initial_seed)
-    key, init_pos = physics.core.initialize_molecular_pos(
-        key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype_to_use
-    )
 
     (
         log_psi,
@@ -573,7 +574,6 @@ def run_molecule() -> None:
         key,
     ) = _setup_vmc(
         config,
-        init_pos,
         ion_pos,
         ion_charges,
         nelec,
@@ -633,7 +633,22 @@ def run_molecule() -> None:
     )
     optimizer_state = None
 
-    if not config.eval.use_data_from_training:
+    eval_and_vmc_nchains_match = config.vmc.nchains == config.eval.nchains
+    if not config.eval.use_data_from_training or not eval_and_vmc_nchains_match:
+        nelec_total = jnp.sum(nelec)
+        # grab the first key if distributed
+        key = utils.distribute.get_first_if_distributed(key)
+        key, init_pos = physics.core.initialize_molecular_pos(
+            key,
+            config.eval.nchains,
+            ion_pos,
+            ion_charges,
+            nelec_total,
+            dtype=dtype_to_use,
+        )
+        # redistribute if needed
+        if config.distribute:
+            key = utils.distribute.make_different_rng_key_on_all_devices(key)
         data = _make_initial_data(
             log_psi.apply, config.eval, init_pos, params, apply_pmap=config.distribute
         )
@@ -650,3 +665,24 @@ def run_molecule() -> None:
         key,
         should_checkpoint=False,
     )
+
+    if config.eval.record_local_energies:
+        local_energies = np.loadtxt(os.path.join(eval_logdir, "local_energies.txt"))
+        energy = jnp.mean(local_energies)
+        autocorr_curve, variance = mcmc.statistics.multi_chain_autocorr_and_variance(
+            local_energies
+        )
+        iac = mcmc.statistics.tau(autocorr_curve)
+        std_err = jnp.sqrt(iac * variance / jnp.size(local_energies))
+        eval_statistics = {
+            "energy": energy,
+            "variance": variance,
+            "std_err": std_err,
+            "integrated_autocorrelation": iac,
+        }
+        eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
+        utils.io.save_dict_to_json(
+            eval_statistics,
+            eval_logdir,
+            "statistics",
+        )

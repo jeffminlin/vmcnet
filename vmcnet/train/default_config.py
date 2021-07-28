@@ -249,6 +249,7 @@ def get_default_eval_config() -> ConfigDict:
             # std_move are completely ignored, and the data output from training is
             # used as the initial positions instead
             "use_data_from_training": False,
+            "record_local_energies": True,  # save local energies and compute statistics
             "nan_safe": False,
         }
     )
