@@ -76,15 +76,18 @@ def _get_and_init_model(
     key: jnp.ndarray,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
+) -> Tuple[flax.linen.Module, flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
     log_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, dtype=dtype
+    )
+    safe_log_psi = models.construct.get_model_from_config(
+        model_config, nelec, ion_pos, dtype=dtype, use_safe_log=True
     )
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos[0:1])
     if apply_pmap:
         params = utils.distribute.replicate_all_local_devices(params)
-    return log_psi, params, key
+    return log_psi, safe_log_psi, params, key
 
 
 # TODO: figure out how to merge this and other distributing logic with the current
@@ -239,11 +242,12 @@ def _get_energy_fns(
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
     log_psi_apply: ModelApply[P],
+    safe_log_psi_apply: ModelApply[P],
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_apply,
+        safe_log_psi_apply,
         local_energy_fn,
         vmc_config.nchains,
         clipping_fn,
@@ -419,7 +423,7 @@ def _setup_vmc(
 ]:
 
     # Make the model
-    log_psi, params, key = _get_and_init_model(
+    log_psi, safe_log_psi, params, key = _get_and_init_model(
         config.model, ion_pos, nelec, init_pos, key, dtype=dtype, apply_pmap=apply_pmap
     )
 
@@ -434,7 +438,7 @@ def _setup_vmc(
     )
 
     local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi.apply
+        config.vmc, ion_pos, ion_charges, log_psi.apply, safe_log_psi.apply
     )
 
     # Setup parameter updates

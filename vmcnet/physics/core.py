@@ -177,7 +177,7 @@ def get_statistics_from_local_energy(
 
 
 def create_value_and_grad_energy_fn(
-    log_psi_apply: ModelApply[P],
+    safe_log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     nchains: int,
     clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
@@ -196,7 +196,7 @@ def create_value_and_grad_energy_fn(
     the distribution |psi|^2.
 
     Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
+        safe_log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
             function is (params, x) -> log|psi(x)|
         local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
             (params, x) -> (Hpsi / psi)(x)
@@ -264,7 +264,7 @@ def create_value_and_grad_energy_fn(
         sum_grad_fn = jnp.sum
 
     def scaled_by_local_e(params, positions, centered_local_energies):
-        log_psi = log_psi_apply(params, positions)
+        log_psi = safe_log_psi_apply(params, positions)
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
         return 2.0 * sum_grad_fn(centered_local_energies * log_psi)
 
@@ -273,6 +273,7 @@ def create_value_and_grad_energy_fn(
     def energy_bwd(res, cotangents):
         energy, local_energies, params, positions = res
         centered_local_energies = local_energies - energy
+        centered_local_energies = jnp.nan_to_num(centered_local_energies)
         gradient = get_energy_grad(params, positions, centered_local_energies)
         return jax.tree_map(lambda x: x * cotangents[0], gradient), None
 

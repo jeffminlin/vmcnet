@@ -55,6 +55,7 @@ def get_model_from_config(
     nelec: jnp.ndarray,
     ion_pos: jnp.ndarray,
     dtype=jnp.float32,
+    use_safe_log: bool = False,
 ) -> flax.linen.Module:
     """Get a model from a hyperparameter config."""
     spin_split = tuple(jnp.cumsum(nelec)[:-1])
@@ -67,7 +68,6 @@ def get_model_from_config(
     )
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
-    use_safe_log = model_config.use_safe_log
 
     if model_config.type == "ferminet":
         determinant_fn = None

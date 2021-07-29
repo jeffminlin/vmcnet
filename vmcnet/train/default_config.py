@@ -135,7 +135,6 @@ def get_default_model_config() -> ConfigDict:
                             "register_kfac": False,
                         }
                     ),
-                    "use_safe_log": True,
                 }
             ),
             "orbital_cofactor_net": ConfigDict(
@@ -148,7 +147,6 @@ def get_default_model_config() -> ConfigDict:
                     "orbitals_use_bias": True,
                     "isotropic_decay": True,
                     "invariance": invariance,
-                    "use_safe_log": True,
                 }
             ),
             "per_particle_dets_net": ConfigDict(
@@ -161,7 +159,6 @@ def get_default_model_config() -> ConfigDict:
                     "orbitals_use_bias": True,
                     "isotropic_decay": True,
                     "invariance": invariance,
-                    "use_safe_log": True,
                 }
             ),
             "brute_force_antisym": ConfigDict(
@@ -175,7 +172,6 @@ def get_default_model_config() -> ConfigDict:
                     "bias_init_resnet": normal_init,
                     "activation_fn_resnet": "tanh",
                     "resnet_use_bias": True,
-                    "use_safe_log": True,
                 }
             ),
         }
