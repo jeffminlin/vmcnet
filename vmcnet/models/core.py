@@ -47,7 +47,7 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
 
 
-@jax.custom_jvp
+@jax.custom_vjp
 def safe_log(x: jnp.ndarray) -> jnp.ndarray:
     """Log which returns 0.0 instead of nan for its gradient when the input is 0.0.
 
@@ -62,18 +62,18 @@ def safe_log(x: jnp.ndarray) -> jnp.ndarray:
     return jnp.log(x)
 
 
-@safe_log.defjvp
-def _safe_log_jvp(
-    primals: Tuple[jnp.ndarray], tangents: Tuple[jnp.ndarray]
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    (x,) = primals
-    (x_dot,) = tangents
-    primal_out = jnp.log(x)
-    # It is important to keep the x_dot on the outside of the where clause. For reasons
-    # that are not entirely clear, the function may start giving nans or infs if this
-    # is rewritten as jnp.where(x == 0, 0.0, x_dot / x)
-    tangent_out = jnp.where(x == 0, 0.0, 1 / x) * x_dot
-    return primal_out, tangent_out
+def log_fwd(x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    result = jnp.log(x)
+    return result, x
+
+
+def log_bwd(res: jnp.ndarray, cotangent: jnp.ndarray) -> Tuple[jnp.ndarray]:
+    x = res
+    tangents = jnp.nan_to_num(cotangent / x)
+    return (tangents,)
+
+
+safe_log.defvjp(log_fwd, log_bwd)
 
 
 def log_or_safe_log(x: jnp.ndarray, use_safe_log: bool) -> jnp.ndarray:
