@@ -55,7 +55,7 @@ def safe_log(x: jnp.ndarray) -> jnp.ndarray:
     by adding up over some set of symmetries, and then explicitly take the log of Psi
     at the end. In such cases, numerical errors can lead walkers to yield Psi > 0 during
     the MCMC sampling, but then act as if Psi = 0 when taking gradients in the local
-    energy calculation and parameter update. This can create nans if the log is taken
+    energy calculation or parameter update. This can create nans if the log is taken
     directly using jnp.log(x), but if safe_log(x) is used instead, the walkers with
     Psi = 0 will simply be masked out of any gradient calculations.
     """

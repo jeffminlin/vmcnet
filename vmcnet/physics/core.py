@@ -196,10 +196,10 @@ def create_value_and_grad_energy_fn(
     the distribution |psi|^2.
 
     Args:
-        safe_log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
-            (params, x) -> (Hpsi / psi)(x)
+        safe_log_psi_apply (ModelApply): "safely" computes log|psi(x)|, meaning that it
+            computes log|psi(x)| in a way such that the gradient when psi(x) is 0 is 0
+            instead of inf or nan.
+        local_energy_fn (ModelApply): computes local energies Hpsi / psi.
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
         clipping_fn (Callable, optional): post-processing function on the local energy,
