@@ -183,6 +183,8 @@ def create_kfac_update_param_fn(
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": stats_to_save[4]})
 
+        # metrics.update({"local_energies": stats["aux"][1]})
+
         return params, optimizer_state, metrics, key
 
     return update_param_fn

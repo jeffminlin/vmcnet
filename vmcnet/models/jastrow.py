@@ -1,4 +1,5 @@
 """Jastrow factors."""
+from typing import Callable
 import flax
 import jax.numpy as jnp
 
@@ -126,3 +127,50 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
             return -abs_lin_comb_distances
 
         return jnp.exp(-abs_lin_comb_distances)
+
+
+def make_molecular_decay(
+    ion_charges: jnp.ndarray,
+    strength: float = 1.0,
+    scale_factor: float = 0.0,
+    logabs: bool = True,
+) -> Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]:
+    """Make an exp decay jastrow with both electron-ion and electron-electron effects.
+
+    Args:
+        ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
+            elementary charge (the charge of one electron)
+        strength (float, optional): amount to multiply the overall interaction by.
+            Defaults to 1.0.
+        scale_factor (float, optional): Amount to add to the log jastrow (amounts to a
+            multiplicative factor after exponentiation). Defaults to 0.0.
+        logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
+            (False). Defaults to True.
+
+    Returns:
+        Callable: a function with signature (r_ei, r_ee) -> jastrow or log jastrow
+    """
+
+    def molecular_decay(r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
+        scaled_ei_distances = ion_charges * jnp.linalg.norm(r_ei, axis=-1)
+        n = r_ee.shape[-2]
+        eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
+        r_ee_diag_ones = r_ee + eye_n
+        ee_distances = jnp.squeeze(
+            jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (1.0 - eye_n),
+            axis=-1,
+        )
+        interaction = strength * (
+            jnp.sum(
+                jnp.sum(jnp.triu(ee_distances), axis=-1)
+                - jnp.sum(scaled_ei_distances, axis=-1),
+                axis=-1,
+            )
+            + scale_factor
+        )
+        if logabs:
+            return interaction
+
+        return jnp.exp(interaction)
+
+    return molecular_decay

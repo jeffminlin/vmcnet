@@ -156,6 +156,12 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+            if saved_nans_checkpoint:
+                params = old_params
+                optimizer_state = old_state
+                data = old_data
+                key = old_key
+                break
 
         utils.checkpoint.finish_checkpointing(
             checkpoint_writer, best_checkpoint_data, logdir

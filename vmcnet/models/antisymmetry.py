@@ -265,11 +265,14 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         # multiplied with all_perms_out, the product will broadcast each leaf and apply
         # the signs along the correct (ith) axis of the output.
         signed_perms_out = _reduce_prod_over_leaves([all_perms_out, reshaped_signs])
+        self.sow("intermediates", "perms_out", signed_perms_out)
 
         antisymmetrized_out = jnp.sum(
             signed_perms_out, axis=tuple(-i for i in range(1, nleaves + 2))
         )
         if self.logabs:
-            return jnp.log(jnp.abs(antisymmetrized_out))
+            log_abs_out = jnp.log(jnp.abs(antisymmetrized_out))
+            self.sow("intermediates", "antisym_out", log_abs_out)
+            return log_abs_out
 
         return antisymmetrized_out

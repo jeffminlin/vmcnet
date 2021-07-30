@@ -79,6 +79,7 @@ def _get_electron_ion_config_as_arrays(
 def _get_and_init_model(
     model_config: ConfigDict,
     ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
     nelec: jnp.ndarray,
     init_pos: jnp.ndarray,
     key: jnp.ndarray,
@@ -86,7 +87,7 @@ def _get_and_init_model(
     apply_pmap: bool = True,
 ) -> Tuple[flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
     log_psi = models.construct.get_model_from_config(
-        model_config, nelec, ion_pos, dtype=dtype
+        model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos[0:1])
@@ -432,7 +433,14 @@ def _setup_vmc(
 
     # Make the model
     log_psi, params, key = _get_and_init_model(
-        config.model, ion_pos, nelec, init_pos, key, dtype=dtype, apply_pmap=apply_pmap
+        config.model,
+        ion_pos,
+        ion_charges,
+        nelec,
+        init_pos,
+        key,
+        dtype=dtype,
+        apply_pmap=apply_pmap,
     )
 
     # Make initial data
