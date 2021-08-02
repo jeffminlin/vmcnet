@@ -1,5 +1,5 @@
 """Main VMC loop."""
-from typing import Tuple, Optional
+from typing import Callable, Dict, Tuple, Optional
 
 import jax.numpy as jnp
 
@@ -8,6 +8,25 @@ from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, P, S
+
+
+def _add_amplitude_to_metrics_if_requested(
+    metrics: Dict,
+    data: D,
+    record_amplitudes: bool,
+    get_amplitude_from_data: Optional[Callable[[D], jnp.ndarray]],
+) -> None:
+    if record_amplitudes:
+        if get_amplitude_from_data is None:
+            raise ValueError(
+                "record_amplitudes set to True, but get_amplitude_from_data "
+                "function is None."
+            )
+        amplitudes = get_amplitude_from_data(data)
+        mean_amp = jnp.mean(amplitudes)
+        min_amp = jnp.min(amplitudes)
+        max_amp = jnp.max(amplitudes)
+        metrics["amplitude"] = [mean_amp, min_amp, max_amp]
 
 
 def vmc_loop(
@@ -26,6 +45,8 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     checkpoint_if_nans: bool = False,
     only_checkpoint_first_nans: bool = True,
+    record_amplitudes: bool = False,
+    get_amplitude_from_data: Optional[Callable[[D], jnp.ndarray]] = None,
     nhistory_max: int = 200,
 ) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
@@ -112,7 +133,6 @@ def vmc_loop(
             old_key = key
 
             accept_ratio, data, key = walker_fn(params, data, key)
-
             params, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
             )
@@ -121,6 +141,10 @@ def vmc_loop(
                 continue
 
             metrics["accept_ratio"] = accept_ratio
+
+            _add_amplitude_to_metrics_if_requested(
+                metrics, data, record_amplitudes, get_amplitude_from_data
+            )
 
             (
                 checkpoint_metric,

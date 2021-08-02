@@ -149,14 +149,20 @@ def _make_initial_data(
     init_pos: jnp.ndarray,
     params: P,
     apply_pmap: bool = True,
-) -> dwpa.DWPAData:
+) -> Tuple[dwpa.DWPAData, Callable[[dwpa.DWPAData], jnp.ndarray]]:
     if apply_pmap:
-        return _make_initial_distributed_data(
-            utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
+        return (
+            _make_initial_distributed_data(
+                utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
+            ),
+            pacore.get_amplitude_from_data,
         )
     else:
-        return _make_initial_single_device_data(
-            log_psi_apply, run_config, init_pos, params
+        return (
+            _make_initial_single_device_data(
+                log_psi_apply, run_config, init_pos, params
+            ),
+            pacore.get_amplitude_from_data,
         )
 
 
@@ -411,6 +417,7 @@ def _setup_vmc(
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
+    Callable[[dwpa.DWPAData], jnp.ndarray],
     flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
@@ -427,7 +434,7 @@ def _setup_vmc(
     )
 
     # Make initial data
-    data = _make_initial_data(
+    data, get_amplitude_from_data = _make_initial_data(
         log_psi.apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
 
@@ -459,6 +466,7 @@ def _setup_vmc(
         walker_fn,
         local_energy_fn,
         update_param_fn,
+        get_amplitude_from_data,
         params,
         data,
         optimizer_state,
@@ -516,7 +524,7 @@ def _make_new_data_for_eval(
     # redistribute if needed
     if config.distribute:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
-    data = _make_initial_data(
+    data, _ = _make_initial_data(
         log_psi_apply, config.eval, init_pos, params, apply_pmap=config.distribute
     )
 
@@ -532,6 +540,7 @@ def _burn_and_run_vmc(
     burning_step: mcmc.metropolis.BurningStep[P, D],
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
+    get_amplitude_from_data: Callable[[D], jnp.ndarray],
     key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
@@ -571,6 +580,8 @@ def _burn_and_run_vmc(
         checkpoint_variance_scale=checkpoint_variance_scale,
         checkpoint_if_nans=checkpoint_if_nans,
         only_checkpoint_first_nans=only_checkpoint_first_nans,
+        record_amplitudes=run_config.record_amplitudes,
+        get_amplitude_from_data=get_amplitude_from_data,
         nhistory_max=nhistory_max,
     )
 
@@ -610,6 +621,7 @@ def run_molecule() -> None:
         walker_fn,
         local_energy_fn,
         update_param_fn,
+        get_amplitude_from_data,
         params,
         data,
         optimizer_state,
@@ -655,6 +667,7 @@ def run_molecule() -> None:
         burning_step,
         walker_fn,
         update_param_fn,
+        get_amplitude_from_data,
         key,
         should_checkpoint=True,
     )
@@ -697,6 +710,7 @@ def run_molecule() -> None:
         eval_burning_step,
         eval_walker_fn,
         eval_update_param_fn,
+        get_amplitude_from_data,
         key,
         should_checkpoint=False,
     )

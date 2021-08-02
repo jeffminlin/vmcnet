@@ -78,6 +78,18 @@ def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
     return data["walker_data"]["position"]
 
 
+def get_amplitude_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
+    """Get the amplitude data from PositionAmplitudeData.
+
+    Args:
+        data (PositionAmplitudeData): the data
+
+    Returns:
+        jnp.ndarray: the wave function amplitudes from the data
+    """
+    return data["walker_data"]["amplitude"]
+
+
 def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[jnp.ndarray, jnp.ndarray, Any]:
     """Returns data as a (position, amplitude, move_metadata) tuple.
 
