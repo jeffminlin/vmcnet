@@ -7,25 +7,11 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
-from vmcnet.utils.pytree_helpers import tree_sum, tree_prod
+from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import ArrayList, SpinSplit
-from .core import Activation, Dense, _valid_skip
+from .core import Activation, Dense, _split_mean, _valid_skip
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
-
-
-def _split_mean(
-    x: jnp.ndarray,
-    splits: SpinSplit,
-    axis: int = -2,
-    keepdims: bool = True,
-) -> ArrayList:
-    """Split x on an axis and take the mean over that axis in each of the splits."""
-    split_x = jnp.split(x, splits, axis=axis)
-    split_x_mean = jax.tree_map(
-        functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
-    )
-    return split_x_mean
 
 
 def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
