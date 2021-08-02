@@ -21,7 +21,7 @@ def test_invariant_tensor():
     bias_init = models.weights.get_bias_initializer("normal")
     residual_blocks = models.construct._get_residual_blocks_for_ferminet_backflow(
         spin_split=spin_split,
-        ndense_list=((12,), (12,)),
+        ndense_list=((8,), (10,)),
         kernel_initializer_unmixed=kernel_init,
         kernel_initializer_mixed=kernel_init,
         kernel_initializer_2e_1e_stream=kernel_init,

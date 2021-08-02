@@ -11,6 +11,35 @@ from .weights import WeightInitializer
 
 
 class InvariantTensor(flax.linen.Module):
+    """Spinful invariance via averaged backflow, with desired shape via a dense layer.
+
+    Attributes:
+        spin_split (SpinSplit): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        output_shape_per_spin (Sequence[Iterable[int]]): sequence of iterables which
+            correspond to the desired non-batch output shapes of for each split of the
+            input. This determines the output shapes for each split, i.e. the outputs
+            are shaped (batch_dims, output_shape_per_spin[i])
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+        kernel_initializer (WeightInitializer): kernel initializer. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer (WeightInitializer): bias initializer. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        use_bias (bool, optional): whether to add a bias term. Defaults to True.
+        register_kfac (bool, optional): whether to register the dense computations with
+            KFAC. Defaults to True.
+    """
+
     spin_split: SpinSplit
     output_shape_per_spin: Sequence[Iterable[int]]
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
@@ -52,6 +81,17 @@ class InvariantTensor(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> ArrayList:
+        """Apply backflow -> split mean -> dense to get invariance with desired shape.
+
+        Args:
+            elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+
+        Returns:
+            ArrayList: list of invariant arrays which are invariant with respect to
+            permutations within each split, where the last two axes of these arrays are
+            specified by self.output_shape_per_spin, and the other axes are shared batch
+            axes
+        """
         stream_1e = self._backflow(elec_pos)[0]
         invariant_split = _split_mean(stream_1e, self.spin_split, keepdims=False)
 
