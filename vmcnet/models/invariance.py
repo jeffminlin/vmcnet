@@ -60,6 +60,6 @@ class InvariantTensor(flax.linen.Module):
             for i, invariant_in in enumerate(invariant_split)
         ]
         return [
-            jnp.reshape(x, x.shape[:-2] + tuple(self.output_shape_per_spin[i]))
+            jnp.reshape(x, x.shape[:-1] + tuple(self.output_shape_per_spin[i]))
             for i, x in enumerate(invariant_dense_split_out)
         ]
