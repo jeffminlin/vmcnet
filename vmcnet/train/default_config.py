@@ -208,8 +208,8 @@ def get_default_vmc_config() -> ConfigDict:
             "checkpoint_if_nans": False,
             "only_checkpoint_first_nans": True,
             "nhistory_max": 200,
-            "record_param_l1_norm": False,
             "record_amplitudes": False,
+            "record_param_l1_norm": False,
             "clip_threshold": 5.0,
             "schedule_type": "inverse_time",  # constant or inverse_time
             "learning_rate": 1e-4,
@@ -245,6 +245,7 @@ def get_default_eval_config() -> ConfigDict:
             "nepochs": 20000,
             "nsteps_per_param_update": 10,
             "nmoves_per_width_update": 100,
+            "record_amplitudes": False,
             "std_move": 0.25,
             # if use_data_from_training=True, nchains, nmoves_per_width_update, and
             # std_move are completely ignored, and the data output from training is
