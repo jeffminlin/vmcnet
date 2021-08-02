@@ -59,3 +59,6 @@ SLArrayList = List[SLArray]
 SpinSplit = Union[int, Sequence[int]]
 
 ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
+
+GetPositionFromData = Callable[[D], jnp.ndarray]
+GetAmplitudeFromData = GetPositionFromData[D]
