@@ -157,20 +157,14 @@ def _make_initial_data(
     init_pos: jnp.ndarray,
     params: P,
     apply_pmap: bool = True,
-) -> Tuple[dwpa.DWPAData, Callable[[dwpa.DWPAData], jnp.ndarray]]:
+) -> dwpa.DWPAData:
     if apply_pmap:
-        return (
-            _make_initial_distributed_data(
-                utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
-            ),
-            pacore.get_amplitude_from_data,
+        return _make_initial_distributed_data(
+            utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
         )
     else:
-        return (
-            _make_initial_single_device_data(
-                log_psi_apply, run_config, init_pos, params
-            ),
-            pacore.get_amplitude_from_data,
+        return _make_initial_single_device_data(
+            log_psi_apply, run_config, init_pos, params
         )
 
 
@@ -425,7 +419,7 @@ def _setup_vmc(
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
-    Callable[[dwpa.DWPAData], jnp.ndarray],
+    GetAmplitudeFromData[dwpa.DWPAData],
     flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
@@ -442,9 +436,10 @@ def _setup_vmc(
     )
 
     # Make initial data
-    data, get_amplitude_fn = _make_initial_data(
+    data = _make_initial_data(
         log_psi.apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
+    get_amplitude_fn = pacore.get_amplitude_from_data
 
     # Setup metropolis step
     burning_step, walker_fn = _get_mcmc_fns(
@@ -532,7 +527,7 @@ def _make_new_data_for_eval(
     # redistribute if needed
     if config.distribute:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
-    data, _ = _make_initial_data(
+    data = _make_initial_data(
         log_psi_apply, config.eval, init_pos, params, apply_pmap=config.distribute
     )
 

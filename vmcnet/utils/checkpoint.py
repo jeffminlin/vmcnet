@@ -641,7 +641,7 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
         variance_str = variance_str + " (%(variance_noclip).5e)"
 
     if "amplitude_min" in metrics:
-        amplitude_str = "Min/max amplitude: %(amplitude_min).3e/%(amplitude_max).3e"
+        amplitude_str = "Min/max amplitude: %(amplitude_min).2f/%(amplitude_max).2f"
 
     info_out = ", ".join(
         [epoch_str, energy_str, variance_str, accept_ratio_str, amplitude_str]

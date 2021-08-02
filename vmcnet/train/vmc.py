@@ -131,6 +131,7 @@ def vmc_loop(
             old_key = key
 
             accept_ratio, data, key = walker_fn(params, data, key)
+
             params, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
             )
