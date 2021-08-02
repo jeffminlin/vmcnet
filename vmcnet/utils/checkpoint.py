@@ -628,9 +628,6 @@ def save_metrics_and_regular_checkpoint(
 
 def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
-    logged_metrics = {"epoch": epoch + 1}
-    logged_metrics.update(metrics)
-
     epoch_str = "Epoch %(epoch)5d"
     energy_str = "Energy: %(energy).5e"
     variance_str = "Variance: %(variance).5e"
@@ -643,13 +640,14 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     if "variance_noclip" in metrics:
         variance_str = variance_str + " (%(variance_noclip).5e)"
 
-    if "amplitude" in metrics:
-        amplitude_str = "Min amplitude: %(amplitude)"
-        logged_metrics["amplitude"] = metrics["amplitude"][1]
+    if "amplitude_min" in metrics:
+        amplitude_str = "Min/max amplitude: %(amplitude_min).3e/%(amplitude_max).3e"
 
     info_out = ", ".join(
         [epoch_str, energy_str, variance_str, accept_ratio_str, amplitude_str]
     )
     info_out = info_out + checkpoint_str
 
+    logged_metrics = {"epoch": epoch + 1}
+    logged_metrics.update(metrics)
     logging.info(info_out, logged_metrics)

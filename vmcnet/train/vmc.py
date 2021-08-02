@@ -23,10 +23,8 @@ def _add_amplitude_to_metrics_if_requested(
                 "function is None."
             )
         amplitudes = get_amplitude_from_data(data)
-        mean_amp = jnp.mean(amplitudes)
-        min_amp = jnp.min(amplitudes)
-        max_amp = jnp.max(amplitudes)
-        metrics["amplitude"] = [mean_amp, min_amp, max_amp]
+        metrics["amplitude_min"] = jnp.min(amplitudes)
+        metrics["amplitude_max"] = jnp.max(amplitudes)
 
 
 def vmc_loop(
