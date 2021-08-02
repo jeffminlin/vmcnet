@@ -6,8 +6,9 @@ import numpy as np
 import pytest
 from typing import Callable
 
-import vmcnet.models.sign_symmetry as sign_cov
+import vmcnet.models.sign_symmetry as sign_sym
 from vmcnet.utils.slog_helpers import (
+    array_from_slog,
     array_to_slog,
     array_list_to_slog,
 )
@@ -25,7 +26,7 @@ def test_get_sign_orbit_array_list():
     s3 = jnp.array([[[-0.3, 0.6]], [[-2, -10]]])
     inputs = [s1, s2, s3]
 
-    syms, sym_signs = sign_cov._get_sign_orbit_array_list(inputs, axis=-2)
+    syms, sym_signs = sign_sym._get_sign_orbit_array_list(inputs, axis=-2)
 
     expected_syms = [
         jnp.stack([s1, -s1, s1, -s1, s1, -s1, s1, -s1], axis=-2),
@@ -48,7 +49,7 @@ def test_get_sign_orbit_slog_array_list():
     )
     inputs = [(spin1_signs, spin1_logs), (spin2_signs, spin2_logs)]
 
-    syms, sym_signs = sign_cov._get_sign_orbit_sl_array_list(inputs, axis=-2)
+    syms, sym_signs = sign_sym._get_sign_orbit_sl_array_list(inputs, axis=-2)
 
     expected_syms = [
         (
@@ -71,11 +72,14 @@ def _make_simple_nn_layers(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     dhidden = 4
     key, subkey = jax.random.split(key)
+    # Biases important here to avoid starting with a perfectly odd function
+    biases = jax.random.normal(subkey, (dinput,))
+    key, subkey = jax.random.split(key)
     weights1 = jax.random.normal(key, (dinput, dhidden))
     weights2 = jax.random.normal(subkey, (dhidden, dout))
 
     def apply_layers(x: jnp.ndarray) -> jnp.ndarray:
-        output = jnp.matmul(x, weights1)
+        output = jnp.matmul(x + biases, weights1)
         output = jnp.tanh(output)
         output = jnp.matmul(output, weights2)
         output = jnp.tanh(output)
@@ -84,41 +88,7 @@ def _make_simple_nn_layers(
     return apply_layers
 
 
-@pytest.mark.slow
-def test_make_array_list_fn_sign_covariant():
-    """Test making a fn of an ArrayList sign-covariant w.r.t each array."""
-    nbatch = 5
-    nelec_per_spin = (2, 3, 4)
-    nelec_total = 9
-    d = 2
-    key = jax.random.PRNGKey(0)
-
-    key, subkey = jax.random.split(key)
-    inputs = [jax.random.normal(key, (nbatch, n * d)) for n in nelec_per_spin]
-
-    flip_sign_inputs = [inputs[0], -inputs[1], inputs[2]]
-    same_sign_inputs = [inputs[0], -inputs[1], -inputs[2]]
-
-    dout = 3
-    nn_layers = _make_simple_nn_layers(nelec_total * d, dout, subkey)
-
-    def fn(x: ArrayList) -> jnp.ndarray:
-        all_vals = jnp.concatenate(x, axis=-1)
-        return nn_layers(all_vals)
-
-    covariant_fn = sign_cov.make_array_list_fn_sign_covariant(fn)
-    result = covariant_fn(inputs)
-    chex.assert_shape(result, (nbatch, dout))
-    flip_sign_result = covariant_fn(flip_sign_inputs)
-    same_sign_result = covariant_fn(same_sign_inputs)
-
-    assert_pytree_allclose(flip_sign_result, -result, atol=1e-5)
-    assert_pytree_allclose(same_sign_result, result, atol=1e-5)
-
-
-@pytest.mark.slow
-def test_make_array_list_fn_sign_invariant():
-    """Test making a fn of an ArrayList sign-invariant w.r.t each array."""
+def _test_sign_covariance_or_invariance(is_invariance: bool, atol: float):
     nbatch = 5
     nelec_per_spin = (2, 3, 4)
     nelec_total = 9
@@ -138,14 +108,33 @@ def test_make_array_list_fn_sign_invariant():
         all_vals = jnp.concatenate(x, axis=-1)
         return nn_layers(all_vals)
 
-    covariant_fn = sign_cov.make_array_list_fn_sign_invariant(fn)
-    result = covariant_fn(inputs)
-    chex.assert_shape(result, (nbatch, dout))
-    sign_change_result = covariant_fn(sign_change_inputs)
-    double_sign_change_result = covariant_fn(double_sign_change_inputs)
+    if is_invariance:
+        sym_fn = sign_sym.make_array_list_fn_sign_invariant(fn)
+    else:
+        sym_fn = sign_sym.make_array_list_fn_sign_covariant(fn)
 
-    assert_pytree_allclose(sign_change_result, result, atol=1e-5)
-    assert_pytree_allclose(double_sign_change_result, result, atol=1e-5)
+    result = sym_fn(inputs)
+    chex.assert_shape(result, (nbatch, dout))
+    sign_change_result = sym_fn(sign_change_inputs)
+    double_sign_change_result = sym_fn(double_sign_change_inputs)
+
+    assert_pytree_allclose(double_sign_change_result, result, atol=atol)
+    if is_invariance:
+        assert_pytree_allclose(sign_change_result, result, atol=atol)
+    else:
+        assert_pytree_allclose(sign_change_result, -result, atol=atol)
+
+
+@pytest.mark.slow
+def test_make_array_list_fn_sign_covariant():
+    """Test making a fn of an ArrayList sign-covariant w.r.t each array."""
+    _test_sign_covariance_or_invariance(is_invariance=False, atol=1e-6)
+
+
+@pytest.mark.slow
+def test_make_array_list_fn_sign_invariant():
+    """Test making a fn of an ArrayList sign-invariant w.r.t each array."""
+    _test_sign_covariance_or_invariance(is_invariance=True, atol=1e-6)
 
 
 @pytest.mark.slow
@@ -178,12 +167,11 @@ def test_make_sl_array_list_fn_sign_covariant():
         output = nn_layers(all_vals)
         return array_to_slog(output)
 
-    covariant_fn = sign_cov.make_sl_array_list_fn_sign_covariant(fn)
-    result = covariant_fn(slog_inputs)
+    covariant_fn = sign_sym.make_sl_array_list_fn_sign_covariant(fn)
+    result = array_from_slog(covariant_fn(slog_inputs))
     chex.assert_shape(result, (nbatch, dout))
-    flip_sign_result = covariant_fn(flip_slog_inputs)
-    same_sign_result = covariant_fn(same_slog_inputs)
+    flip_sign_result = array_from_slog(covariant_fn(flip_slog_inputs))
+    same_sign_result = array_from_slog(covariant_fn(same_slog_inputs))
 
-    expected_neg_result = (-result[0], result[1])
-    assert_pytree_allclose(flip_sign_result, expected_neg_result, atol=1e-5)
-    assert_pytree_allclose(same_sign_result, result, atol=1e-5)
+    np.testing.assert_allclose(flip_sign_result, -result, atol=1e-6)
+    np.testing.assert_allclose(same_sign_result, result, atol=1e-6)
