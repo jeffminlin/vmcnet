@@ -26,7 +26,7 @@ from .equivariance import (
 )
 from .invariance import InvariantTensor
 from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
-from .sign_covariance import make_array_list_fn_sign_covariant
+from .sign_symmetry import make_array_list_fn_sign_covariant
 from .weights import (
     WeightInitializer,
     get_bias_init_from_config,

@@ -163,7 +163,7 @@ def _get_sign_orbit_sl_array_list(
     return _get_sign_orbit_for_list(x, _get_sign_orbit_single_sl_array, axis)
 
 
-def make_fn_sign_covariant(
+def apply_sign_symmetry_to_fn(
     fn: Callable[[List[A]], A],
     get_signs_and_syms: Callable[[List[A]], Tuple[List[A], jnp.ndarray]],
     apply_output_signs: Callable[[A, jnp.ndarray], A],
@@ -225,7 +225,7 @@ def make_sl_array_list_fn_sign_covariant(
 ) -> Callable[[SLArrayList], SLArray]:
     """Make a function of an SLArrayList sign-covariant in the sign of each SLArray.
 
-    Shallow wrapper around the generic make_fn_sign_covariant.
+    Shallow wrapper around the generic apply_sign_symmetry_to_fn.
 
     Args:
         fn (Callable): the function to symmetrize. The given axis is injected into the
@@ -238,7 +238,7 @@ def make_sl_array_list_fn_sign_covariant(
         which has been symmetrized so that its output will be covariant with respect
         to the sign of each input, or in other words, will be odd.
     """
-    return make_fn_sign_covariant(
+    return apply_sign_symmetry_to_fn(
         fn,
         functools.partial(_get_sign_orbit_sl_array_list, axis=axis),
         lambda x, s: (_multiply_sign_along_axis(x[0], s, axis), x[1]),
@@ -251,7 +251,7 @@ def make_array_list_fn_sign_covariant(
 ) -> Callable[[ArrayList], jnp.ndarray]:
     """Make a function of an ArrayList sign-covariant in the sign of each array.
 
-    Shallow wrapper around the generic make_fn_sign_covariant.
+    Shallow wrapper around the generic apply_sign_symmetry_to_fn.
 
     Args:
         fn (Callable): the function to symmetrize. The given axis is injected into the
@@ -264,9 +264,35 @@ def make_array_list_fn_sign_covariant(
         which has been symmetrized so that its output will be covariant with respect
         to the sign of each input, or in other words, will be odd.
     """
-    return make_fn_sign_covariant(
+    return apply_sign_symmetry_to_fn(
         fn,
         functools.partial(_get_sign_orbit_array_list, axis=axis),
         functools.partial(_multiply_sign_along_axis, axis=axis),
+        functools.partial(jnp.sum, axis=axis),
+    )
+
+
+def make_array_list_fn_sign_invariant(
+    fn: Callable[[ArrayList], jnp.ndarray], axis: int = -2
+) -> Callable[[ArrayList], jnp.ndarray]:
+    """Make a function of an ArrayList sign-invariant (even) in the sign of each array.
+
+    Shallow wrapper around the generic apply_sign_symmetry_to_fn.
+
+    Args:
+        fn (Callable): the function to symmetrize. The given axis is injected into the
+            inputs and the sign orbit is computed, so this function should be able to
+            treat the given sign orbit axis as a batch dimension, and the overall tensor
+            rank should not change (len(input.shape) == len(output.shape))
+
+    Returns:
+        Callable: a function with the same signature as the input function, but
+        which has been symmetrized so that its output will be invariant with respect
+        to the sign of each input, or in other words, will be even.
+    """
+    return apply_sign_symmetry_to_fn(
+        fn,
+        functools.partial(_get_sign_orbit_array_list, axis=axis),
+        lambda x, _: x,  # Ignore the signs to get an invariance
         functools.partial(jnp.sum, axis=axis),
     )

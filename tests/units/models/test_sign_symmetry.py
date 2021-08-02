@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from typing import Callable
 
-import vmcnet.models.sign_covariance as sign_cov
+import vmcnet.models.sign_symmetry as sign_cov
 from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_list_to_slog,
@@ -114,6 +114,38 @@ def test_make_array_list_fn_sign_covariant():
 
     assert_pytree_allclose(flip_sign_result, -result, atol=1e-5)
     assert_pytree_allclose(same_sign_result, result, atol=1e-5)
+
+
+@pytest.mark.slow
+def test_make_array_list_fn_sign_invariant():
+    """Test making a fn of an ArrayList sign-invariant w.r.t each array."""
+    nbatch = 5
+    nelec_per_spin = (2, 3, 4)
+    nelec_total = 9
+    d = 2
+    key = jax.random.PRNGKey(0)
+
+    key, subkey = jax.random.split(key)
+    inputs = [jax.random.normal(key, (nbatch, n * d)) for n in nelec_per_spin]
+
+    sign_change_inputs = [inputs[0], -inputs[1], inputs[2]]
+    double_sign_change_inputs = [inputs[0], -inputs[1], -inputs[2]]
+
+    dout = 3
+    nn_layers = _make_simple_nn_layers(nelec_total * d, dout, subkey)
+
+    def fn(x: ArrayList) -> jnp.ndarray:
+        all_vals = jnp.concatenate(x, axis=-1)
+        return nn_layers(all_vals)
+
+    covariant_fn = sign_cov.make_array_list_fn_sign_invariant(fn)
+    result = covariant_fn(inputs)
+    chex.assert_shape(result, (nbatch, dout))
+    sign_change_result = covariant_fn(sign_change_inputs)
+    double_sign_change_result = covariant_fn(double_sign_change_inputs)
+
+    assert_pytree_allclose(sign_change_result, result, atol=1e-5)
+    assert_pytree_allclose(double_sign_change_result, result, atol=1e-5)
 
 
 @pytest.mark.slow
