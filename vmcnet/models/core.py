@@ -30,6 +30,25 @@ def _split_mean(
     return split_x_mean
 
 
+def compute_ee_norm_with_safe_diag(r_ee):
+    """Get electron-electron distances with a safe derivative along the diagonal.
+
+    Avoids computing norm(x - x) along the diagonal, since autograd will be unhappy
+    about differentiating through the norm function evaluated at 0. Instead compute
+    0 * norm(x - x + 1) along the diagonal.
+
+    Args:
+        x (jnp.ndarray): electron-electron displacements wth shape (..., n, n, d)
+
+    Returns:
+        jnp.ndarray: electron-electrondists with shape (..., n, n, 1)
+    """
+    n = r_ee.shape[-2]
+    eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
+    r_ee_diag_ones = r_ee + eye_n
+    return jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (1.0 - eye_n)
+
+
 def is_tuple_of_arrays(x: PyTree) -> bool:
     """Returns True if x is a tuple of jnp.ndarray objects."""
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)

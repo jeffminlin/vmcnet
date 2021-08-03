@@ -9,7 +9,14 @@ import jax.numpy as jnp
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import ArrayList, SpinSplit
-from .core import Activation, Dense, _split_mean, _valid_skip, get_nspins
+from .core import (
+    Activation,
+    Dense,
+    _split_mean,
+    _valid_skip,
+    compute_ee_norm_with_safe_diag,
+    get_nspins,
+)
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 
@@ -133,15 +140,7 @@ def compute_electron_electron(
     r_ee = _compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
-        # Avoid computing norm(x - x) along the diagonal, since autograd will be
-        # unhappy about differentiating through the norm function evaluated at 0.
-        # Instead compute 0 * norm(x - x + 1) along the diagonal.
-        n = elec_pos.shape[-2]
-        eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
-        r_ee_diag_ones = input_2e + eye_n
-        r_ee_norm = jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (
-            1.0 - eye_n
-        )
+        r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
         input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
     return input_2e, r_ee
 

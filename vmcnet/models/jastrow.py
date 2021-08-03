@@ -4,7 +4,8 @@ import flax
 import jax.numpy as jnp
 
 import vmcnet.models as models
-from vmcnet.models.weights import WeightInitializer, zeros
+from .core import compute_ee_norm_with_safe_diag
+from .weights import WeightInitializer, zeros
 
 
 def _isotropy_on_leaf(
@@ -153,13 +154,7 @@ def make_molecular_decay(
 
     def molecular_decay(r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
         scaled_ei_distances = ion_charges * jnp.linalg.norm(r_ei, axis=-1)
-        n = r_ee.shape[-2]
-        eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
-        r_ee_diag_ones = r_ee + eye_n
-        ee_distances = jnp.squeeze(
-            jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (1.0 - eye_n),
-            axis=-1,
-        )
+        ee_distances = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), axis=-1)
         interaction = strength * (
             jnp.sum(
                 jnp.sum(jnp.triu(ee_distances), axis=-1)
