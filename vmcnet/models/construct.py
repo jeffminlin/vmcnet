@@ -211,7 +211,7 @@ def get_backflow_from_config(
     """Get a FermiNet backflow from a model configuration."""
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    residual_blocks = _get_residual_blocks_for_ferminet_backflow(
+    residual_blocks = get_residual_blocks_for_ferminet_backflow(
         spin_split,
         backflow_config.ndense_list,
         kernel_initializer_unmixed=kernel_init_constructor(
@@ -268,7 +268,7 @@ class ComposedModel(flax.linen.Module):
         return outputs
 
 
-def _get_residual_blocks_for_ferminet_backflow(
+def get_residual_blocks_for_ferminet_backflow(
     spin_split: SpinSplit,
     ndense_list: List[Tuple[int, ...]],
     kernel_initializer_unmixed: WeightInitializer,

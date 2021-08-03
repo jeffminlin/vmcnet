@@ -26,15 +26,16 @@ class InvariantTensor(flax.linen.Module):
         output_shape_per_spin (Sequence[Iterable[int]]): sequence of iterables which
             correspond to the desired non-batch output shapes of for each split of the
             input. This determines the output shapes for each split, i.e. the outputs
-            are shaped (batch_dims, output_shape_per_spin[i])
+            are shaped [(batch_dims, output_shape_per_spin[i])]
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
             (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
-        kernel_initializer (WeightInitializer): kernel initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d)),
+            but r_ei is unused.
+        kernel_initializer (WeightInitializer): kernel initializer for the dense
+            layer(s). Has signature (key, shape, dtype) -> jnp.ndarray
+        bias_initializer (WeightInitializer): bias initializer for the dense layer(s).
+            Has signature (key, shape, dtype) -> jnp.ndarray
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         register_kfac (bool, optional): whether to register the dense computations with
             KFAC. Defaults to True.
@@ -88,7 +89,7 @@ class InvariantTensor(flax.linen.Module):
 
         Returns:
             ArrayList: list of invariant arrays which are invariant with respect to
-            permutations within each split, where the last two axes of these arrays are
+            permutations within each split, where the last axes of these arrays are
             specified by self.output_shape_per_spin, and the other axes are shared batch
             axes
         """

@@ -17,23 +17,12 @@ def test_invariant_tensor():
         nchains, nelec_total, nion, d, permutation
     )
 
+    def backflow(elec_pos):
+        """Simple equivariance with linear and quadratic features."""
+        return jnp.concatenate([2.0 * elec_pos, jnp.square(elec_pos)], axis=-1), None
+
     kernel_init = models.weights.get_kernel_initializer("orthogonal")
     bias_init = models.weights.get_bias_initializer("normal")
-    residual_blocks = models.construct._get_residual_blocks_for_ferminet_backflow(
-        spin_split=spin_split,
-        ndense_list=((8,), (10,)),
-        kernel_initializer_unmixed=kernel_init,
-        kernel_initializer_mixed=kernel_init,
-        kernel_initializer_2e_1e_stream=kernel_init,
-        kernel_initializer_2e_2e_stream=kernel_init,
-        bias_initializer_1e_stream=bias_init,
-        bias_initializer_2e_stream=bias_init,
-        activation_fn=jnp.tanh,
-    )
-    backflow = models.equivariance.FermiNetBackflow(
-        residual_blocks, ion_pos, include_2e_stream=False
-    )
-
     output_shape_per_spin = ((2, 3), (12,))
     invariant_model = models.invariance.InvariantTensor(
         spin_split=spin_split,
