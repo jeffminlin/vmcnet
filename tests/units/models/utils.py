@@ -28,6 +28,22 @@ def get_elec_hyperparams() -> Tuple[
     return nchains, nelec_total, nion, d, permutation, spin_split, split_perm
 
 
+def get_elec_and_ion_pos_from_hyperparams(
+    nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int, ...]
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, Optional[jnp.ndarray]]:
+    """Get electron, permuted electron, and ion positions from hyperparameters."""
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+    elec_pos = jax.random.normal(subkey, (nchains, nelec_total, d))
+    permuted_elec_pos = elec_pos[:, permutation, :]
+    key, subkey = jax.random.split(key)
+    if nion > 0:
+        ion_pos: Optional[jnp.ndarray] = jax.random.normal(subkey, (nion, d))
+    else:
+        ion_pos = None
+    return key, elec_pos, permuted_elec_pos, ion_pos
+
+
 def get_input_streams_from_hyperparams(
     nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int, ...]
 ) -> Tuple[
@@ -39,13 +55,10 @@ def get_input_streams_from_hyperparams(
     Optional[jnp.ndarray],
     jnp.ndarray,
 ]:
-    """Get electron input data given several hyperparameters."""
-    key = jax.random.PRNGKey(0)
-    key, subkey = jax.random.split(key)
-    elec_pos = jax.random.normal(subkey, (nchains, nelec_total, d))
-    permuted_elec_pos = elec_pos[:, permutation, :]
-    key, subkey = jax.random.split(key)
-    ion_pos = jax.random.normal(subkey, (nion, d))
+    """Get electron and permuted electron input streams given hyperparameters."""
+    key, elec_pos, permuted_elec_pos, ion_pos = get_elec_and_ion_pos_from_hyperparams(
+        nchains, nelec_total, nion, d, permutation
+    )
 
     input_1e, input_2e, input_ei = models.equivariance.compute_input_streams(
         elec_pos, ion_pos

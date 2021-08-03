@@ -1,4 +1,5 @@
 """Core model building parts."""
+import functools
 from typing import Callable, Tuple, cast
 
 import flax
@@ -8,11 +9,25 @@ import jax.numpy as jnp
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import PyTree, SLArray, SpinSplit
+from vmcnet.utils.typing import ArrayList, PyTree, SLArray, SpinSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
+
+
+def _split_mean(
+    x: jnp.ndarray,
+    splits: SpinSplit,
+    axis: int = -2,
+    keepdims: bool = True,
+) -> ArrayList:
+    """Split x on an axis and take the mean over that axis in each of the splits."""
+    split_x = jnp.split(x, splits, axis=axis)
+    split_x_mean = jax.tree_map(
+        functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
+    )
+    return split_x_mean
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:
@@ -23,6 +38,15 @@ def is_tuple_of_arrays(x: PyTree) -> bool:
 def get_alternating_signs(n: int) -> jnp.ndarray:
     """Return alternating series of 1 and -1, of length n."""
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+
+
+def get_nspins(spin_split: SpinSplit) -> int:
+    """Get the number of spins from a spin split."""
+    if isinstance(spin_split, int):
+        nspins = spin_split
+    else:
+        nspins = len(spin_split) + 1
+    return nspins
 
 
 def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:

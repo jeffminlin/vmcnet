@@ -55,7 +55,7 @@ def _get_initial_pos_and_hyperparams():
 
 
 def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
-    residual_blocks = models.construct._get_residual_blocks_for_ferminet_backflow(
+    residual_blocks = models.construct.get_residual_blocks_for_ferminet_backflow(
         spin_split,
         ndense_list,
         models.weights.get_kernel_initializer("orthogonal"),
