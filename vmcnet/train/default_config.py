@@ -89,6 +89,38 @@ def get_default_model_config() -> ConfigDict:
             "cyclic_spins": cyclic_spins,
         }
     )
+    # TODO (ggoldsh): should any of the defaults be different for this?
+    embedded_slave_fermion_backflow = ferminet_backflow
+
+    determinant_resnet = (
+        ConfigDict(
+            {
+                "ndense": 10,
+                "nlayers": 3,
+                "activation": "gelu",
+                "kernel_init": {"type": "orthogonal", "scale": 2.0},
+                "bias_init": normal_init,
+                "use_bias": True,
+                "register_kfac": False,
+            }
+        ),
+    )
+
+    base_ferminet_config = ConfigDict(
+        {
+            "backflow": ferminet_backflow,
+            "ndeterminants": 1,
+            "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+            "kernel_init_envelope_dim": {"type": "ones"},
+            "kernel_init_envelope_ion": {"type": "ones"},
+            "bias_init_orbital_linear": normal_init,
+            "orbitals_use_bias": True,
+            "isotropic_decay": True,
+            "use_det_resnet": False,
+            "det_resnet": determinant_resnet,
+        }
+    )
+
     invariance = ConfigDict(
         {
             "ndense_list": ((256,), (256,), (1,)),
@@ -113,26 +145,17 @@ def get_default_model_config() -> ConfigDict:
     config = ConfigDict(
         {
             "type": "ferminet",
-            "ferminet": ConfigDict(
+            "ferminet": base_ferminet_config,
+            "embedded_slave_ferminet": ConfigDict(
                 {
-                    "backflow": ferminet_backflow,
-                    "ndeterminants": 1,
-                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-                    "kernel_init_envelope_dim": {"type": "ones"},
-                    "kernel_init_envelope_ion": {"type": "ones"},
-                    "bias_init_orbital_linear": normal_init,
-                    "orbitals_use_bias": True,
-                    "isotropic_decay": True,
-                    "use_det_resnet": False,
-                    "det_resnet": ConfigDict(
+                    **base_ferminet_config,
+                    "invariance": ConfigDict(
                         {
-                            "ndense": 10,
-                            "nlayers": 3,
-                            "activation": "gelu",
-                            "kernel_init": {"type": "orthogonal", "scale": 2.0},
-                            "bias_init": normal_init,
+                            "backflow": embedded_slave_fermion_backflow,
+                            "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
+                            "bias_initializer": normal_init,
                             "use_bias": True,
-                            "register_kfac": False,
+                            "register_kfac": True,
                         }
                     ),
                 }

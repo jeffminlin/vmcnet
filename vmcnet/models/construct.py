@@ -69,7 +69,7 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    if model_config.type == "ferminet":
+    if model_config.type in ["ferminet", "embedded_slave_ferminet"]:
         determinant_fn = None
         if model_config.use_det_resnet:
             resnet_config = model_config.det_resnet
@@ -82,26 +82,62 @@ def get_model_from_config(
                 resnet_config.use_bias,
                 resnet_config.register_kfac,
             )
-        return FermiNet(
-            spin_split,
-            backflow,
-            model_config.ndeterminants,
-            kernel_initializer_orbital_linear=kernel_init_constructor(
-                model_config.kernel_init_orbital_linear
-            ),
-            kernel_initializer_envelope_dim=kernel_init_constructor(
-                model_config.kernel_init_envelope_dim
-            ),
-            kernel_initializer_envelope_ion=kernel_init_constructor(
-                model_config.kernel_init_envelope_ion
-            ),
-            bias_initializer_orbital_linear=bias_init_constructor(
-                model_config.bias_init_orbital_linear
-            ),
-            orbitals_use_bias=model_config.orbitals_use_bias,
-            isotropic_decay=model_config.isotropic_decay,
-            determinant_fn=determinant_fn,
-        )
+
+        if model_config.type == "ferminet":
+            return FermiNet(
+                spin_split,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+                determinant_fn=determinant_fn,
+            )
+        elif model_config.type == "embedded_slave_ferminet":
+            invariance_config = model_config.invariance
+            invariance_backflow = get_backflow_from_config(
+                invariance_config.backflow,
+                ion_pos,
+                spin_split,
+                dtype=dtype,
+            )
+            return EmbeddedSlaveFermiNet(
+                spin_split,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+                invariance_backflow=invariance_backflow,
+                invariance_kernel_initializer=invariance_config.kernel_initializer,
+                invariance_bias_initializer=invariance_config.bias_initializer,
+                invariance_use_bias=invariance_config.use_bias,
+                invariance_register_kfac=invariance_config.register_kfac,
+                determinant_fn=determinant_fn,
+            )
+
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
             antieq_layer = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
@@ -544,7 +580,7 @@ class FermiNet(flax.linen.Module):
         return log_psi
 
 
-class HiddenParticleFerminet(flax.linen.Module):
+class EmbeddedSlaveFermiNet(flax.linen.Module):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
     Attributes:
@@ -559,13 +595,13 @@ class HiddenParticleFerminet(flax.linen.Module):
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
+    invariance_backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    invariance_kernel_initializer: WeightInitializer
+    invariance_bias_initializer: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    hidden_invariance_backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
-    hidden_invariance_kernel_initializer: WeightInitializer
-    hidden_invariance_bias_initializer: WeightInitializer
-    hidden_invariance_use_bias: bool = True
-    hidden_invariance_register_kfac: bool = True
+    invariance_use_bias: bool = True
+    invariance_register_kfac: bool = True
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
     def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]):
@@ -586,11 +622,11 @@ class HiddenParticleFerminet(flax.linen.Module):
         return InvariantTensor(
             self.spin_split,
             output_shape_per_spin,
-            self.hidden_invariance_backflow,
-            self.hidden_invariance_kernel_initializer,
-            self.hidden_invariance_bias_initializer,
-            self.hidden_invariance_use_bias,
-            self.hidden_invariance_register_kfac,
+            self.invariance_backflow,
+            self.invariance_kernel_initializer,
+            self.invariance_bias_initializer,
+            self.invariance_use_bias,
+            self.invariance_register_kfac,
         )
 
     def _get_ferminet(self, total_spin_split: SpinSplit):
