@@ -3,8 +3,9 @@ from typing import Callable
 import flax
 import jax.numpy as jnp
 
-import vmcnet.models as models
+import vmcnet.physics as physics
 from .core import compute_ee_norm_with_safe_diag
+from .equivariance import SplitDense
 from .weights import WeightInitializer, zeros
 
 
@@ -25,7 +26,7 @@ def _isotropy_on_leaf(
     # split x_nion along the ion axis and apply nion parallel maps 1 -> norbitals
     # along the last axis, resulting in
     # [i: (..., nelec, d, 1, norbitals)], where i is the ion index
-    split_out = models.equivariance.SplitDense(
+    split_out = SplitDense(
         nion,
         (norbitals,) * nion,
         kernel_initializer,
@@ -53,7 +54,7 @@ def _anisotropy_on_leaf(
 
     # split x along the ion axis and apply nion parallel maps d -> d * norbitals
     # along the last axis, resulting in [i: (..., nelec, 1, d * norbitals)]
-    split_out = models.equivariance.SplitDense(
+    split_out = SplitDense(
         nion,
         (d * norbitals,) * nion,
         kernel_initializer,
@@ -169,3 +170,33 @@ def make_molecular_decay(
         return jnp.exp(interaction)
 
     return molecular_decay
+
+
+def get_mol_decay_scaled_for_chargeless_molecules(
+    ion_pos: jnp.ndarray, ion_charges: jnp.ndarray, logabs: bool = True
+) -> Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]:
+    """Make fixed molecular decay jastrow, scaled for chargeless molecules.
+
+    The scale factor is chosen so that the log jastrow is 0 when electrons are at ion
+    positions.
+
+    Args:
+        ion_pos (jnp.ndarray): [description]
+        ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
+            elementary charge (the charge of one electron)
+        logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
+            (False). Defaults to True.
+
+    Returns:
+        Callable: a function with signature (r_ei, r_ee) -> jastrow or log jastrow
+    """
+    r_ii, charge_charge_prods = physics.potential._get_ion_ion_info(
+        ion_pos, ion_charges
+    )
+    jastrow_scale_factor = 0.5 * jnp.sum(
+        jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
+    )
+    jastrow = make_molecular_decay(
+        ion_charges, scale_factor=jastrow_scale_factor, logabs=logabs
+    )
+    return jastrow

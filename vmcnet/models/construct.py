@@ -22,9 +22,8 @@ from .equivariance import (
     FermiNetOrbitalLayer,
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
-    compute_electron_electron,
 )
-from .jastrow import make_molecular_decay
+from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
 from .sign_covariance import make_array_list_fn_sign_covariant
 from .weights import (
     WeightInitializer,
@@ -152,9 +151,7 @@ def get_model_from_config(
 
         return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
     elif model_config.type == "brute_force_antisym":
-        _, ii_distances = compute_electron_electron(ion_pos)
-        jastrow_scale_factor = 0.5 * jnp.sum(jnp.linalg.norm(ii_distances, axis=-1))
-        jastrow = make_molecular_decay(ion_charges, scale_factor=jastrow_scale_factor)
+        jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
