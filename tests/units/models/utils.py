@@ -60,13 +60,14 @@ def get_input_streams_from_hyperparams(
         nchains, nelec_total, nion, d, permutation
     )
 
-    input_1e, input_2e, input_ei = models.equivariance.compute_input_streams(
+    input_1e, input_2e, input_ei, _ = models.equivariance.compute_input_streams(
         elec_pos, ion_pos
     )
     (
         perm_input_1e,
         perm_input_2e,
         perm_input_ei,
+        _,
     ) = models.equivariance.compute_input_streams(permuted_elec_pos, ion_pos)
     return (
         input_1e,
