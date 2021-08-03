@@ -642,6 +642,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             self.kernel_initializer_orbital_linear,
             self.kernel_initializer_envelope_dim,
             self.kernel_initializer_envelope_ion,
+            self.bias_initializer_orbital_linear,
             self.orbitals_use_bias,
             self.isotropic_decay,
             self.determinant_fn,
