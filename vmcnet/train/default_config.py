@@ -149,7 +149,7 @@ def get_default_model_config() -> ConfigDict:
             "embedded_slave_ferminet": ConfigDict(
                 {
                     **base_ferminet_config,
-                    "nhidden_particles_per_spin": 1,
+                    "nhidden_particles_per_spin": (2, 2),
                     "invariance": ConfigDict(
                         {
                             "backflow": embedded_slave_fermion_backflow,

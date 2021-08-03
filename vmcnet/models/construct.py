@@ -687,9 +687,9 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             for i in range(nspins)
             for p in [split_input_particles[i], split_hidden_particles[i]]
         ]
-        joint_all_particles = jnp.concatenate(split_all_particles, axis=-2)
+        concat_all_particles = jnp.concatenate(split_all_particles, axis=-2)
 
-        return ferminet(joint_all_particles)
+        return ferminet(concat_all_particles)
 
 
 class AntiequivarianceNet(flax.linen.Module):
