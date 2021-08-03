@@ -111,12 +111,12 @@ def _make_embedded_slave_ferminets():
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    nhidden_particles_per_spins = [(2, 3), 2]
+    nslave_fermions_per_spin_vals = [(2, 3), 2]
 
-    for nhidden_particles_per_spin in nhidden_particles_per_spins:
+    for nslave_fermions_per_spin in nslave_fermions_per_spin_vals:
         log_psi = models.construct.EmbeddedSlaveFermiNet(
             spin_split,
-            nhidden_particles_per_spin,
+            nslave_fermions_per_spin,
             backflow,
             3,
             models.weights.get_kernel_initializer("he_normal"),

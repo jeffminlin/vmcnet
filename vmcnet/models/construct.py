@@ -115,7 +115,7 @@ def get_model_from_config(
             )
             return EmbeddedSlaveFermiNet(
                 spin_split,
-                model_config.nhidden_particles_per_spin,
+                model_config.nslave_fermions_per_spin,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
@@ -594,7 +594,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    nhidden_particles_per_spin: Union[int, Sequence[int]]
+    nslave_fermions_per_spin: Union[int, Sequence[int]]
     backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -611,18 +611,18 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
     def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]):
-        if isinstance(self.nhidden_particles_per_spin, int):
-            return [n + self.nhidden_particles_per_spin for n in nelec_per_spin]
+        if isinstance(self.nslave_fermions_per_spin, int):
+            return [n + self.nslave_fermions_per_spin for n in nelec_per_spin]
 
         return [
-            n + self.nhidden_particles_per_spin[i] for i, n in enumerate(nelec_per_spin)
+            n + self.nslave_fermions_per_spin[i] for i, n in enumerate(nelec_per_spin)
         ]
 
     def _get_invariance_output_shape_per_spin(self, nspins: int, d: int):
-        if isinstance(self.nhidden_particles_per_spin, int):
-            return [(self.nhidden_particles_per_spin, d)] * nspins
+        if isinstance(self.nslave_fermions_per_spin, int):
+            return [(self.nslave_fermions_per_spin, d)] * nspins
 
-        return [(n, d) for n in self.nhidden_particles_per_spin]
+        return [(n, d) for n in self.nslave_fermions_per_spin]
 
     def _get_invariant_tensor(self, output_shape_per_spin):
         return InvariantTensor(
