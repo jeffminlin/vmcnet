@@ -590,7 +590,65 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
     Attributes:
-        blah
+        spin_split (SpinSplit): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        nslave_fermions_per_spin (int or Sequence[int]): number of slave fermions to
+            generate for each spin. If an integer, the same number will be used for
+            each spin. If a sequence, must have length nspins, and each value in the
+            sequence will specify the number of slave fermions for the corresponding
+            spin.
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (elec pos of shape (..., n, d))
+                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+        ndeterminants (int): number of determinants in the FermiNet model, i.e. the
+            number of distinct orbital layers applied
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
+            the linear part of the orbitals. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
+            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
+            this initializes a single decay rate number per ion and orbital. If
+            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
+            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
+            linear combination over the ions of exponential envelopes. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
+            linear part of the orbitals. Has signature
+            (key, shape, dtype) -> jnp.ndarray
+        invariance_backflow (Callable): backflow function to be used for the invariance
+            which generates the slave fermion positions.
+        invariance_kernel_initializer (WeightInitializer): kernel initializer for the
+            invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
+        invariance_bias_initializer (WeightInitializer): bias initializer for the
+            invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
+        orbitals_use_bias (bool, optional): whether to add a bias term in the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should be
+            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
+            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
+            exp(-||a(r - R||)) for a number a.
+        invariance_use_bias: (bool, optional): whether to add a bias term in the dense
+            layer of the invariance. Defaults to True.
+        invariance_register_kfac (bool, optional): whether to register the dense layer
+            of the invariance with KFAC. Defaults to True.
+        determinant_fn (Callable[[ArrayList], jnp.ndarray], optional): An arbitrary
+            function that can map an ArrayList of nspins determinant outputs of shape
+            (..., ndeterminants) to a single output array of shape (..., 1). If
+            provided, this function will be symmetrized to be sign-covariant (odd) with
+            respect to each spin, and will then be used to combine the orbital
+            determinants into the final wavefunction value. If not provided, the final
+            wavefunction value is calculated as the sum of the product of the
+            determinants, where the product is taken across the nspins spins and the sum
+            is taken across the ndeterminants determinants. Defaults to None.
     """
 
     spin_split: SpinSplit
@@ -653,6 +711,14 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
         """Use invariance to generate hidden particles, then Ferminet to calculate Psi.
 
+        In this model, the set of input particles is expanded for each spin with a set
+        of permutation invariant "slave fermions." These extra slave fermions
+        effectively move the problem into a higher dimensional space, resulting in
+        larger orbital matrices and potentially a more expressive ansatz than a regular
+        FermiNet. Due to the invariance of these slave fermions with respect
+        to the original input particle permutation, the ansatz is still antisymmetric
+        with respect to the original input particles only.
+
         Args:
             elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
 
@@ -682,6 +748,8 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         split_hidden_particles = invariance(elec_pos)
+        # Create overall list of [real_pos_spin1, slave_pos_spin1, real_pos_spin2, ...],
+        # so that the full input positions can be created with a single concatenation.
         split_all_particles = [
             p
             for i in range(nspins)
