@@ -23,6 +23,7 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
 )
+from .invariance import InvariantTensor
 from .jastrow import IsotropicAtomicExpDecay
 from .sign_covariance import make_array_list_fn_sign_covariant
 from .weights import (
@@ -541,6 +542,109 @@ class FermiNet(flax.linen.Module):
         slog_det_prods = slogdet_product(orbitals)
         _, log_psi = slog_sum_over_axis(slog_det_prods)
         return log_psi
+
+
+class HiddenParticleFerminet(flax.linen.Module):
+    """Model that expands its inputs with extra hidden particles, then applies FermiNet.
+
+    Attributes:
+        blah
+    """
+
+    spin_split: SpinSplit
+    nhidden_particles_per_spin: Union[int, Sequence[int]]
+    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    ndeterminants: int
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool = True
+    isotropic_decay: bool = False
+    hidden_invariance_backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    hidden_invariance_kernel_initializer: WeightInitializer
+    hidden_invariance_bias_initializer: WeightInitializer
+    hidden_invariance_use_bias: bool = True
+    hidden_invariance_register_kfac: bool = True
+    determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
+
+    def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]):
+        if isinstance(self.nhidden_particles_per_spin, int):
+            return [n + self.nhidden_particles_per_spin for n in nelec_per_spin]
+
+        return [
+            n + self.nhidden_particles_per_spin[i] for i, n in enumerate(nelec_per_spin)
+        ]
+
+    def _get_invariance_output_shape_per_spin(self, nspins: int, d: int):
+        if isinstance(self.nhidden_particles_per_spin, int):
+            return [(self.nhidden_particles_per_spin, d)] * nspins
+
+        return [(n, d) for n in self.nhidden_particles_per_spin]
+
+    def _get_invariant_tensor(self, output_shape_per_spin):
+        return InvariantTensor(
+            self.spin_split,
+            output_shape_per_spin,
+            self.hidden_invariance_backflow,
+            self.hidden_invariance_kernel_initializer,
+            self.hidden_invariance_bias_initializer,
+            self.hidden_invariance_use_bias,
+            self.hidden_invariance_register_kfac,
+        )
+
+    def _get_ferminet(self, total_spin_split: SpinSplit):
+        return FermiNet(
+            total_spin_split,
+            self.backflow,
+            self.ndeterminants,
+            self.kernel_initializer_orbital_linear,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            self.orbitals_use_bias,
+            self.isotropic_decay,
+            self.determinant_fn,
+        )
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+        """Use invariance to generate hidden particles, then Ferminet to calculate Psi.
+
+        Args:
+            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+
+        Returns:
+            jnp.ndarray: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
+        real_nelec_total = elec_pos.shape[-2]
+        d = elec_pos.shape[-1]
+        real_nelec_per_spin = get_nelec_per_spin(self.spin_split, real_nelec_total)
+        nspins = len(real_nelec_per_spin)
+
+        invariance_output_shape_per_spin = self._get_invariance_output_shape_per_spin(
+            nspins, d
+        )
+        invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
+
+        total_nelec_per_spin = self._get_total_nelec_per_spin(real_nelec_per_spin)
+        total_spin_split = tuple(jnp.cumsum(jnp.array(total_nelec_per_spin))[:-1])
+        ferminet = self._get_ferminet(total_spin_split)
+
+        split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
+        split_hidden_particles = invariance(elec_pos)
+        split_all_particles = [
+            p
+            for i in range(nspins)
+            for p in [split_input_particles[i], split_hidden_particles[i]]
+        ]
+        joint_all_particles = jnp.concatenate(split_all_particles, axis=-2)
+
+        return ferminet(joint_all_particles)
 
 
 class AntiequivarianceNet(flax.linen.Module):
