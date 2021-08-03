@@ -132,8 +132,12 @@ def get_model_from_config(
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 invariance_backflow=invariance_backflow,
-                invariance_kernel_initializer=invariance_config.kernel_initializer,
-                invariance_bias_initializer=invariance_config.bias_initializer,
+                invariance_kernel_initializer=kernel_init_constructor(
+                    invariance_config.kernel_initializer
+                ),
+                invariance_bias_initializer=bias_init_constructor(
+                    invariance_config.bias_initializer
+                ),
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
                 determinant_fn=determinant_fn,
