@@ -40,6 +40,15 @@ def get_alternating_signs(n: int) -> jnp.ndarray:
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
 
+def get_nspins(spin_split: SpinSplit) -> int:
+    """Get the number of spins from a spin split."""
+    if isinstance(spin_split, int):
+        nspins = spin_split
+    else:
+        nspins = len(spin_split) + 1
+    return nspins
+
+
 def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:
     """From a spin_split and nelec_total, get the number of particles per spin.
 

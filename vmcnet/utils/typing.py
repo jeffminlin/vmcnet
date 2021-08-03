@@ -4,7 +4,7 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, Callable, List, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 import flax.core.frozen_dict as frozen_dict
 import jax.numpy as jnp
@@ -57,5 +57,7 @@ SLArray = Tuple[jnp.ndarray, jnp.ndarray]
 SLArrayList = List[SLArray]
 
 SpinSplit = Union[int, Sequence[int]]
+
+Backflow = Callable[[jnp.ndarray], Tuple[jnp.ndarray, Optional[jnp.ndarray]]]
 
 ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]

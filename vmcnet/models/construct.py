@@ -9,7 +9,7 @@ from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import ArrayList, SpinSplit
+from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -474,7 +474,7 @@ class FermiNet(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
@@ -565,7 +565,7 @@ class AntiequivarianceNet(flax.linen.Module):
             dimensions of the output.
     """
 
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
     array_list_equivariance: Callable[[ArrayList], jnp.ndarray]
 
@@ -636,7 +636,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -728,7 +728,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer

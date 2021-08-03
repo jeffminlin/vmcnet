@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import ArrayList, SpinSplit
-from .core import Activation, Dense, _split_mean, _valid_skip
+from .core import Activation, Dense, _split_mean, _valid_skip, get_nspins
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 
@@ -574,10 +574,7 @@ class SplitDense(flax.linen.Module):
 
     def setup(self):
         """Set up the dense layers for each split."""
-        if isinstance(self.spin_split, int):
-            nspins = self.spin_split
-        else:
-            nspins = len(self.spin_split) + 1
+        nspins = get_nspins(self.spin_split)
 
         if len(self.ndense_per_spin) != nspins:
             raise ValueError(

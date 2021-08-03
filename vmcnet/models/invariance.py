@@ -1,12 +1,12 @@
 """Permutation invariant models."""
 import math
-from typing import Callable, Iterable, Sequence, Tuple
+from typing import Iterable, Sequence
 
 import flax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import ArrayList, SpinSplit
-from .core import Dense, _split_mean
+from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
+from .core import Dense, _split_mean, get_nspins
 from .weights import WeightInitializer
 
 
@@ -43,7 +43,7 @@ class InvariantTensor(flax.linen.Module):
 
     spin_split: SpinSplit
     output_shape_per_spin: Sequence[Iterable[int]]
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
@@ -55,10 +55,7 @@ class InvariantTensor(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
 
-        if isinstance(self.spin_split, int):
-            nspins = self.spin_split
-        else:
-            nspins = len(self.spin_split) + 1
+        nspins = get_nspins(self.spin_split)
 
         if len(self.output_shape_per_spin) != nspins:
             raise ValueError(
