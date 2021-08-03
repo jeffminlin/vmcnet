@@ -104,6 +104,37 @@ def _make_ferminets():
     return key, init_pos, log_psis
 
 
+def _make_embedded_slave_ferminet():
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+
+    log_psis = []
+    cyclic_spins = False
+    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+    invariance_backflow = (
+        _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos),
+    )
+    nhidden_particles_per_spin = (2, 3)
+
+    log_psi = models.construct.EmbeddedSlaveFermiNet(
+        spin_split,
+        nhidden_particles_per_spin,
+        backflow,
+        3,
+        models.weights.get_kernel_initializer("he_normal"),
+        models.weights.get_kernel_initializer("lecun_normal"),
+        models.weights.get_kernel_initializer("ones"),
+        models.weights.get_bias_initializer("uniform"),
+        invariance_backflow=invariance_backflow,
+        invariance_kernel_initializer=models.weights.get_kernel_initializer(
+            "he_normal"
+        ),
+        invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
+    )
+    log_psis.append(log_psi)
+
+    return key, init_pos, log_psis
+
+
 def _make_antiequivariance_net(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
@@ -217,6 +248,18 @@ def test_ferminet_can_be_constructed():
 def test_ferminet_can_be_evaluated():
     """Check evaluation of FermiNet does not fail."""
     key, init_pos, log_psis = _make_ferminets()
+    (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
+
+
+def test_embedded_slave_ferminet_can_be_constructed():
+    """Check construction of EmbeddedSlaveFermiNet does not fail."""
+    _make_embedded_slave_ferminet()
+
+
+@pytest.mark.slow
+def test_embedded_slave_ferminet_can_be_evaluated():
+    """Check evaluation of EmbeddedSlaveFermiNet does not fail."""
+    key, init_pos, log_psis = _make_embedded_slave_ferminet()
     (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
 
 
