@@ -114,6 +114,7 @@ def get_model_from_config(
             )
             return EmbeddedSlaveFermiNet(
                 spin_split,
+                model_config.nhidden_particles_per_spin,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
