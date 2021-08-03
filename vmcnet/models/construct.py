@@ -6,6 +6,7 @@ import flax
 import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
+import numpy as np
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
@@ -674,7 +675,9 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
         invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
 
         total_nelec_per_spin = self._get_total_nelec_per_spin(real_nelec_per_spin)
-        total_spin_split = tuple(jnp.cumsum(jnp.array(total_nelec_per_spin))[:-1])
+        # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
+        # complaining when it gets used within the constructed FermiNet.
+        total_spin_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
         ferminet = self._get_ferminet(total_spin_split)
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
