@@ -3,9 +3,9 @@ from typing import Callable
 import flax
 import jax.numpy as jnp
 
+import vmcnet.models as models
 import vmcnet.physics as physics
 from .core import compute_ee_norm_with_safe_diag
-from .equivariance import SplitDense
 from .weights import WeightInitializer, zeros
 
 
@@ -26,7 +26,7 @@ def _isotropy_on_leaf(
     # split x_nion along the ion axis and apply nion parallel maps 1 -> norbitals
     # along the last axis, resulting in
     # [i: (..., nelec, d, 1, norbitals)], where i is the ion index
-    split_out = SplitDense(
+    split_out = models.equivariance.SplitDense(
         nion,
         (norbitals,) * nion,
         kernel_initializer,
@@ -54,7 +54,7 @@ def _anisotropy_on_leaf(
 
     # split x along the ion axis and apply nion parallel maps d -> d * norbitals
     # along the last axis, resulting in [i: (..., nelec, 1, d * norbitals)]
-    split_out = SplitDense(
+    split_out = models.equivariance.SplitDense(
         nion,
         (d * norbitals,) * nion,
         kernel_initializer,
