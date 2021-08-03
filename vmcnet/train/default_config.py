@@ -92,18 +92,16 @@ def get_default_model_config() -> ConfigDict:
     # TODO (ggoldsh): should any of the defaults be different for this?
     embedded_slave_fermion_backflow = ferminet_backflow
 
-    determinant_resnet = (
-        ConfigDict(
-            {
-                "ndense": 10,
-                "nlayers": 3,
-                "activation": "gelu",
-                "kernel_init": {"type": "orthogonal", "scale": 2.0},
-                "bias_init": normal_init,
-                "use_bias": True,
-                "register_kfac": False,
-            }
-        ),
+    determinant_resnet = ConfigDict(
+        {
+            "ndense": 10,
+            "nlayers": 3,
+            "activation": "gelu",
+            "kernel_init": {"type": "orthogonal", "scale": 2.0},
+            "bias_init": normal_init,
+            "use_bias": True,
+            "register_kfac": False,
+        }
     )
 
     base_ferminet_config = ConfigDict(

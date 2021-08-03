@@ -275,6 +275,7 @@ def test_get_model_from_default_config():
 
     for model_type in [
         "ferminet",
+        "embedded_slave_ferminet",
         "orbital_cofactor_net",
         "per_particle_dets_net",
         "brute_force_antisym",
@@ -290,6 +291,9 @@ def test_get_model_from_default_config():
                 model_config = get_default_config_with_chosen_model(model_type).model
                 model_config.use_det_resnet = use_det_resnet
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
+        elif model_type == "embedded_slave_ferminet":
+            model_config = get_default_config_with_chosen_model(model_type).model
+            models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
             model_config = get_default_config_with_chosen_model(model_type).model
             models.construct.get_model_from_config(model_config, nelec, ion_pos)
