@@ -9,7 +9,7 @@ from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
+from vmcnet.utils.typing import ArrayList, Backflow, Jastrow, SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -641,6 +641,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     spin_split: SpinSplit
     backflow: Backflow
+    jastrow: Jastrow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -734,6 +735,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     spin_split: SpinSplit
     backflow: Backflow
+    jastrow: Jastrow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer

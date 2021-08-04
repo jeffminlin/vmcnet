@@ -44,6 +44,7 @@ def _get_initial_pos_and_hyperparams():
     key, subkey = jax.random.split(key)
 
     ion_pos = jax.random.normal(subkey, (5, 3))
+    ion_charges = jnp.array([1.0, 2.0, 1.0, 3.0, 5.0])
 
     key, subkey = jax.random.split(key)
     init_pos = jax.random.normal(subkey, shape=(7, 6, 3))
@@ -51,7 +52,7 @@ def _get_initial_pos_and_hyperparams():
     spin_split = (2,)  # 2 up, 4 down
     ndense_list = ((6, 3), (6, 3), (3, 3), (3, 4), (12,), (11, 3), (9,))
 
-    return key, ion_pos, init_pos, spin_split, ndense_list
+    return key, ion_pos, ion_charges, init_pos, spin_split, ndense_list
 
 
 def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
@@ -81,7 +82,14 @@ def _get_det_resnet():
 
 
 def _make_ferminets():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        ion_charges,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     log_psis = []
     # No need for combinatorial testing over these flags; just test with both
@@ -125,7 +133,14 @@ def _make_antiequivariance_net(
 
 
 def _make_orbital_cofactor_net():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        ion_charges,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     antiequivariance = models.antiequivariance.OrbitalCofactorAntiequivarianceLayer(
         spin_split,
@@ -143,7 +158,14 @@ def _make_orbital_cofactor_net():
 
 
 def _make_per_particle_dets_net():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        ion_charges,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     antiequivariance = (
         models.antiequivariance.PerParticleDeterminantAntiequivarianceLayer(
@@ -163,14 +185,25 @@ def _make_per_particle_dets_net():
 
 
 def _make_split_antisymmetry():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        ion_charges,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     backflow = _get_backflow(
         spin_split, ndense_list, cyclic_spins=False, ion_pos=ion_pos
     )
+    jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
+        ion_pos, ion_charges
+    )
     log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
         spin_split,
         backflow,
+        jastrow,
         32,
         3,
         models.weights.get_kernel_initializer("lecun_normal"),
@@ -183,14 +216,25 @@ def _make_split_antisymmetry():
 
 
 def _make_double_antisymmetry():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        ion_charges,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     backflow = _get_backflow(
         spin_split, ndense_list, cyclic_spins=True, ion_pos=ion_pos
     )
+    jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
+        ion_pos, ion_charges
+    )
     log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
         spin_split,
         backflow,
+        jastrow,
         32,
         3,
         models.weights.get_kernel_initializer("lecun_normal"),
@@ -271,7 +315,18 @@ def test_ferminet_composed_antisymmetry_can_be_evaluated():
 def test_get_model_from_default_config():
     """Test that construction using the default model config does not raise an error."""
     ion_pos = jnp.array([[1.0, 2.0, 3.0], [-2.0, 3.0, -4.0], [-0.5, 0.0, 0.0]])
+    ion_charges = jnp.array([1.0, 3.0, 2.0])
     nelec = jnp.array([4, 3])
+
+    def _construct_model(model_type, use_det_resnet=True, brute_force_subtype=None):
+        model_config = get_default_config_with_chosen_model(
+            model_type,
+            use_det_resnet=use_det_resnet,
+            brute_force_subtype=brute_force_subtype,
+        ).model
+        models.construct.get_model_from_config(
+            model_config, nelec, ion_pos, ion_charges
+        )
 
     for model_type in [
         "ferminet",
@@ -281,15 +336,9 @@ def test_get_model_from_default_config():
     ]:
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
-                model_config = get_default_config_with_chosen_model(
-                    model_type, brute_force_subtype=subtype
-                ).model
-                models.construct.get_model_from_config(model_config, nelec, ion_pos)
+                _construct_model(model_type, brute_force_subtype=subtype)
         elif model_type == "ferminet":
             for use_det_resnet in [False, True]:
-                model_config = get_default_config_with_chosen_model(model_type).model
-                model_config.use_det_resnet = use_det_resnet
-                models.construct.get_model_from_config(model_config, nelec, ion_pos)
+                _construct_model(model_type, use_det_resnet=use_det_resnet)
         elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
-            model_config = get_default_config_with_chosen_model(model_type).model
-            models.construct.get_model_from_config(model_config, nelec, ion_pos)
+            _construct_model(model_type)

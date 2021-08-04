@@ -1,10 +1,10 @@
 """Jastrow factors."""
-from typing import Callable
 import flax
 import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
+from vmcnet.utils.typing import Jastrow
 from .core import compute_ee_norm_with_safe_diag
 from .weights import WeightInitializer, zeros
 
@@ -105,18 +105,21 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
         self._kernel_initializer = self.kernel_initializer
 
     @flax.linen.compact
-    def __call__(self, r_ei: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
         """Transform electron-ion displacements into an exp decay one-body Jastrow.
 
         Args:
             r_ei (jnp.ndarray): electron-ion displacements of shape
                 (..., nelec, nion, d)
+            r_ee (jnp.ndarray): electron-electron displacements of shape
+                (..., nelec, nelec, d); unused
 
         Returns:
             jnp.ndarray: -sum_ij ||a_j * (elec_i - ion_j)||, when self.logabs is True,
             or exp of that expression when self.logabs is False. If the input has shape
             (batch_dims, nelec, nion, d), then the output has shape (batch_dims,)
         """
+        del r_ee
         # scale_out has shape (..., nelec, 1, nion, d)
         scale_out = _isotropy_on_leaf(
             r_ei, 1, self._kernel_initializer, register_kfac=True
@@ -136,7 +139,7 @@ def make_molecular_decay(
     strength: float = 1.0,
     scale_factor: float = 0.0,
     logabs: bool = True,
-) -> Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]:
+) -> Jastrow:
     """Make an exp decay jastrow with both electron-ion and electron-electron effects.
 
     Args:
@@ -174,7 +177,7 @@ def make_molecular_decay(
 
 def get_mol_decay_scaled_for_chargeless_molecules(
     ion_pos: jnp.ndarray, ion_charges: jnp.ndarray, logabs: bool = True
-) -> Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]:
+) -> Jastrow:
     """Make fixed molecular decay jastrow, scaled for chargeless molecules.
 
     The scale factor is chosen so that the log jastrow is 0 when electrons are at ion
