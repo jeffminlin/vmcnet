@@ -97,7 +97,7 @@ def _make_ferminets():
     for (cyclic_spins, use_det_resnet, determinant_fn_mode) in [
         (False, False, ""),  # No mode required if no determinant resnet is used
         (True, True, "sign_covariance"),
-        (True, True, "parallel_even"),
+        (False, True, "parallel_even"),
         (True, True, "pairwise_even"),
     ]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)

@@ -609,9 +609,9 @@ class FermiNet(flax.linen.Module):
         return jnp.log(jnp.abs(psi))
 
     def _calculate_psi_pairwise_even(self, orbitals: ArrayList):
-        if len(orbitals) != -2:
+        if len(orbitals) != 2:
             raise ValueError(
-                "For pairwise_even determinant_fn_mode, only nspins=2 is supported."
+                "For pairwise_even determinant_fn_mode, only nspins=2 is supported. "
                 "Received nspins={}.".format(len(orbitals))
             )
 
