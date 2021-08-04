@@ -308,6 +308,8 @@ def _should_save_nans_checkpoint(
     return _check_for_nans(metrics, new_params)
 
 
+# TODO (ggoldsh): encapsulate the numerous settings passed into this function into some
+# sort of checkpointing/logging object.
 def save_metrics_and_handle_checkpoints(
     epoch: int,
     old_params: P,
