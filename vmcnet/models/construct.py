@@ -1,4 +1,5 @@
 """Combine pieces to form full models."""
+from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
@@ -35,6 +36,14 @@ from .weights import (
     get_bias_init_from_config,
     get_kernel_init_from_config,
 )
+
+
+class DeterminantFnMode(Enum):
+    """Enum specifying how to use determinant resnet in FermiNet model."""
+
+    SIGN_COVARIANCE = 0
+    PARALLEL_EVEN = 1
+    PAIRWISE_EVEN = 2
 
 
 # TODO: figure out a way to add other options in a scalable way
@@ -108,7 +117,9 @@ def get_model_from_config(
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn_builder=determinant_fn_builder,
-                determinant_fn_mode=model_config.determinant_fn_mode,
+                determinant_fn_mode=DeterminantFnMode[
+                    model_config.determinant_fn_mode.upper()
+                ],
             )
         elif model_config.type == "embedded_particle_ferminet":
             invariance_config = model_config.invariance
@@ -147,7 +158,9 @@ def get_model_from_config(
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
                 determinant_fn_builder=determinant_fn_builder,
-                determinant_fn_mode=model_config.determinant_fn_mode,
+                determinant_fn_mode=DeterminantFnMode[
+                    model_config.determinant_fn_mode.upper()
+                ],
             )
 
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
@@ -542,8 +555,8 @@ class FermiNet(flax.linen.Module):
             range over all pairs. That is, for 2 spins, the ansatz will be
             sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
             supports nspins = 2. Defaults to None.
-        determinant_fn_mode (str, optional): One of "sign_covariance", "parallel_even",
-            or "pairwise_even". Used to decide how exactly to use the
+        determinant_fn_mode (DeterminantFnMode, optional): One of "sign_covariance",
+            "parallel_even", or "pairwise_even". Used to decide how exactly to use the
             provided determinant_fn_builder to calculate an ansatz for Psi; irrelevant
             if no determinant_fn_builder is provided. Defaults to "parallel_even."
     """
@@ -558,7 +571,7 @@ class FermiNet(flax.linen.Module):
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
     determinant_fn_builder: Optional[DeterminantFnBuilder] = None
-    determinant_fn_mode: str = "parallel_even"
+    determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
     def setup(self):
         """Setup backflow and symmetrized determinant function."""
@@ -567,13 +580,13 @@ class FermiNet(flax.linen.Module):
         self._backflow = self.backflow
         self._symmetrized_det_fn = None
         if self.determinant_fn_builder is not None:
-            if self.determinant_fn_mode == "sign_covariance":
+            if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
                 det_fn = self.determinant_fn_builder(1)
                 self._symmetrized_det_fn = make_array_list_fn_sign_covariant(det_fn)
-            elif self.determinant_fn_mode == "parallel_even":
+            elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
                 det_fn = self.determinant_fn_builder(self.ndeterminants)
                 self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
-            elif self.determinant_fn_mode == "pairwise_even":
+            elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
                 # TODO (ggoldsh): build support for "pairwise_even" for nspins != 2
                 det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
                 self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
@@ -674,11 +687,11 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
         if self._symmetrized_det_fn is not None:
-            if self.determinant_fn_mode == "sign_covariance":
+            if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
                 return self._calculate_psi_sign_covariance(orbitals)
-            elif self.determinant_fn_mode == "parallel_even":
+            elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
                 return self._calculate_psi_parallel_even(orbitals)
-            elif self.determinant_fn_mode == "pairwise_even":
+            elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
                 return self._calculate_psi_pairwise_even(orbitals)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)

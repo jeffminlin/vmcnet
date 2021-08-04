@@ -95,10 +95,10 @@ def _make_ferminets():
     # No need for combinatorial testing over these flags; just make sure Ferminet is
     # tested with and without cyclic spins, and with each different determinant_fn_mode.
     for (cyclic_spins, use_det_resnet, determinant_fn_mode) in [
-        (False, False, ""),  # No mode required if no determinant resnet is used
-        (True, True, "sign_covariance"),
-        (False, True, "parallel_even"),
-        (True, True, "pairwise_even"),
+        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
+        (True, True, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
+        (False, True, models.construct.DeterminantFnMode.PARALLEL_EVEN),
+        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN),
     ]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
         resnet_det_fn_builder = _get_det_resnet_builder() if use_det_resnet else None
@@ -373,10 +373,16 @@ def test_get_model_from_default_config():
     ion_charges = jnp.array([1.0, 3.0, 2.0])
     nelec = jnp.array([4, 3])
 
-    def _construct_model(model_type, use_det_resnet=True, brute_force_subtype=None):
+    def _construct_model(
+        model_type,
+        use_det_resnet=True,
+        determinant_fn_mode=None,
+        brute_force_subtype=None,
+    ):
         model_config = get_default_config_with_chosen_model(
             model_type,
             use_det_resnet=use_det_resnet,
+            determinant_fn_mode=determinant_fn_mode,
             brute_force_subtype=brute_force_subtype,
         ).model
         models.construct.get_model_from_config(
@@ -394,7 +400,14 @@ def test_get_model_from_default_config():
             for subtype in ["rank_one", "double"]:
                 _construct_model(model_type, brute_force_subtype=subtype)
         elif model_type == "ferminet":
-            for use_det_resnet in [False, True]:
-                _construct_model(model_type, use_det_resnet=use_det_resnet)
+            _construct_model(model_type, use_det_resnet=False)
+            for mode in [
+                "sign_covariance",
+                "parallel_even",
+                "pairwise_even",
+            ]:
+                _construct_model(
+                    model_type, use_det_resnet=True, determinant_fn_mode=mode
+                )
         else:
             _construct_model(model_type)
