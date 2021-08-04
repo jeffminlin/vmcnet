@@ -1,5 +1,5 @@
 """Main VMC loop."""
-from typing import Dict, Tuple, Optional
+from typing import Tuple, Optional
 
 import jax.numpy as jnp
 
@@ -8,23 +8,6 @@ from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, GetAmplitudeFromData, P, S
-
-
-def _add_amplitude_to_metrics_if_requested(
-    metrics: Dict,
-    data: D,
-    record_amplitudes: bool,
-    get_amplitude_fn: Optional[GetAmplitudeFromData[D]],
-) -> None:
-    if record_amplitudes:
-        if get_amplitude_fn is None:
-            raise ValueError(
-                "record_amplitudes set to True, but get_amplitude_fn "
-                "function is None."
-            )
-        amplitudes = get_amplitude_fn(data)
-        metrics["amplitude_min"] = jnp.min(amplitudes)
-        metrics["amplitude_max"] = jnp.max(amplitudes)
 
 
 def vmc_loop(
@@ -141,10 +124,6 @@ def vmc_loop(
 
             metrics["accept_ratio"] = accept_ratio
 
-            _add_amplitude_to_metrics_if_requested(
-                metrics, data, record_amplitudes, get_amplitude_fn
-            )
-
             (
                 checkpoint_metric,
                 checkpoint_str,
@@ -172,6 +151,8 @@ def vmc_loop(
                 checkpoint_if_nans=checkpoint_if_nans,
                 only_checkpoint_first_nans=only_checkpoint_first_nans,
                 saved_nans_checkpoint=saved_nans_checkpoint,
+                record_amplitudes=record_amplitudes,
+                get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 

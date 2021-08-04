@@ -18,7 +18,7 @@ import jax.numpy as jnp
 
 import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
-from vmcnet.utils.typing import CheckpointData, D, P, S
+from vmcnet.utils.typing import CheckpointData, D, GetAmplitudeFromData, P, S
 
 T = TypeVar("T")
 
@@ -230,6 +230,23 @@ def finish_checkpointing(
         checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
 
 
+def _add_amplitude_to_metrics_if_requested(
+    metrics: Dict,
+    data: D,
+    record_amplitudes: bool,
+    get_amplitude_fn: Optional[GetAmplitudeFromData[D]],
+) -> None:
+    if record_amplitudes:
+        if get_amplitude_fn is None:
+            raise ValueError(
+                "record_amplitudes set to True, but get_amplitude_fn "
+                "function is None."
+            )
+        amplitudes = get_amplitude_fn(data)
+        metrics["amplitude_min"] = jnp.min(amplitudes)
+        metrics["amplitude_max"] = jnp.max(amplitudes)
+
+
 def get_checkpoint_metric(
     energy_running_avg: jnp.float32,
     variance_running_avg: jnp.float32,
@@ -313,6 +330,8 @@ def save_metrics_and_handle_checkpoints(
     checkpoint_if_nans: bool = False,
     only_checkpoint_first_nans: bool = True,
     saved_nans_checkpoint: bool = False,
+    record_amplitudes: bool = False,
+    get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
 ) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]], bool]:
     """Checkpoint the current state of the VMC loop.
 
@@ -391,6 +410,10 @@ def save_metrics_and_handle_checkpoints(
             best_checkpoint_data,
             saved_nans_checkpoint,
         )
+
+    _add_amplitude_to_metrics_if_requested(
+        metrics, data, record_amplitudes, get_amplitude_fn
+    )
 
     checkpoint_str, saved_nans_checkpoint = save_metrics_and_regular_checkpoint(
         epoch,
