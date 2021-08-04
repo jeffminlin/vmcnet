@@ -26,7 +26,10 @@ from .equivariance import (
 )
 from .invariance import InvariantTensor
 from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
-from .sign_symmetry import make_array_list_fn_sign_covariant
+from .sign_symmetry import (
+    make_array_list_fn_sign_covariant,
+    make_array_list_fn_sign_invariant,
+)
 from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
@@ -105,6 +108,7 @@ def get_model_from_config(
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
+                make_odd_fn_from_even=model_config.make_odd_fn_from_even,
             )
         elif model_config.type == "embedded_particle_ferminet":
             invariance_config = model_config.invariance
@@ -143,6 +147,7 @@ def get_model_from_config(
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
                 determinant_fn=determinant_fn,
+                make_odd_fn_from_even=model_config.make_odd_fn_from_even,
             )
 
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
@@ -523,6 +528,13 @@ class FermiNet(flax.linen.Module):
             wavefunction value is calculated as the sum of the product of the
             determinants, where the product is taken across the nspins spins and the sum
             is taken across the ndeterminants determinants. Defaults to None.
+        make_odd_fn_from_even (bool, optional): whether to make determinant_fn odd (or
+            sign-covariant) by starting with an even function and multiplying by odd
+            linear terms. For example, for ndeterminants=1, and the up and down spin
+            determinants are d1 and d2, they will be combined into d1*d2*g(d1, d2),
+            where g(d1, d2) is an even function made by symmetrizing the provided
+            determinant_fn. For more determinants, many such terms are combined.
+            Defaults to False.
     """
 
     spin_split: SpinSplit
@@ -535,6 +547,7 @@ class FermiNet(flax.linen.Module):
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
+    make_odd_fn_from_even: bool = False
 
     def setup(self):
         """Setup backflow."""
@@ -542,10 +555,16 @@ class FermiNet(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
         self._sign_cov_det_fn = None
-        if self.determinant_fn is not None:
-            self._sign_cov_det_fn = make_array_list_fn_sign_covariant(
-                self.determinant_fn
-            )
+        self._sign_inv_det_fn = None
+        if self.determinant_fn:
+            if self.make_odd_fn_from_even:
+                self._sign_inv_det_fn = make_array_list_fn_sign_invariant(
+                    self.determinant_fn
+                )
+            else:
+                self._sign_cov_det_fn = make_array_list_fn_sign_covariant(
+                    self.determinant_fn
+                )
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -587,6 +606,16 @@ class FermiNet(flax.linen.Module):
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
             psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
+            return jnp.log(jnp.abs(psi))
+        elif self._sign_inv_det_fn is not None:
+            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+            dets = jax.tree_map(jnp.linalg.det, orbitals)
+            # Swap axes to get shape [nspins: (..., ndeterminants)]
+            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
+            # Shape (..., d) where d hopefully = ndets^nspins
+            even_outputs = self._sign_inv_det_fn(fn_inputs)
+            det_prods = fn_inputs[0] * fn_inputs[1]
+            psi = jnp.squeeze(det_prods * even_outputs, axis=-1)
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
