@@ -135,6 +135,7 @@ def vmc_loop(
                 params,
                 old_state,
                 old_data,
+                data,
                 old_key,
                 metrics,
                 nchains,

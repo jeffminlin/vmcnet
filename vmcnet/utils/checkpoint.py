@@ -313,7 +313,8 @@ def save_metrics_and_handle_checkpoints(
     old_params: P,
     new_params: P,
     optimizer_state: S,
-    data: D,
+    old_data: D,
+    new_data: D,
     key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
@@ -350,7 +351,9 @@ def save_metrics_and_handle_checkpoints(
         new_params (pytree-like): model parameters, from after the update function.
         optimizer_state (pytree-like): running state of the optimizer other than the
             trainable parameters. Needs to be serialiable via `np.savez`
-        data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
+        old_data (pytree-like): previous mcmc data (e.g. position and amplitude data).
+            Needs to be serializable via `np.savez`
+        new_data (pytree-like): new mcmc data (e.g. position and amplitude data). Needs
             to be serializable via `np.savez`
         metrics (dict): dictionary of metrics. If this is not None, then it must include
             "energy" and "variance". Metrics are currently flattened and written to a
@@ -412,7 +415,7 @@ def save_metrics_and_handle_checkpoints(
         )
 
     _add_amplitude_to_metrics_if_requested(
-        metrics, data, record_amplitudes, get_amplitude_fn
+        metrics, new_data, record_amplitudes, get_amplitude_fn
     )
 
     checkpoint_str, saved_nans_checkpoint = save_metrics_and_regular_checkpoint(
@@ -420,7 +423,7 @@ def save_metrics_and_handle_checkpoints(
         old_params,
         new_params,
         optimizer_state,
-        data,
+        old_data,
         key,
         metrics,
         logdir,
@@ -442,7 +445,7 @@ def save_metrics_and_handle_checkpoints(
         epoch,
         old_params,
         optimizer_state,
-        data,
+        old_data,
         key,
         metrics,
         nchains,
