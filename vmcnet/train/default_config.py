@@ -156,7 +156,7 @@ def get_default_model_config() -> ConfigDict:
                             "register_kfac": True,
                         }
                     ),
-                    "make_odd_fn_from_even": False,
+                    "determinant_fn_mode": "parallel_even",
                 }
             ),
             "orbital_cofactor_net": ConfigDict(

@@ -108,7 +108,7 @@ def get_model_from_config(
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn_builder=determinant_fn_builder,
-                make_odd_fn_from_even=model_config.make_odd_fn_from_even,
+                determinant_fn_mode=model_config.determinant_fn_mode,
             )
         elif model_config.type == "embedded_particle_ferminet":
             invariance_config = model_config.invariance
@@ -147,7 +147,7 @@ def get_model_from_config(
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
                 determinant_fn_builder=determinant_fn_builder,
-                make_odd_fn_from_even=model_config.make_odd_fn_from_even,
+                determinant_fn_mode=model_config.determinant_fn_mode,
             )
 
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
@@ -432,18 +432,13 @@ def get_resnet_determinant_fn_builder_for_ferminet(
     use_bias: bool = True,
     register_kfac: bool = False,
 ) -> DeterminantFnBuilder:
-    """Get a resnet-based determinant function for FermiNet construction.
+    """Get a builder for a resnet-based determinant function for FermiNet construction.
 
-    This is used as a more general way to combine the determinant outputs into the
-    final wavefunction value, relative to the original method of a sum of products.
-
-    Note: the parameters for this network should be chosen so as to make it not too
-    close to an odd function. If the Resnet were to be perfectly odd, for example by
-    using a tanh activation function and no biases, then the wavefunction would end
-    up being uniformly zero when there are an even number of spins, after the sign
-    covariant symmetrization is applied. This somewhat paradoxical phenomenon comes from
-    the fact that a per-spin odd function is actually even with respect to the inputs as
-    a whole, since for two spins for example f(s1, s2) = -f(-s1, s2) = f(-s1, -s2).
+    The built function is used as a more general way to combine the determinant
+    outputs into the final wavefunction value, relative to the original method of a
+    sum of products. A function builder is required rather than a simple function
+    because several variants of this method are supported, and each requires the
+    function to generate a different output size.
 
     Args:
         ndense (int): the number of neurons in the dense layers
@@ -459,17 +454,19 @@ def get_resnet_determinant_fn_builder_for_ferminet(
             overridden with care. The reason for the instability is not known.
 
     Returns:
-        (Callable[[ArrayList, jnp.ndarray]): A resnet-based function which takes as
-        input a list of nspins arrays of shape (..., ndeterminants) and outputs a
-        single array of shape (..., 1).
+        (DeterminantFnBuilder): A builder for a resnet-based function. The builder
+        accepts an integer dout specifying the required output size, and returns a
+        corresponding ResNet-based function. The function accepts as input a list of
+        nspins arrays of shape (..., ndeterminants) and outputs a single array of shape
+        (..., dout).
     """
 
-    def get_fn(nout: int) -> DeterminantFn:
+    def get_fn(dout: int) -> DeterminantFn:
         def fn(det_values: ArrayList) -> jnp.ndarray:
             concat_values = jnp.concatenate(det_values, axis=-1)
             return SimpleResNet(
                 ndense,
-                nout,
+                dout,
                 nlayers,
                 activation,
                 kernel_initializer,
@@ -561,8 +558,7 @@ class FermiNet(flax.linen.Module):
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
     determinant_fn_builder: Optional[DeterminantFnBuilder] = None
-    determinant_fn_mode: str
-    make_odd_fn_from_even: bool = False
+    determinant_fn_mode: str = "parallel_even"
 
     def setup(self):
         """Setup backflow and symmetrized determinant function."""
