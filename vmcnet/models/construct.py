@@ -653,13 +653,13 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
 
     spin_split: SpinSplit
     nslave_fermions_per_spin: Union[int, Sequence[int]]
-    backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
-    invariance_backflow: Callable[[jnp.ndarray], Tuple[jnp.ndarray, jnp.ndarray]]
+    invariance_backflow: Backflow
     invariance_kernel_initializer: WeightInitializer
     invariance_bias_initializer: WeightInitializer
     orbitals_use_bias: bool = True
@@ -668,7 +668,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     invariance_register_kfac: bool = True
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
-    def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]):
+    def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]) -> Sequence[int]:
         if isinstance(self.nslave_fermions_per_spin, int):
             return [n + self.nslave_fermions_per_spin for n in nelec_per_spin]
 
@@ -676,13 +676,17 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             n + self.nslave_fermions_per_spin[i] for i, n in enumerate(nelec_per_spin)
         ]
 
-    def _get_invariance_output_shape_per_spin(self, nspins: int, d: int):
+    def _get_invariance_output_shape_per_spin(
+        self, nspins: int, d: int
+    ) -> Sequence[Tuple[int, int]]:
         if isinstance(self.nslave_fermions_per_spin, int):
             return [(self.nslave_fermions_per_spin, d)] * nspins
 
         return [(n, d) for n in self.nslave_fermions_per_spin]
 
-    def _get_invariant_tensor(self, output_shape_per_spin):
+    def _get_invariant_tensor(
+        self, output_shape_per_spin: Sequence[Tuple[int, int]]
+    ) -> InvariantTensor:
         return InvariantTensor(
             self.spin_split,
             output_shape_per_spin,
@@ -693,7 +697,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             self.invariance_register_kfac,
         )
 
-    def _get_ferminet(self, total_spin_split: SpinSplit):
+    def _get_ferminet(self, total_spin_split: SpinSplit) -> FermiNet:
         return FermiNet(
             total_spin_split,
             self.backflow,
@@ -734,6 +738,16 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
         d = elec_pos.shape[-1]
         real_nelec_per_spin = get_nelec_per_spin(self.spin_split, real_nelec_total)
         nspins = len(real_nelec_per_spin)
+        if (
+            isinstance(self.nslave_fermions_per_spin, Sequence)
+            and len(self.nslave_fermions_per_spin) != nspins
+        ):
+            raise ValueError(
+                "Length of nslave_fermions_per_spin does not match number of spins. "
+                "Provided {} for {} spins.".format(
+                    len(self.nslave_fermions_per_spin), nspins
+                )
+            )
 
         invariance_output_shape_per_spin = self._get_invariance_output_shape_per_spin(
             nspins, d

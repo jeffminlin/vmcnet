@@ -89,7 +89,6 @@ def get_default_model_config() -> ConfigDict:
             "cyclic_spins": cyclic_spins,
         }
     )
-    # TODO (ggoldsh): should any of the defaults be different for this?
     embedded_slave_fermion_backflow = ferminet_backflow
 
     determinant_resnet = ConfigDict(
