@@ -75,10 +75,10 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type in ["ferminet", "embedded_particle_ferminet"]:
-        determinant_fn = None
+        determinant_fn_builder = None
         if model_config.use_det_resnet:
             resnet_config = model_config.det_resnet
-            determinant_fn = get_resnet_determinant_fn_for_ferminet(
+            determinant_fn_builder = get_resnet_determinant_fn_builder_for_ferminet(
                 resnet_config.ndense,
                 resnet_config.nlayers,
                 _get_named_activation_fn(resnet_config.activation),
@@ -107,7 +107,7 @@ def get_model_from_config(
                 ),
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
-                determinant_fn=determinant_fn,
+                determinant_fn_builder=determinant_fn_builder,
                 make_odd_fn_from_even=model_config.make_odd_fn_from_even,
             )
         elif model_config.type == "embedded_particle_ferminet":
@@ -146,7 +146,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
-                determinant_fn=determinant_fn,
+                determinant_fn_builder=determinant_fn_builder,
                 make_odd_fn_from_even=model_config.make_odd_fn_from_even,
             )
 
@@ -419,7 +419,7 @@ def get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
-def get_resnet_determinant_fn_for_ferminet(
+def get_resnet_determinant_fn_builder_for_ferminet(
     ndense: int,
     nlayers: int,
     activation: Activation,
@@ -427,7 +427,7 @@ def get_resnet_determinant_fn_for_ferminet(
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
     register_kfac: bool = False,
-) -> Callable[[ArrayList], jnp.ndarray]:
+) -> Callable[[int], Callable[[ArrayList], jnp.ndarray]]:
     """Get a resnet-based determinant function for FermiNet construction.
 
     This is used as a more general way to combine the determinant outputs into the
@@ -460,20 +460,23 @@ def get_resnet_determinant_fn_for_ferminet(
         single array of shape (..., 1).
     """
 
-    def fn(det_values: ArrayList) -> jnp.ndarray:
-        concat_values = jnp.concatenate(det_values, axis=-1)
-        return SimpleResNet(
-            ndense,
-            1,
-            nlayers,
-            activation,
-            kernel_initializer,
-            bias_initializer,
-            use_bias,
-            register_kfac=register_kfac,
-        )(concat_values)
+    def get_fn(nout: int) -> Callable[[ArrayList], jnp.ndarray]:
+        def fn(det_values: ArrayList) -> jnp.ndarray:
+            concat_values = jnp.concatenate(det_values, axis=-1)
+            return SimpleResNet(
+                ndense,
+                nout,
+                nlayers,
+                activation,
+                kernel_initializer,
+                bias_initializer,
+                use_bias,
+                register_kfac=register_kfac,
+            )(concat_values)
 
-    return fn
+        return fn
+
+    return get_fn
 
 
 class FermiNet(flax.linen.Module):
@@ -546,7 +549,9 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
+    determinant_fn_builder: Optional[
+        Callable[[int], Callable[[ArrayList], jnp.ndarray]]
+    ] = None
     make_odd_fn_from_even: bool = False
 
     def setup(self):
@@ -556,15 +561,13 @@ class FermiNet(flax.linen.Module):
         self._backflow = self.backflow
         self._sign_cov_det_fn = None
         self._sign_inv_det_fn = None
-        if self.determinant_fn:
+        if self.determinant_fn_builder:
             if self.make_odd_fn_from_even:
-                self._sign_inv_det_fn = make_array_list_fn_sign_invariant(
-                    self.determinant_fn
-                )
+                det_fn = self.determinant_fn_builder(self.ndeterminants)
+                self._sign_inv_det_fn = make_array_list_fn_sign_invariant(det_fn)
             else:
-                self._sign_cov_det_fn = make_array_list_fn_sign_covariant(
-                    self.determinant_fn
-                )
+                det_fn = self.determinant_fn_builder(1)
+                self._sign_cov_det_fn = make_array_list_fn_sign_covariant(det_fn)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -615,7 +618,7 @@ class FermiNet(flax.linen.Module):
             # Shape (..., d) where d hopefully = ndets^nspins
             even_outputs = self._sign_inv_det_fn(fn_inputs)
             det_prods = fn_inputs[0] * fn_inputs[1]
-            psi = jnp.squeeze(det_prods * even_outputs, axis=-1)
+            psi = jnp.sum(det_prods * even_outputs, axis=-1)
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
