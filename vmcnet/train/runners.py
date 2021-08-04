@@ -23,7 +23,15 @@ import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
-from vmcnet.utils.typing import P, D, S, ModelApply, OptimizerState
+from vmcnet.utils.typing import (
+    P,
+    D,
+    S,
+    GetPositionFromData,
+    GetAmplitudeFromData,
+    ModelApply,
+    OptimizerState,
+)
 
 FLAGS = flags.FLAGS
 
@@ -277,7 +285,7 @@ def _get_learning_rate_schedule(vmc_config: ConfigDict) -> Callable[[int], jnp.f
 def _get_kfac_update_fn(
     params: P,
     data: D,
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: jnp.ndarray,
     learning_rate_schedule: Callable[[int], jnp.float32],
@@ -318,7 +326,7 @@ def _get_kfac_update_fn(
 
 def _get_adam_update_fn(
     params: P,
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
@@ -352,7 +360,7 @@ def _get_update_fn_and_init_optimizer(
     vmc_config: ConfigDict,
     params: P,
     data: D,
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: jnp.ndarray,
     apply_pmap: bool = True,
@@ -411,6 +419,7 @@ def _setup_vmc(
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
+    GetAmplitudeFromData[dwpa.DWPAData],
     flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
@@ -430,6 +439,7 @@ def _setup_vmc(
     data = _make_initial_data(
         log_psi.apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
+    get_amplitude_fn = pacore.get_amplitude_from_data
 
     # Setup metropolis step
     burning_step, walker_fn = _get_mcmc_fns(
@@ -459,6 +469,7 @@ def _setup_vmc(
         walker_fn,
         local_energy_fn,
         update_param_fn,
+        get_amplitude_fn,
         params,
         data,
         optimizer_state,
@@ -471,7 +482,7 @@ def _setup_eval(
     config: ConfigDict,
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
-    get_position_fn: Callable[[dwpa.DWPAData], jnp.ndarray],
+    get_position_fn: GetPositionFromData[dwpa.DWPAData],
     apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
@@ -532,6 +543,7 @@ def _burn_and_run_vmc(
     burning_step: mcmc.metropolis.BurningStep[P, D],
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
+    get_amplitude_fn: GetAmplitudeFromData[D],
     key: jnp.ndarray,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, jnp.ndarray]:
@@ -571,6 +583,8 @@ def _burn_and_run_vmc(
         checkpoint_variance_scale=checkpoint_variance_scale,
         checkpoint_if_nans=checkpoint_if_nans,
         only_checkpoint_first_nans=only_checkpoint_first_nans,
+        record_amplitudes=run_config.record_amplitudes,
+        get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
     )
 
@@ -610,6 +624,7 @@ def run_molecule() -> None:
         walker_fn,
         local_energy_fn,
         update_param_fn,
+        get_amplitude_fn,
         params,
         data,
         optimizer_state,
@@ -655,6 +670,7 @@ def run_molecule() -> None:
         burning_step,
         walker_fn,
         update_param_fn,
+        get_amplitude_fn,
         key,
         should_checkpoint=True,
     )
@@ -697,6 +713,7 @@ def run_molecule() -> None:
         eval_burning_step,
         eval_walker_fn,
         eval_update_param_fn,
+        get_amplitude_fn,
         key,
         should_checkpoint=False,
     )

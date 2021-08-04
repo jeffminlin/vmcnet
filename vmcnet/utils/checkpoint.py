@@ -18,7 +18,7 @@ import jax.numpy as jnp
 
 import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
-from vmcnet.utils.typing import CheckpointData, D, P, S
+from vmcnet.utils.typing import CheckpointData, D, GetAmplitudeFromData, P, S
 
 T = TypeVar("T")
 
@@ -230,6 +230,23 @@ def finish_checkpointing(
         checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
 
 
+def _add_amplitude_to_metrics_if_requested(
+    metrics: Dict,
+    data: D,
+    record_amplitudes: bool,
+    get_amplitude_fn: Optional[GetAmplitudeFromData[D]],
+) -> None:
+    if record_amplitudes:
+        if get_amplitude_fn is None:
+            raise ValueError(
+                "record_amplitudes set to True, but get_amplitude_fn "
+                "function is None."
+            )
+        amplitudes = get_amplitude_fn(data)
+        metrics["amplitude_min"] = jnp.min(amplitudes)
+        metrics["amplitude_max"] = jnp.max(amplitudes)
+
+
 def get_checkpoint_metric(
     energy_running_avg: jnp.float32,
     variance_running_avg: jnp.float32,
@@ -291,12 +308,15 @@ def _should_save_nans_checkpoint(
     return _check_for_nans(metrics, new_params)
 
 
+# TODO (ggoldsh): encapsulate the numerous settings passed into this function into some
+# sort of checkpointing/logging object.
 def save_metrics_and_handle_checkpoints(
     epoch: int,
     old_params: P,
     new_params: P,
     optimizer_state: S,
-    data: D,
+    old_data: D,
+    new_data: D,
     key: jnp.ndarray,
     metrics: Dict,
     nchains: int,
@@ -313,6 +333,8 @@ def save_metrics_and_handle_checkpoints(
     checkpoint_if_nans: bool = False,
     only_checkpoint_first_nans: bool = True,
     saved_nans_checkpoint: bool = False,
+    record_amplitudes: bool = False,
+    get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
 ) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]], bool]:
     """Checkpoint the current state of the VMC loop.
 
@@ -331,7 +353,9 @@ def save_metrics_and_handle_checkpoints(
         new_params (pytree-like): model parameters, from after the update function.
         optimizer_state (pytree-like): running state of the optimizer other than the
             trainable parameters. Needs to be serialiable via `np.savez`
-        data (pytree-like): current mcmc data (e.g. position and amplitude data). Needs
+        old_data (pytree-like): previous mcmc data (e.g. position and amplitude data).
+            Needs to be serializable via `np.savez`
+        new_data (pytree-like): new mcmc data (e.g. position and amplitude data). Needs
             to be serializable via `np.savez`
         metrics (dict): dictionary of metrics. If this is not None, then it must include
             "energy" and "variance". Metrics are currently flattened and written to a
@@ -392,12 +416,16 @@ def save_metrics_and_handle_checkpoints(
             saved_nans_checkpoint,
         )
 
+    _add_amplitude_to_metrics_if_requested(
+        metrics, new_data, record_amplitudes, get_amplitude_fn
+    )
+
     checkpoint_str, saved_nans_checkpoint = save_metrics_and_regular_checkpoint(
         epoch,
         old_params,
         new_params,
         optimizer_state,
-        data,
+        old_data,
         key,
         metrics,
         logdir,
@@ -419,7 +447,7 @@ def save_metrics_and_handle_checkpoints(
         epoch,
         old_params,
         optimizer_state,
-        data,
+        old_data,
         key,
         metrics,
         nchains,
@@ -632,6 +660,7 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     energy_str = "Energy: %(energy).5e"
     variance_str = "Variance: %(variance).5e"
     accept_ratio_str = "Accept ratio: %(accept_ratio).5f"
+    amplitude_str = ""
 
     if "energy_noclip" in metrics:
         energy_str = energy_str + " (%(energy_noclip).5e)"
@@ -639,7 +668,12 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     if "variance_noclip" in metrics:
         variance_str = variance_str + " (%(variance_noclip).5e)"
 
-    info_out = ", ".join([epoch_str, energy_str, variance_str, accept_ratio_str])
+    if "amplitude_min" in metrics:
+        amplitude_str = "Min/max amplitude: %(amplitude_min).2f/%(amplitude_max).2f"
+
+    info_out = ", ".join(
+        [epoch_str, energy_str, variance_str, accept_ratio_str, amplitude_str]
+    )
     info_out = info_out + checkpoint_str
 
     logged_metrics = {"epoch": epoch + 1}

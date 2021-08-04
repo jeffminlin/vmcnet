@@ -9,7 +9,15 @@ from kfac_ferminet_alpha import optimizer as kfac_opt
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import tree_reduce_l1
-from vmcnet.utils.typing import D, ModelApply, OptimizerState, P, PyTree, S
+from vmcnet.utils.typing import (
+    D,
+    GetPositionFromData,
+    ModelApply,
+    OptimizerState,
+    P,
+    PyTree,
+    S,
+)
 
 UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
 
@@ -54,7 +62,7 @@ def _make_traced_fn_with_single_metrics(
 def create_grad_energy_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[P, D, S]:
@@ -71,7 +79,8 @@ def create_grad_energy_update_param_fn(
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         optimizer_apply (Callable): applies an update to the parameters. Has signature
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
-        get_position_fn (Callable): gets the walker positions from the MCMC data
+        get_position_fn (GetPositionFromData): gets the walker positions from the MCMC
+            data.
         apply_pmap (bool, optional): whether to apply jax.pmap to the walker function.
             If False, applies jax.jit. Defaults to True.
 
@@ -116,7 +125,7 @@ def _get_traced_compute_param_norm(
 def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
@@ -125,8 +134,8 @@ def create_kfac_update_param_fn(
         optimizer (kfac_ferminet_alpha.Optimizer): instance of the Optimizer class from
             kfac_ferminet_alpha
         damping (jnp.float32): damping coefficient
-        get_position_from_data (Callable): function which gets the walker positions from
-            the data. Has signature data -> jnp.ndarray
+        get_position_fn (GetPositionFromData): function which gets the walker positions
+            from the data. Has signature data -> jnp.ndarray
 
     Returns:
         Callable: function which updates the parameters given the current data, params,
@@ -182,7 +191,7 @@ def create_kfac_update_param_fn(
 def create_eval_update_param_fn(
     local_energy_fn: ModelApply[P],
     nchains: int,
-    get_position_fn: Callable[[D], jnp.ndarray],
+    get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_local_energies: bool = True,
     nan_safe: bool = False,
@@ -196,7 +205,8 @@ def create_eval_update_param_fn(
             (params, x) -> (Hpsi / psi)(x)
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
-        get_position_fn (Callable): gets the walker positions from the MCMC data
+        get_position_fn (GetPositionFromData): gets the walker positions from the MCMC
+            data.
         nan_safe (bool): whether or not to mask local energy nans in the evaluation
             process. This option should not be used under normal circumstances, as the
             energy estimates are of unclear validity if nans are masked. However,

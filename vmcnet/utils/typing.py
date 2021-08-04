@@ -61,3 +61,6 @@ SpinSplit = Union[int, Sequence[int]]
 Backflow = Callable[[jnp.ndarray], Tuple[jnp.ndarray, Optional[jnp.ndarray]]]
 
 ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
+
+GetPositionFromData = Callable[[D], jnp.ndarray]
+GetAmplitudeFromData = GetPositionFromData[D]

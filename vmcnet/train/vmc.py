@@ -7,7 +7,7 @@ from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, P, S
+from vmcnet.utils.typing import D, GetAmplitudeFromData, P, S
 
 
 def vmc_loop(
@@ -26,6 +26,8 @@ def vmc_loop(
     checkpoint_variance_scale: float = 10.0,
     checkpoint_if_nans: bool = False,
     only_checkpoint_first_nans: bool = True,
+    record_amplitudes: bool = False,
+    get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
 ) -> Tuple[P, S, D, jnp.ndarray]:
     """Main Variational Monte Carlo loop routine.
@@ -133,6 +135,7 @@ def vmc_loop(
                 params,
                 old_state,
                 old_data,
+                data,
                 old_key,
                 metrics,
                 nchains,
@@ -149,6 +152,8 @@ def vmc_loop(
                 checkpoint_if_nans=checkpoint_if_nans,
                 only_checkpoint_first_nans=only_checkpoint_first_nans,
                 saved_nans_checkpoint=saved_nans_checkpoint,
+                record_amplitudes=record_amplitudes,
+                get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
