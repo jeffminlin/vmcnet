@@ -104,19 +104,19 @@ def _make_ferminets():
     return key, init_pos, log_psis
 
 
-def _make_embedded_slave_ferminets():
+def _make_embedded_particle_ferminets():
     key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
 
     log_psis = []
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    nslave_fermions_per_spin_vals = [(2, 3), 2]
+    nhidden_fermions_per_spin_vals = [(2, 3), 2]
 
-    for nslave_fermions_per_spin in nslave_fermions_per_spin_vals:
-        log_psi = models.construct.EmbeddedSlaveFermiNet(
+    for nhidden_fermions_per_spin in nhidden_fermions_per_spin_vals:
+        log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
-            nslave_fermions_per_spin,
+            nhidden_fermions_per_spin,
             backflow,
             3,
             models.weights.get_kernel_initializer("he_normal"),
@@ -250,15 +250,15 @@ def test_ferminet_can_be_evaluated():
     (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
 
 
-def test_embedded_slave_ferminet_can_be_constructed():
-    """Check construction of EmbeddedSlaveFermiNet does not fail."""
-    _make_embedded_slave_ferminets()
+def test_embedded_particle_ferminet_can_be_constructed():
+    """Check construction of EmbeddedParticleFerminet does not fail."""
+    _make_embedded_particle_ferminets()
 
 
 @pytest.mark.slow
-def test_embedded_slave_ferminet_can_be_evaluated():
-    """Check evaluation of EmbeddedSlaveFermiNet does not fail."""
-    key, init_pos, log_psis = _make_embedded_slave_ferminets()
+def test_embedded_particle_ferminet_can_be_evaluated():
+    """Check evaluation of EmbeddedParticleFerminet does not fail."""
+    key, init_pos, log_psis = _make_embedded_particle_ferminets()
     (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
 
 
@@ -317,7 +317,7 @@ def test_get_model_from_default_config():
 
     for model_type in [
         "ferminet",
-        "embedded_slave_ferminet",
+        "embedded_particle_ferminet",
         "orbital_cofactor_net",
         "per_particle_dets_net",
         "brute_force_antisym",
@@ -333,7 +333,7 @@ def test_get_model_from_default_config():
                 model_config = get_default_config_with_chosen_model(model_type).model
                 model_config.use_det_resnet = use_det_resnet
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
-        elif model_type == "embedded_slave_ferminet":
+        elif model_type == "embedded_particle_ferminet":
             model_config = get_default_config_with_chosen_model(model_type).model
             models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:

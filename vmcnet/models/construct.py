@@ -70,7 +70,7 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    if model_config.type in ["ferminet", "embedded_slave_ferminet"]:
+    if model_config.type in ["ferminet", "embedded_particle_ferminet"]:
         determinant_fn = None
         if model_config.use_det_resnet:
             resnet_config = model_config.det_resnet
@@ -105,7 +105,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
             )
-        elif model_config.type == "embedded_slave_ferminet":
+        elif model_config.type == "embedded_particle_ferminet":
             invariance_config = model_config.invariance
             invariance_backflow = get_backflow_from_config(
                 invariance_config.backflow,
@@ -113,9 +113,9 @@ def get_model_from_config(
                 spin_split,
                 dtype=dtype,
             )
-            return EmbeddedSlaveFermiNet(
+            return EmbeddedParticleFermiNet(
                 spin_split,
-                model_config.nslave_fermions_per_spin,
+                model_config.nhidden_fermions_per_spin,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
@@ -586,7 +586,7 @@ class FermiNet(flax.linen.Module):
         return log_psi
 
 
-class EmbeddedSlaveFermiNet(flax.linen.Module):
+class EmbeddedParticleFermiNet(flax.linen.Module):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
     Attributes:
@@ -599,10 +599,10 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        nslave_fermions_per_spin (int or Sequence[int]): number of slave fermions to
+        nhidden_fermions_per_spin (int or Sequence[int]): number of hidden fermions to
             generate for each spin. If an integer, the same number will be used for
             each spin. If a sequence, must have length nspins, and each value in the
-            sequence will specify the number of slave fermions for the corresponding
+            sequence will specify the number of hidden fermions for the corresponding
             spin.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
@@ -625,7 +625,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
         invariance_backflow (Callable): backflow function to be used for the invariance
-            which generates the slave fermion positions.
+            which generates the hidden fermion positions.
         invariance_kernel_initializer (WeightInitializer): kernel initializer for the
             invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
         invariance_bias_initializer (WeightInitializer): bias initializer for the
@@ -652,7 +652,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    nslave_fermions_per_spin: Union[int, Sequence[int]]
+    nhidden_fermions_per_spin: Union[int, Sequence[int]]
     backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -669,20 +669,20 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
 
     def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]) -> Sequence[int]:
-        if isinstance(self.nslave_fermions_per_spin, int):
-            return [n + self.nslave_fermions_per_spin for n in nelec_per_spin]
+        if isinstance(self.nhidden_fermions_per_spin, int):
+            return [n + self.nhidden_fermions_per_spin for n in nelec_per_spin]
 
         return [
-            n + self.nslave_fermions_per_spin[i] for i, n in enumerate(nelec_per_spin)
+            n + self.nhidden_fermions_per_spin[i] for i, n in enumerate(nelec_per_spin)
         ]
 
     def _get_invariance_output_shape_per_spin(
         self, nspins: int, d: int
     ) -> Sequence[Tuple[int, int]]:
-        if isinstance(self.nslave_fermions_per_spin, int):
-            return [(self.nslave_fermions_per_spin, d)] * nspins
+        if isinstance(self.nhidden_fermions_per_spin, int):
+            return [(self.nhidden_fermions_per_spin, d)] * nspins
 
-        return [(n, d) for n in self.nslave_fermions_per_spin]
+        return [(n, d) for n in self.nhidden_fermions_per_spin]
 
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
@@ -716,10 +716,10 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
         """Use invariance to generate hidden particles, then Ferminet to calculate Psi.
 
         In this model, the set of input particles is expanded for each spin with a set
-        of permutation invariant "slave fermions." These extra slave fermions
+        of permutation invariant "hidden" fermions. These extra hidden fermions
         effectively move the problem into a higher dimensional space, resulting in
         larger orbital matrices and potentially a more expressive ansatz than a regular
-        FermiNet. Due to the invariance of these slave fermions with respect
+        FermiNet. Due to the invariance of these hidden fermions with respect
         to the original input particle permutation, the ansatz is still antisymmetric
         with respect to the original input particles only.
 
@@ -739,13 +739,13 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
         real_nelec_per_spin = get_nelec_per_spin(self.spin_split, real_nelec_total)
         nspins = len(real_nelec_per_spin)
         if (
-            isinstance(self.nslave_fermions_per_spin, Sequence)
-            and len(self.nslave_fermions_per_spin) != nspins
+            isinstance(self.nhidden_fermions_per_spin, Sequence)
+            and len(self.nhidden_fermions_per_spin) != nspins
         ):
             raise ValueError(
-                "Length of nslave_fermions_per_spin does not match number of spins. "
+                "Length of nhidden_fermions_per_spin does not match number of spins. "
                 "Provided {} for {} spins.".format(
-                    len(self.nslave_fermions_per_spin), nspins
+                    len(self.nhidden_fermions_per_spin), nspins
                 )
             )
 
@@ -762,7 +762,7 @@ class EmbeddedSlaveFermiNet(flax.linen.Module):
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         split_hidden_particles = invariance(elec_pos)
-        # Create overall list of [real_pos_spin1, slave_pos_spin1, real_pos_spin2, ...],
+        # Create list of [real_pos_spin1, hidden_pos_spin1, real_pos_spin2, ...],
         # so that the full input positions can be created with a single concatenation.
         split_all_particles = [
             p

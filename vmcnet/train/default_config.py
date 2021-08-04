@@ -89,7 +89,7 @@ def get_default_model_config() -> ConfigDict:
             "cyclic_spins": cyclic_spins,
         }
     )
-    embedded_slave_fermion_backflow = ferminet_backflow
+    embedded_particle_fermion_backflow = ferminet_backflow
 
     determinant_resnet = ConfigDict(
         {
@@ -143,13 +143,13 @@ def get_default_model_config() -> ConfigDict:
         {
             "type": "ferminet",
             "ferminet": base_ferminet_config,
-            "embedded_slave_ferminet": ConfigDict(
+            "embedded_particle_ferminet": ConfigDict(
                 {
                     **base_ferminet_config,
-                    "nslave_fermions_per_spin": (2, 2),
+                    "nhidden_fermions_per_spin": (2, 2),
                     "invariance": ConfigDict(
                         {
-                            "backflow": embedded_slave_fermion_backflow,
+                            "backflow": embedded_particle_fermion_backflow,
                             "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                             "bias_initializer": normal_init,
                             "use_bias": True,
