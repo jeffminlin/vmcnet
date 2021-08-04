@@ -526,22 +526,29 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn_builder (DeterminantFnBuilder, optional): An arbitrary
+        determinant_fn_builder (DeterminantFnBuilder, optional): A builder for a
             function that can map an ArrayList of nspins determinant outputs of shape
-            (..., ndeterminants) to a single output array of shape (..., 1). If
-            provided, this function will be symmetrized to be sign-covariant (odd) with
-            respect to each spin, and will then be used to combine the orbital
-            determinants into the final wavefunction value. If not provided, the final
-            wavefunction value is calculated as the sum of the product of the
-            determinants, where the product is taken across the nspins spins and the sum
-            is taken across the ndeterminants determinants. Defaults to None.
-        make_odd_fn_from_even (bool, optional): whether to make determinant_fn odd (or
-            sign-covariant) by starting with an even function and multiplying by odd
-            linear terms. For example, for ndeterminants=1, and the up and down spin
-            determinants are d1 and d2, they will be combined into d1*d2*g(d1, d2),
-            where g(d1, d2) is an even function made by symmetrizing the provided
-            determinant_fn. For more determinants, many such terms are combined.
-            Defaults to False.
+            (..., ndeterminants) to a single output array of shape (..., d). If
+            provided, the built function will be used to calculate Psi based on the
+            outputs of the orbital matrix determinants. Depending on the
+            determinant_fn_mode selected, this function can be used in one of several
+            ways. If the mode is "sign_covariance", the function will use d=1
+            and will be explicitly symmetrized over the sign group, on a per-spin basis,
+            to be sign-covariant (odd). If "parallel_even" or "pairwise_even" are
+            selected, the function will be symmetrized to be spin-wise sign invariant
+            (even). For "parallel_even", the function will use d=ndeterminants, and each
+            output will be multiplied by the product of corresponding determinants. That
+            is, for 2 spins, with up determinants u_i and down determinants d_i, the
+            ansatz will be sum_{i}(u_i * d_i * f_i(u,d)). For "pairwise_even", the
+            function will use d=ndeterminants**nspins, and each output will again be
+            multiplied by a product of determinants, but this time the determinants will
+            range over all pairs. That is, for 2 spins, the ansatz will be
+            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
+            supports nspins = 2. Defaults to None.
+        determinant_fn_mode (str, optional): One of "sign_covariance", "parallel_even",
+            or "pairwise_even". Used to decide how exactly to use the
+            provided determinant_fn_builder to calculate an ansatz for Psi; irrelevant
+            if no determinant_fn_builder is provided. Defaults to "parallel_even."
     """
 
     spin_split: SpinSplit
@@ -554,22 +561,87 @@ class FermiNet(flax.linen.Module):
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
     determinant_fn_builder: Optional[DeterminantFnBuilder] = None
+    determinant_fn_mode: str
     make_odd_fn_from_even: bool = False
 
     def setup(self):
-        """Setup backflow."""
+        """Setup backflow and symmetrized determinant function."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
-        self._sign_cov_det_fn = None
-        self._sign_inv_det_fn = None
+        self._symmetrized_det_fn = None
         if self.determinant_fn_builder is not None:
-            if self.make_odd_fn_from_even:
-                det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
-                self._sign_inv_det_fn = make_array_list_fn_sign_invariant(det_fn)
-            else:
+            if self.determinant_fn_mode == "sign_covariance":
                 det_fn = self.determinant_fn_builder(1)
-                self._sign_cov_det_fn = make_array_list_fn_sign_covariant(det_fn)
+                self._symmetrized_det_fn = make_array_list_fn_sign_covariant(det_fn)
+            elif self.determinant_fn_mode == "parallel_even":
+                det_fn = self.determinant_fn_builder(self.ndeterminants)
+                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
+            elif self.determinant_fn_mode == "pairwise_even":
+                # TODO (ggoldsh): build support for "pairwise_even" for nspins != 2
+                det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
+                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
+            else:
+                raise ValueError(
+                    "Only supported determinant function modes are sign_covariance, "
+                    "parallel_even, and pairwise_even. Received {}.".format(
+                        self.determinant_fn_mode
+                    )
+                )
+
+    def _calculate_psi_sign_covariance(self, orbitals: ArrayList):
+        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+        dets = jax.tree_map(jnp.linalg.det, orbitals)
+        # Swap axes to get shape [nspins: (..., ndeterminants)]
+        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
+        psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
+        return jnp.log(jnp.abs(psi))
+
+    def _calculate_psi_parallel_even(self, orbitals: ArrayList):
+        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+        dets = jax.tree_map(jnp.linalg.det, orbitals)
+        # Swap axes to get shape [nspins: (..., ndeterminants)]
+        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
+
+        # even_outputs has shape (..., ndeterminantss)
+        even_outputs = self._symmetrized_det_fn(fn_inputs)
+        # stacked_dets has shape (..., ndeterminants, nspins)
+        stacked_dets = jnp.stack(fn_inputs, axis=-1)
+        # prod_dets has shape (..., ndeterminants)
+        prod_dets = jnp.prod(stacked_dets, axis=-1)
+        psi = jnp.sum(prod_dets * even_outputs, axis=-1)
+        return jnp.log(jnp.abs(psi))
+
+    def _calculate_psi_pairwise_even(self, orbitals: ArrayList):
+        if len(orbitals) != -2:
+            raise ValueError(
+                "For pairwise_even determinant_fn_mode, only nspins=2 is supported."
+                "Received nspins={}.".format(len(orbitals))
+            )
+
+        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+        dets = jax.tree_map(jnp.linalg.det, orbitals)
+        # Swap axes to get shape [nspins: (..., ndeterminants)]
+        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
+
+        # even_outputs is shape (..., ndets**2)
+        even_outputs = self._symmetrized_det_fn(fn_inputs)
+
+        # up_dets, down_dets are shape (..., ndeterminants, 1),  (..., 1, ndeterminants)
+        up_dets = jnp.expand_dims(fn_inputs[0], -1)
+        down_dets = jnp.expand_dims(fn_inputs[1], -2)
+        # prod_dets is shape (..., ndeterminants, ndeterminants)
+        prod_dets = up_dets * down_dets
+        # Reshape prod_dets to (..., ndeterminants**2)
+        prod_dets = jnp.reshape(
+            prod_dets,
+            (
+                *prod_dets.shape[:-2],
+                prod_dets.shape[-1] * prod_dets.shape[-2],
+            ),
+        )
+        psi = jnp.sum(prod_dets * even_outputs, axis=-1)
+        return jnp.log(jnp.abs(psi))
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -605,34 +677,13 @@ class FermiNet(flax.linen.Module):
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
-        if self._sign_cov_det_fn is not None:
-            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
-            dets = jax.tree_map(jnp.linalg.det, orbitals)
-            # Swap axes to get shape [nspins: (..., ndeterminants)]
-            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-            psi = jnp.squeeze(self._sign_cov_det_fn(fn_inputs), -1)
-            return jnp.log(jnp.abs(psi))
-        elif self._sign_inv_det_fn is not None:
-            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
-            dets = jax.tree_map(jnp.linalg.det, orbitals)
-            # Swap axes to get shape [nspins: (..., ndeterminants)]
-            fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-
-            # Shape (..., d) where d hopefully = ndets^2
-            even_outputs = self._sign_inv_det_fn(fn_inputs)
-
-            up_dets = jnp.expand_dims(fn_inputs[0], -1)
-            down_dets = jnp.expand_dims(fn_inputs[1], -2)
-            prod_dets = up_dets * down_dets
-            shaped_prod_dets = jnp.reshape(
-                prod_dets,
-                (
-                    *prod_dets.shape[:-2],
-                    prod_dets.shape[-1] * prod_dets.shape[-2],
-                ),
-            )
-            psi = jnp.sum(shaped_prod_dets * even_outputs, axis=-1)
-            return jnp.log(jnp.abs(psi))
+        if self._symmetrized_det_fn is not None:
+            if self.determinant_fn_mode == "sign_covariance":
+                return self._calculate_psi_sign_covariance(orbitals)
+            elif self.determinant_fn_mode == "parallel_even":
+                return self._calculate_psi_parallel_even(orbitals)
+            elif self.determinant_fn_mode == "pairwise_even":
+                return self._calculate_psi_pairwise_even(orbitals)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
