@@ -549,10 +549,11 @@ class FermiNet(flax.linen.Module):
             (even). For "parallel_even", the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
-            ansatz will be sum_{i}(u_i * d_i * f_i(u,d)). For "pairwise_even", the
-            function will use d=ndeterminants**nspins, and each output will again be
-            multiplied by a product of determinants, but this time the determinants will
-            range over all pairs. That is, for 2 spins, the ansatz will be
+            ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
+            symmetrized determinant function. For "pairwise_even", the function will use
+            d=ndeterminants**nspins, and each output will again be multiplied by a
+            product of determinants, but this time the determinants will range over all
+            pairs. That is, for 2 spins, the ansatz will be
             sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
             supports nspins = 2. Defaults to None.
         determinant_fn_mode (DeterminantFnMode, optional): One of "sign_covariance",
@@ -599,6 +600,7 @@ class FermiNet(flax.linen.Module):
                 )
 
     def _calculate_psi_sign_covariance(self, orbitals: ArrayList):
+        """Calculate psi using a function directly symmetrized to be sign covariant."""
         # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
         dets = jax.tree_map(jnp.linalg.det, orbitals)
         # Swap axes to get shape [nspins: (..., ndeterminants)]
@@ -607,6 +609,7 @@ class FermiNet(flax.linen.Module):
         return jnp.log(jnp.abs(psi))
 
     def _calculate_psi_parallel_even(self, orbitals: ArrayList):
+        """Calculate psi as an even fn. times products of corresponding determinants."""
         # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
         dets = jax.tree_map(jnp.linalg.det, orbitals)
         # Swap axes to get shape [nspins: (..., ndeterminants)]
@@ -622,6 +625,7 @@ class FermiNet(flax.linen.Module):
         return jnp.log(jnp.abs(psi))
 
     def _calculate_psi_pairwise_even(self, orbitals: ArrayList):
+        """Calculate psi as an even fn. times products of all pairs of determinants."""
         if len(orbitals) != 2:
             raise ValueError(
                 "For pairwise_even determinant_fn_mode, only nspins=2 is supported. "
@@ -633,7 +637,7 @@ class FermiNet(flax.linen.Module):
         # Swap axes to get shape [nspins: (..., ndeterminants)]
         fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
 
-        # even_outputs is shape (..., ndets**2)
+        # even_outputs is shape (..., ndeterminants**2)
         even_outputs = self._symmetrized_det_fn(fn_inputs)
 
         # up_dets, down_dets are shape (..., ndeterminants, 1),  (..., 1, ndeterminants)

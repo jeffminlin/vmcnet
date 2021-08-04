@@ -168,6 +168,8 @@ def test_make_sl_array_list_fn_sign_covariant():
         return array_to_slog(output)
 
     covariant_fn = sign_sym.make_sl_array_list_fn_sign_covariant(fn)
+    # Compare final results in the non-log domain for better numerical accuracy and
+    # lower permissible tolerances.
     result = array_from_slog(covariant_fn(slog_inputs))
     chex.assert_shape(result, (nbatch, dout))
     flip_sign_result = array_from_slog(covariant_fn(flip_slog_inputs))
