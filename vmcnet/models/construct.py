@@ -419,6 +419,10 @@ def get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
+DeterminantFn = Callable[[ArrayList], jnp.ndarray]
+DeterminantFnBuilder = Callable[[int], DeterminantFn]
+
+
 def get_resnet_determinant_fn_builder_for_ferminet(
     ndense: int,
     nlayers: int,
@@ -427,7 +431,7 @@ def get_resnet_determinant_fn_builder_for_ferminet(
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
     register_kfac: bool = False,
-) -> Callable[[int], Callable[[ArrayList], jnp.ndarray]]:
+) -> DeterminantFnBuilder:
     """Get a resnet-based determinant function for FermiNet construction.
 
     This is used as a more general way to combine the determinant outputs into the
@@ -460,7 +464,7 @@ def get_resnet_determinant_fn_builder_for_ferminet(
         single array of shape (..., 1).
     """
 
-    def get_fn(nout: int) -> Callable[[ArrayList], jnp.ndarray]:
+    def get_fn(nout: int) -> DeterminantFn:
         def fn(det_values: ArrayList) -> jnp.ndarray:
             concat_values = jnp.concatenate(det_values, axis=-1)
             return SimpleResNet(
@@ -522,7 +526,7 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn (Callable[[ArrayList], jnp.ndarray], optional): An arbitrary
+        determinant_fn_builder (DeterminantFnBuilder, optional): An arbitrary
             function that can map an ArrayList of nspins determinant outputs of shape
             (..., ndeterminants) to a single output array of shape (..., 1). If
             provided, this function will be symmetrized to be sign-covariant (odd) with
@@ -549,9 +553,7 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    determinant_fn_builder: Optional[
-        Callable[[int], Callable[[ArrayList], jnp.ndarray]]
-    ] = None
+    determinant_fn_builder: Optional[DeterminantFnBuilder] = None
     make_odd_fn_from_even: bool = False
 
     def setup(self):
@@ -561,9 +563,9 @@ class FermiNet(flax.linen.Module):
         self._backflow = self.backflow
         self._sign_cov_det_fn = None
         self._sign_inv_det_fn = None
-        if self.determinant_fn_builder:
+        if self.determinant_fn_builder is not None:
             if self.make_odd_fn_from_even:
-                det_fn = self.determinant_fn_builder(self.ndeterminants)
+                det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
                 self._sign_inv_det_fn = make_array_list_fn_sign_invariant(det_fn)
             else:
                 det_fn = self.determinant_fn_builder(1)
@@ -615,10 +617,21 @@ class FermiNet(flax.linen.Module):
             dets = jax.tree_map(jnp.linalg.det, orbitals)
             # Swap axes to get shape [nspins: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-            # Shape (..., d) where d hopefully = ndets^nspins
+
+            # Shape (..., d) where d hopefully = ndets^2
             even_outputs = self._sign_inv_det_fn(fn_inputs)
-            det_prods = fn_inputs[0] * fn_inputs[1]
-            psi = jnp.sum(det_prods * even_outputs, axis=-1)
+
+            up_dets = jnp.expand_dims(fn_inputs[0], -1)
+            down_dets = jnp.expand_dims(fn_inputs[1], -2)
+            prod_dets = up_dets * down_dets
+            shaped_prod_dets = jnp.reshape(
+                prod_dets,
+                (
+                    *prod_dets.shape[:-2],
+                    prod_dets.shape[-1] * prod_dets.shape[-2],
+                ),
+            )
+            psi = jnp.sum(shaped_prod_dets * even_outputs, axis=-1)
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
