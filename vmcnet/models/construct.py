@@ -204,7 +204,7 @@ def get_model_from_config(
         if model_config.use_products_covariance:
             array_list_sign_covariance = ProductsSignCovariance(
                 1,
-                model_config.products_covariance.kernel_init,
+                kernel_init_constructor(model_config.products_covariance.kernel_init),
                 model_config.products_covariance.register_kfac,
             )
 
@@ -921,14 +921,14 @@ class AntiequivarianceNet(flax.linen.Module):
             [(..., nelec[spin], d_antieq)]  -> (..., n, d_equiv).
             All outputs of this function are made covariant with respect to each input
             sign, and an odd invariance is created by summing over the last two
-            dimensions of the output. Only one of array_list_equivariance and
+            dimensions of the output. Exactly one of array_list_equivariance and
             array_list_sign_covariance should be provided for any given instance.
             Defaults to None.
         array_list_sign_covariance (Callable, optional): function which is sign-
             covariant with respect to each spin. Has the signature
             [(..., nelec[spin], d_antieq)]  -> (..., n, d_antisym). Since this function
             is sign covariant, its outputs are antisymmetric, so Psi can be calculated
-            by summing over the final axis of the result.O nly one of
+            by summing over the final axis of the result. Exactly one of
             array_list_equivariance and array_list_sign_covariance should be provided
             for any given instance. Defaults to None.
     """
@@ -944,8 +944,6 @@ class AntiequivarianceNet(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
         self._antiequivariant_layer = self.antiequivariant_layer
-        self._array_list_equivariance = self.array_list_equivariance
-        self._array_list_sign_covariance = self.array_list_sign_covariance
 
         nfunctions_provided = sum(
             x is not None
@@ -959,19 +957,13 @@ class AntiequivarianceNet(flax.linen.Module):
                 )
             )
 
-        def log_psi_from_antieq(x: ArrayList):
-            if self._array_list_sign_covariance is not None:
-                antisym_vector = self._array_list_sign_covariance(x)
+        self._sign_cov_fn = self.array_list_sign_covariance
 
-            else:
-                sign_cov_equivariance = make_array_list_fn_sign_covariant(
-                    self._array_list_equivariance, axis=-3
-                )
-                antisym_vector = jnp.sum(sign_cov_equivariance(x), axis=-2)
-
-            return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
-
-        self._log_psi_from_antieq = log_psi_from_antieq
+        if self.array_list_equivariance:
+            sign_cov_equivariance = make_array_list_fn_sign_covariant(
+                self.array_list_equivariance, axis=-3
+            )
+            self._sign_cov_fn = lambda x: jnp.sum(sign_cov_equivariance(x), axis=-2)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -987,7 +979,8 @@ class AntiequivarianceNet(flax.linen.Module):
         """
         backflow_out, r_ei, _ = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
-        return self._log_psi_from_antieq(antiequivariant_out)
+        antisym_vector = self._sign_cov_fn(antiequivariant_out)
+        return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

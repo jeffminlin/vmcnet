@@ -306,12 +306,11 @@ class ProductsSignCovariance(flax.linen.Module):
 
     Only supports two spins at the moment. Given per-spin antiequivariant vectors
     a_1, a_2, ..., and b_1, b_2, ..., computes an antisymmetry of
-    sum_{i,j} w_{i,j}a_ib_j, or multiply such antisymmetries if features>1.
+    sum_{i,j} w_{i,j} dot(a_i, b_j), or multiple such antisymmetries if features>1. If
 
     Attributes:
         features (int): the number of antisymmetric output features to generate.
-        kernel_init (WeightInitializer): initializer for the weights of the dense layer
-            that represents the weights with which the products are combined.
+        kernel_init (WeightInitializer): initializer for the weights of the dense layer.
         register_kfac (bool): whether to register the dense layer with KFAC. Defaults to
             True.
     """
@@ -325,14 +324,15 @@ class ProductsSignCovariance(flax.linen.Module):
         """Calculate weighted sum of products of up- and down-spin antiequivariances.
 
         Arguments:
-            x (ArrayList): input antiequivariant values of shape
+            x (ArrayList): input antiequivariant arrays of shape
                 [(..., nelec_up, d), (..., nelec_down, d)]
 
         Returns:
             jnp.ndarray: array of length features of antisymmetric values calculated
-                by taking a weighted sum of the pairwise products of the up- and
+                by taking a weighted sum of the pairwise dot-products of the up- and
                 down-spin antiequivariant inputs.
         """
+        # TODO (ggoldsh): update this to support nspins != 2 as well
         if len(x) != 2:
             raise ValueError(
                 "Products covariance only supported for nspins=2, got {}".format(len(x))
