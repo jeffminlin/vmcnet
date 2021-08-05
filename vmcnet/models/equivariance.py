@@ -525,6 +525,7 @@ class FermiNetBackflow(flax.linen.Module):
             electron-ion displacements (..., nelec, nion, d). r_ei is None if
             self.ion_pos is None.
         """
+        # TODO (ggoldsh): move this computation out of the backflow layer
         stream_1e, stream_2e, r_ei = compute_input_streams(
             elec_pos,
             self.ion_pos,
