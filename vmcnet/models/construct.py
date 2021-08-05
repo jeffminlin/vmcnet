@@ -734,10 +734,12 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        real_nelec_total = elec_pos.shape[-2]
+        visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
-        real_nelec_per_spin = get_nelec_per_spin(self.spin_split, real_nelec_total)
-        nspins = len(real_nelec_per_spin)
+        visible_nelec_per_spin = get_nelec_per_spin(
+            self.spin_split, visible_nelec_total
+        )
+        nspins = len(visible_nelec_per_spin)
         if (
             isinstance(self.nhidden_fermions_per_spin, Sequence)
             and len(self.nhidden_fermions_per_spin) != nspins
@@ -754,7 +756,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         )
         invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
 
-        total_nelec_per_spin = self._get_total_nelec_per_spin(real_nelec_per_spin)
+        total_nelec_per_spin = self._get_total_nelec_per_spin(visible_nelec_per_spin)
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
         total_spin_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
@@ -762,7 +764,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         split_hidden_particles = invariance(elec_pos)
-        # Create list of [real_pos_spin1, hidden_pos_spin1, real_pos_spin2, ...],
+        # Create list of [visible_pos_spin1, hidden_pos_spin1, visible_pos_spin2, ...],
         # so that the full input positions can be created with a single concatenation.
         split_all_particles = [
             p
