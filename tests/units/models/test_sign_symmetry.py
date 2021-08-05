@@ -184,6 +184,7 @@ def test_make_sl_array_list_fn_sign_covariant():
     np.testing.assert_allclose(same_sign_result, result, atol=1e-6)
 
 
+@pytest.mark.slow
 def test_products_sign_covariance():
     """Test ProductsSignCovariance can be evaluated and is sign covariant."""
     nbatch = 5
