@@ -113,7 +113,14 @@ def _make_ferminets():
 
 
 def _make_embedded_particle_ferminets():
-    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+    (
+        key,
+        ion_pos,
+        _,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
 
     log_psis = []
     cyclic_spins = False
