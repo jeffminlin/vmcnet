@@ -25,10 +25,12 @@ def test_electron_electron_add_norm():
         [target_input_2e, jnp.linalg.norm(target_input_2e, axis=-1, keepdims=True)],
         axis=-1,
     )
-
+    input_2e, _ = models.equivariance.compute_electron_electron(
+        elec_pos, include_ee_norm=True
+    )
     np.testing.assert_allclose(
+        input_2e,
         target_input_2e,
-        models.equivariance.compute_electron_electron(elec_pos, include_ee_norm=True),
     )
 
 

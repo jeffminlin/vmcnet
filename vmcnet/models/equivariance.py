@@ -9,7 +9,14 @@ import jax.numpy as jnp
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import ArrayList, SpinSplit
-from .core import Activation, Dense, _split_mean, _valid_skip, get_nspins
+from .core import (
+    Activation,
+    Dense,
+    _split_mean,
+    _valid_skip,
+    compute_ee_norm_with_safe_diag,
+    get_nspins,
+)
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
 
@@ -28,7 +35,9 @@ def compute_input_streams(
     include_ee: bool = True,
     include_ei_norm: bool = True,
     include_ee_norm: bool = True,
-) -> Tuple[jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]]:
+) -> Tuple[
+    jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray], Optional[jnp.ndarray]
+]:
     """Create input streams with electron and optionally ion data.
 
     If `ion_pos` is given, computes the electron-ion displacements (i.e. nuclear
@@ -53,7 +62,12 @@ def compute_input_streams(
             in the two-electron input. Defaults to True.
 
     Returns:
-        (jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]):
+        (
+            jnp.ndarray,
+            Optional[jnp.ndarray],
+            Optional[jnp.ndarray],
+            Optional[jnp.ndarray],
+        ):
 
         first output: one-electron input of shape (..., nelec, d'), where
             d' = d if `ion_pos` is None,
@@ -66,14 +80,17 @@ def compute_input_streams(
 
         third output: electron-ion displacements of shape (..., nelec, nion, d)
 
-        If `include_ee` is False, then the second output is None. If `ion_pos` is None,
-        then the third output is None.
+        fourth output: electron-electron displacements of shape (..., nelec, nelec, d)
+
+        If `include_ee` is False, then the second and fourth outputs are None. If
+        `ion_pos` is None, then the third output is None.
     """
     input_1e, r_ei = compute_electron_ion(elec_pos, ion_pos, include_ei_norm)
     input_2e = None
+    r_ee = None
     if include_ee:
-        input_2e = compute_electron_electron(elec_pos, include_ee_norm)
-    return input_1e, input_2e, r_ei
+        input_2e, r_ee = compute_electron_electron(elec_pos, include_ee_norm)
+    return input_1e, input_2e, r_ei, r_ee
 
 
 def compute_electron_ion(
@@ -114,7 +131,7 @@ def compute_electron_ion(
 
 def compute_electron_electron(
     elec_pos: jnp.ndarray, include_ee_norm: bool = True
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Compute electron-electron displacements and optionally add on the distances.
 
     Args:
@@ -123,23 +140,20 @@ def compute_electron_electron(
             in the two-electron input. Defaults to True.
 
     Returns:
-        jnp.ndarray: two-electron input of shape (..., nelec, nelec, d'), where
+        (jnp.ndarray, jnp.ndarray):
+
+        first output: two-electron input of shape (..., nelec, nelec, d'), where
             d' = d if `include_ee_norm` is False, and
             d' = d + 1 if `include_ee_norm` is True
+
+        second output: two-electron displacements of shape (..., nelec, nelec, d)
     """
-    input_2e = _compute_displacements(elec_pos, elec_pos)
+    r_ee = _compute_displacements(elec_pos, elec_pos)
+    input_2e = r_ee
     if include_ee_norm:
-        # Avoid computing norm(x - x) along the diagonal, since autograd will be
-        # unhappy about differentiating through the norm function evaluated at 0.
-        # Instead compute 0 * norm(x - x + 1) along the diagonal.
-        n = elec_pos.shape[-2]
-        eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
-        r_ee_diag_ones = input_2e + eye_n
-        r_ee_norm = jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (
-            1.0 - eye_n
-        )
+        r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
         input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
-    return input_2e
+    return input_2e, r_ee
 
 
 class FermiNetOneElectronLayer(flax.linen.Module):
@@ -512,21 +526,22 @@ class FermiNetBackflow(flax.linen.Module):
 
     def __call__(
         self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]]:
         """Create input streams and iteratively apply residual blocks.
 
         Args:
             elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
 
         Returns:
-            (jnp.ndarray, optional jnp.ndarray): tuple of (stream_1e, r_ei) where
-            stream_1e is the output of the one-electron stream after applying
-            self.residual_blocks to the initial input streams, and r_ei is the
-            electron-ion displacements (..., nelec, nion, d). r_ei is None if
-            self.ion_pos is None.
+            (jnp.ndarray, optional jnp.ndarray, optional jnp.ndarray): tuple of
+            (stream_1e, r_ei, r_ee) where stream_1e is the output of the one-electron
+            stream after applying self.residual_blocks to the initial input streams,
+            r_ei is the electron-ion displacements (..., nelec, nion, d), and r_ee is
+            the electron-electron displacements (..., nelec, nelec, d). r_ei is None if
+            self.ion_pos is None. r_ee is None if self.include_2e_stream is None.
         """
         # TODO (ggoldsh): move this computation out of the backflow layer
-        stream_1e, stream_2e, r_ei = compute_input_streams(
+        stream_1e, stream_2e, r_ei, r_ee = compute_input_streams(
             elec_pos,
             self.ion_pos,
             include_ee=self.include_2e_stream,
@@ -537,7 +552,7 @@ class FermiNetBackflow(flax.linen.Module):
         for block in self._residual_block_list:
             stream_1e, stream_2e = block(stream_1e, stream_2e)
 
-        return stream_1e, r_ei
+        return stream_1e, r_ei, r_ee
 
 
 class SplitDense(flax.linen.Module):

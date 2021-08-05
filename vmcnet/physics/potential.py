@@ -1,4 +1,5 @@
 """Potential energy terms."""
+from typing import Tuple
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import ModelApply, ModelParams
@@ -36,6 +37,15 @@ def _compute_soft_norm(
     return jnp.sqrt(
         jnp.sum(jnp.square(displacements), axis=-1) + jnp.square(softening_term)
     )
+
+
+def _get_ion_ion_info(
+    ion_locations: jnp.ndarray, ion_charges: jnp.ndarray
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    """Get pairwise ion-ion displacements and charge-charge products."""
+    ion_ion_displacements = _compute_displacements(ion_locations, ion_locations)
+    charge_charge_prods = jnp.expand_dims(ion_charges, axis=-1) * ion_charges
+    return ion_ion_displacements, charge_charge_prods
 
 
 def create_electron_ion_coulomb_potential(
@@ -125,9 +135,10 @@ def create_ion_ion_coulomb_potential(
         (params, electron_positions of shape (..., n_elec, d))
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
-    ion_ion_displacements = _compute_displacements(ion_locations, ion_locations)
+    ion_ion_displacements, charge_charge_prods = _get_ion_ion_info(
+        ion_locations, ion_charges
+    )
     ion_ion_distances = _compute_soft_norm(ion_ion_displacements)
-    charge_charge_prods = jnp.expand_dims(ion_charges, axis=-1) * ion_charges
     constant_potential = jnp.sum(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )

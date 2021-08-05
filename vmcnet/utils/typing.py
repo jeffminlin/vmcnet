@@ -58,7 +58,11 @@ SLArrayList = List[SLArray]
 
 SpinSplit = Union[int, Sequence[int]]
 
-Backflow = Callable[[jnp.ndarray], Tuple[jnp.ndarray, Optional[jnp.ndarray]]]
+Backflow = Callable[
+    [jnp.ndarray], Tuple[jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]]
+]
+
+Jastrow = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
 
 ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
 

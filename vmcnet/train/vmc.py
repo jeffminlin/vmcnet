@@ -156,6 +156,9 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+            # TODO: add flag which gives a way to break out of the VMC loop when the
+            # first nan has been hit, to keep jobs from running past useful output in
+            # some cases
 
         utils.checkpoint.finish_checkpointing(
             checkpoint_writer, best_checkpoint_data, logdir

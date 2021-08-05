@@ -5,12 +5,12 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 import flax
 import jax
 import jax.numpy as jnp
-from ml_collections import ConfigDict
 import numpy as np
+from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
+from vmcnet.utils.typing import ArrayList, Backflow, Jastrow, SpinSplit
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -25,7 +25,7 @@ from .equivariance import (
     FermiNetTwoElectronLayer,
 )
 from .invariance import InvariantTensor
-from .jastrow import IsotropicAtomicExpDecay
+from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
 from .sign_covariance import make_array_list_fn_sign_covariant
 from .weights import (
     WeightInitializer,
@@ -56,6 +56,7 @@ def get_model_from_config(
     model_config: ConfigDict,
     nelec: jnp.ndarray,
     ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
     dtype=jnp.float32,
 ) -> flax.linen.Module:
     """Get a model from a hyperparameter config."""
@@ -193,10 +194,13 @@ def get_model_from_config(
 
         return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
     elif model_config.type == "brute_force_antisym":
+        # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
+        jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
                 backflow,
+                jastrow,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
@@ -217,6 +221,7 @@ def get_model_from_config(
             return ComposedBruteForceAntisymmetryWithDecay(
                 spin_split,
                 backflow,
+                jastrow,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
@@ -481,8 +486,12 @@ class FermiNet(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -555,7 +564,7 @@ class FermiNet(flax.linen.Module):
         """
         nelec_total = elec_pos.shape[-2]
         norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-        stream_1e, r_ei = self._backflow(elec_pos)
+        stream_1e, r_ei, _ = self._backflow(elec_pos)
         orbitals = [
             FermiNetOrbitalLayer(
                 spin_split=self.spin_split,
@@ -606,8 +615,12 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             spin.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -782,9 +795,12 @@ class AntiequivarianceNet(flax.linen.Module):
     Attributes:
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d_backflow),
-                    r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
@@ -824,7 +840,7 @@ class AntiequivarianceNet(flax.linen.Module):
             anti-equivariant backflow. If the inputs have shape (batch_dims, nelec, d),
             then the output has shape (batch_dims,).
         """
-        backflow_out, r_ei = self._backflow(elec_pos)
+        backflow_out, r_ei, _ = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
         transformed_out = self._sign_cov_equivariance(antiequivariant_out)
         return jnp.log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
@@ -848,8 +864,19 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
+        jastrow (Callable): function which computes a Jastrow factor from displacements.
+            Has the signature
+            (
+                r_ei of shape (batch_dims, n, nion, d),
+                r_ee of shape (batch_dims, n, n, d),
+            )
+                -> log jastrow of shape (batch_dims,)
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
             ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
@@ -870,6 +897,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     spin_split: SpinSplit
     backflow: Backflow
+    jastrow: Jastrow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -883,6 +911,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
+        self._jastrow = self.jastrow
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -899,7 +928,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei = self._backflow(elec_pos)
+        stream_1e, r_ei, r_ee = self._backflow(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
             [
@@ -915,7 +944,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 for _ in split_spins
             ]
         )(split_spins)
-        jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
+        jastrow_part = self._jastrow(r_ei, r_ee)
 
         return antisymmetric_part + jastrow_part
 
@@ -941,8 +970,19 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
+        jastrow (Callable): function which computes a Jastrow factor from displacements.
+            Has the signature
+            (
+                r_ei of shape (batch_dims, n, nion, d),
+                r_ee of shape (batch_dims, n, n, d),
+            )
+                -> log jastrow of shape (batch_dims,)
         ndense_resnet (int): number of dense nodes in each layer of the ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
@@ -962,6 +1002,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
 
     spin_split: SpinSplit
     backflow: Backflow
+    jastrow: Jastrow
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -975,6 +1016,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
+        self._jastrow = self.jastrow
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -991,7 +1033,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei = self._backflow(elec_pos)
+        stream_1e, r_ei, r_ee = self._backflow(elec_pos)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = ComposedBruteForceAntisymmetrize(
             SimpleResNet(
@@ -1004,6 +1046,6 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 use_bias=self.resnet_use_bias,
             )
         )(split_spins)
-        jastrow_part = IsotropicAtomicExpDecay(self.kernel_initializer_jastrow)(r_ei)
+        jastrow_part = self._jastrow(r_ei, r_ee)
 
         return antisymmetric_part + jastrow_part
