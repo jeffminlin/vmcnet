@@ -132,9 +132,8 @@ def _make_embedded_particle_ferminets():
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    nhidden_fermions_per_spin_vals = [(2, 3), (4, 0)]
 
-    for nhidden_fermions_per_spin in nhidden_fermions_per_spin_vals:
+    for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             nhidden_fermions_per_spin,
@@ -399,13 +398,9 @@ def test_get_model_from_default_config():
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
                 _construct_model(model_type, brute_force_subtype=subtype)
-        elif model_type == "ferminet":
+        elif model_type in ["ferminet", "embedded_particle_ferminet"]:
             _construct_model(model_type, use_det_resnet=False)
-            for mode in [
-                "sign_covariance",
-                "parallel_even",
-                "pairwise_even",
-            ]:
+            for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
                 _construct_model(
                     model_type, use_det_resnet=True, determinant_fn_mode=mode
                 )

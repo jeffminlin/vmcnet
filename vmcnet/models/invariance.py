@@ -26,7 +26,7 @@ class InvariantTensor(flax.linen.Module):
         output_shape_per_spin (Sequence[Iterable[int]]): sequence of iterables which
             correspond to the desired non-batch output shapes of for each split of the
             input. This determines the output shapes for each split, i.e. the outputs
-            are shaped [(batch_dims, output_shape_per_spin[i])]
+            are shaped [(batch_dims, output_shape_per_spin[i])].
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
             elec pos of shape (..., n, d)
@@ -68,11 +68,13 @@ class InvariantTensor(flax.linen.Module):
                 "spin_split {}".format(self.output_shape_per_spin, self.spin_split)
             )
 
-        ndense_per_spin = [math.prod(shape) for shape in self.output_shape_per_spin]
+        self._ndense_per_spin = [
+            math.prod(shape) for shape in self.output_shape_per_spin
+        ]
 
         self._dense_layers = [
             Dense(
-                ndense_per_spin[i],
+                self._ndense_per_spin[i],
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
@@ -80,6 +82,15 @@ class InvariantTensor(flax.linen.Module):
             )
             for i in range(nspins)
         ]
+
+    def _get_shaped_outputs(self, invariant_in: jnp.ndarray, i: int):
+        output_shape = invariant_in.shape[:-1] + tuple(self.output_shape_per_spin[i])
+        if self._ndense_per_spin[i] == 0:
+            # Return dummy array of expected shape even when no elements are required.
+            return jnp.zeros(output_shape)
+
+        dense_out = self._dense_layers[i](invariant_in)
+        return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> ArrayList:
@@ -97,11 +108,7 @@ class InvariantTensor(flax.linen.Module):
         stream_1e = self._backflow(elec_pos)[0]
         invariant_split = _split_mean(stream_1e, self.spin_split, keepdims=False)
 
-        invariant_dense_split_out = [
-            self._dense_layers[i](invariant_in)
-            for i, invariant_in in enumerate(invariant_split)
-        ]
         return [
-            jnp.reshape(x, x.shape[:-1] + tuple(self.output_shape_per_spin[i]))
-            for i, x in enumerate(invariant_dense_split_out)
+            self._get_shaped_outputs(invariant_in, i)
+            for i, invariant_in in enumerate(invariant_split)
         ]

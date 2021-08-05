@@ -100,6 +100,7 @@ def get_default_model_config() -> ConfigDict:
             "bias_init": normal_init,
             "use_bias": True,
             "register_kfac": False,
+            "mode": "parallel_even",
         }
     )
 

@@ -21,16 +21,16 @@ def get_default_config_with_chosen_model(
     """Get default ConfigDict for a particular model type."""
     config = default_config.get_default_config()
     config.model.type = model_type
-    if brute_force_subtype is not None:
-        config.model.brute_force_antisym.antisym_type = brute_force_subtype
+    if use_det_resnet is not None:
+        config.model.ferminet.use_det_resnet = use_det_resnet
+        config.model.embedded_particle_ferminet.use_det_resnet = use_det_resnet
     if determinant_fn_mode is not None:
         config.model.ferminet.determinant_fn_mode = determinant_fn_mode
         config.model.embedded_particle_ferminet.determinant_fn_mode = (
             determinant_fn_mode
         )
-    if use_det_resnet is not None:
-        config.model.ferminet.use_det_resnet = use_det_resnet
-        config.model.embedded_particle_ferminet.use_det_resnet = use_det_resnet
+    if brute_force_subtype is not None:
+        config.model.brute_force_antisym.antisym_type = brute_force_subtype
     config.model = default_config.choose_model_type_in_model_config(config.model)
     return config
 
