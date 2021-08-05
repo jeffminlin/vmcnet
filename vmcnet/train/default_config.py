@@ -179,6 +179,8 @@ def get_default_model_config() -> ConfigDict:
                     ),
                 }
             ),
+            # TODO (ggoldsh): these two should probably be subtypes of a single
+            # "antiequivariance" model type
             "orbital_cofactor_net": antieq_config,
             "per_particle_dets_net": antieq_config,
             "brute_force_antisym": ConfigDict(
