@@ -104,6 +104,36 @@ def _make_ferminets():
     return key, init_pos, log_psis
 
 
+def _make_embedded_particle_ferminets():
+    key, ion_pos, init_pos, spin_split, ndense_list = _get_initial_pos_and_hyperparams()
+
+    log_psis = []
+    cyclic_spins = False
+    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+    invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+    nhidden_fermions_per_spin_vals = [(2, 3), 2]
+
+    for nhidden_fermions_per_spin in nhidden_fermions_per_spin_vals:
+        log_psi = models.construct.EmbeddedParticleFermiNet(
+            spin_split,
+            nhidden_fermions_per_spin,
+            backflow,
+            3,
+            models.weights.get_kernel_initializer("he_normal"),
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_kernel_initializer("ones"),
+            models.weights.get_bias_initializer("uniform"),
+            invariance_backflow=invariance_backflow,
+            invariance_kernel_initializer=models.weights.get_kernel_initializer(
+                "he_normal"
+            ),
+            invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
+        )
+        log_psis.append(log_psi)
+
+    return key, init_pos, log_psis
+
+
 def _make_antiequivariance_net(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
@@ -220,6 +250,18 @@ def test_ferminet_can_be_evaluated():
     (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
 
 
+def test_embedded_particle_ferminet_can_be_constructed():
+    """Check construction of EmbeddedParticleFerminet does not fail."""
+    _make_embedded_particle_ferminets()
+
+
+@pytest.mark.slow
+def test_embedded_particle_ferminet_can_be_evaluated():
+    """Check evaluation of EmbeddedParticleFerminet does not fail."""
+    key, init_pos, log_psis = _make_embedded_particle_ferminets()
+    (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
+
+
 def test_orbital_cofactor_net_can_be_constructed():
     """Check construction of the orbital cofactor AntiequivarianceNet does not fail."""
     _make_orbital_cofactor_net()
@@ -275,6 +317,7 @@ def test_get_model_from_default_config():
 
     for model_type in [
         "ferminet",
+        "embedded_particle_ferminet",
         "orbital_cofactor_net",
         "per_particle_dets_net",
         "brute_force_antisym",
@@ -290,6 +333,9 @@ def test_get_model_from_default_config():
                 model_config = get_default_config_with_chosen_model(model_type).model
                 model_config.use_det_resnet = use_det_resnet
                 models.construct.get_model_from_config(model_config, nelec, ion_pos)
+        elif model_type == "embedded_particle_ferminet":
+            model_config = get_default_config_with_chosen_model(model_type).model
+            models.construct.get_model_from_config(model_config, nelec, ion_pos)
         elif model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
             model_config = get_default_config_with_chosen_model(model_type).model
             models.construct.get_model_from_config(model_config, nelec, ion_pos)
