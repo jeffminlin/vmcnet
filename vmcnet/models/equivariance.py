@@ -62,7 +62,12 @@ def compute_input_streams(
             in the two-electron input. Defaults to True.
 
     Returns:
-        (jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]):
+        (
+            jnp.ndarray,
+            Optional[jnp.ndarray],
+            Optional[jnp.ndarray],
+            Optional[jnp.ndarray],
+        ):
 
         first output: one-electron input of shape (..., nelec, d'), where
             d' = d if `ion_pos` is None,
@@ -75,8 +80,10 @@ def compute_input_streams(
 
         third output: electron-ion displacements of shape (..., nelec, nion, d)
 
-        If `include_ee` is False, then the second output is None. If `ion_pos` is None,
-        then the third output is None.
+        fourth output: electron-electron displacements of shape (..., nelec, nelec, d)
+
+        If `include_ee` is False, then the second and fourth outputs are None. If
+        `ion_pos` is None, then the third output is None.
     """
     input_1e, r_ei = compute_electron_ion(elec_pos, ion_pos, include_ei_norm)
     input_2e = None
@@ -133,9 +140,13 @@ def compute_electron_electron(
             in the two-electron input. Defaults to True.
 
     Returns:
-        jnp.ndarray: two-electron input of shape (..., nelec, nelec, d'), where
+        (jnp.ndarray, jnp.ndarray):
+
+        first output: two-electron input of shape (..., nelec, nelec, d'), where
             d' = d if `include_ee_norm` is False, and
             d' = d + 1 if `include_ee_norm` is True
+
+        second output: two-electron displacements of shape (..., nelec, nelec, d)
     """
     r_ee = _compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
@@ -522,11 +533,12 @@ class FermiNetBackflow(flax.linen.Module):
             elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
 
         Returns:
-            (jnp.ndarray, optional jnp.ndarray): tuple of (stream_1e, r_ei) where
-            stream_1e is the output of the one-electron stream after applying
-            self.residual_blocks to the initial input streams, and r_ei is the
-            electron-ion displacements (..., nelec, nion, d). r_ei is None if
-            self.ion_pos is None.
+            (jnp.ndarray, optional jnp.ndarray, optional jnp.ndarray): tuple of
+            (stream_1e, r_ei, r_ee) where stream_1e is the output of the one-electron
+            stream after applying self.residual_blocks to the initial input streams,
+            r_ei is the electron-ion displacements (..., nelec, nion, d), and r_ee is
+            the electron-electron displacements (..., nelec, nelec, d). r_ei is None if
+            self.ion_pos is None. r_ee is None if self.include_2e_stream is None.
         """
         # TODO (ggoldsh): move this computation out of the backflow layer
         stream_1e, stream_2e, r_ei, r_ee = compute_input_streams(

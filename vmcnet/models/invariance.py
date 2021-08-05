@@ -29,9 +29,13 @@ class InvariantTensor(flax.linen.Module):
             are shaped [(batch_dims, output_shape_per_spin[i])]
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d)),
-            but r_ei is unused.
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                ),
+            but r_ei and r_ee are unused.
         kernel_initializer (WeightInitializer): kernel initializer for the dense
             layer(s). Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer (WeightInitializer): bias initializer for the dense layer(s).

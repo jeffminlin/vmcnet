@@ -5,8 +5,8 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 import flax
 import jax
 import jax.numpy as jnp
-from ml_collections import ConfigDict
 import numpy as np
+from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
@@ -486,8 +486,12 @@ class FermiNet(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -611,8 +615,12 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             spin.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -787,9 +795,12 @@ class AntiequivarianceNet(flax.linen.Module):
     Attributes:
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d_backflow),
-                    r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
@@ -853,8 +864,19 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
+        jastrow (Callable): function which computes a Jastrow factor from displacements.
+            Has the signature
+            (
+                r_ei of shape (batch_dims, n, nion, d),
+                r_ee of shape (batch_dims, n, n, d),
+            )
+                -> log jastrow of shape (batch_dims,)
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
             ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
@@ -948,8 +970,19 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             the total number of electrons.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            (elec pos of shape (..., n, d))
-                -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+            elec pos of shape (..., n, d)
+                -> (
+                    stream_1e of shape (..., n, d'),
+                    r_ei of shape (..., n, nion, d),
+                    r_ee of shape (..., n, n, d),
+                )
+        jastrow (Callable): function which computes a Jastrow factor from displacements.
+            Has the signature
+            (
+                r_ei of shape (batch_dims, n, nion, d),
+                r_ee of shape (batch_dims, n, n, d),
+            )
+                -> log jastrow of shape (batch_dims,)
         ndense_resnet (int): number of dense nodes in each layer of the ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
         kernel_initializer_resnet (WeightInitializer): kernel initializer for

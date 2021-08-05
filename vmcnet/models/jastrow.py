@@ -137,18 +137,22 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
 def make_molecular_decay(
     ion_charges: jnp.ndarray,
     strength: float = 1.0,
-    scale_factor: float = 0.0,
+    log_scale_factor: float = 0.0,
     logabs: bool = True,
 ) -> Jastrow:
     """Make an exp decay jastrow with both electron-ion and electron-electron effects.
+
+    This jastrow has the form
+
+        exp(sum_i (-sum_j Z_j ||elec_i - ion_j|| + sum_k ||elec_i - elec_k||)
 
     Args:
         ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
         strength (float, optional): amount to multiply the overall interaction by.
             Defaults to 1.0.
-        scale_factor (float, optional): Amount to add to the log jastrow (amounts to a
-            multiplicative factor after exponentiation). Defaults to 0.0.
+        log_scale_factor (float, optional): Amount to add to the log jastrow (amounts to
+            a multiplicative factor after exponentiation). Defaults to 0.0.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
             (False). Defaults to True.
 
@@ -157,16 +161,29 @@ def make_molecular_decay(
     """
 
     def molecular_decay(r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
+        """Non-trainable jastrow with both electron-ion and electron-electron effects.
+
+        Args:
+            r_ei (jnp.ndarray): electron-ion displacements with shape
+                (..., nion, nelec, d)
+            r_ee (jnp.ndarray): electron-electron displacements with shape
+                (..., nelec, nelec, d)
+
+        Returns:
+            jnp.ndarray:
+
+                sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k ||elec_i - elec_k||)
+
+            if logabs is True, or exp of that if logabs is False
+        """
         scaled_ei_distances = ion_charges * jnp.linalg.norm(r_ei, axis=-1)
         ee_distances = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), axis=-1)
-        interaction = strength * (
-            jnp.sum(
-                jnp.sum(jnp.triu(ee_distances), axis=-1)
-                - jnp.sum(scaled_ei_distances, axis=-1),
-                axis=-1,
-            )
-            + scale_factor
-        )
+
+        sum_ion_effect = jnp.sum(jnp.triu(ee_distances), axis=-1)
+        sum_elec_effect = jnp.sum(scaled_ei_distances, axis=-1)
+        unscaled_interaction = jnp.sum(sum_ion_effect - sum_elec_effect, axis=-1)
+        interaction = strength * (unscaled_interaction + log_scale_factor)
+
         if logabs:
             return interaction
 
@@ -200,6 +217,6 @@ def get_mol_decay_scaled_for_chargeless_molecules(
         jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
     )
     jastrow = make_molecular_decay(
-        ion_charges, scale_factor=jastrow_scale_factor, logabs=logabs
+        ion_charges, log_scale_factor=jastrow_scale_factor, logabs=logabs
     )
     return jastrow

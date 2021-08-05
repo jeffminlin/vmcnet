@@ -85,7 +85,7 @@ def _make_ferminets():
     (
         key,
         ion_pos,
-        ion_charges,
+        _,
         init_pos,
         spin_split,
         ndense_list,
@@ -166,7 +166,7 @@ def _make_orbital_cofactor_net():
     (
         key,
         ion_pos,
-        ion_charges,
+        _,
         init_pos,
         spin_split,
         ndense_list,
@@ -191,7 +191,7 @@ def _make_per_particle_dets_net():
     (
         key,
         ion_pos,
-        ion_charges,
+        _,
         init_pos,
         spin_split,
         ndense_list,
