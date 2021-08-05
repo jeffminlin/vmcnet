@@ -16,10 +16,12 @@ def test_invariant_tensor():
     key, elec_pos, perm_elec_pos, ion_pos = get_elec_and_ion_pos_from_hyperparams(
         nchains, nelec_total, nion, d, permutation
     )
+    stream_1e = elec_pos
+    perm_stream_1e = perm_elec_pos
 
-    def backflow(elec_pos):
+    def backflow(stream_1e, _stream_2e, _r_ei):
         """Simple equivariance with linear and quadratic features."""
-        return jnp.concatenate([2.0 * elec_pos, jnp.square(elec_pos)], axis=-1), None
+        return jnp.concatenate([2.0 * stream_1e, jnp.square(stream_1e)], axis=-1)
 
     kernel_init = models.weights.get_kernel_initializer("orthogonal")
     bias_init = models.weights.get_bias_initializer("normal")
@@ -32,10 +34,10 @@ def test_invariant_tensor():
         bias_initializer=bias_init,
     )
 
-    params = invariant_model.init(key, elec_pos)
+    params = invariant_model.init(key, stream_1e, None, None)
 
-    output = invariant_model.apply(params, elec_pos)
-    perm_output = invariant_model.apply(params, perm_elec_pos)
+    output = invariant_model.apply(params, stream_1e, None, None)
+    perm_output = invariant_model.apply(params, perm_stream_1e, None, None)
 
     chex.assert_shape(
         output, [(nchains,) + output_shape for output_shape in output_shape_per_spin]

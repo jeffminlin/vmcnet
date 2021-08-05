@@ -1,6 +1,6 @@
 """Permutation invariant models."""
 import math
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 import flax
 import jax.numpy as jnp
@@ -93,11 +93,18 @@ class InvariantTensor(flax.linen.Module):
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> ArrayList:
+    def __call__(
+        self,
+        stream_1e: jnp.ndarray,
+        stream_2e: Optional[jnp.ndarray],
+    ) -> ArrayList:
         """Apply backflow -> split mean -> dense to get invariance with desired shape.
 
         Args:
-            elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+            stream_1e (jnp.ndarray): one-electron input stream of shape
+                (..., nelec, d1).
+            stream_2e (jnp.ndarray, optional): two-electron input of shape
+                (..., nelec, nelec, d2).
 
         Returns:
             ArrayList: list of invariant arrays which are invariant with respect to
@@ -105,7 +112,7 @@ class InvariantTensor(flax.linen.Module):
             specified by self.output_shape_per_spin, and the other axes are shared batch
             axes
         """
-        stream_1e = self._backflow(elec_pos)[0]
+        stream_1e = self._backflow(stream_1e, stream_2e)
         invariant_split = _split_mean(stream_1e, self.spin_split, keepdims=False)
 
         return [
