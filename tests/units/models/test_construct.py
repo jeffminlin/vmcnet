@@ -111,7 +111,7 @@ def _make_embedded_particle_ferminets():
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    nhidden_fermions_per_spin_vals = [(2, 3), 2]
+    nhidden_fermions_per_spin_vals = [(2, 3), (4, 0)]
 
     for nhidden_fermions_per_spin in nhidden_fermions_per_spin_vals:
         log_psi = models.construct.EmbeddedParticleFermiNet(
@@ -247,7 +247,7 @@ def test_ferminet_can_be_constructed():
 def test_ferminet_can_be_evaluated():
     """Check evaluation of FermiNet does not fail."""
     key, init_pos, log_psis = _make_ferminets()
-    (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
 def test_embedded_particle_ferminet_can_be_constructed():
@@ -259,7 +259,7 @@ def test_embedded_particle_ferminet_can_be_constructed():
 def test_embedded_particle_ferminet_can_be_evaluated():
     """Check evaluation of EmbeddedParticleFerminet does not fail."""
     key, init_pos, log_psis = _make_embedded_particle_ferminets()
-    (_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis)
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
 def test_orbital_cofactor_net_can_be_constructed():
