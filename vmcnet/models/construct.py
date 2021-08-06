@@ -35,6 +35,7 @@ from .weights import (
     WeightInitializer,
     get_bias_init_from_config,
     get_kernel_init_from_config,
+    get_kernel_initializer,
 )
 
 
@@ -637,6 +638,33 @@ class FermiNet(flax.linen.Module):
         )
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
+    def _eval_orbitals(
+        self,
+        norbitals_per_spin: Sequence[int],
+        stream_1e: jnp.ndarray,
+        r_ei: Optional[jnp.ndarray],
+    ) -> List[ArrayList]:
+        return [
+            FermiNetOrbitalLayer(
+                spin_split=self.spin_split,
+                norbitals_per_spin=norbitals_per_spin,
+                kernel_initializer_linear=self.kernel_initializer_orbital_linear,
+                kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
+                kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
+                bias_initializer_linear=self.bias_initializer_orbital_linear,
+                use_bias=self.orbitals_use_bias,
+                isotropic_decay=self.isotropic_decay,
+            )(stream_1e, r_ei)
+            for _ in range(self.ndeterminants)
+        ]
+
+    def _get_norbitals_and_eval_orbitals(
+        self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
+    ) -> List[ArrayList]:
+        nelec_total = elec_pos.shape[-2]
+        norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        return self._eval_orbitals(norbitals_per_spin, stream_1e, r_ei)
+
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
@@ -652,22 +680,8 @@ class FermiNet(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        nelec_total = elec_pos.shape[-2]
-        norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
         stream_1e, r_ei, _ = self._backflow(elec_pos)
-        orbitals = [
-            FermiNetOrbitalLayer(
-                spin_split=self.spin_split,
-                norbitals_per_spin=norbitals_per_spin,
-                kernel_initializer_linear=self.kernel_initializer_orbital_linear,
-                kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
-                kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
-                bias_initializer_linear=self.bias_initializer_orbital_linear,
-                use_bias=self.orbitals_use_bias,
-                isotropic_decay=self.isotropic_decay,
-            )(stream_1e, r_ei)
-            for _ in range(self.ndeterminants)
-        ]
+        orbitals = self._get_norbitals_and_eval_orbitals(elec_pos, stream_1e, r_ei)
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
@@ -881,6 +895,110 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         concat_all_particles = jnp.concatenate(split_all_particles, axis=-2)
 
         return ferminet(concat_all_particles)
+
+
+class ExtendedOrbitalMatrixFermiNet(FermiNet):
+    """FermiNet-based model with larger orbital matrices via padding with invariance.
+
+    Attributes:
+        extra_dims_per_spin (Sequence[int], optional): sequence of integers specifying
+            how many extra hidden particle dimensions and corresponding virtual orbitals
+            to add to the orbital matrices. If not None, must have length nspins.
+            Defaults to None (no extra dims added, equivalent to FermiNet).
+        invariance_kernel_initializer (WeightInitializer, optional): kernel initializer
+            for the invariance dense layer. Has signature
+                (key, shape, dtype) -> jnp.ndarray.
+            Defaults to an orthogonal initializer.
+        invariance_bias_initializer (WeightInitializer, optional): bias initializer for
+            the invariance dense layer. Has signature
+                (key, shape, dtype) -> jnp.ndarray.
+            Defaults to a scaled random normal initializer.
+        orbitals_use_bias (bool, optional): whether to add a bias term in the linear
+            part of the orbitals. Defaults to True.
+        isotropic_decay (bool, optional): whether the decay for each ion should be
+            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
+            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
+            exp(-||a(r - R||)) for a number a.
+        invariance_use_bias: (bool, optional): whether to add a bias term in the dense
+            layer of the invariance. Defaults to True.
+        invariance_register_kfac (bool, optional): whether to register the dense layer
+            of the invariance with KFAC. Defaults to True.
+        invariance_backflow (Callable, optional): backflow function to be used for the
+            invariance which generates the hidden fermion positions. If None, the
+            outputs of the regular FermiNet backflow are used instead to form an
+            invariance. Defaults to None.
+    """
+
+    extra_dims_per_spin: Optional[Sequence[int]] = None
+    invariance_kernel_initializer: WeightInitializer = get_kernel_initializer(
+        "orthogonal"
+    )
+    invariance_bias_initializer: WeightInitializer = get_kernel_initializer("normal")
+    invariance_use_bias: bool = True
+    invariance_register_kfac: bool = True
+    invariance_backflow: Optional[Backflow] = None
+
+    def _get_invariance(
+        self,
+        extra_dims_per_spin: Sequence[int],  # explicit arg here to type-check not None
+        norbitals_per_spin: Sequence[int],
+        elec_pos: jnp.ndarray,
+        stream_1e: jnp.ndarray,
+    ) -> List[ArrayList]:
+        invariant_shape_per_spin = [
+            (extra_dim, norbitals_per_spin[i])
+            for i, extra_dim in enumerate(extra_dims_per_spin)
+        ]
+
+        if self.invariance_backflow is not None:
+            invariance_backflow = self.invariance_backflow
+            invariance_input = elec_pos
+        else:
+
+            def invariance_backflow(stream_1e):
+                return stream_1e, None, None
+
+            invariance_input = stream_1e
+
+        return [
+            InvariantTensor(
+                spin_split=self.spin_split,
+                output_shape_per_spin=invariant_shape_per_spin,
+                backflow=invariance_backflow,
+                kernel_initializer=self.invariance_kernel_initializer,
+                bias_initializer=self.invariance_bias_initializer,
+                use_bias=self.invariance_use_bias,
+                register_kfac=self.invariance_register_kfac,
+            )(invariance_input)
+            for _ in range(self.ndeterminants)
+        ]
+
+    def _get_norbitals_and_eval_orbitals(
+        self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
+    ) -> List[ArrayList]:
+        nelec_total = elec_pos.shape[-2]
+        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+
+        if self.extra_dims_per_spin is not None:
+            norbitals_per_spin = [
+                nelec + self.extra_dims_per_spin[i]
+                for i, nelec in enumerate(nelec_per_spin)
+            ]
+            invariant_part = self._get_invariance(
+                self.extra_dims_per_spin, norbitals_per_spin, elec_pos, stream_1e
+            )
+            equivariant_part = super()._eval_orbitals(
+                norbitals_per_spin, stream_1e, r_ei
+            )
+            return [
+                [
+                    jnp.concatenate([spin, invariant_part[det_idx][spin_idx]], axis=-2)
+                    for spin_idx, spin in enumerate(orbs)
+                ]
+                for det_idx, orbs in enumerate(equivariant_part)
+            ]
+        else:
+            return super()._eval_orbitals(nelec_per_spin, stream_1e, r_ei)
 
 
 class AntiequivarianceNet(flax.linen.Module):

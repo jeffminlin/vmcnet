@@ -154,6 +154,58 @@ def _make_embedded_particle_ferminets():
     return key, init_pos, log_psis
 
 
+def _make_extended_orbital_matrix_ferminets():
+    (
+        key,
+        ion_pos,
+        _,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
+
+    log_psis = []
+    cyclic_spins = False
+    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+    extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+
+    for extra_dims_per_spin, use_invariance_backflow in [
+        ((2, 3), True),
+        ((4, 0), False),
+    ]:
+        if use_invariance_backflow:
+            invariance_backflow = extra_backflow
+        else:
+            invariance_backflow = None
+
+        log_psi = models.construct.ExtendedOrbitalMatrixFermiNet(
+            spin_split=spin_split,
+            backflow=backflow,
+            ndeterminants=3,
+            kernel_initializer_orbital_linear=models.weights.get_kernel_initializer(
+                "he_normal"
+            ),
+            kernel_initializer_envelope_dim=models.weights.get_kernel_initializer(
+                "lecun_normal"
+            ),
+            kernel_initializer_envelope_ion=models.weights.get_kernel_initializer(
+                "ones"
+            ),
+            bias_initializer_orbital_linear=models.weights.get_bias_initializer(
+                "uniform"
+            ),
+            extra_dims_per_spin=extra_dims_per_spin,
+            invariance_backflow=invariance_backflow,
+            invariance_kernel_initializer=models.weights.get_kernel_initializer(
+                "he_normal"
+            ),
+            invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
+        )
+        log_psis.append(log_psi)
+
+    return key, init_pos, log_psis
+
+
 def _make_antiequivariance_net(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
@@ -315,6 +367,18 @@ def test_embedded_particle_ferminet_can_be_constructed():
 def test_embedded_particle_ferminet_can_be_evaluated():
     """Check evaluation of EmbeddedParticleFerminet does not fail."""
     key, init_pos, log_psis = _make_embedded_particle_ferminets()
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+
+
+def test_extended_orbital_matrix_ferminet_can_be_constructed():
+    """Check construction of EmbeddedParticleFerminet does not fail."""
+    _make_extended_orbital_matrix_ferminets()
+
+
+@pytest.mark.slow
+def test_extended_orbital_matrix_ferminet_can_be_evaluated():
+    """Check evaluation of EmbeddedParticleFerminet does not fail."""
+    key, init_pos, log_psis = _make_extended_orbital_matrix_ferminets()
     [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
