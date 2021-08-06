@@ -525,30 +525,29 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn (DeterminantFn, optional): A function that can map an ArrayList
-            of nspins determinant outputs of shape (..., ndeterminants) to a single
-            output array of shape (..., d), for any requested value of d. If
-            provided, the function will be used to calculate Psi based on the
+        determinant_fn (DeterminantFn, optional): A function with signature
+            dout, [nspins: (..., ndeterminants)] -> (..., dout).
+            If provided, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
             determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is sign_covariance, the function will use d=1
+            ways. If the mode is SIGN_COVARIANCE, the function will use d=1
             and will be explicitly symmetrized over the sign group, on a per-spin basis,
-            to be sign-covariant (odd). If "parallel_even" or "pairwise_even" are
+            to be sign-covariant (odd). If PARALLEL_EVEN or PAIRWISE_EVEN are
             selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For parallel_even, the function will use d=ndeterminants, and each
+            (even). For PARALLEL_EVEN, the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
             ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For pairwise_even, the function will use
+            symmetrized determinant function. For PAIRWISE_EVEN, the function will use
             d=ndeterminants**nspins, and each output will again be multiplied by a
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, pairwise_even mode only
+            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
             supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of sign_covariance,
-            parallel_even, or pairwise_even. Used to decide how exactly to use the
+        determinant_fn_mode (DeterminantFnMode, optional): One of SIGN_COVARIANCE,
+            PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
             provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn is provided. Defaults to parallel_even.
+            if no determinant_fn is provided. Defaults to PARALLEL_EVEN.
     """
 
     spin_split: SpinSplit
@@ -565,8 +564,8 @@ class FermiNet(flax.linen.Module):
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
-            "Only supported determinant function modes are sign_covariance, "
-            "parallel_even, and pairwise_even. Received {}.".format(
+            "Only supported determinant function modes are SIGN_COVARIANCE, "
+            "PARALLEL_EVEN, and PAIRWISE_EVEN. Received {}.".format(
                 self.determinant_fn_mode
             )
         )
@@ -587,7 +586,7 @@ class FermiNet(flax.linen.Module):
                     functools.partial(self.determinant_fn, self.ndeterminants)
                 )
             elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
-                # TODO (ggoldsh): build support for "pairwise_even" for nspins != 2
+                # TODO (ggoldsh): build support for PAIRWISE_EVEN for nspins != 2
                 self._symmetrized_det_fn = make_array_list_fn_sign_invariant(
                     functools.partial(self.determinant_fn, self.ndeterminants ** 2)
                 )
@@ -616,7 +615,7 @@ class FermiNet(flax.linen.Module):
         """
         if len(fn_inputs) != 2:
             raise ValueError(
-                "For pairwise_even determinant_fn_mode, only nspins=2 is supported. "
+                "For PAIRWISE_EVEN determinant_fn_mode, only nspins=2 is supported. "
                 "Received nspins={}.".format(len(fn_inputs))
             )
 
@@ -748,30 +747,29 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             layer of the invariance. Defaults to True.
         invariance_register_kfac (bool, optional): whether to register the dense layer
             of the invariance with KFAC. Defaults to True.
-        determinant_fn (DeterminantFn, optional): A function that can map an ArrayList
-            of nspins determinant outputs of shape (..., ndeterminants) to a single
-            output array of shape (..., d), for any requested value of d. If
-            provided, the function will be used to calculate Psi based on the
+        determinant_fn (DeterminantFn, optional):  A function with signature
+            dout, [nspins: (..., ndeterminants)] -> (..., dout).
+            If provided, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
             determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is sign_covariance, the function will use d=1
+            ways. If the mode is SIGN_COVARIANCE, the function will use d=1
             and will be explicitly symmetrized over the sign group, on a per-spin basis,
-            to be sign-covariant (odd). If "parallel_even" or "pairwise_even" are
+            to be sign-covariant (odd). If PARALLEL_EVEN or PAIRWISE_EVEN are
             selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For parallel_even, the function will use d=ndeterminants, and each
+            (even). For PARALLEL_EVEN, the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
             ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For pairwise_even, the function will use
+            symmetrized determinant function. For PAIRWISE_EVEN, the function will use
             d=ndeterminants**nspins, and each output will again be multiplied by a
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, pairwise_even mode only
+            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
             supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of sign_covariance,
-            parallel_even, or pairwise_even. Used to decide how exactly to use the
+        determinant_fn_mode (DeterminantFnMode, optional): One of SIGN_COVARIANCE,
+            PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
             provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn is provided. Defaults to parallel_even.
+            if no determinant_fn is provided. Defaults to PARALLEL_EVEN.
     """
 
     spin_split: SpinSplit
