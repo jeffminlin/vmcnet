@@ -608,11 +608,8 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        nhidden_fermions_per_spin (int or Sequence[int]): number of hidden fermions to
-            generate for each spin. If an integer, the same number will be used for
-            each spin. If a sequence, must have length nspins, and each value in the
-            sequence will specify the number of hidden fermions for the corresponding
-            spin.
+        nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
+            generate for each spin. Must have length nspins.
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
             elec pos of shape (..., n, d)
@@ -665,7 +662,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     """
 
     spin_split: SpinSplit
-    nhidden_fermions_per_spin: Union[int, Sequence[int]]
+    nhidden_fermions_per_spin: Sequence[int]
     backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -680,22 +677,6 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     invariance_use_bias: bool = True
     invariance_register_kfac: bool = True
     determinant_fn: Optional[Callable[[ArrayList], jnp.ndarray]] = None
-
-    def _get_total_nelec_per_spin(self, nelec_per_spin: Sequence[int]) -> Sequence[int]:
-        if isinstance(self.nhidden_fermions_per_spin, int):
-            return [n + self.nhidden_fermions_per_spin for n in nelec_per_spin]
-
-        return [
-            n + self.nhidden_fermions_per_spin[i] for i, n in enumerate(nelec_per_spin)
-        ]
-
-    def _get_invariance_output_shape_per_spin(
-        self, nspins: int, d: int
-    ) -> Sequence[Tuple[int, int]]:
-        if isinstance(self.nhidden_fermions_per_spin, int):
-            return [(self.nhidden_fermions_per_spin, d)] * nspins
-
-        return [(n, d) for n in self.nhidden_fermions_per_spin]
 
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
@@ -753,10 +734,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             self.spin_split, visible_nelec_total
         )
         nspins = len(visible_nelec_per_spin)
-        if (
-            isinstance(self.nhidden_fermions_per_spin, Sequence)
-            and len(self.nhidden_fermions_per_spin) != nspins
-        ):
+        if len(self.nhidden_fermions_per_spin) != nspins:
             raise ValueError(
                 "Length of nhidden_fermions_per_spin does not match number of spins. "
                 "Provided {} for {} spins.".format(
@@ -764,12 +742,15 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
                 )
             )
 
-        invariance_output_shape_per_spin = self._get_invariance_output_shape_per_spin(
-            nspins, d
-        )
+        invariance_output_shape_per_spin = [
+            (n, d) for n in self.nhidden_fermions_per_spin
+        ]
         invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
 
-        total_nelec_per_spin = self._get_total_nelec_per_spin(visible_nelec_per_spin)
+        total_nelec_per_spin = [
+            n + self.nhidden_fermions_per_spin[i]
+            for i, n in enumerate(visible_nelec_per_spin)
+        ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
         total_spin_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
