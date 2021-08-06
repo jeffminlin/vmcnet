@@ -33,16 +33,14 @@ class InvariantTensor(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
+                positions. Has the signature
+                (
                     stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                ),
-            but r_ei and r_ee are unused.
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         kernel_initializer (WeightInitializer): kernel initializer for the dense
             layer(s). Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer (WeightInitializer): bias initializer for the dense layer(s).

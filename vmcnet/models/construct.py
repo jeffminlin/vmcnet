@@ -550,14 +550,14 @@ class FermiNet(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            (
-                stream_1e of shape (..., n, d'),
-                r_ei of shape (..., n, nion, d),
-                r_ee of shape (..., n, n, d),
-            ) -> (stream_1e of shape (..., n, d'), r_ei of shape (..., n, nion, d))
+                positions. Has the signature
+                (
+                    stream_1e of shape (..., n, d'),
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -776,13 +776,11 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
                 optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
+                positions. Has the signature
+                (
                     stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -806,9 +804,14 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         invariance_backflow (Callable): backflow function to be used for the invariance
-            which generates the hidden fermion positions.
+            which generates the hidden fermion positions. Has the signature
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         invariance_kernel_initializer (WeightInitializer): kernel initializer for the
             invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
         invariance_bias_initializer (WeightInitializer): bias initializer for the
@@ -977,12 +980,10 @@ class AntiequivarianceNet(flax.linen.Module):
             )
         backflow (Callable): function which computes position features from the electron
                 positions. Has the signature
-                elec pos of shape (..., n, d)
-                    -> (
-                        stream_1e of shape (..., n, d'),
-                        r_ei of shape (..., n, nion, d),
-                        r_ee of shape (..., n, n, d),
-                    )
+                (
+                    stream_1e of shape (..., n, d'),
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
@@ -1049,15 +1050,14 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
+                positions. Has the signature
+                (
                     stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         jastrow (Callable): function which computes a Jastrow factor from displacements.
             Has the signature
             (
@@ -1165,15 +1165,14 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
+                positions. Has the signature
+                (
                     stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+                    optional stream_2e of shape (..., nelec, nelec, d2),
+                ) -> stream_1e of shape (..., n, d')
         jastrow (Callable): function which computes a Jastrow factor from displacements.
             Has the signature
             (
