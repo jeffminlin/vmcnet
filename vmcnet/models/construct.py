@@ -772,10 +772,10 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             pairs. That is, for 2 spins, the ansatz will be
             sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
             supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of "sign_covariance",
-            "parallel_even", or "pairwise_even". Used to decide how exactly to use the
+        determinant_fn_mode (DeterminantFnMode, optional): One of sign_covariance,
+            parallel_even, or pairwise_even. Used to decide how exactly to use the
             provided determinant_fn_builder to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn_builder is provided. Defaults to "parallel_even."
+            if no determinant_fn_builder is provided. Defaults to parallel_even.
     """
 
     spin_split: SpinSplit
