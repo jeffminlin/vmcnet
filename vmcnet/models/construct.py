@@ -164,8 +164,8 @@ def get_model_from_config(
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "extended_orbital_matrix_ferminet":
+            invariance_config = model_config.invariance
             if model_config.use_separate_invariance_backflow:
-                invariance_config = model_config.invariance
                 invariance_backflow = get_backflow_from_config(
                     invariance_config.backflow,
                     ion_pos,

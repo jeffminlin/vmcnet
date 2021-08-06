@@ -452,25 +452,16 @@ def test_get_model_from_default_config():
             model_config, nelec, ion_pos, ion_charges
         )
 
+    for model_type in ["brute_force_antisym"]:
+        for subtype in ["rank_one", "double"]:
+            _construct_model(model_type, brute_force_subtype=subtype)
     for model_type in [
         "ferminet",
         "embedded_particle_ferminet",
-        "orbital_cofactor_net",
-        "per_particle_dets_net",
-        "brute_force_antisym",
+        "extended_orbital_matrix_ferminet",
     ]:
-        if model_type == "brute_force_antisym":
-            for subtype in ["rank_one", "double"]:
-                _construct_model(model_type, brute_force_subtype=subtype)
-        elif model_type in [
-            "ferminet",
-            "embedded_particle_ferminet",
-            "extended_orbital_matrix_ferminet",
-        ]:
-            _construct_model(model_type, use_det_resnet=False)
-            for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
-                _construct_model(
-                    model_type, use_det_resnet=True, determinant_fn_mode=mode
-                )
-        else:
-            _construct_model(model_type)
+        _construct_model(model_type, use_det_resnet=False)
+        for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
+            _construct_model(model_type, use_det_resnet=True, determinant_fn_mode=mode)
+    for model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
+        _construct_model(model_type)
