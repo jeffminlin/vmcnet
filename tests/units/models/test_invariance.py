@@ -22,7 +22,7 @@ def test_invariant_tensor():
         models.equivariance.compute_input_streams, ion_pos=ion_pos
     )
 
-    def backflow(stream_1e, _stream_2e, _r_ei):
+    def backflow(stream_1e, _stream_2e):
         """Simple equivariance with linear and quadratic features."""
         return jnp.concatenate([2.0 * stream_1e, jnp.square(stream_1e)], axis=-1)
 

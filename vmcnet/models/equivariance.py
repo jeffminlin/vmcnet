@@ -513,7 +513,7 @@ class FermiNetBackflow(flax.linen.Module):
     def __call__(
         self,
         stream_1e: jnp.ndarray,
-        stream_2e: Optional[jnp.ndarray],
+        stream_2e: Optional[jnp.ndarray] = None,
     ) -> jnp.ndarray:
         """Iteratively apply residual blocks to Ferminet input streams.
 
