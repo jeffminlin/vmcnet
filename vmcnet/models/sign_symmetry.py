@@ -346,7 +346,7 @@ class ProductsSignCovariance(flax.linen.Module):
         shape = pairwise_dots.shape
         # flattened_dots has shape (..., nelec_up * nelec_down)
         flattened_dots = jnp.reshape(
-            pairwise_products, (*shape[:-2], shape[-1] * shape[-2])
+            pairwise_dots, (*shape[:-2], shape[-1] * shape[-2])
         )
 
         return Dense(

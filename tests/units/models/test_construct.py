@@ -155,21 +155,31 @@ def _make_embedded_particle_ferminets():
     return key, init_pos, log_psis
 
 
-def _make_antiequivariance_net_with_array_list_equivariance(
+def _make_antiequivariance_net_with_resnet_sign_covariance(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
     backflow = _get_backflow(
         spin_split, ndense_list, cyclic_spins=cyclic_spins, ion_pos=ion_pos
     )
 
-    def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
+    def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
         concat_x = jnp.concatenate(x, axis=-2)
         return _get_backflow(
             spin_split, ((9,), (2,), (1,)), cyclic_spins=True, ion_pos=None
         )(concat_x)[0]
 
+    covariant_equivariance = sign_sym.make_array_list_fn_sign_covariant(
+        backflow_based_equivariance, axis=-3
+    )
+
+    def array_list_sign_covariance(x: ArrayList) -> jnp.ndarray:
+        return jnp.sum(
+            covariant_equivariance(x),
+            axis=-2,
+        )
+
     log_psi = models.construct.AntiequivarianceNet(
-        backflow, antiequivariance, array_list_equivariance=array_list_equivariance
+        backflow, antiequivariance, array_list_sign_covariance
     )
 
     return log_psi
@@ -187,9 +197,7 @@ def _make_antiequivariance_net_with_products_sign_covariance(
     )
 
     log_psi = models.construct.AntiequivarianceNet(
-        backflow,
-        antiequivariance,
-        array_list_sign_covariance=array_list_sign_covariance,
+        backflow, antiequivariance, array_list_sign_covariance
     )
 
     return log_psi
@@ -213,7 +221,7 @@ def _make_orbital_cofactor_net():
         models.weights.get_bias_initializer("uniform"),
     )
 
-    log_psi_eq = _make_antiequivariance_net_with_array_list_equivariance(
+    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
     )
 
@@ -240,7 +248,7 @@ def _make_per_particle_dets_nets():
         )
     )
 
-    log_psi_eq = _make_antiequivariance_net_with_array_list_equivariance(
+    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=False, ion_pos=ion_pos
     )
     log_psi_sign_cov = _make_antiequivariance_net_with_products_sign_covariance(

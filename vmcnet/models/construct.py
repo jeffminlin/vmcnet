@@ -198,32 +198,11 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
             )
 
-        array_list_equivariance = None
-        array_list_sign_covariance = None
-
-        if model_config.use_products_covariance:
-            array_list_sign_covariance = ProductsSignCovariance(
-                1,
-                kernel_init_constructor(model_config.products_covariance.kernel_init),
-                model_config.products_covariance.register_kfac,
-            )
-
-        else:
-
-            def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
-                concat_x = jnp.concatenate(x, axis=-2)
-                return get_backflow_from_config(
-                    model_config.invariance,
-                    ion_pos=None,
-                    spin_split=spin_split,
-                    dtype=dtype,
-                )(concat_x)[0]
-
-            array_list_equivariance = backflow_based_equivariance
-
-        return AntiequivarianceNet(
-            backflow, antieq_layer, array_list_equivariance, array_list_sign_covariance
+        array_list_sign_covariance = get_sign_covariance_from_config(
+            model_config, spin_split, kernel_init_constructor, dtype
         )
+
+        return AntiequivarianceNet(backflow, antieq_layer, array_list_sign_covariance)
     elif model_config.type == "brute_force_antisym":
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
@@ -326,6 +305,37 @@ def get_backflow_from_config(
     )
 
     return backflow
+
+
+def get_sign_covariance_from_config(
+    model_config: ConfigDict,
+    spin_split: SpinSplit,
+    kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
+    dtype: jnp.dtype,
+) -> Callable[[ArrayList], jnp.ndarray]:
+    """Get a sign covariance from a model config, for use in AntiequivarianceNet."""
+    if model_config.use_products_covariance:
+        return ProductsSignCovariance(
+            1,
+            kernel_init_constructor(model_config.products_covariance.kernel_init),
+            model_config.products_covariance.register_kfac,
+        )
+
+    else:
+
+        def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
+            concat_x = jnp.concatenate(x, axis=-2)
+            return get_backflow_from_config(
+                model_config.invariance,
+                ion_pos=None,
+                spin_split=spin_split,
+                dtype=dtype,
+            )(concat_x)[0]
+
+        covariant_equivariance = make_array_list_fn_sign_covariant(
+            backflow_based_equivariance, axis=-3
+        )
+        return lambda x: jnp.sum(covariant_equivariance(x), axis=-2)
 
 
 class ComposedModel(flax.linen.Module):
@@ -916,27 +926,16 @@ class AntiequivarianceNet(flax.linen.Module):
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
                 -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
-        array_list_equivariance (Callable, optional): function which is
-            equivariant-per-spin. Has the signature
-            [(..., nelec[spin], d_antieq)]  -> (..., n, d_equiv).
-            All outputs of this function are made covariant with respect to each input
-            sign, and an odd invariance is created by summing over the last two
-            dimensions of the output. Exactly one of array_list_equivariance and
-            array_list_sign_covariance should be provided for any given instance.
-            Defaults to None.
-        array_list_sign_covariance (Callable, optional): function which is sign-
+        array_list_sign_covariance (Callable): function which is sign-
             covariant with respect to each spin. Has the signature
             [(..., nelec[spin], d_antieq)]  -> (..., n, d_antisym). Since this function
             is sign covariant, its outputs are antisymmetric, so Psi can be calculated
-            by summing over the final axis of the result. Exactly one of
-            array_list_equivariance and array_list_sign_covariance should be provided
-            for any given instance. Defaults to None.
+            by summing over the final axis of the result.
     """
 
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
-    array_list_equivariance: Optional[Callable[[ArrayList], jnp.ndarray]] = None
-    array_list_sign_covariance: Optional[Callable[[ArrayList], jnp.ndarray]] = None
+    array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
 
     def setup(self):
         """Setup backflow."""
@@ -944,26 +943,7 @@ class AntiequivarianceNet(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
         self._antiequivariant_layer = self.antiequivariant_layer
-
-        nfunctions_provided = sum(
-            x is not None
-            for x in [self.array_list_equivariance, self.array_list_sign_covariance]
-        )
-        if nfunctions_provided != 1:
-            raise ValueError(
-                "AntiequivarianceNet requires exactly one of array_list_equivariance "
-                "and array_list_sign_covariance, but received {},{}".format(
-                    self.array_list_equivariance, self.array_list_sign_covariance
-                )
-            )
-
-        self._sign_cov_fn = self.array_list_sign_covariance
-
-        if self.array_list_equivariance:
-            sign_cov_equivariance = make_array_list_fn_sign_covariant(
-                self.array_list_equivariance, axis=-3
-            )
-            self._sign_cov_fn = lambda x: jnp.sum(sign_cov_equivariance(x), axis=-2)
+        self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -979,7 +959,7 @@ class AntiequivarianceNet(flax.linen.Module):
         """
         backflow_out, r_ei, _ = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
-        antisym_vector = self._sign_cov_fn(antiequivariant_out)
+        antisym_vector = self._array_list_sign_covariance(antiequivariant_out)
         return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
 
 
