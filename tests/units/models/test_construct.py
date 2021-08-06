@@ -71,8 +71,8 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
     return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
 
 
-def _get_det_resnet_builder():
-    return models.construct.get_resnet_determinant_fn_builder_for_ferminet(
+def _get_det_resnet_fn():
+    return models.construct.get_resnet_determinant_fn_for_ferminet(
         6,
         3,
         jax.nn.gelu,
@@ -101,7 +101,7 @@ def _make_ferminets():
         (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN),
     ]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-        resnet_det_fn_builder = _get_det_resnet_builder() if use_det_resnet else None
+        resnet_det_fn = _get_det_resnet_fn() if use_det_resnet else None
         log_psi = models.construct.FermiNet(
             spin_split,
             backflow,
@@ -110,7 +110,7 @@ def _make_ferminets():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
-            determinant_fn_builder=resnet_det_fn_builder,
+            determinant_fn=resnet_det_fn,
             determinant_fn_mode=determinant_fn_mode,
         )
         log_psis.append(log_psi)

@@ -84,10 +84,10 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type in ["ferminet", "embedded_particle_ferminet"]:
-        determinant_fn_builder = None
+        determinant_fn = None
         resnet_config = model_config.det_resnet
         if model_config.use_det_resnet:
-            determinant_fn_builder = get_resnet_determinant_fn_builder_for_ferminet(
+            determinant_fn = get_resnet_determinant_fn_for_ferminet(
                 resnet_config.ndense,
                 resnet_config.nlayers,
                 _get_named_activation_fn(resnet_config.activation),
@@ -116,7 +116,7 @@ def get_model_from_config(
                 ),
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
-                determinant_fn_builder=determinant_fn_builder,
+                determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "embedded_particle_ferminet":
@@ -155,7 +155,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
-                determinant_fn_builder=determinant_fn_builder,
+                determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
 
@@ -428,11 +428,10 @@ def get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
-DeterminantFn = Callable[[ArrayList], jnp.ndarray]
-DeterminantFnBuilder = Callable[[int], DeterminantFn]
+DeterminantFn = Callable[[int, ArrayList], jnp.ndarray]
 
 
-def get_resnet_determinant_fn_builder_for_ferminet(
+def get_resnet_determinant_fn_for_ferminet(
     ndense: int,
     nlayers: int,
     activation: Activation,
@@ -440,14 +439,14 @@ def get_resnet_determinant_fn_builder_for_ferminet(
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
     register_kfac: bool = False,
-) -> DeterminantFnBuilder:
-    """Get a builder for a resnet-based determinant function for FermiNet construction.
+) -> DeterminantFn:
+    """Get a resnet-based determinant function for FermiNet construction.
 
-    The built function is used as a more general way to combine the determinant
+    The returned function is used as a more general way to combine the determinant
     outputs into the final wavefunction value, relative to the original method of a
-    sum of products. A function builder is required rather than a simple function
-    because several variants of this method are supported, and each requires the
-    function to generate a different output size.
+    sum of products. The function takes as its first argument the number of requested
+    output features because several variants of this method are supported, and each
+    requires the function to generate a different output size.
 
     Args:
         ndense (int): the number of neurons in the dense layers
@@ -463,30 +462,24 @@ def get_resnet_determinant_fn_builder_for_ferminet(
             overridden with care. The reason for the instability is not known.
 
     Returns:
-        (DeterminantFnBuilder): A builder for a resnet-based function. The builder
-        accepts an integer dout specifying the required output size, and returns a
-        corresponding ResNet-based function. The function accepts as input a list of
-        nspins arrays of shape (..., ndeterminants) and outputs a single array of shape
-        (..., dout).
+        (DeterminantFn): A resnet-based function. Has the signature
+        dout, [nspins: (..., ndeterminants)] -> (..., dout).
     """
 
-    def get_fn(dout: int) -> DeterminantFn:
-        def fn(det_values: ArrayList) -> jnp.ndarray:
-            concat_values = jnp.concatenate(det_values, axis=-1)
-            return SimpleResNet(
-                ndense,
-                dout,
-                nlayers,
-                activation,
-                kernel_initializer,
-                bias_initializer,
-                use_bias,
-                register_kfac=register_kfac,
-            )(concat_values)
+    def fn(dout: int, det_values: ArrayList) -> jnp.ndarray:
+        concat_values = jnp.concatenate(det_values, axis=-1)
+        return SimpleResNet(
+            ndense,
+            dout,
+            nlayers,
+            activation,
+            kernel_initializer,
+            bias_initializer,
+            use_bias,
+            register_kfac=register_kfac,
+        )(concat_values)
 
-        return fn
-
-    return get_fn
+    return fn
 
 
 class FermiNet(flax.linen.Module):
@@ -532,30 +525,30 @@ class FermiNet(flax.linen.Module):
             anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
             form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn_builder (DeterminantFnBuilder, optional): A builder for a
-            function that can map an ArrayList of nspins determinant outputs of shape
-            (..., ndeterminants) to a single output array of shape (..., d). If
-            provided, the built function will be used to calculate Psi based on the
+        determinant_fn (DeterminantFn, optional): A function that can map an ArrayList
+            of nspins determinant outputs of shape (..., ndeterminants) to a single
+            output array of shape (..., d), for any requested value of d. If
+            provided, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
             determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is "sign_covariance", the function will use d=1
+            ways. If the mode is sign_covariance, the function will use d=1
             and will be explicitly symmetrized over the sign group, on a per-spin basis,
             to be sign-covariant (odd). If "parallel_even" or "pairwise_even" are
             selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For "parallel_even", the function will use d=ndeterminants, and each
+            (even). For parallel_even, the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
             ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For "pairwise_even", the function will use
+            symmetrized determinant function. For pairwise_even, the function will use
             d=ndeterminants**nspins, and each output will again be multiplied by a
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
+            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, pairwise_even mode only
             supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of "sign_covariance",
-            "parallel_even", or "pairwise_even". Used to decide how exactly to use the
-            provided determinant_fn_builder to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn_builder is provided. Defaults to "parallel_even."
+        determinant_fn_mode (DeterminantFnMode, optional): One of sign_covariance,
+            parallel_even, or pairwise_even. Used to decide how exactly to use the
+            provided determinant_fn to calculate an ansatz for Psi; irrelevant
+            if no determinant_fn is provided. Defaults to parallel_even.
     """
 
     spin_split: SpinSplit
@@ -567,10 +560,10 @@ class FermiNet(flax.linen.Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool = True
     isotropic_decay: bool = False
-    determinant_fn_builder: Optional[DeterminantFnBuilder] = None
+    determinant_fn: Optional[DeterminantFn] = None
     determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
-    def _make_bad_determinant_fn_mode_error(self) -> ValueError:
+    def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
             "Only supported determinant function modes are sign_covariance, "
             "parallel_even, and pairwise_even. Received {}.".format(
@@ -584,19 +577,22 @@ class FermiNet(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
         self._symmetrized_det_fn = None
-        if self.determinant_fn_builder is not None:
+        if self.determinant_fn is not None:
             if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
-                det_fn = self.determinant_fn_builder(1)
-                self._symmetrized_det_fn = make_array_list_fn_sign_covariant(det_fn)
+                self._symmetrized_det_fn = make_array_list_fn_sign_covariant(
+                    functools.partial(self.determinant_fn, 1)
+                )
             elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
-                det_fn = self.determinant_fn_builder(self.ndeterminants)
-                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
+                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(
+                    functools.partial(self.determinant_fn, self.ndeterminants)
+                )
             elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
                 # TODO (ggoldsh): build support for "pairwise_even" for nspins != 2
-                det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
-                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
+                self._symmetrized_det_fn = make_array_list_fn_sign_invariant(
+                    functools.partial(self.determinant_fn, self.ndeterminants ** 2)
+                )
             else:
-                raise self._make_bad_determinant_fn_mode_error()
+                raise self._get_bad_determinant_fn_mode_error()
 
     def _calculate_psi_parallel_even(self, fn_inputs: ArrayList):
         """Calculate psi as an even fn. times products of corresponding determinants.
@@ -688,7 +684,7 @@ class FermiNet(flax.linen.Module):
             elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
                 psi = self._calculate_psi_pairwise_even(fn_inputs)
             else:
-                raise self._make_bad_determinant_fn_mode_error()
+                raise self._get_bad_determinant_fn_mode_error()
             return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
@@ -752,30 +748,30 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             layer of the invariance. Defaults to True.
         invariance_register_kfac (bool, optional): whether to register the dense layer
             of the invariance with KFAC. Defaults to True.
-        determinant_fn_builder (DeterminantFnBuilder, optional): A builder for a
-            function that can map an ArrayList of nspins determinant outputs of shape
-            (..., ndeterminants) to a single output array of shape (..., d). If
-            provided, the built function will be used to calculate Psi based on the
+        determinant_fn (DeterminantFn, optional): A function that can map an ArrayList
+            of nspins determinant outputs of shape (..., ndeterminants) to a single
+            output array of shape (..., d), for any requested value of d. If
+            provided, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
             determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is "sign_covariance", the function will use d=1
+            ways. If the mode is sign_covariance, the function will use d=1
             and will be explicitly symmetrized over the sign group, on a per-spin basis,
             to be sign-covariant (odd). If "parallel_even" or "pairwise_even" are
             selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For "parallel_even", the function will use d=ndeterminants, and each
+            (even). For parallel_even, the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
             ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For "pairwise_even", the function will use
+            symmetrized determinant function. For pairwise_even, the function will use
             d=ndeterminants**nspins, and each output will again be multiplied by a
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, "pairwise_even" mode only
+            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, pairwise_even mode only
             supports nspins = 2. Defaults to None.
         determinant_fn_mode (DeterminantFnMode, optional): One of sign_covariance,
             parallel_even, or pairwise_even. Used to decide how exactly to use the
-            provided determinant_fn_builder to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn_builder is provided. Defaults to parallel_even.
+            provided determinant_fn to calculate an ansatz for Psi; irrelevant
+            if no determinant_fn is provided. Defaults to parallel_even.
     """
 
     spin_split: SpinSplit
@@ -793,7 +789,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     isotropic_decay: bool = False
     invariance_use_bias: bool = True
     invariance_register_kfac: bool = True
-    determinant_fn_builder: Optional[DeterminantFnBuilder] = None
+    determinant_fn: Optional[DeterminantFn] = None
     determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
     def _get_invariant_tensor(
@@ -820,7 +816,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             self.bias_initializer_orbital_linear,
             self.orbitals_use_bias,
             self.isotropic_decay,
-            self.determinant_fn_builder,
+            self.determinant_fn,
             self.determinant_fn_mode,
         )
 
