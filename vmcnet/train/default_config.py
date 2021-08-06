@@ -100,6 +100,7 @@ def get_default_model_config() -> ConfigDict:
             "bias_init": normal_init,
             "use_bias": True,
             "register_kfac": False,
+            "mode": "parallel_even",
         }
     )
 
@@ -115,6 +116,7 @@ def get_default_model_config() -> ConfigDict:
             "isotropic_decay": True,
             "use_det_resnet": False,
             "det_resnet": determinant_resnet,
+            "determinant_fn_mode": "parallel_even",
         }
     )
 

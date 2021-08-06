@@ -71,7 +71,7 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos):
     return models.construct.FermiNetBackflow(residual_blocks, ion_pos=ion_pos)
 
 
-def _get_det_resnet():
+def _get_det_resnet_fn():
     return models.construct.get_resnet_determinant_fn_for_ferminet(
         6,
         3,
@@ -92,11 +92,16 @@ def _make_ferminets():
     ) = _get_initial_pos_and_hyperparams()
 
     log_psis = []
-    # No need for combinatorial testing over these flags; just test with both
-    # false and both true to cover our bases without making the test too slow.
-    for (cyclic_spins, use_det_resnet) in [(False, False), (True, True)]:
+    # No need for combinatorial testing over these flags; just make sure Ferminet is
+    # tested with and without cyclic spins, and with each different determinant_fn_mode.
+    for (cyclic_spins, use_det_resnet, determinant_fn_mode) in [
+        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
+        (True, True, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
+        (False, True, models.construct.DeterminantFnMode.PARALLEL_EVEN),
+        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN),
+    ]:
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-        resnet_det_fn = _get_det_resnet() if use_det_resnet else None
+        resnet_det_fn = _get_det_resnet_fn() if use_det_resnet else None
         log_psi = models.construct.FermiNet(
             spin_split,
             backflow,
@@ -106,6 +111,7 @@ def _make_ferminets():
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
             determinant_fn=resnet_det_fn,
+            determinant_fn_mode=determinant_fn_mode,
         )
         log_psis.append(log_psi)
 
@@ -126,9 +132,8 @@ def _make_embedded_particle_ferminets():
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    nhidden_fermions_per_spin_vals = [(2, 3), (4, 0)]
 
-    for nhidden_fermions_per_spin in nhidden_fermions_per_spin_vals:
+    for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             nhidden_fermions_per_spin,
@@ -367,10 +372,16 @@ def test_get_model_from_default_config():
     ion_charges = jnp.array([1.0, 3.0, 2.0])
     nelec = jnp.array([4, 3])
 
-    def _construct_model(model_type, use_det_resnet=True, brute_force_subtype=None):
+    def _construct_model(
+        model_type,
+        use_det_resnet=True,
+        determinant_fn_mode=None,
+        brute_force_subtype=None,
+    ):
         model_config = get_default_config_with_chosen_model(
             model_type,
             use_det_resnet=use_det_resnet,
+            determinant_fn_mode=determinant_fn_mode,
             brute_force_subtype=brute_force_subtype,
         ).model
         models.construct.get_model_from_config(
@@ -387,8 +398,11 @@ def test_get_model_from_default_config():
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
                 _construct_model(model_type, brute_force_subtype=subtype)
-        elif model_type == "ferminet":
-            for use_det_resnet in [False, True]:
-                _construct_model(model_type, use_det_resnet=use_det_resnet)
+        elif model_type in ["ferminet", "embedded_particle_ferminet"]:
+            _construct_model(model_type, use_det_resnet=False)
+            for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
+                _construct_model(
+                    model_type, use_det_resnet=True, determinant_fn_mode=mode
+                )
         else:
             _construct_model(model_type)
