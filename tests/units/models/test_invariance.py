@@ -1,5 +1,6 @@
 """Test model invariant components."""
 import chex
+import functools
 import jax.numpy as jnp
 import pytest
 
@@ -16,8 +17,10 @@ def test_invariant_tensor():
     key, elec_pos, perm_elec_pos, ion_pos = get_elec_and_ion_pos_from_hyperparams(
         nchains, nelec_total, nion, d, permutation
     )
-    stream_1e = elec_pos
-    perm_stream_1e = perm_elec_pos
+
+    compute_input_streams = functools.partial(
+        models.equivariance.compute_input_streams, ion_pos=ion_pos
+    )
 
     def backflow(stream_1e, _stream_2e, _r_ei):
         """Simple equivariance with linear and quadratic features."""
@@ -29,15 +32,16 @@ def test_invariant_tensor():
     invariant_model = models.invariance.InvariantTensor(
         spin_split=spin_split,
         output_shape_per_spin=output_shape_per_spin,
+        compute_input_streams=compute_input_streams,
         backflow=backflow,
         kernel_initializer=kernel_init,
         bias_initializer=bias_init,
     )
 
-    params = invariant_model.init(key, stream_1e, None, None)
+    params = invariant_model.init(key, elec_pos)
 
-    output = invariant_model.apply(params, stream_1e, None, None)
-    perm_output = invariant_model.apply(params, perm_stream_1e, None, None)
+    output = invariant_model.apply(params, elec_pos)
+    perm_output = invariant_model.apply(params, elec_pos)
 
     chex.assert_shape(
         output, [(nchains,) + output_shape for output_shape in output_shape_per_spin]

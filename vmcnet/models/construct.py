@@ -973,15 +973,16 @@ class AntiequivarianceNet(flax.linen.Module):
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),
                 optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
             )
         backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+                positions. Has the signature
+                elec pos of shape (..., n, d)
+                    -> (
+                        stream_1e of shape (..., n, d'),
+                        r_ei of shape (..., n, nion, d),
+                        r_ee of shape (..., n, n, d),
+                    )
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
