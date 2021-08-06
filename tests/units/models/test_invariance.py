@@ -41,7 +41,7 @@ def test_invariant_tensor():
     params = invariant_model.init(key, elec_pos)
 
     output = invariant_model.apply(params, elec_pos)
-    perm_output = invariant_model.apply(params, elec_pos)
+    perm_output = invariant_model.apply(params, perm_elec_pos)
 
     chex.assert_shape(
         output, [(nchains,) + output_shape for output_shape in output_shape_per_spin]
