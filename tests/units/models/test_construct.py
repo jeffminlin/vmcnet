@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 import vmcnet.models as models
-import vmcnet.models.sign_covariance as sign_cov
+import vmcnet.models.sign_symmetry as sign_sym
 from vmcnet.utils.typing import ArrayList
 
 from tests.test_utils import get_default_config_with_chosen_model
@@ -182,7 +182,7 @@ def _make_antiequivariance_net_with_products_sign_covariance(
         spin_split, ndense_list, cyclic_spins=cyclic_spins, ion_pos=ion_pos
     )
 
-    array_list_sign_covariance = sign_cov.ProductsSignCovariance(
+    array_list_sign_covariance = sign_sym.ProductsSignCovariance(
         1, models.weights.get_kernel_initializer("orthogonal")
     )
 

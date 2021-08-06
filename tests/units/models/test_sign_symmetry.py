@@ -6,12 +6,8 @@ import numpy as np
 import pytest
 from typing import Callable
 
-<<<<<<< HEAD:tests/units/models/test_sign_symmetry.py
 import vmcnet.models.sign_symmetry as sign_sym
-=======
-import vmcnet.models.sign_covariance as sign_cov
 import vmcnet.models.weights as weights
->>>>>>> 8e32d93 (Add test for products sign covariance):tests/units/models/test_sign_covariance.py
 from vmcnet.utils.slog_helpers import (
     array_from_slog,
     array_to_slog,
@@ -199,7 +195,7 @@ def test_products_sign_covariance():
     same_sign_inputs = [-inputs[0], -inputs[1]]
 
     dout = 3
-    model = sign_cov.ProductsSignCovariance(
+    model = sign_sym.ProductsSignCovariance(
         dout, weights.get_kernel_initializer("orthogonal")
     )
     result, params = model.init_with_output(subkey, inputs)
