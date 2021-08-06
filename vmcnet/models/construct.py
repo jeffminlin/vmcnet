@@ -570,6 +570,14 @@ class FermiNet(flax.linen.Module):
     determinant_fn_builder: Optional[DeterminantFnBuilder] = None
     determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
+    def _make_bad_determinant_fn_mode_error(self) -> ValueError:
+        raise ValueError(
+            "Only supported determinant function modes are sign_covariance, "
+            "parallel_even, and pairwise_even. Received {}.".format(
+                self.determinant_fn_mode
+            )
+        )
+
     def setup(self):
         """Setup backflow and symmetrized determinant function."""
         # workaround MyPy's typing error for callable attribute, see
@@ -588,50 +596,33 @@ class FermiNet(flax.linen.Module):
                 det_fn = self.determinant_fn_builder(self.ndeterminants ** 2)
                 self._symmetrized_det_fn = make_array_list_fn_sign_invariant(det_fn)
             else:
-                raise ValueError(
-                    "Only supported determinant function modes are sign_covariance, "
-                    "parallel_even, and pairwise_even. Received {}.".format(
-                        self.determinant_fn_mode
-                    )
-                )
+                raise self._make_bad_determinant_fn_mode_error()
 
-    def _calculate_psi_sign_covariance(self, orbitals: ArrayList):
-        """Calculate psi using a function directly symmetrized to be sign covariant."""
-        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
-        dets = jax.tree_map(jnp.linalg.det, orbitals)
-        # Swap axes to get shape [nspins: (..., ndeterminants)]
-        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-        psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
-        return jnp.log(jnp.abs(psi))
+    def _calculate_psi_parallel_even(self, fn_inputs: ArrayList):
+        """Calculate psi as an even fn. times products of corresponding determinants.
 
-    def _calculate_psi_parallel_even(self, orbitals: ArrayList):
-        """Calculate psi as an even fn. times products of corresponding determinants."""
-        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
-        dets = jax.tree_map(jnp.linalg.det, orbitals)
-        # Swap axes to get shape [nspins: (..., ndeterminants)]
-        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
-
+        Arguments:
+            fn_inputs (ArrayList): input data of shape [nspins: (..., ndeterminants)]
+        """
         # even_outputs has shape (..., ndeterminantss)
         even_outputs = self._symmetrized_det_fn(fn_inputs)
         # stacked_dets has shape (..., ndeterminants, nspins)
         stacked_dets = jnp.stack(fn_inputs, axis=-1)
         # prod_dets has shape (..., ndeterminants)
         prod_dets = jnp.prod(stacked_dets, axis=-1)
-        psi = jnp.sum(prod_dets * even_outputs, axis=-1)
-        return jnp.log(jnp.abs(psi))
+        return jnp.sum(prod_dets * even_outputs, axis=-1)
 
-    def _calculate_psi_pairwise_even(self, orbitals: ArrayList):
-        """Calculate psi as an even fn. times products of all pairs of determinants."""
-        if len(orbitals) != 2:
+    def _calculate_psi_pairwise_even(self, fn_inputs: ArrayList):
+        """Calculate psi as an even fn. times products of all pairs of determinants.
+
+        Arguments:
+            fn_inputs (ArrayList): input data of shape [nspins: (..., ndeterminants)]
+        """
+        if len(fn_inputs) != 2:
             raise ValueError(
                 "For pairwise_even determinant_fn_mode, only nspins=2 is supported. "
-                "Received nspins={}.".format(len(orbitals))
+                "Received nspins={}.".format(len(fn_inputs))
             )
-
-        # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
-        dets = jax.tree_map(jnp.linalg.det, orbitals)
-        # Swap axes to get shape [nspins: (..., ndeterminants)]
-        fn_inputs = jax.tree_map(lambda x: jnp.swapaxes(x, 0, -1), dets)
 
         # even_outputs is shape (..., ndeterminants**2)
         even_outputs = self._symmetrized_det_fn(fn_inputs)
@@ -649,8 +640,7 @@ class FermiNet(flax.linen.Module):
                 prod_dets.shape[-1] * prod_dets.shape[-2],
             ),
         )
-        psi = jnp.sum(prod_dets * even_outputs, axis=-1)
-        return jnp.log(jnp.abs(psi))
+        return jnp.sum(prod_dets * even_outputs, axis=-1)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -687,12 +677,19 @@ class FermiNet(flax.linen.Module):
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
         if self._symmetrized_det_fn is not None:
+            # dets is ArrayList of shape [nspins: (ndeterminants, ...)]
+            dets = jax.tree_map(jnp.linalg.det, orbitals)
+            # Move axis to get shape [nspins: (..., ndeterminants)]
+            fn_inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, -1), dets)
             if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
-                return self._calculate_psi_sign_covariance(orbitals)
+                psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
             elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
-                return self._calculate_psi_parallel_even(orbitals)
+                psi = self._calculate_psi_parallel_even(fn_inputs)
             elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
-                return self._calculate_psi_pairwise_even(orbitals)
+                psi = self._calculate_psi_pairwise_even(fn_inputs)
+            else:
+                raise self._make_bad_determinant_fn_mode_error()
+            return jnp.log(jnp.abs(psi))
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
