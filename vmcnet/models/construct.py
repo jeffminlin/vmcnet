@@ -281,7 +281,7 @@ def get_model_from_config(
 
 def get_compute_input_streams_from_config(
     input_streams_config: ConfigDict, ion_pos: Optional[jnp.ndarray] = None
-):
+) -> ComputeInputStreams:
     """Get a function for computing input streams from a model configuration."""
     return functools.partial(
         compute_input_streams,
