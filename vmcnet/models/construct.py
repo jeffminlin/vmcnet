@@ -84,7 +84,11 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    if model_config.type in ["ferminet", "embedded_particle_ferminet"]:
+    if model_config.type in [
+        "ferminet",
+        "embedded_particle_ferminet",
+        "extended_orbital_matrix_ferminet",
+    ]:
         determinant_fn = None
         resnet_config = model_config.det_resnet
         if model_config.use_det_resnet:
@@ -159,7 +163,47 @@ def get_model_from_config(
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
-
+        elif model_config.type == "extended_orbital_matrix_ferminet":
+            if model_config.use_separate_invariance_backflow:
+                invariance_config = model_config.invariance
+                invariance_backflow = get_backflow_from_config(
+                    invariance_config.backflow,
+                    ion_pos,
+                    spin_split,
+                    dtype=dtype,
+                )
+            else:
+                invariance_backflow = None
+            return ExtendedOrbitalMatrixFermiNet(
+                spin_split,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+                determinant_fn=determinant_fn,
+                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
+                invariance_backflow=invariance_backflow,
+                invariance_kernel_initializer=kernel_init_constructor(
+                    invariance_config.kernel_initializer
+                ),
+                invariance_bias_initializer=bias_init_constructor(
+                    invariance_config.bias_initializer
+                ),
+                invariance_use_bias=invariance_config.use_bias,
+                invariance_register_kfac=invariance_config.register_kfac,
+            )
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
             antieq_layer = antiequivariance.OrbitalCofactorAntiequivarianceLayer(

@@ -169,11 +169,11 @@ def _make_extended_orbital_matrix_ferminets():
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
     extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
 
-    for extra_dims_per_spin, use_invariance_backflow in [
+    for extra_dims_per_spin, use_separate_invariance_backflow in [
         ((2, 3), True),
         ((4, 0), False),
     ]:
-        if use_invariance_backflow:
+        if use_separate_invariance_backflow:
             invariance_backflow = extra_backflow
         else:
             invariance_backflow = None
@@ -462,7 +462,11 @@ def test_get_model_from_default_config():
         if model_type == "brute_force_antisym":
             for subtype in ["rank_one", "double"]:
                 _construct_model(model_type, brute_force_subtype=subtype)
-        elif model_type in ["ferminet", "embedded_particle_ferminet"]:
+        elif model_type in [
+            "ferminet",
+            "embedded_particle_ferminet",
+            "extended_orbital_matrix_ferminet",
+        ]:
             _construct_model(model_type, use_det_resnet=False)
             for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
                 _construct_model(

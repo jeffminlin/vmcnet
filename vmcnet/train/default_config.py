@@ -90,6 +90,7 @@ def get_default_model_config() -> ConfigDict:
         }
     )
     embedded_particle_fermion_backflow = ferminet_backflow
+    extended_orbital_matrix_backflow = ferminet_backflow
 
     determinant_resnet = ConfigDict(
         {
@@ -152,6 +153,22 @@ def get_default_model_config() -> ConfigDict:
                     "invariance": ConfigDict(
                         {
                             "backflow": embedded_particle_fermion_backflow,
+                            "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
+                            "bias_initializer": normal_init,
+                            "use_bias": True,
+                            "register_kfac": True,
+                        }
+                    ),
+                }
+            ),
+            "extended_orbital_matrix_ferminet": ConfigDict(
+                {
+                    **base_ferminet_config,
+                    "extra_dims_per_spin": (2, 2),
+                    "use_separate_invariance_backflow": False,
+                    "invariance": ConfigDict(
+                        {
+                            "backflow": extended_orbital_matrix_backflow,
                             "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                             "bias_initializer": normal_init,
                             "use_bias": True,
