@@ -306,7 +306,8 @@ class ProductsSignCovariance(flax.linen.Module):
 
     Only supports two spins at the moment. Given per-spin antiequivariant vectors
     a_1, a_2, ..., and b_1, b_2, ..., computes an antisymmetry of
-    sum_{i,j} w_{i,j} dot(a_i, b_j), or multiple such antisymmetries if features>1. If
+    sum_{i,j} (w_{i,j} sum_{k} a_ik b_jk), or multiple such antisymmetries if
+    features>1.
 
     Attributes:
         features (int): the number of antisymmetric output features to generate.
@@ -340,10 +341,12 @@ class ProductsSignCovariance(flax.linen.Module):
 
         # pairwise_products has shape (..., nelec_up, nelec_down, d)
         pairwise_products = jnp.expand_dims(x[0], -3) * jnp.expand_dims(x[1], -2)
-        shape = pairwise_products.shape
-        # flattened_products has shape (..., nelec_up * nelec_down * d)
-        flattened_products = jnp.reshape(
-            pairwise_products, (*shape[:-3], shape[-1] * shape[-2] * shape[-3])
+        # pairwise_dots has shape (..., nelec_up, nelec_down)
+        pairwise_dots = jnp.sum(pairwise_products, axis=-1)
+        shape = pairwise_dots.shape
+        # flattened_dots has shape (..., nelec_up * nelec_down)
+        flattened_dots = jnp.reshape(
+            pairwise_products, (*shape[:-2], shape[-1] * shape[-2])
         )
 
         return Dense(
@@ -351,4 +354,4 @@ class ProductsSignCovariance(flax.linen.Module):
             kernel_init=self.kernel_init,
             use_bias=False,
             register_kfac=self.register_kfac,
-        )(flattened_products)
+        )(flattened_dots)
