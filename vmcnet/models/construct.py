@@ -194,6 +194,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
+                extra_dims_per_spin=model_config.extra_dims_per_spin,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
                     invariance_config.kernel_initializer
@@ -682,7 +683,7 @@ class FermiNet(flax.linen.Module):
         )
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
-    def _eval_orbitals(
+    def _get_orbitals_from_norbitals(
         self,
         norbitals_per_spin: Sequence[int],
         stream_1e: jnp.ndarray,
@@ -702,12 +703,12 @@ class FermiNet(flax.linen.Module):
             for _ in range(self.ndeterminants)
         ]
 
-    def _get_norbitals_and_eval_orbitals(
+    def _get_orbitals_from_inputs(
         self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
     ) -> List[ArrayList]:
         nelec_total = elec_pos.shape[-2]
         norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-        return self._eval_orbitals(norbitals_per_spin, stream_1e, r_ei)
+        return self._get_orbitals_from_norbitals(norbitals_per_spin, stream_1e, r_ei)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -725,7 +726,7 @@ class FermiNet(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         stream_1e, r_ei, _ = self._backflow(elec_pos)
-        orbitals = self._get_norbitals_and_eval_orbitals(elec_pos, stream_1e, r_ei)
+        orbitals = self._get_orbitals_from_inputs(elec_pos, stream_1e, r_ei)
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
@@ -1017,7 +1018,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             for _ in range(self.ndeterminants)
         ]
 
-    def _get_norbitals_and_eval_orbitals(
+    def _get_orbitals_from_inputs(
         self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
     ) -> List[ArrayList]:
         nelec_total = elec_pos.shape[-2]
@@ -1031,7 +1032,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             invariant_part = self._get_invariance(
                 self.extra_dims_per_spin, norbitals_per_spin, elec_pos, stream_1e
             )
-            equivariant_part = super()._eval_orbitals(
+            equivariant_part = super()._get_orbitals_from_norbitals(
                 norbitals_per_spin, stream_1e, r_ei
             )
             return [
@@ -1042,7 +1043,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
                 for det_idx, orbs in enumerate(equivariant_part)
             ]
         else:
-            return super()._eval_orbitals(nelec_per_spin, stream_1e, r_ei)
+            return super()._get_orbitals_from_norbitals(nelec_per_spin, stream_1e, r_ei)
 
 
 class AntiequivarianceNet(flax.linen.Module):
