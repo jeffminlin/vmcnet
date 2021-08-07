@@ -168,15 +168,12 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
             spin_split, ((9,), (2,), (1,)), cyclic_spins=True, ion_pos=None
         )(concat_x)[0]
 
-    covariant_equivariance = sign_sym.make_array_list_fn_sign_covariant(
+    odd_equivariance = sign_sym.make_array_list_fn_sign_covariant(
         backflow_based_equivariance, axis=-3
     )
 
     def array_list_sign_covariance(x: ArrayList) -> jnp.ndarray:
-        return jnp.sum(
-            covariant_equivariance(x),
-            axis=-2,
-        )
+        return jnp.sum(odd_equivariance(x), axis=-2)
 
     log_psi = models.construct.AntiequivarianceNet(
         backflow, antiequivariance, array_list_sign_covariance

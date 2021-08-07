@@ -332,10 +332,10 @@ def get_sign_covariance_from_config(
                 dtype=dtype,
             )(concat_x)[0]
 
-        covariant_equivariance = make_array_list_fn_sign_covariant(
+        odd_equivariance = make_array_list_fn_sign_covariant(
             backflow_based_equivariance, axis=-3
         )
-        return lambda x: jnp.sum(covariant_equivariance(x), axis=-2)
+        return lambda x: jnp.sum(odd_equivariance(x), axis=-2)
 
 
 class ComposedModel(flax.linen.Module):
