@@ -339,10 +339,16 @@ class ProductsSignCovariance(flax.linen.Module):
                 "Products covariance only supported for nspins=2, got {}".format(len(x))
             )
 
-        # pairwise_products has shape (..., nelec_up, nelec_down, d)
-        pairwise_products = jnp.expand_dims(x[0], -3) * jnp.expand_dims(x[1], -2)
-        # pairwise_dots has shape (..., nelec_up, nelec_down)
-        pairwise_dots = jnp.sum(pairwise_products, axis=-1)
+        naxes = len(x[0].shape)
+        batch_dims = range(naxes - 2)
+        contraction_dim = (naxes - 1,)
+        # Since the second last axis is not specified as either a batch or contraction
+        # dim, jax.lax.dot_general will automatically compute over all pairs of up and
+        # down spins. pairwise_dots thus has shape (..., nelec_up, nelec_down).
+        pairwise_dots = jax.lax.dot_general(
+            x[0], x[1], ((contraction_dim, contraction_dim), (batch_dims, batch_dims))
+        )
+
         shape = pairwise_dots.shape
         # flattened_dots has shape (..., nelec_up * nelec_down)
         flattened_dots = jnp.reshape(
