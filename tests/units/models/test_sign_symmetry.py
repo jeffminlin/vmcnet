@@ -7,6 +7,7 @@ import pytest
 from typing import Callable
 
 import vmcnet.models.sign_symmetry as sign_sym
+import vmcnet.models.weights as weights
 from vmcnet.utils.slog_helpers import (
     array_from_slog,
     array_to_slog,
@@ -177,3 +178,31 @@ def test_make_sl_array_list_fn_sign_covariant():
 
     np.testing.assert_allclose(flip_sign_result, -result, atol=1e-6)
     np.testing.assert_allclose(same_sign_result, result, atol=1e-6)
+
+
+@pytest.mark.slow
+def test_products_sign_covariance():
+    """Test ProductsSignCovariance can be evaluated and is sign covariant."""
+    nbatch = 5
+    nelec_per_spin = (2, 5)
+    d = 2
+    key = jax.random.PRNGKey(0)
+
+    key, subkey = jax.random.split(key)
+    inputs = [jax.random.normal(key, (nbatch, n, d)) for n in nelec_per_spin]
+
+    flip_sign_inputs = [inputs[0], -inputs[1]]
+    same_sign_inputs = [-inputs[0], -inputs[1]]
+
+    dout = 3
+    model = sign_sym.ProductsSignCovariance(
+        dout, weights.get_kernel_initializer("orthogonal")
+    )
+    result, params = model.init_with_output(subkey, inputs)
+
+    chex.assert_shape(result, (nbatch, dout))
+    flip_sign_result = model.apply(params, flip_sign_inputs)
+    same_sign_result = model.apply(params, same_sign_inputs)
+
+    assert_pytree_allclose(flip_sign_result, -result)
+    assert_pytree_allclose(same_sign_result, result)

@@ -28,6 +28,7 @@ from .equivariance import (
 from .invariance import InvariantTensor
 from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
 from .sign_symmetry import (
+    ProductsSignCovariance,
     make_array_list_fn_sign_covariant,
     make_array_list_fn_sign_invariant,
 )
@@ -197,16 +198,11 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
             )
 
-        def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
-            concat_x = jnp.concatenate(x, axis=-2)
-            return get_backflow_from_config(
-                model_config.invariance,
-                ion_pos=None,
-                spin_split=spin_split,
-                dtype=dtype,
-            )(concat_x)[0]
+        array_list_sign_covariance = get_sign_covariance_from_config(
+            model_config, spin_split, kernel_init_constructor, dtype
+        )
 
-        return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
+        return AntiequivarianceNet(backflow, antieq_layer, array_list_sign_covariance)
     elif model_config.type == "brute_force_antisym":
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
@@ -309,6 +305,37 @@ def get_backflow_from_config(
     )
 
     return backflow
+
+
+def get_sign_covariance_from_config(
+    model_config: ConfigDict,
+    spin_split: SpinSplit,
+    kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
+    dtype: jnp.dtype,
+) -> Callable[[ArrayList], jnp.ndarray]:
+    """Get a sign covariance from a model config, for use in AntiequivarianceNet."""
+    if model_config.use_products_covariance:
+        return ProductsSignCovariance(
+            1,
+            kernel_init_constructor(model_config.products_covariance.kernel_init),
+            model_config.products_covariance.register_kfac,
+        )
+
+    else:
+
+        def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
+            concat_x = jnp.concatenate(x, axis=-2)
+            return get_backflow_from_config(
+                model_config.invariance,
+                ion_pos=None,
+                spin_split=spin_split,
+                dtype=dtype,
+            )(concat_x)[0]
+
+        odd_equivariance = make_array_list_fn_sign_covariant(
+            backflow_based_equivariance, axis=-3
+        )
+        return lambda x: jnp.sum(odd_equivariance(x), axis=-2)
 
 
 class ComposedModel(flax.linen.Module):
@@ -899,18 +926,16 @@ class AntiequivarianceNet(flax.linen.Module):
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
                 -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
-        array_list_equivariance (Callable): function which is equivariant-per-spin. Has
-            the signature
-            (list of arrays of shapes [spin: (..., n[spin], d_antieq)])
-                -> (array of shape (..., n, d_equiv))
-            All outputs of this function are made covariant with respect to each input
-            sign, and an odd invariance is created by summing over the last two
-            dimensions of the output.
+        array_list_sign_covariance (Callable): function which is sign-
+            covariant with respect to each spin. Has the signature
+            [(..., nelec[spin], d_antieq)]  -> (..., d_antisym). Since this function
+            is sign covariant, its outputs are antisymmetric, so Psi can be calculated
+            by summing over the final axis of the result.
     """
 
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
-    array_list_equivariance: Callable[[ArrayList], jnp.ndarray]
+    array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
 
     def setup(self):
         """Setup backflow."""
@@ -918,9 +943,7 @@ class AntiequivarianceNet(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
         self._antiequivariant_layer = self.antiequivariant_layer
-        self._sign_cov_equivariance = make_array_list_fn_sign_covariant(
-            self.array_list_equivariance, axis=-3
-        )
+        self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -936,8 +959,8 @@ class AntiequivarianceNet(flax.linen.Module):
         """
         backflow_out, r_ei, _ = self._backflow(elec_pos)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
-        transformed_out = self._sign_cov_equivariance(antiequivariant_out)
-        return jnp.log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
+        antisym_vector = self._array_list_sign_covariance(antiequivariant_out)
+        return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):

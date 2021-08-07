@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 import vmcnet.models as models
+import vmcnet.models.sign_symmetry as sign_sym
 from vmcnet.utils.typing import ArrayList
 
 from tests.test_utils import get_default_config_with_chosen_model
@@ -154,21 +155,46 @@ def _make_embedded_particle_ferminets():
     return key, init_pos, log_psis
 
 
-def _make_antiequivariance_net(
+def _make_antiequivariance_net_with_resnet_sign_covariance(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
     backflow = _get_backflow(
         spin_split, ndense_list, cyclic_spins=cyclic_spins, ion_pos=ion_pos
     )
 
-    def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
+    def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
         concat_x = jnp.concatenate(x, axis=-2)
         return _get_backflow(
             spin_split, ((9,), (2,), (1,)), cyclic_spins=True, ion_pos=None
         )(concat_x)[0]
 
+    odd_equivariance = sign_sym.make_array_list_fn_sign_covariant(
+        backflow_based_equivariance, axis=-3
+    )
+
+    def array_list_sign_covariance(x: ArrayList) -> jnp.ndarray:
+        return jnp.sum(odd_equivariance(x), axis=-2)
+
     log_psi = models.construct.AntiequivarianceNet(
-        backflow, antiequivariance, array_list_equivariance
+        backflow, antiequivariance, array_list_sign_covariance
+    )
+
+    return log_psi
+
+
+def _make_antiequivariance_net_with_products_sign_covariance(
+    spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
+):
+    backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins=cyclic_spins, ion_pos=ion_pos
+    )
+
+    array_list_sign_covariance = sign_sym.ProductsSignCovariance(
+        1, models.weights.get_kernel_initializer("orthogonal")
+    )
+
+    log_psi = models.construct.AntiequivarianceNet(
+        backflow, antiequivariance, array_list_sign_covariance
     )
 
     return log_psi
@@ -192,14 +218,14 @@ def _make_orbital_cofactor_net():
         models.weights.get_bias_initializer("uniform"),
     )
 
-    log_psi = _make_antiequivariance_net(
+    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
     )
 
-    return key, init_pos, log_psi
+    return key, init_pos, log_psi_eq
 
 
-def _make_per_particle_dets_net():
+def _make_per_particle_dets_nets():
     (
         key,
         ion_pos,
@@ -219,11 +245,14 @@ def _make_per_particle_dets_net():
         )
     )
 
-    log_psi = _make_antiequivariance_net(
+    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=False, ion_pos=ion_pos
     )
+    log_psi_sign_cov = _make_antiequivariance_net_with_products_sign_covariance(
+        spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
+    )
 
-    return key, init_pos, log_psi
+    return key, init_pos, [log_psi_eq, log_psi_sign_cov]
 
 
 def _make_split_antisymmetry():
@@ -332,14 +361,14 @@ def test_orbital_cofactor_net_can_be_evaluated():
 
 def test_per_particle_dets_net_can_be_constructed():
     """Check construction of the per-particle dets AntiequivarianceNet does not fail."""
-    _make_per_particle_dets_net()
+    _make_per_particle_dets_nets()
 
 
 @pytest.mark.slow
 def test_per_particle_dets_net_can_be_evaluated():
     """Check evaluation of the per-particle dets AntiequivarianceNet."""
-    key, init_pos, log_psi = _make_per_particle_dets_net()
-    _jit_eval_model(key, init_pos, log_psi)
+    key, init_pos, log_psis = _make_per_particle_dets_nets()
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
 def test_split_antisymmetry_can_be_constructed():
@@ -377,32 +406,28 @@ def test_get_model_from_default_config():
         use_det_resnet=True,
         determinant_fn_mode=None,
         brute_force_subtype=None,
+        use_products_covariance=False,
     ):
         model_config = get_default_config_with_chosen_model(
             model_type,
             use_det_resnet=use_det_resnet,
             determinant_fn_mode=determinant_fn_mode,
             brute_force_subtype=brute_force_subtype,
+            use_products_covariance=use_products_covariance,
         ).model
         models.construct.get_model_from_config(
             model_config, nelec, ion_pos, ion_charges
         )
 
-    for model_type in [
-        "ferminet",
-        "embedded_particle_ferminet",
-        "orbital_cofactor_net",
-        "per_particle_dets_net",
-        "brute_force_antisym",
-    ]:
-        if model_type == "brute_force_antisym":
-            for subtype in ["rank_one", "double"]:
-                _construct_model(model_type, brute_force_subtype=subtype)
-        elif model_type in ["ferminet", "embedded_particle_ferminet"]:
-            _construct_model(model_type, use_det_resnet=False)
-            for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
-                _construct_model(
-                    model_type, use_det_resnet=True, determinant_fn_mode=mode
-                )
-        else:
-            _construct_model(model_type)
+    for model_type in ["brute_force_antisym"]:
+        for subtype in ["rank_one", "double"]:
+            _construct_model(model_type, brute_force_subtype=subtype)
+    for model_type in ["ferminet", "embedded_particle_ferminet"]:
+        _construct_model(model_type, use_det_resnet=False)
+        for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
+            _construct_model(model_type, use_det_resnet=True, determinant_fn_mode=mode)
+    for model_type in ["orbital_cofactor_net", "per_particle_dets_net"]:
+        for use_products_covariance in [False, True]:
+            _construct_model(
+                model_type, use_products_covariance=use_products_covariance
+            )

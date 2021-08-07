@@ -141,6 +141,25 @@ def get_default_model_config() -> ConfigDict:
             "cyclic_spins": cyclic_spins,
         }
     )
+
+    antieq_config = ConfigDict(
+        {
+            "backflow": ferminet_backflow,
+            "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+            "kernel_init_envelope_dim": {"type": "ones"},
+            "kernel_init_envelope_ion": {"type": "ones"},
+            "bias_init_orbital_linear": normal_init,
+            "orbitals_use_bias": True,
+            "isotropic_decay": True,
+            "use_products_covariance": True,
+            "invariance": invariance,
+            "products_covariance": {
+                "kernel_init": {"type": "orthogonal", "scale": 2.0},
+                "register_kfac": True,
+            },
+        }
+    )
+
     config = ConfigDict(
         {
             "type": "ferminet",
@@ -160,30 +179,10 @@ def get_default_model_config() -> ConfigDict:
                     ),
                 }
             ),
-            "orbital_cofactor_net": ConfigDict(
-                {
-                    "backflow": ferminet_backflow,
-                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-                    "kernel_init_envelope_dim": {"type": "ones"},
-                    "kernel_init_envelope_ion": {"type": "ones"},
-                    "bias_init_orbital_linear": normal_init,
-                    "orbitals_use_bias": True,
-                    "isotropic_decay": True,
-                    "invariance": invariance,
-                }
-            ),
-            "per_particle_dets_net": ConfigDict(
-                {
-                    "backflow": ferminet_backflow,
-                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-                    "kernel_init_envelope_dim": {"type": "ones"},
-                    "kernel_init_envelope_ion": {"type": "ones"},
-                    "bias_init_orbital_linear": normal_init,
-                    "orbitals_use_bias": True,
-                    "isotropic_decay": True,
-                    "invariance": invariance,
-                }
-            ),
+            # TODO (ggoldsh): these two should probably be subtypes of a single
+            # "antiequivariance" model type
+            "orbital_cofactor_net": antieq_config,
+            "per_particle_dets_net": antieq_config,
             "brute_force_antisym": ConfigDict(
                 {
                     "backflow": ferminet_backflow,
