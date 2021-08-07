@@ -928,7 +928,7 @@ class AntiequivarianceNet(flax.linen.Module):
                 -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
         array_list_sign_covariance (Callable): function which is sign-
             covariant with respect to each spin. Has the signature
-            [(..., nelec[spin], d_antieq)]  -> (..., n, d_antisym). Since this function
+            [(..., nelec[spin], d_antieq)]  -> (..., d_antisym). Since this function
             is sign covariant, its outputs are antisymmetric, so Psi can be calculated
             by summing over the final axis of the result.
     """
