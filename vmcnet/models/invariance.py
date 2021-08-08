@@ -1,11 +1,11 @@
 """Permutation invariant models."""
 import math
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 import flax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import ArrayList, Backflow, ComputeInputStreams, SpinSplit
+from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
 from .core import Dense, _split_mean, get_nspins
 from .weights import WeightInitializer
 
@@ -27,14 +27,6 @@ class InvariantTensor(flax.linen.Module):
             correspond to the desired non-batch output shapes of for each split of the
             input. This determines the output shapes for each split, i.e. the outputs
             are shaped [(batch_dims, output_shape_per_spin[i])].
-        compute_input_streams (ComputeInputStreams): function to compute input
-            streams from electron positions. Has the signature
-            (elec_pos of shape (..., n, d)) -> (
-                stream_1e of shape (..., n, d'),
-                optional stream_2e of shape (..., nelec, nelec, d2),
-                optional r_ei of shape (..., n, nion, d),
-                optional r_ee of shape (..., n, n, d),
-            )
         backflow (Callable): function which computes position features from the electron
                 positions. Has the signature
                 (
@@ -52,7 +44,6 @@ class InvariantTensor(flax.linen.Module):
 
     spin_split: SpinSplit
     output_shape_per_spin: Sequence[Iterable[int]]
-    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -64,7 +55,6 @@ class InvariantTensor(flax.linen.Module):
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
-        self._compute_input_streams = self.compute_input_streams
 
         nspins = get_nspins(self.spin_split)
 
@@ -100,11 +90,16 @@ class InvariantTensor(flax.linen.Module):
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> ArrayList:
+    def __call__(
+        self, stream_1e: jnp.ndarray, stream_2e: Optional[jnp.ndarray] = None
+    ) -> ArrayList:
         """Compute input streams -> backflow -> split mean -> dense to get invariance.
 
         Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+            stream_1e (jnp.ndarray): one-electron input stream of shape
+                (..., nelec, d1).
+            stream_2e (jnp.ndarray, optional): two-electron input of shape
+                (..., nelec, nelec, d2).
 
         Returns:
             ArrayList: list of invariant arrays which are invariant with respect to
@@ -112,7 +107,6 @@ class InvariantTensor(flax.linen.Module):
             specified by self.output_shape_per_spin, and the other axes are shared batch
             axes
         """
-        stream_1e, stream_2e, _, _ = self._compute_input_streams(elec_pos)
         stream_1e = self._backflow(stream_1e, stream_2e)
 
         invariant_split = _split_mean(stream_1e, self.spin_split, keepdims=False)

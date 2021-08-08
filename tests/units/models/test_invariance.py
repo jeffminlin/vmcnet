@@ -32,16 +32,18 @@ def test_invariant_tensor():
     invariant_model = models.invariance.InvariantTensor(
         spin_split=spin_split,
         output_shape_per_spin=output_shape_per_spin,
-        compute_input_streams=compute_input_streams,
         backflow=backflow,
         kernel_initializer=kernel_init,
         bias_initializer=bias_init,
     )
 
-    params = invariant_model.init(key, elec_pos)
+    stream_1e, stream_2e, _, _ = compute_input_streams(elec_pos)
+    perm_stream_1e, perm_stream_2e, _, _ = compute_input_streams(elec_pos)
 
-    output = invariant_model.apply(params, elec_pos)
-    perm_output = invariant_model.apply(params, perm_elec_pos)
+    params = invariant_model.init(key, stream_1e, stream_2e)
+
+    output = invariant_model.apply(params, perm_stream_1e, perm_stream_2e)
+    perm_output = invariant_model.apply(params, perm_stream_1e, perm_stream_2e)
 
     chex.assert_shape(
         output, [(nchains,) + output_shape for output_shape in output_shape_per_spin]

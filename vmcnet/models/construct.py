@@ -871,13 +871,18 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     determinant_fn: Optional[DeterminantFn] = None
     determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
+    def setup(self):
+        """Setup EmbeddedParticleFermiNet."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._invariance_compute_input_streams = self.invariance_compute_input_streams
+
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
     ) -> InvariantTensor:
         return InvariantTensor(
             self.spin_split,
             output_shape_per_spin,
-            self.invariance_compute_input_streams,
             self.invariance_backflow,
             self.invariance_kernel_initializer,
             self.invariance_bias_initializer,
@@ -953,7 +958,13 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         ferminet = self._get_ferminet(total_spin_split)
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
-        split_hidden_particles = invariance(elec_pos)
+        (
+            invariance_stream_1e,
+            invariance_stream_2e,
+            _,
+            _,
+        ) = self._invariance_compute_input_streams(elec_pos)
+        split_hidden_particles = invariance(invariance_stream_1e, invariance_stream_2e)
         # Create list of [visible_pos_spin1, hidden_pos_spin1, visible_pos_spin2, ...],
         # so that the full input positions can be created with a single concatenation.
         split_all_particles = [
