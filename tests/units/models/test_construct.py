@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import vmcnet.models as models
 import vmcnet.models.sign_symmetry as sign_sym
+from vmcnet.models.construct import DeterminantFnMode
 from vmcnet.utils.typing import ArrayList
 
 from tests.test_utils import get_default_config_with_chosen_model
@@ -118,6 +119,8 @@ def _make_ferminets():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
+            orbitals_use_bias=True,
+            isotropic_decay=True,
             determinant_fn=resnet_det_fn,
             determinant_fn_mode=determinant_fn_mode,
         )
@@ -178,8 +181,8 @@ def _make_extended_orbital_matrix_ferminets():
 
     log_psis = []
     cyclic_spins = False
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
-    extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins, ion_pos)
+    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+    extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
     for extra_dims_per_spin, use_separate_invariance_backflow in [
         ((2, 3), True),
@@ -192,6 +195,7 @@ def _make_extended_orbital_matrix_ferminets():
 
         log_psi = models.construct.ExtendedOrbitalMatrixFermiNet(
             spin_split=spin_split,
+            compute_input_streams=_get_compute_input_streams(ion_pos),
             backflow=backflow,
             ndeterminants=3,
             kernel_initializer_orbital_linear=models.weights.get_kernel_initializer(
@@ -206,6 +210,10 @@ def _make_extended_orbital_matrix_ferminets():
             bias_initializer_orbital_linear=models.weights.get_bias_initializer(
                 "uniform"
             ),
+            orbitals_use_bias=True,
+            isotropic_decay=True,
+            determinant_fn=None,
+            determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
             extra_dims_per_spin=extra_dims_per_spin,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(

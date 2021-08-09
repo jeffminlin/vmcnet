@@ -190,6 +190,7 @@ def get_model_from_config(
                 invariance_backflow = None
             return ExtendedOrbitalMatrixFermiNet(
                 spin_split,
+                compute_input_streams,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
@@ -619,13 +620,13 @@ class FermiNet(flax.linen.Module):
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        orbitals_use_bias (bool, optional): whether to add a bias term in the linear
-            part of the orbitals. Defaults to True.
-        isotropic_decay (bool, optional): whether the decay for each ion should be
-            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
-            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
+        orbitals_use_bias (bool): whether to add a bias term in the linear part of the
+            orbitals.
+        isotropic_decay (bool): whether the decay for each ion should be anisotropic
+            (w.r.t. the dimensions of the input), giving envelopes of the form
+            exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn (DeterminantFn, optional): A function with signature
+        determinant_fn (DeterminantFn): A function with signature
             dout, [nspins: (..., ndeterminants)] -> (..., dout).
             If provided, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
@@ -643,11 +644,11 @@ class FermiNet(flax.linen.Module):
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
             sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
-            supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of SIGN_COVARIANCE,
+            supports nspins = 2.
+        determinant_fn_mode (DeterminantFnMode): One of SIGN_COVARIANCE,
             PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
             provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn is provided. Defaults to PARALLEL_EVEN.
+            if no determinant_fn is provided.
     """
 
     spin_split: SpinSplit
@@ -658,10 +659,10 @@ class FermiNet(flax.linen.Module):
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
-    orbitals_use_bias: bool = True
-    isotropic_decay: bool = False
-    determinant_fn: Optional[DeterminantFn] = None
-    determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
+    orbitals_use_bias: bool
+    isotropic_decay: bool
+    determinant_fn: Optional[DeterminantFn]
+    determinant_fn_mode: DeterminantFnMode
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
