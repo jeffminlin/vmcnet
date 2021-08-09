@@ -417,13 +417,13 @@ def test_embedded_particle_ferminet_can_be_evaluated():
 
 
 def test_extended_orbital_matrix_ferminet_can_be_constructed():
-    """Check construction of EmbeddedParticleFerminet does not fail."""
+    """Check construction of ExtendedOrbitalMatrixFermiNet does not fail."""
     _make_extended_orbital_matrix_ferminets()
 
 
 @pytest.mark.slow
 def test_extended_orbital_matrix_ferminet_can_be_evaluated():
-    """Check evaluation of EmbeddedParticleFerminet does not fail."""
+    """Check evaluation of ExtendedOrbitalMatrixFermiNet does not fail."""
     key, init_pos, log_psis = _make_extended_orbital_matrix_ferminets()
     [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 

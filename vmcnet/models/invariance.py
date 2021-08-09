@@ -72,10 +72,10 @@ class SplitMeanDense(flax.linen.Module):
             x (jnp.ndarray): array of shape (..., n, d)
 
         Returns:
-            [(..., n[i], self.ndense_per_spin[i])]: list of length nspins, where nspins
+            [(..., self.ndense_per_spin[i])]: list of length nspins, where nspins
             is the number of splits created by jnp.split(x, self.spin_split, axis=-2),
-            and the ith entry of the output is the ith split transformed by a dense
-            layer with self.ndense_per_spin[i] nodes.
+            and the ith entry of the output is the ith split mean (an array of shape
+            (..., d)) transformed by a dense layer with self.ndense_per_spin[i] nodes.
         """
         x_split = _split_mean(x, self.spin_split, keepdims=False)
         return [
@@ -103,8 +103,8 @@ class InvariantTensor(flax.linen.Module):
             correspond to the desired non-batch output shapes of for each split of the
             input. This determines the output shapes for each split, i.e. the outputs
             are shaped [(batch_dims, output_shape_per_spin[i])].
-        backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
+        backflow (Callable or None): function which computes position features from the
+            electron positions. Has the signature
             (
                 stream_1e of shape (..., n, d'),
                 optional stream_2e of shape (..., nelec, nelec, d2),

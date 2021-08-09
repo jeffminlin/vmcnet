@@ -626,29 +626,40 @@ class FermiNet(flax.linen.Module):
             (w.r.t. the dimensions of the input), giving envelopes of the form
             exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
             exp(-||a(r - R||)) for a number a.
-        determinant_fn (DeterminantFn): A function with signature
+        determinant_fn (DeterminantFn or None): A optional function with signature
             dout, [nspins: (..., ndeterminants)] -> (..., dout).
-            If provided, the function will be used to calculate Psi based on the
+
+            If not None, the function will be used to calculate Psi based on the
             outputs of the orbital matrix determinants. Depending on the
             determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is SIGN_COVARIANCE, the function will use d=1
+            ways.
+
+            If the mode is SIGN_COVARIANCE, the function will use d=1
             and will be explicitly symmetrized over the sign group, on a per-spin basis,
             to be sign-covariant (odd). If PARALLEL_EVEN or PAIRWISE_EVEN are
             selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For PARALLEL_EVEN, the function will use d=ndeterminants, and each
+            (even).
+
+            For PARALLEL_EVEN, the function will use d=ndeterminants, and each
             output will be multiplied by the product of corresponding determinants. That
             is, for 2 spins, with up determinants u_i and down determinants d_i, the
             ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For PAIRWISE_EVEN, the function will use
+            symmetrized determinant function.
+
+            For PAIRWISE_EVEN, the function will use
             d=ndeterminants**nspins, and each output will again be multiplied by a
             product of determinants, but this time the determinants will range over all
             pairs. That is, for 2 spins, the ansatz will be
             sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
             supports nspins = 2.
+
+            If None, the equivalent of PARALLEL_EVEN mode (overriding any set
+            determinant_fn_mode) is used without a symmetrized resnet (so the output,
+            before any log-transformations, is a sum of products of determinants).
         determinant_fn_mode (DeterminantFnMode): One of SIGN_COVARIANCE,
             PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
             provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn is provided.
+            if determinant_fn is set to None.
     """
 
     spin_split: SpinSplit
@@ -1143,10 +1154,12 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         )
         return [
             [
-                jnp.concatenate([spin, invariant_part[det_idx][spin_idx]], axis=-2)
-                for spin_idx, spin in enumerate(orbs)
+                jnp.concatenate(
+                    [orbital_matrix, invariant_part[det_idx][spin_idx]], axis=-2
+                )
+                for spin_idx, orbital_matrix in enumerate(orbital_matrices)
             ]
-            for det_idx, orbs in enumerate(equivariant_part)
+            for det_idx, orbital_matrices in enumerate(equivariant_part)
         ]
 
 
