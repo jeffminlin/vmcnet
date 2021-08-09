@@ -1017,6 +1017,11 @@ class AntiequivarianceNet(flax.linen.Module):
             [(..., nelec[spin], d_antieq)]  -> (..., d_antisym). Since this function
             is sign covariant, its outputs are antisymmetric, so Psi can be calculated
             by summing over the final axis of the result.
+        multiply_by_eq_features (bool, optional): If True, the antiequivariance from the
+            antiequivariant_layer is multiplied by the equivariant features from the
+            backflow before being fed into the sign covariant function. If False, the
+            antiequivariance is processed directly by the sign covariant function.
+            Defaults to False.
     """
 
     spin_split: SpinSplit
@@ -1024,7 +1029,7 @@ class AntiequivarianceNet(flax.linen.Module):
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
     array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
-    multiply_antieq_by_feature_vectors: bool = False
+    multiply_by_eq_features: bool = False
 
     def setup(self):
         """Setup backflow."""
@@ -1051,7 +1056,7 @@ class AntiequivarianceNet(flax.linen.Module):
         backflow_out = self._backflow(stream_1e, stream_2e)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
 
-        if self.multiply_antieq_by_feature_vectors:
+        if self.multiply_by_eq_features:
             antiequivariant_out = antiequivariance.multiply_antieq_by_eq_features(
                 antiequivariant_out, backflow_out, self.spin_split
             )

@@ -172,7 +172,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
     antiequivariance,
     cyclic_spins,
     ion_pos,
-    multiply_feature_vectors=False,
+    multiply_by_eq_features=False,
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
@@ -196,7 +196,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
         backflow,
         antiequivariance,
         array_list_sign_covariance,
-        multiply_antieq_by_feature_vectors=multiply_feature_vectors,
+        multiply_by_eq_features=multiply_by_eq_features,
     )
 
     return log_psi
@@ -247,7 +247,7 @@ def _make_orbital_cofactor_nets():
         antiequivariance,
         cyclic_spins=True,
         ion_pos=ion_pos,
-        multiply_feature_vectors=False,
+        multiply_by_eq_features=False,
     )
     log_psi_with_features = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split,
@@ -255,7 +255,7 @@ def _make_orbital_cofactor_nets():
         antiequivariance,
         cyclic_spins=True,
         ion_pos=ion_pos,
-        multiply_feature_vectors=True,
+        multiply_by_eq_features=True,
     )
 
     return key, init_pos, [log_psi_no_features, log_psi_with_features]
