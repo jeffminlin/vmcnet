@@ -2,9 +2,12 @@
 import functools
 from typing import Callable, List, Tuple, TypeVar
 
+import flax
 import jax
 import jax.numpy as jnp
 
+from vmcnet.models.core import Dense
+from vmcnet.models.weights import WeightInitializer
 from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
 from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList
 
@@ -296,3 +299,65 @@ def make_array_list_fn_sign_invariant(
         lambda x, _: x,  # Ignore the signs to get an invariance
         functools.partial(jnp.sum, axis=axis),
     )
+
+
+class ProductsSignCovariance(flax.linen.Module):
+    """Sign covariance from a weighted sum of products of per-particle values.
+
+    Only supports two spins at the moment. Given per-spin antiequivariant vectors
+    a_1, a_2, ..., and b_1, b_2, ..., computes an antisymmetry of
+    sum_{i,j} (w_{i,j} sum_{k} a_ik b_jk), or multiple such antisymmetries if
+    features>1.
+
+    Attributes:
+        features (int): the number of antisymmetric output features to generate.
+        kernel_init (WeightInitializer): initializer for the weights of the dense layer.
+        register_kfac (bool): whether to register the dense layer with KFAC. Defaults to
+            True.
+    """
+
+    features: int
+    kernel_init: WeightInitializer
+    register_kfac: bool = True
+
+    @flax.linen.compact
+    def __call__(self, x: ArrayList) -> jnp.ndarray:
+        """Calculate weighted sum of products of up- and down-spin antiequivariances.
+
+        Arguments:
+            x (ArrayList): input antiequivariant arrays of shape
+                [(..., nelec_up, d), (..., nelec_down, d)]
+
+        Returns:
+            jnp.ndarray: array of length features of antisymmetric values calculated
+                by taking a weighted sum of the pairwise dot-products of the up- and
+                down-spin antiequivariant inputs.
+        """
+        # TODO (ggoldsh): update this to support nspins != 2 as well
+        if len(x) != 2:
+            raise ValueError(
+                "Products covariance only supported for nspins=2, got {}".format(len(x))
+            )
+
+        naxes = len(x[0].shape)
+        batch_dims = range(naxes - 2)
+        contraction_dim = (naxes - 1,)
+        # Since the second last axis is not specified as either a batch or contraction
+        # dim, jax.lax.dot_general will automatically compute over all pairs of up and
+        # down spins. pairwise_dots thus has shape (..., nelec_up, nelec_down).
+        pairwise_dots = jax.lax.dot_general(
+            x[0], x[1], ((contraction_dim, contraction_dim), (batch_dims, batch_dims))
+        )
+
+        shape = pairwise_dots.shape
+        # flattened_dots has shape (..., nelec_up * nelec_down)
+        flattened_dots = jnp.reshape(
+            pairwise_dots, (*shape[:-2], shape[-1] * shape[-2])
+        )
+
+        return Dense(
+            self.features,
+            kernel_init=self.kernel_init,
+            use_bias=False,
+            register_kfac=self.register_kfac,
+        )(flattened_dots)

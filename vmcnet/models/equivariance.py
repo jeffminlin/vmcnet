@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
-from vmcnet.utils.typing import ArrayList, SpinSplit
+from vmcnet.utils.typing import ArrayList, InputStreams, SpinSplit
 from .core import (
     Activation,
     Dense,
@@ -32,12 +32,10 @@ def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
 def compute_input_streams(
     elec_pos: jnp.ndarray,
     ion_pos: jnp.ndarray = None,
-    include_ee: bool = True,
+    include_2e_stream: bool = True,
     include_ei_norm: bool = True,
     include_ee_norm: bool = True,
-) -> Tuple[
-    jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray], Optional[jnp.ndarray]
-]:
+) -> InputStreams:
     """Create input streams with electron and optionally ion data.
 
     If `ion_pos` is given, computes the electron-ion displacements (i.e. nuclear
@@ -45,16 +43,16 @@ def compute_input_streams(
     `include_ei_norm` is True, then the distances are also concatenated, so the map is
     elec_pos = (..., nelec, d) -> input_1e = (..., nelec, nion * (d + 1)).
 
-    If `include_ee` is True, then a two-electron stream of shape (..., nelec, nelec, d)
-    is also computed and returned (otherwise None is returned). If `include_ee_norm` is
-    True, then this becomes (..., nelec, nelec, d + 1) by concatenating pairwise
-    distances onto the stream.
+    If `include_2e_stream` is True, then a two-electron stream of shape
+    (..., nelec, nelec, d) is also computed and returned (otherwise None is returned).
+    If `include_ee_norm` is True, then this becomes (..., nelec, nelec, d + 1) by
+    concatenating pairwise distances onto the stream.
 
     Args:
         elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
         ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
             relative electron positions, 2-d array of shape (nion, d). Defaults to None.
-        include_ee (bool, optional): whether to compute pairwise electron
+        include_2e_stream (bool, optional): whether to compute pairwise electron
             displacements/distances. Defaults to True.
         include_ei_norm (bool, optional): whether to include electron-ion distances in
             the one-electron input. Defaults to True.
@@ -82,13 +80,13 @@ def compute_input_streams(
 
         fourth output: electron-electron displacements of shape (..., nelec, nelec, d)
 
-        If `include_ee` is False, then the second and fourth outputs are None. If
+        If `include_2e_stream` is False, then the second and fourth outputs are None. If
         `ion_pos` is None, then the third output is None.
     """
     input_1e, r_ei = compute_electron_ion(elec_pos, ion_pos, include_ei_norm)
     input_2e = None
     r_ee = None
-    if include_ee:
+    if include_2e_stream:
         input_2e, r_ee = compute_electron_electron(elec_pos, include_ee_norm)
     return input_1e, input_2e, r_ei, r_ee
 
@@ -499,14 +497,6 @@ class FermiNetBackflow(flax.linen.Module):
                 out_1e has shape (..., n, d_1e')
                 in_2e has shape (..., n, n, d_2e)
                 out_2d has shape (..., n, n, d_2e')
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
-            relative electron positions, 2-d array of shape (nion, d). Defaults to None.
-        include_2e_stream (bool, optional): whether to include pairwise electron
-            displacements/distances in the input. Defaults to True.
-        include_ei_norm (bool, optional): whether to include electron-ion distances in
-            the one-electron input. Defaults to True.
-        include_ee_norm (bool, optional): whether to include electron-electron distances
-            in the two-electron input. Defaults to True.
     """
 
     residual_blocks: Sequence[
@@ -515,44 +505,32 @@ class FermiNetBackflow(flax.linen.Module):
             Tuple[jnp.ndarray, Optional[jnp.ndarray]],
         ]
     ]
-    ion_pos: Optional[jnp.ndarray] = None
-    include_2e_stream: bool = True
-    include_ei_norm: bool = True
-    include_ee_norm: bool = True
 
     def setup(self):
         """Setup called residual blocks."""
         self._residual_block_list = [block for block in self.residual_blocks]
 
     def __call__(
-        self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray]]:
-        """Create input streams and iteratively apply residual blocks.
+        self,
+        stream_1e: jnp.ndarray,
+        stream_2e: Optional[jnp.ndarray] = None,
+    ) -> jnp.ndarray:
+        """Iteratively apply residual blocks to Ferminet input streams.
 
         Args:
-            elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+            stream_1e (jnp.ndarray): one-electron input stream of shape
+                (..., nelec, d1).
+            stream_2e (jnp.ndarray, optional): two-electron input of shape
+                (..., nelec, nelec, d2).
 
         Returns:
-            (jnp.ndarray, optional jnp.ndarray, optional jnp.ndarray): tuple of
-            (stream_1e, r_ei, r_ee) where stream_1e is the output of the one-electron
-            stream after applying self.residual_blocks to the initial input streams,
-            r_ei is the electron-ion displacements (..., nelec, nion, d), and r_ee is
-            the electron-electron displacements (..., nelec, nelec, d). r_ei is None if
-            self.ion_pos is None. r_ee is None if self.include_2e_stream is None.
+            (jnp.ndarray): the output of the one-electron stream after applying
+            self.residual_blocks to the initial input streams.
         """
-        # TODO (ggoldsh): move this computation out of the backflow layer
-        stream_1e, stream_2e, r_ei, r_ee = compute_input_streams(
-            elec_pos,
-            self.ion_pos,
-            include_ee=self.include_2e_stream,
-            include_ei_norm=self.include_ei_norm,
-            include_ee_norm=self.include_ee_norm,
-        )
-
         for block in self._residual_block_list:
             stream_1e, stream_2e = block(stream_1e, stream_2e)
 
-        return stream_1e, r_ei, r_ee
+        return stream_1e
 
 
 class SplitDense(flax.linen.Module):

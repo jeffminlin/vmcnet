@@ -11,7 +11,13 @@ from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import ArrayList, Backflow, Jastrow, SpinSplit
+from vmcnet.utils.typing import (
+    ArrayList,
+    Backflow,
+    ComputeInputStreams,
+    Jastrow,
+    SpinSplit,
+)
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
@@ -24,10 +30,12 @@ from .equivariance import (
     FermiNetOrbitalLayer,
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
+    compute_input_streams,
 )
 from .invariance import InvariantTensor
 from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
 from .sign_symmetry import (
+    ProductsSignCovariance,
     make_array_list_fn_sign_covariant,
     make_array_list_fn_sign_invariant,
 )
@@ -75,9 +83,11 @@ def get_model_from_config(
     """Get a model from a hyperparameter config."""
     spin_split = tuple(jnp.cumsum(nelec)[:-1])
 
+    compute_input_streams = get_compute_input_streams_from_config(
+        model_config.input_streams, ion_pos
+    )
     backflow = get_backflow_from_config(
         model_config.backflow,
-        ion_pos,
         spin_split,
         dtype=dtype,
     )
@@ -105,6 +115,7 @@ def get_model_from_config(
         if model_config.type == "ferminet":
             return FermiNet(
                 spin_split,
+                compute_input_streams,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
@@ -126,15 +137,18 @@ def get_model_from_config(
             )
         elif model_config.type == "embedded_particle_ferminet":
             invariance_config = model_config.invariance
+            invariance_compute_input_streams = get_compute_input_streams_from_config(
+                invariance_config.input_streams, ion_pos
+            )
             invariance_backflow = get_backflow_from_config(
                 invariance_config.backflow,
-                ion_pos,
                 spin_split,
                 dtype=dtype,
             )
             return EmbeddedParticleFermiNet(
                 spin_split,
                 model_config.nhidden_fermions_per_spin,
+                compute_input_streams,
                 backflow,
                 model_config.ndeterminants,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
@@ -149,6 +163,7 @@ def get_model_from_config(
                 bias_initializer_orbital_linear=bias_init_constructor(
                     model_config.bias_init_orbital_linear
                 ),
+                invariance_compute_input_streams=invariance_compute_input_streams,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
                     invariance_config.kernel_initializer
@@ -168,7 +183,6 @@ def get_model_from_config(
             if model_config.use_separate_invariance_backflow:
                 invariance_backflow = get_backflow_from_config(
                     invariance_config.backflow,
-                    ion_pos,
                     spin_split,
                     dtype=dtype,
                 )
@@ -243,22 +257,21 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
             )
 
-        def array_list_equivariance(x: ArrayList) -> jnp.ndarray:
-            concat_x = jnp.concatenate(x, axis=-2)
-            return get_backflow_from_config(
-                model_config.invariance,
-                ion_pos=None,
-                spin_split=spin_split,
-                dtype=dtype,
-            )(concat_x)[0]
+        array_list_sign_covariance = get_sign_covariance_from_config(
+            model_config, spin_split, kernel_init_constructor, dtype
+        )
 
-        return AntiequivarianceNet(backflow, antieq_layer, array_list_equivariance)
+        return AntiequivarianceNet(
+            compute_input_streams, backflow, antieq_layer, array_list_sign_covariance
+        )
+
     elif model_config.type == "brute_force_antisym":
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
+                compute_input_streams,
                 backflow,
                 jastrow,
                 ndense_resnet=model_config.ndense_resnet,
@@ -280,6 +293,7 @@ def get_model_from_config(
         elif model_config.antisym_type == "double":
             return ComposedBruteForceAntisymmetryWithDecay(
                 spin_split,
+                compute_input_streams,
                 backflow,
                 jastrow,
                 ndense_resnet=model_config.ndense_resnet,
@@ -310,9 +324,21 @@ def get_model_from_config(
         )
 
 
+def get_compute_input_streams_from_config(
+    input_streams_config: ConfigDict, ion_pos: Optional[jnp.ndarray] = None
+) -> ComputeInputStreams:
+    """Get a function for computing input streams from a model configuration."""
+    return functools.partial(
+        compute_input_streams,
+        ion_pos=ion_pos,
+        include_2e_stream=input_streams_config.include_2e_stream,
+        include_ei_norm=input_streams_config.include_ei_norm,
+        include_ee_norm=input_streams_config.include_ee_norm,
+    )
+
+
 def get_backflow_from_config(
     backflow_config,
-    ion_pos,
     spin_split,
     dtype=jnp.float32,
 ) -> flax.linen.Module:
@@ -346,15 +372,37 @@ def get_backflow_from_config(
         cyclic_spins=backflow_config.cyclic_spins,
     )
 
-    backflow = FermiNetBackflow(
-        residual_blocks,
-        ion_pos=ion_pos,
-        include_2e_stream=backflow_config.include_2e_stream,
-        include_ei_norm=backflow_config.include_ei_norm,
-        include_ee_norm=backflow_config.include_ee_norm,
-    )
+    return FermiNetBackflow(residual_blocks)
 
-    return backflow
+
+def get_sign_covariance_from_config(
+    model_config: ConfigDict,
+    spin_split: SpinSplit,
+    kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
+    dtype: jnp.dtype,
+) -> Callable[[ArrayList], jnp.ndarray]:
+    """Get a sign covariance from a model config, for use in AntiequivarianceNet."""
+    if model_config.use_products_covariance:
+        return ProductsSignCovariance(
+            1,
+            kernel_init_constructor(model_config.products_covariance.kernel_init),
+            model_config.products_covariance.register_kfac,
+        )
+
+    else:
+
+        def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
+            concat_x = jnp.concatenate(x, axis=-2)
+            return get_backflow_from_config(
+                model_config.invariance,
+                spin_split=spin_split,
+                dtype=dtype,
+            )(concat_x)[0]
+
+        odd_equivariance = make_array_list_fn_sign_covariant(
+            backflow_based_equivariance, axis=-3
+        )
+        return lambda x: jnp.sum(odd_equivariance(x), axis=-2)
 
 
 class ComposedModel(flax.linen.Module):
@@ -541,14 +589,20 @@ class FermiNet(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -597,6 +651,7 @@ class FermiNet(flax.linen.Module):
     """
 
     spin_split: SpinSplit
+    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
@@ -620,6 +675,7 @@ class FermiNet(flax.linen.Module):
         """Setup backflow and symmetrized determinant function."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._symmetrized_det_fn = None
         if self.determinant_fn is not None:
@@ -725,8 +781,10 @@ class FermiNet(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei, _ = self._backflow(elec_pos)
+        stream_1e, stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
+        stream_1e = self._backflow(stream_1e, stream_2e)
         orbitals = self._get_orbitals_from_inputs(elec_pos, stream_1e, r_ei)
+
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
@@ -766,14 +824,20 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             the total number of electrons.
         nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
             generate for each spin. Must have length nspins.
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         ndeterminants (int): number of determinants in the FermiNet model, i.e. the
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
@@ -790,8 +854,21 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> jnp.ndarray
+        invariance_compute_input_streams (ComputeInputStreams): function to compute
+            input streams from electron positions, for the invariance that is used to
+            generate the hidden particle positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         invariance_backflow (Callable): backflow function to be used for the invariance
-            which generates the hidden fermion positions.
+            which generates the hidden fermion positions. Has the signature
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         invariance_kernel_initializer (WeightInitializer): kernel initializer for the
             invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
         invariance_bias_initializer (WeightInitializer): bias initializer for the
@@ -833,12 +910,14 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
 
     spin_split: SpinSplit
     nhidden_fermions_per_spin: Sequence[int]
+    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     ndeterminants: int
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
+    invariance_compute_input_streams: ComputeInputStreams
     invariance_backflow: Backflow
     invariance_kernel_initializer: WeightInitializer
     invariance_bias_initializer: WeightInitializer
@@ -848,6 +927,12 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     invariance_register_kfac: bool = True
     determinant_fn: Optional[DeterminantFn] = None
     determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
+
+    def setup(self):
+        """Setup EmbeddedParticleFermiNet."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._invariance_compute_input_streams = self.invariance_compute_input_streams
 
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
@@ -865,6 +950,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
     def _get_ferminet(self, total_spin_split: SpinSplit) -> FermiNet:
         return FermiNet(
             total_spin_split,
+            self.compute_input_streams,
             self.backflow,
             self.ndeterminants,
             self.kernel_initializer_orbital_linear,
@@ -929,7 +1015,13 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         ferminet = self._get_ferminet(total_spin_split)
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
-        split_hidden_particles = invariance(elec_pos)
+        (
+            invariance_stream_1e,
+            invariance_stream_2e,
+            _,
+            _,
+        ) = self._invariance_compute_input_streams(elec_pos)
+        split_hidden_particles = invariance(invariance_stream_1e, invariance_stream_2e)
         # Create list of [visible_pos_spin1, hidden_pos_spin1, visible_pos_spin2, ...],
         # so that the full input positions can be created with a single concatenation.
         split_all_particles = [
@@ -997,26 +1089,38 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
         if self.invariance_backflow is not None:
             invariance_backflow = self.invariance_backflow
-            invariance_input = elec_pos
+            input_1e, input_2e, _, _ = self._compute_input_streams(elec_pos)
+
+            return [
+                InvariantTensor(
+                    spin_split=self.spin_split,
+                    output_shape_per_spin=invariant_shape_per_spin,
+                    backflow=invariance_backflow,
+                    kernel_initializer=self.invariance_kernel_initializer,
+                    bias_initializer=self.invariance_bias_initializer,
+                    use_bias=self.invariance_use_bias,
+                    register_kfac=self.invariance_register_kfac,
+                )(input_1e, input_2e)
+                for _ in range(self.ndeterminants)
+            ]
         else:
 
-            def invariance_backflow(stream_1e):
-                return stream_1e, None, None
+            def invariance_backflow(stream_1e, stream_2e):
+                del stream_2e
+                return stream_1e
 
-            invariance_input = stream_1e
-
-        return [
-            InvariantTensor(
-                spin_split=self.spin_split,
-                output_shape_per_spin=invariant_shape_per_spin,
-                backflow=invariance_backflow,
-                kernel_initializer=self.invariance_kernel_initializer,
-                bias_initializer=self.invariance_bias_initializer,
-                use_bias=self.invariance_use_bias,
-                register_kfac=self.invariance_register_kfac,
-            )(invariance_input)
-            for _ in range(self.ndeterminants)
-        ]
+            return [
+                InvariantTensor(
+                    spin_split=self.spin_split,
+                    output_shape_per_spin=invariant_shape_per_spin,
+                    backflow=invariance_backflow,
+                    kernel_initializer=self.invariance_kernel_initializer,
+                    bias_initializer=self.invariance_bias_initializer,
+                    use_bias=self.invariance_use_bias,
+                    register_kfac=self.invariance_register_kfac,
+                )(stream_1e, None)
+                for _ in range(self.ndeterminants)
+            ]
 
     def _get_orbitals_from_inputs(
         self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
@@ -1029,6 +1133,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
                 nelec + self.extra_dims_per_spin[i]
                 for i, nelec in enumerate(nelec_per_spin)
             ]
+
             invariant_part = self._get_invariance(
                 self.extra_dims_per_spin, norbitals_per_spin, elec_pos, stream_1e
             )
@@ -1050,40 +1155,44 @@ class AntiequivarianceNet(flax.linen.Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         antiequivariant_layer (Callable): function which computes antiequivariances-per-
             spin. Has the signature
             (stream_1e of shape (..., n, d_backflow), r_ei of shape (..., n, nion, d))
                 -> (antieqs of shapes [spin: (..., n[spin], d_antieq)])
-        array_list_equivariance (Callable): function which is equivariant-per-spin. Has
-            the signature
-            (list of arrays of shapes [spin: (..., n[spin], d_antieq)])
-                -> (array of shape (..., n, d_equiv))
-            All outputs of this function are made covariant with respect to each input
-            sign, and an odd invariance is created by summing over the last two
-            dimensions of the output.
+        array_list_sign_covariance (Callable): function which is sign-
+            covariant with respect to each spin. Has the signature
+            [(..., nelec[spin], d_antieq)]  -> (..., d_antisym). Since this function
+            is sign covariant, its outputs are antisymmetric, so Psi can be calculated
+            by summing over the final axis of the result.
     """
 
+    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
-    array_list_equivariance: Callable[[ArrayList], jnp.ndarray]
+    array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
 
     def setup(self):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._antiequivariant_layer = self.antiequivariant_layer
-        self._sign_cov_equivariance = make_array_list_fn_sign_covariant(
-            self.array_list_equivariance, axis=-3
-        )
+        self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -1097,10 +1206,11 @@ class AntiequivarianceNet(flax.linen.Module):
             anti-equivariant backflow. If the inputs have shape (batch_dims, nelec, d),
             then the output has shape (batch_dims,).
         """
-        backflow_out, r_ei, _ = self._backflow(elec_pos)
+        stream_1e, stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
+        backflow_out = self._backflow(stream_1e, stream_2e)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
-        transformed_out = self._sign_cov_equivariance(antiequivariant_out)
-        return jnp.log(jnp.abs(jnp.sum(transformed_out, axis=(-1, -2))))
+        antisym_vector = self._array_list_sign_covariance(antiequivariant_out)
+        return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
@@ -1119,14 +1229,20 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         jastrow (Callable): function which computes a Jastrow factor from displacements.
             Has the signature
             (
@@ -1153,6 +1269,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     """
 
     spin_split: SpinSplit
+    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
     ndense_resnet: int
@@ -1167,6 +1284,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._jastrow = self.jastrow
 
@@ -1185,7 +1303,8 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei, r_ee = self._backflow(elec_pos)
+        stream_1e, stream_2e, r_ei, r_ee = self._compute_input_streams(elec_pos)
+        stream_1e = self._backflow(stream_1e, stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
             [
@@ -1225,14 +1344,20 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles, `spin_split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
         backflow (Callable): function which computes position features from the electron
             positions. Has the signature
-            elec pos of shape (..., n, d)
-                -> (
-                    stream_1e of shape (..., n, d'),
-                    r_ei of shape (..., n, nion, d),
-                    r_ee of shape (..., n, n, d),
-                )
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         jastrow (Callable): function which computes a Jastrow factor from displacements.
             Has the signature
             (
@@ -1258,6 +1383,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     """
 
     spin_split: SpinSplit
+    compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
     ndense_resnet: int
@@ -1272,6 +1398,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         """Setup backflow."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._jastrow = self.jastrow
 
@@ -1290,7 +1417,8 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, r_ei, r_ee = self._backflow(elec_pos)
+        stream_1e, stream_2e, r_ei, r_ee = self._compute_input_streams(elec_pos)
+        stream_1e = self._backflow(stream_1e, stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = ComposedBruteForceAntisymmetrize(
             SimpleResNet(

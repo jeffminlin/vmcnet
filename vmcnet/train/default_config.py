@@ -71,9 +71,17 @@ def get_default_model_config() -> ConfigDict:
     # invariance.cyclic_spins
     cyclic_spins = FieldReference(False)
 
-    ferminet_backflow = ConfigDict(
+    input_streams = ConfigDict(
         {
-            "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
+            "include_2e_stream": True,
+            "include_ei_norm": True,
+            "include_ee_norm": True,
+        }
+    )
+    embedded_particle_input_streams = input_streams
+
+    base_backflow_config = ConfigDict(
+        {
             "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
             "kernel_init_mixed": orthogonal_init,
             "kernel_init_2e_1e_stream": orthogonal_init,
@@ -81,12 +89,15 @@ def get_default_model_config() -> ConfigDict:
             "bias_init_1e_stream": normal_init,
             "bias_init_2e_stream": normal_init,
             "activation_fn": "tanh",
-            "include_2e_stream": True,
-            "include_ei_norm": True,
-            "include_ee_norm": True,
             "use_bias": True,
             "skip_connection": True,
             "cyclic_spins": cyclic_spins,
+        }
+    )
+    ferminet_backflow = ConfigDict(
+        {
+            "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
+            **base_backflow_config,
         }
     )
     embedded_particle_fermion_backflow = ferminet_backflow
@@ -107,6 +118,7 @@ def get_default_model_config() -> ConfigDict:
 
     base_ferminet_config = ConfigDict(
         {
+            "input_streams": input_streams,
             "backflow": ferminet_backflow,
             "ndeterminants": 1,
             "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
@@ -121,27 +133,32 @@ def get_default_model_config() -> ConfigDict:
         }
     )
 
-    invariance = ConfigDict(
+    invariance_for_antieq = ConfigDict(
         {
             "ndense_list": ((256,), (256,), (1,)),
-            "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
-            "kernel_init_mixed": orthogonal_init,
-            "kernel_init_2e_1e_stream": orthogonal_init,
-            "kernel_init_2e_2e_stream": {
-                "type": "orthogonal",
-                "scale": 2.0,
-            },
-            "bias_init_1e_stream": normal_init,
-            "bias_init_2e_stream": normal_init,
-            "activation_fn": "tanh",
-            "include_2e_stream": False,
-            "include_ei_norm": False,
-            "include_ee_norm": False,
-            "use_bias": True,
-            "skip_connection": True,
-            "cyclic_spins": cyclic_spins,
+            **base_backflow_config,
         }
     )
+
+    antieq_config = ConfigDict(
+        {
+            "input_streams": input_streams,
+            "backflow": ferminet_backflow,
+            "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+            "kernel_init_envelope_dim": {"type": "ones"},
+            "kernel_init_envelope_ion": {"type": "ones"},
+            "bias_init_orbital_linear": normal_init,
+            "orbitals_use_bias": True,
+            "isotropic_decay": True,
+            "use_products_covariance": True,
+            "invariance": invariance_for_antieq,
+            "products_covariance": {
+                "kernel_init": {"type": "orthogonal", "scale": 2.0},
+                "register_kfac": True,
+            },
+        }
+    )
+
     config = ConfigDict(
         {
             "type": "ferminet",
@@ -152,6 +169,7 @@ def get_default_model_config() -> ConfigDict:
                     "nhidden_fermions_per_spin": (2, 2),
                     "invariance": ConfigDict(
                         {
+                            "input_streams": embedded_particle_input_streams,
                             "backflow": embedded_particle_fermion_backflow,
                             "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                             "bias_initializer": normal_init,
@@ -177,32 +195,13 @@ def get_default_model_config() -> ConfigDict:
                     ),
                 }
             ),
-            "orbital_cofactor_net": ConfigDict(
-                {
-                    "backflow": ferminet_backflow,
-                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-                    "kernel_init_envelope_dim": {"type": "ones"},
-                    "kernel_init_envelope_ion": {"type": "ones"},
-                    "bias_init_orbital_linear": normal_init,
-                    "orbitals_use_bias": True,
-                    "isotropic_decay": True,
-                    "invariance": invariance,
-                }
-            ),
-            "per_particle_dets_net": ConfigDict(
-                {
-                    "backflow": ferminet_backflow,
-                    "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-                    "kernel_init_envelope_dim": {"type": "ones"},
-                    "kernel_init_envelope_ion": {"type": "ones"},
-                    "bias_init_orbital_linear": normal_init,
-                    "orbitals_use_bias": True,
-                    "isotropic_decay": True,
-                    "invariance": invariance,
-                }
-            ),
+            # TODO (ggoldsh): these two should probably be subtypes of a single
+            # "antiequivariance" model type
+            "orbital_cofactor_net": antieq_config,
+            "per_particle_dets_net": antieq_config,
             "brute_force_antisym": ConfigDict(
                 {
+                    "input_streams": input_streams,
                     "backflow": ferminet_backflow,
                     "antisym_type": "double",
                     "ndense_resnet": 64,

@@ -17,6 +17,7 @@ def get_default_config_with_chosen_model(
     use_det_resnet=None,
     determinant_fn_mode=None,
     brute_force_subtype=None,
+    use_products_covariance=None,
 ):
     """Get default ConfigDict for a particular model type."""
     config = default_config.get_default_config()
@@ -31,6 +32,14 @@ def get_default_config_with_chosen_model(
         )
     if brute_force_subtype is not None:
         config.model.brute_force_antisym.antisym_type = brute_force_subtype
+    if use_products_covariance is not None:
+        config.model.orbital_cofactor_net.use_products_covariance = (
+            use_products_covariance
+        )
+        config.model.per_particle_dets_net.use_products_covariance = (
+            use_products_covariance
+        )
+
     config.model = default_config.choose_model_type_in_model_config(config.model)
     return config
 
