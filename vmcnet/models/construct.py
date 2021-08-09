@@ -1089,39 +1089,26 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
         if self.invariance_backflow is not None:
-            invariance_backflow = self.invariance_backflow
-            input_1e, input_2e, _, _ = self._compute_input_streams(elec_pos)
-
-            return [
-                InvariantTensor(
-                    spin_split=self.spin_split,
-                    output_shape_per_spin=invariant_shape_per_spin,
-                    backflow=invariance_backflow,
-                    kernel_initializer=self.invariance_kernel_initializer,
-                    bias_initializer=self.invariance_bias_initializer,
-                    use_bias=self.invariance_use_bias,
-                    register_kfac=self.invariance_register_kfac,
-                )(input_1e, input_2e)
-                for _ in range(self.ndeterminants)
-            ]
+            invariance_backflow: Optional[Backflow] = self.invariance_backflow
+            invariance_in_1e, invariance_in_2e, _, _ = self._compute_input_streams(
+                elec_pos
+            )
         else:
+            invariance_backflow = None
+            invariance_in_1e, invariance_in_2e = stream_1e, None
 
-            def invariance_backflow(stream_1e, stream_2e):
-                del stream_2e
-                return stream_1e
-
-            return [
-                InvariantTensor(
-                    spin_split=self.spin_split,
-                    output_shape_per_spin=invariant_shape_per_spin,
-                    backflow=invariance_backflow,
-                    kernel_initializer=self.invariance_kernel_initializer,
-                    bias_initializer=self.invariance_bias_initializer,
-                    use_bias=self.invariance_use_bias,
-                    register_kfac=self.invariance_register_kfac,
-                )(stream_1e, None)
-                for _ in range(self.ndeterminants)
-            ]
+        return [
+            InvariantTensor(
+                spin_split=self.spin_split,
+                output_shape_per_spin=invariant_shape_per_spin,
+                backflow=invariance_backflow,
+                kernel_initializer=self.invariance_kernel_initializer,
+                bias_initializer=self.invariance_bias_initializer,
+                use_bias=self.invariance_use_bias,
+                register_kfac=self.invariance_register_kfac,
+            )(invariance_in_1e, invariance_in_2e)
+            for _ in range(self.ndeterminants)
+        ]
 
     def _get_orbitals_from_inputs(
         self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
