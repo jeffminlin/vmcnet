@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import vmcnet.models as models
 import vmcnet.models.sign_symmetry as sign_sym
+from vmcnet.models.construct import DeterminantFnMode
 from vmcnet.utils.typing import ArrayList
 
 from tests.test_utils import get_default_config_with_chosen_model
@@ -118,6 +119,8 @@ def _make_ferminets():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
+            orbitals_use_bias=True,
+            isotropic_decay=True,
             determinant_fn=resnet_det_fn,
             determinant_fn_mode=determinant_fn_mode,
         )
@@ -155,6 +158,63 @@ def _make_embedded_particle_ferminets():
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
             invariance_compute_input_streams=invariance_compute_input_streams,
+            invariance_backflow=invariance_backflow,
+            invariance_kernel_initializer=models.weights.get_kernel_initializer(
+                "he_normal"
+            ),
+            invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
+        )
+        log_psis.append(log_psi)
+
+    return key, init_pos, log_psis
+
+
+def _make_extended_orbital_matrix_ferminets():
+    (
+        key,
+        ion_pos,
+        _,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
+
+    log_psis = []
+    cyclic_spins = False
+    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+    extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+
+    for extra_dims_per_spin, use_separate_invariance_backflow in [
+        ((2, 3), True),
+        ((4, 0), False),
+    ]:
+        if use_separate_invariance_backflow:
+            invariance_backflow = extra_backflow
+        else:
+            invariance_backflow = None
+
+        log_psi = models.construct.ExtendedOrbitalMatrixFermiNet(
+            spin_split=spin_split,
+            compute_input_streams=_get_compute_input_streams(ion_pos),
+            backflow=backflow,
+            ndeterminants=3,
+            kernel_initializer_orbital_linear=models.weights.get_kernel_initializer(
+                "he_normal"
+            ),
+            kernel_initializer_envelope_dim=models.weights.get_kernel_initializer(
+                "lecun_normal"
+            ),
+            kernel_initializer_envelope_ion=models.weights.get_kernel_initializer(
+                "ones"
+            ),
+            bias_initializer_orbital_linear=models.weights.get_bias_initializer(
+                "uniform"
+            ),
+            orbitals_use_bias=True,
+            isotropic_decay=True,
+            determinant_fn=None,
+            determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
+            extra_dims_per_spin=extra_dims_per_spin,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(
                 "he_normal"
@@ -356,6 +416,18 @@ def test_embedded_particle_ferminet_can_be_evaluated():
     [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
+def test_extended_orbital_matrix_ferminet_can_be_constructed():
+    """Check construction of ExtendedOrbitalMatrixFermiNet does not fail."""
+    _make_extended_orbital_matrix_ferminets()
+
+
+@pytest.mark.slow
+def test_extended_orbital_matrix_ferminet_can_be_evaluated():
+    """Check evaluation of ExtendedOrbitalMatrixFermiNet does not fail."""
+    key, init_pos, log_psis = _make_extended_orbital_matrix_ferminets()
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+
+
 def test_orbital_cofactor_net_can_be_constructed():
     """Check construction of the orbital cofactor AntiequivarianceNet does not fail."""
     _make_orbital_cofactor_net()
@@ -431,7 +503,11 @@ def test_get_model_from_default_config():
     for model_type in ["brute_force_antisym"]:
         for subtype in ["rank_one", "double"]:
             _construct_model(model_type, brute_force_subtype=subtype)
-    for model_type in ["ferminet", "embedded_particle_ferminet"]:
+    for model_type in [
+        "ferminet",
+        "embedded_particle_ferminet",
+        "extended_orbital_matrix_ferminet",
+    ]:
         _construct_model(model_type, use_det_resnet=False)
         for mode in ["sign_covariance", "parallel_even", "pairwise_even"]:
             _construct_model(model_type, use_det_resnet=True, determinant_fn_mode=mode)
