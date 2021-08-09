@@ -740,12 +740,21 @@ class FermiNet(flax.linen.Module):
         )
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
-    def _get_orbitals_from_norbitals(
+    def _get_norbitals_per_spin(self, elec_pos: jnp.ndarray) -> Tuple[int, ...]:
+        nelec_total = elec_pos.shape[-2]
+        return get_nelec_per_spin(self.spin_split, nelec_total)
+
+    def _eval_orbitals(
         self,
         norbitals_per_spin: Sequence[int],
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
         r_ei: Optional[jnp.ndarray],
     ) -> List[ArrayList]:
+        # Input streams unused in orbitals for regular FermiNet
+        del input_stream_1e
+        del input_stream_2e
         return [
             FermiNetOrbitalLayer(
                 spin_split=self.spin_split,
@@ -759,13 +768,6 @@ class FermiNet(flax.linen.Module):
             )(stream_1e, r_ei)
             for _ in range(self.ndeterminants)
         ]
-
-    def _get_orbitals_from_inputs(
-        self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
-    ) -> List[ArrayList]:
-        nelec_total = elec_pos.shape[-2]
-        norbitals_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-        return self._get_orbitals_from_norbitals(norbitals_per_spin, stream_1e, r_ei)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -782,9 +784,15 @@ class FermiNet(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
-        stream_1e = self._backflow(stream_1e, stream_2e)
-        orbitals = self._get_orbitals_from_inputs(elec_pos, stream_1e, r_ei)
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        norbitals_per_spin = self._get_norbitals_per_spin(elec_pos)
+        orbitals = self._eval_orbitals(
+            norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e, r_ei
+        )
 
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
@@ -1067,7 +1075,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             invariance. Defaults to None.
     """
 
-    extra_dims_per_spin: Optional[Sequence[int]] = None
+    extra_dims_per_spin: Sequence[int]
     invariance_kernel_initializer: WeightInitializer = get_kernel_initializer(
         "orthogonal"
     )
@@ -1078,21 +1086,19 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
     def _get_invariance(
         self,
-        extra_dims_per_spin: Sequence[int],  # explicit arg here to type-check not None
         norbitals_per_spin: Sequence[int],
-        elec_pos: jnp.ndarray,
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
             (extra_dim, norbitals_per_spin[i])
-            for i, extra_dim in enumerate(extra_dims_per_spin)
+            for i, extra_dim in enumerate(self.extra_dims_per_spin)
         ]
 
         if self.invariance_backflow is not None:
             invariance_backflow: Optional[Backflow] = self.invariance_backflow
-            invariance_in_1e, invariance_in_2e, _, _ = self._compute_input_streams(
-                elec_pos
-            )
+            invariance_in_1e, invariance_in_2e = input_stream_1e, input_stream_2e
         else:
             invariance_backflow = None
             invariance_in_1e, invariance_in_2e = stream_1e, None
@@ -1110,33 +1116,38 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             for _ in range(self.ndeterminants)
         ]
 
-    def _get_orbitals_from_inputs(
-        self, elec_pos: jnp.ndarray, stream_1e: jnp.ndarray, r_ei: Optional[jnp.ndarray]
-    ) -> List[ArrayList]:
+    def _get_norbitals_per_spin(self, elec_pos: jnp.ndarray) -> Tuple[int, ...]:
+
         nelec_total = elec_pos.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
 
-        if self.extra_dims_per_spin is not None:
-            norbitals_per_spin = [
-                nelec + self.extra_dims_per_spin[i]
-                for i, nelec in enumerate(nelec_per_spin)
-            ]
+        return tuple(
+            nelec + self.extra_dims_per_spin[i]
+            for i, nelec in enumerate(nelec_per_spin)
+        )
 
-            invariant_part = self._get_invariance(
-                self.extra_dims_per_spin, norbitals_per_spin, elec_pos, stream_1e
-            )
-            equivariant_part = super()._get_orbitals_from_norbitals(
-                norbitals_per_spin, stream_1e, r_ei
-            )
-            return [
-                [
-                    jnp.concatenate([spin, invariant_part[det_idx][spin_idx]], axis=-2)
-                    for spin_idx, spin in enumerate(orbs)
-                ]
-                for det_idx, orbs in enumerate(equivariant_part)
+    def _eval_orbitals(
+        self,
+        norbitals_per_spin: Sequence[int],
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: Optional[jnp.ndarray],
+        stream_1e: jnp.ndarray,
+        r_ei: Optional[jnp.ndarray],
+    ) -> List[ArrayList]:
+
+        invariant_part = self._get_invariance(
+            norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e
+        )
+        equivariant_part = super()._eval_orbitals(
+            norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e, r_ei
+        )
+        return [
+            [
+                jnp.concatenate([spin, invariant_part[det_idx][spin_idx]], axis=-2)
+                for spin_idx, spin in enumerate(orbs)
             ]
-        else:
-            return super()._get_orbitals_from_norbitals(nelec_per_spin, stream_1e, r_ei)
+            for det_idx, orbs in enumerate(equivariant_part)
+        ]
 
 
 class AntiequivarianceNet(flax.linen.Module):

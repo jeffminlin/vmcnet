@@ -78,7 +78,12 @@ class SplitMeanDense(flax.linen.Module):
             layer with self.ndense_per_spin[i] nodes.
         """
         x_split = _split_mean(x, self.spin_split, keepdims=False)
-        return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
+        return [
+            self._dense_layers[i](x_spin)
+            if self.ndense_per_spin[i] != 0
+            else jnp.empty(x_spin.shape[:-1] + (0,))
+            for i, x_spin in enumerate(x_split)
+        ]
 
 
 class InvariantTensor(flax.linen.Module):
@@ -143,10 +148,6 @@ class InvariantTensor(flax.linen.Module):
 
     def _reshape_dense_outputs(self, dense_out: jnp.ndarray, i: int):
         output_shape = dense_out.shape[:-1] + tuple(self.output_shape_per_spin[i])
-        if self._ndense_per_spin[i] == 0:
-            # Return dummy array of expected shape even when no elements are required.
-            return jnp.empty(output_shape)
-
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
