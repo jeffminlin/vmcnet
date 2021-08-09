@@ -167,7 +167,12 @@ def _make_embedded_particle_ferminets():
 
 
 def _make_antiequivariance_net_with_resnet_sign_covariance(
-    spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
+    spin_split,
+    ndense_list,
+    antiequivariance,
+    cyclic_spins,
+    ion_pos,
+    multiply_feature_vectors=False,
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
@@ -186,7 +191,12 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
         return jnp.sum(odd_equivariance(x), axis=-2)
 
     log_psi = models.construct.AntiequivarianceNet(
-        compute_input_streams, backflow, antiequivariance, array_list_sign_covariance
+        spin_split,
+        compute_input_streams,
+        backflow,
+        antiequivariance,
+        array_list_sign_covariance,
+        multiply_antieq_by_feature_vectors=multiply_feature_vectors,
     )
 
     return log_psi
@@ -203,13 +213,17 @@ def _make_antiequivariance_net_with_products_sign_covariance(
     )
 
     log_psi = models.construct.AntiequivarianceNet(
-        compute_input_streams, backflow, antiequivariance, array_list_sign_covariance
+        spin_split,
+        compute_input_streams,
+        backflow,
+        antiequivariance,
+        array_list_sign_covariance,
     )
 
     return log_psi
 
 
-def _make_orbital_cofactor_net():
+def _make_orbital_cofactor_nets():
     (
         key,
         ion_pos,
@@ -227,11 +241,24 @@ def _make_orbital_cofactor_net():
         models.weights.get_bias_initializer("uniform"),
     )
 
-    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
-        spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
+    log_psi_no_features = _make_antiequivariance_net_with_resnet_sign_covariance(
+        spin_split,
+        ndense_list,
+        antiequivariance,
+        cyclic_spins=True,
+        ion_pos=ion_pos,
+        multiply_feature_vectors=False,
+    )
+    log_psi_with_features = _make_antiequivariance_net_with_resnet_sign_covariance(
+        spin_split,
+        ndense_list,
+        antiequivariance,
+        cyclic_spins=True,
+        ion_pos=ion_pos,
+        multiply_feature_vectors=True,
     )
 
-    return key, init_pos, log_psi_eq
+    return key, init_pos, [log_psi_no_features, log_psi_with_features]
 
 
 def _make_per_particle_dets_nets():
@@ -358,14 +385,14 @@ def test_embedded_particle_ferminet_can_be_evaluated():
 
 def test_orbital_cofactor_net_can_be_constructed():
     """Check construction of the orbital cofactor AntiequivarianceNet does not fail."""
-    _make_orbital_cofactor_net()
+    _make_orbital_cofactor_nets()
 
 
 @pytest.mark.slow
 def test_orbital_cofactor_net_can_be_evaluated():
     """Check evaluation of the orbital cofactor AntiequivarianceNet."""
-    key, init_pos, log_psi = _make_orbital_cofactor_net()
-    _jit_eval_model(key, init_pos, log_psi)
+    key, init_pos, log_psis = _make_orbital_cofactor_nets()
+    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
 
 
 def test_per_particle_dets_net_can_be_constructed():

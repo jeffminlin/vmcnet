@@ -104,40 +104,38 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
     return signs_and_logs
 
 
-def _multiply_eq_inputs_by_split_antieq(
-    eq_inputs: jnp.ndarray,
+def multiply_antieq_by_eq_features(
     split_antieq: ArrayList,
+    eq_features: jnp.ndarray,
     spin_split: SpinSplit,
 ) -> ArrayList:
     """Multiply equivariant input array with a spin-split antiequivariance.
 
     Args:
-        eq_inputs (jnp.ndarray): array of shape (..., nelec, d)
         split_antieq (ArrayList): list of arrays containing nspins arrays of shape
-            broadcastable to (..., nelec[i])
+            broadcastable to (..., nelec[i], 1)
+        eq_features (jnp.ndarray): array of shape (..., nelec, d)
         spin_split (SpinSplit): the spin split.
 
     Returns:
         (ArrayList): list of per-spin arrays of shape (..., nelec[i], d) which
         represent the product of the equivariant inputs with the antiequivariance.
     """
-    # Expand antiequivariance to shape (..., nelec[i], 1) to broadcast with inputs
-    split_antieq = jax.tree_map(lambda c: jnp.expand_dims(c, -1), split_antieq)
-    split_inputs = jnp.split(eq_inputs, spin_split, axis=-2)
+    split_inputs = jnp.split(eq_features, spin_split, axis=-2)
     return tree_prod(split_inputs, split_antieq)
 
 
-def _multiply_eq_inputs_by_split_slog_antieq(
-    eq_inputs: jnp.ndarray,
+def multiply_slog_antieq_by_eq_features(
     split_slog_antieq: SLArrayList,
+    eq_features: jnp.ndarray,
     spin_split: SpinSplit,
 ) -> SLArrayList:
     """Multiply equivariant input array with a spin-split slog-form antiequivariance.
 
     Args:
-        eq_inputs (jnp.ndarray): array of shape (..., nelec, d)
         split_slog_antieq (SLArrayList): SLArrayList containing nspins arrays of shape
-            broadcastable to (..., nelec[i])
+            broadcastable to (..., nelec[i], 1)
+        eq_features (jnp.ndarray): array of shape (..., nelec, d)
         spin_split (SpinSplit): the spin split.
 
     Returns:
@@ -145,10 +143,7 @@ def _multiply_eq_inputs_by_split_slog_antieq(
         represent the product of the equivariant inputs with the antiequivariance.
     """
     # Expand antiequivariance to shape (..., nelec[i], 1)] to broadcast with inputs
-    split_slog_antieq = jax.tree_map(
-        lambda c: jnp.expand_dims(c, -1), split_slog_antieq
-    )
-    split_slog_inputs = array_list_to_slog(jnp.split(eq_inputs, spin_split, axis=-2))
+    split_slog_inputs = array_list_to_slog(jnp.split(eq_features, spin_split, axis=-2))
 
     return jax.tree_map(
         slog_multiply,
@@ -205,10 +200,10 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
-        For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
-        and the cofactor matrix of the orbital matrix is C, the ith output will
-        be equal to y_i * M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is
-        handled separately in this same way.
+        For a single spin, if the the orbital matrix is M, and the cofactor matrix of
+        the orbital matrix is C, the ith output will be equal to
+        M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is handled separately
+        in this same way.
 
         Args:
             eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
@@ -220,7 +215,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
 
         Returns:
             (ArrayList): per-spin list where each list entry is an array of shape
-            (..., nelec, d).
+            (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
@@ -239,9 +234,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = ferminet_orbital_layer(eq_inputs, r_ei)
         # Calculate cofactors as list of shape [(..., nelec[i])]
         cofactors = jax.tree_map(cofactor_antieq, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_antieq(
-            eq_inputs, cofactors, self.spin_split
-        )
+        return jax.tree_map(lambda x: jnp.expand_dims(x, -1), cofactors)
 
 
 class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
@@ -291,10 +284,10 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
-        For a single spin, if the equivariant inputs are y_i, the orbital matrix is M,
-        and the cofactor matrix of the orbital matrix is C, the ith output will
-        be equal to y_i * M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is
-        handled separately in this same way.
+        For a single spin, if the orbital matrix is M, and the cofactor matrix of the
+        orbital matrix is C, the ith output will be equal to
+        M_(i,0) * C_(i,0) * (-1)**i. For multiple spins, each spin is handled separately
+        in this same way.
 
         Args:
             eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
@@ -306,7 +299,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
 
         Returns:
             (SLArrayList): per-spin list where each list entry is an slog array of
-            shape (..., nelec, d).
+            shape (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
@@ -325,9 +318,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = ferminet_orbital_layer(eq_inputs, r_ei)
         # Calculate slog cofactors as list of shape [((..., nelec[i]), (..., nelec[i]))]
         slog_cofactors = jax.tree_map(slog_cofactor_antieq, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_slog_antieq(
-            eq_inputs, slog_cofactors, self.spin_split
-        )
+        return jax.tree_map(lambda x: jnp.expand_dims(x, -1), slog_cofactors)
 
 
 class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
@@ -377,9 +368,9 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
-        For a single spin, if the equivariant inputs are y_p, and the orbital matrix for
-        particle p is M_p, the output at index p will be equal to y_p * det(M_p). For
-        multiple spins, each spin is handled separately in this same way.
+        For a single spin, if the orbital matrix for particle p is M_p, the output at
+        index p will be equal to det(M_p). For multiple spins, each spin is handled
+        separately in this same way.
 
         Args:
             eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
@@ -391,7 +382,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
 
         Returns:
             (ArrayList): per-spin list where each list entry is an array of shape
-            (..., nelec, d).
+            (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
@@ -410,7 +401,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = equivariant_orbital_layer(eq_inputs, r_ei)
         # ArrayList of nspins arrays of shape (..., nelec[i])
         dets = jax.tree_map(jnp.linalg.det, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_antieq(eq_inputs, dets, self.spin_split)
+        return jax.tree_map(lambda x: jnp.expand_dims(x, -1), dets)
 
 
 class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
@@ -460,9 +451,9 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
-        For a single spin, if the equivariant inputs are y_p, and the orbital matrix for
-        particle p is M_p, the output at index p will be equal to y_p * det(M_p). For
-        multiple spins, each spin is handled separately in this same way.
+        For a single spin, if the the orbital matrix for particle p is M_p, the output
+        at index p will be equal to det(M_p). For multiple spins, each spin is handled
+        separately in this same way.
 
         Args:
             eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
@@ -474,7 +465,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
 
         Returns:
             (SLArrayList): per-spin list where each list entry is an slog array of
-            shape (..., nelec, d).
+            shape (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
         nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
@@ -493,6 +484,4 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         orbital_matrix_list = equivariant_orbital_layer(eq_inputs, r_ei)
         # SLArrayList of nspins slog arrays of shape (..., nelec[i])
         slog_dets = jax.tree_map(jnp.linalg.slogdet, orbital_matrix_list)
-        return _multiply_eq_inputs_by_split_slog_antieq(
-            eq_inputs, slog_dets, self.spin_split
-        )
+        return jax.tree_map(lambda x: jnp.expand_dims(x, -1), slog_dets)

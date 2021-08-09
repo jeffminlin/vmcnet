@@ -217,7 +217,11 @@ def get_model_from_config(
         )
 
         return AntiequivarianceNet(
-            compute_input_streams, backflow, antieq_layer, array_list_sign_covariance
+            spin_split,
+            compute_input_streams,
+            backflow,
+            antieq_layer,
+            array_list_sign_covariance,
         )
 
     elif model_config.type == "brute_force_antisym":
@@ -981,6 +985,15 @@ class AntiequivarianceNet(flax.linen.Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
+        spin_split (SpinSplit): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
         compute_input_streams (ComputeInputStreams): function to compute input
             streams from electron positions. Has the signature
             (elec_pos of shape (..., n, d)) -> (
@@ -1006,10 +1019,12 @@ class AntiequivarianceNet(flax.linen.Module):
             by summing over the final axis of the result.
     """
 
+    spin_split: SpinSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
     array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
+    multiply_antieq_by_feature_vectors: bool = False
 
     def setup(self):
         """Setup backflow."""
@@ -1035,6 +1050,12 @@ class AntiequivarianceNet(flax.linen.Module):
         stream_1e, stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
         backflow_out = self._backflow(stream_1e, stream_2e)
         antiequivariant_out = self._antiequivariant_layer(backflow_out, r_ei)
+
+        if self.multiply_antieq_by_feature_vectors:
+            antiequivariant_out = antiequivariance.multiply_antieq_by_eq_features(
+                antiequivariant_out, backflow_out, self.spin_split
+            )
+
         antisym_vector = self._array_list_sign_covariance(antiequivariant_out)
         return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
 
