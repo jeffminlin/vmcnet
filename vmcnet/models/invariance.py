@@ -28,11 +28,11 @@ class InvariantTensor(flax.linen.Module):
             input. This determines the output shapes for each split, i.e. the outputs
             are shaped [(batch_dims, output_shape_per_spin[i])].
         backflow (Callable): function which computes position features from the electron
-                positions. Has the signature
-                (
-                    stream_1e of shape (..., n, d'),
-                    optional stream_2e of shape (..., nelec, nelec, d2),
-                ) -> stream_1e of shape (..., n, d')
+            positions. Has the signature
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
         kernel_initializer (WeightInitializer): kernel initializer for the dense
             layer(s). Has signature (key, shape, dtype) -> jnp.ndarray
         bias_initializer (WeightInitializer): bias initializer for the dense layer(s).
