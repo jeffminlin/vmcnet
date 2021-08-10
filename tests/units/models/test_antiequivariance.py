@@ -132,19 +132,21 @@ def _assert_permuted_slog_values_allclose(
     perm_output_i: Tuple[jnp.ndarray, jnp.ndarray],
     flips_i: int,
     rtol: float = 1e-7,
+    atol: float = 1e-7,
 ):
     signs, logs = output_i
     perm_signs, perm_logs = perm_output_i
     expected_perm_signs = signs[:, split_perm_i, :] * flips_i
     expected_perm_logs = logs[:, split_perm_i, :]
     np.testing.assert_allclose(perm_signs, expected_perm_signs)
-    np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol)
+    np.testing.assert_allclose(perm_logs, expected_perm_logs, rtol=rtol, atol=atol)
 
 
 def _test_layer_antiequivariance(
     build_layer: Callable[[SpinSplit], flax.linen.Module],
     logabs: bool = False,
     rtol: float = 1e-7,
+    atol: float = 0.0,
 ) -> None:
     """Test evaluation and antiequivariance of an antiequivariant layer."""
     # Generate example hyperparams and input streams
@@ -190,12 +192,15 @@ def _test_layer_antiequivariance(
                 nchains, d_input_1e, output[i], nelec_per_spin[i]
             )
             _assert_permuted_slog_values_allclose(
-                split_perm[i], output[i], perm_output[i], flips[i], rtol=rtol
+                split_perm[i], output[i], perm_output[i], flips[i], rtol=rtol, atol=atol
             )
         else:
             chex.assert_shape(output[i], (nchains, nelec_per_spin[i], d_input_1e))
             np.testing.assert_allclose(
-                output[i], perm_output[i][:, split_perm[i], :] * flips[i], rtol=rtol
+                output[i],
+                perm_output[i][:, split_perm[i], :] * flips[i],
+                rtol=rtol,
+                atol=atol,
             )
 
 
@@ -214,7 +219,7 @@ def test_orbital_cofactor_layer_antiequivariance():
             bias_initializer,
         )
 
-    _test_layer_antiequivariance(build_orbital_cofactor_layer)
+    _test_layer_antiequivariance(build_orbital_cofactor_layer, atol=1e-6)
 
 
 @pytest.mark.slow
@@ -250,7 +255,9 @@ def test_per_particle_determinant_antiequivariance():
             bias_initializer,
         )
 
-    _test_layer_antiequivariance(build_per_particle_determinant_layer, rtol=1e-5)
+    _test_layer_antiequivariance(
+        build_per_particle_determinant_layer, rtol=1e-5, atol=1e-6
+    )
 
 
 @pytest.mark.slow
