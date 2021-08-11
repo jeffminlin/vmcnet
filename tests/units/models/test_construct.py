@@ -1,6 +1,7 @@
 """Test model construction."""
 import functools
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -241,7 +242,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
         concat_x = jnp.concatenate(x, axis=-2)
         return _get_backflow(spin_split, ((9,), (2,), (1,)), cyclic_spins=True)(
             concat_x
-        )[0]
+        )
 
     odd_equivariance = sign_sym.make_array_list_fn_sign_covariant(
         backflow_based_equivariance, axis=-3
@@ -413,10 +414,11 @@ def _make_double_antisymmetry():
     return key, init_pos, log_psi
 
 
-def _jit_eval_model(key, init_pos, log_psi):
+def _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi):
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos)
-    jax.jit(log_psi.apply)(params, init_pos)
+    results = jax.jit(log_psi.apply)(params, init_pos)
+    chex.assert_shape(results, (init_pos.shape[0],))
 
 
 def test_ferminet_can_be_constructed():
@@ -428,7 +430,10 @@ def test_ferminet_can_be_constructed():
 def test_ferminet_can_be_evaluated():
     """Check evaluation of FermiNet does not fail."""
     key, init_pos, log_psis = _make_ferminets()
-    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_embedded_particle_ferminet_can_be_constructed():
@@ -440,7 +445,10 @@ def test_embedded_particle_ferminet_can_be_constructed():
 def test_embedded_particle_ferminet_can_be_evaluated():
     """Check evaluation of EmbeddedParticleFerminet does not fail."""
     key, init_pos, log_psis = _make_embedded_particle_ferminets()
-    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_extended_orbital_matrix_ferminet_can_be_constructed():
@@ -452,7 +460,10 @@ def test_extended_orbital_matrix_ferminet_can_be_constructed():
 def test_extended_orbital_matrix_ferminet_can_be_evaluated():
     """Check evaluation of ExtendedOrbitalMatrixFermiNet does not fail."""
     key, init_pos, log_psis = _make_extended_orbital_matrix_ferminets()
-    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_orbital_cofactor_net_can_be_constructed():
@@ -464,7 +475,10 @@ def test_orbital_cofactor_net_can_be_constructed():
 def test_orbital_cofactor_net_can_be_evaluated():
     """Check evaluation of the orbital cofactor AntiequivarianceNet."""
     key, init_pos, log_psis = _make_orbital_cofactor_nets()
-    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_per_particle_dets_net_can_be_constructed():
@@ -476,7 +490,10 @@ def test_per_particle_dets_net_can_be_constructed():
 def test_per_particle_dets_net_can_be_evaluated():
     """Check evaluation of the per-particle dets AntiequivarianceNet."""
     key, init_pos, log_psis = _make_per_particle_dets_nets()
-    [_jit_eval_model(key, init_pos, log_psi) for log_psi in log_psis]
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_split_antisymmetry_can_be_constructed():
@@ -488,7 +505,7 @@ def test_split_antisymmetry_can_be_constructed():
 def test_split_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
     key, init_pos, log_psi = _make_split_antisymmetry()
-    _jit_eval_model(key, init_pos, log_psi)
+    _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
 
 
 def test_composed_antisymmetry_can_be_constructed():
@@ -500,7 +517,7 @@ def test_composed_antisymmetry_can_be_constructed():
 def test_ferminet_composed_antisymmetry_can_be_evaluated():
     """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
     key, init_pos, log_psi = _make_double_antisymmetry()
-    _jit_eval_model(key, init_pos, log_psi)
+    _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
 
 
 def test_get_model_from_default_config():
