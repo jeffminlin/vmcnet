@@ -403,7 +403,7 @@ def get_sign_covariance_from_config(
                 model_config.invariance,
                 spin_split=spin_split,
                 dtype=dtype,
-            )(concat_x)[0]
+            )(concat_x)
 
         odd_equivariance = make_array_list_fn_sign_covariant(
             backflow_based_equivariance, axis=-3
