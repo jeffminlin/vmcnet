@@ -418,7 +418,7 @@ def _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi):
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos)
     results = jax.jit(log_psi.apply)(params, init_pos)
-    chex.assert_shape(results, (init_pos.shape[0],))
+    chex.assert_shape(results, init_pos.shape[:-2])
 
 
 def test_ferminet_can_be_constructed():
