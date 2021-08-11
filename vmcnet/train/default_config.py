@@ -135,7 +135,7 @@ def get_default_model_config() -> ConfigDict:
 
     invariance_for_antieq = ConfigDict(
         {
-            "ndense_list": ((256,), (256,), (1,)),
+            "ndense_list": ((32,), (32,), (1,)),
             **base_backflow_config,
         }
     )
@@ -156,6 +156,7 @@ def get_default_model_config() -> ConfigDict:
                 "kernel_init": {"type": "orthogonal", "scale": 2.0},
                 "register_kfac": True,
             },
+            "multiply_by_eq_features": False,
         }
     )
 

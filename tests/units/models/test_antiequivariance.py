@@ -114,15 +114,14 @@ def test_slog_cofactor_antiequivariance():
 
 def _assert_slogabs_signs_allclose_to_one(
     nchains: int,
-    d_input_1e: int,
     output_i: Tuple[jnp.ndarray, jnp.ndarray],
     nelec_i: int,
 ):
     assert len(output_i) == 2
-    chex.assert_shape(output_i, (nchains, nelec_i, d_input_1e))
+    chex.assert_shape(output_i, (nchains, nelec_i, 1))
     np.testing.assert_allclose(
         jnp.abs(output_i[0]),
-        jnp.ones((nchains, nelec_i, d_input_1e)),
+        jnp.ones((nchains, nelec_i, 1)),
     )
 
 
@@ -168,7 +167,6 @@ def _test_layer_antiequivariance(
         perm_input_ei,
         key,
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
-    d_input_1e = input_1e.shape[-1]
 
     # Set up antiequivariant layer
     antieq_layer = build_layer(spin_split)
@@ -188,14 +186,12 @@ def _test_layer_antiequivariance(
 
     for i in range(nspins):
         if logabs:
-            _assert_slogabs_signs_allclose_to_one(
-                nchains, d_input_1e, output[i], nelec_per_spin[i]
-            )
+            _assert_slogabs_signs_allclose_to_one(nchains, output[i], nelec_per_spin[i])
             _assert_permuted_slog_values_allclose(
                 split_perm[i], output[i], perm_output[i], flips[i], rtol=rtol, atol=atol
             )
         else:
-            chex.assert_shape(output[i], (nchains, nelec_per_spin[i], d_input_1e))
+            chex.assert_shape(output[i], (nchains, nelec_per_spin[i], 1))
             np.testing.assert_allclose(
                 output[i],
                 perm_output[i][:, split_perm[i], :] * flips[i],
