@@ -222,6 +222,7 @@ def get_model_from_config(
             backflow,
             antieq_layer,
             array_list_sign_covariance,
+            multiply_by_eq_features=model_config.multiply_by_eq_features,
         )
 
     elif model_config.type == "brute_force_antisym":
