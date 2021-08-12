@@ -71,7 +71,9 @@ def nanmean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
     return pmean_if_pmap(jnp.nanmean(x))
 
 
-def get_mean_fn(nan_safe: bool = True) -> Callable[[jnp.ndarray], jnp.ndarray]:
+def get_mean_over_first_axis_fn(
+    nan_safe: bool = True,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Get a function which averages over the first axis over all local devices.
 
     Args:

@@ -305,7 +305,7 @@ def create_value_and_grad_energy_fn(
         local_energies = output[1][1]
         return output, (energy, local_energies, params, positions)
 
-    mean_grad_fn = utils.distribute.get_mean_fn(nan_safe=nan_safe)
+    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
     energy_bwd = get_energy_bwd(log_psi_apply, mean_grad_fn)
 
     compute_energy_data.defvjp(energy_fwd, energy_bwd)

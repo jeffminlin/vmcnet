@@ -157,7 +157,7 @@ def _get_sr_update_fn(
     nan_safe: bool = True,
 ):
     maxiter = optimizer_config.maxiter if optimizer_config.maxiter >= 0 else None
-    mean_grad_fn = utils.distribute.get_mean_fn(nan_safe=nan_safe)
+    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
     precondition_grad_fn = get_fisher_inverse_fn(
         log_psi_apply,
         mean_grad_fn,
