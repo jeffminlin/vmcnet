@@ -150,7 +150,6 @@ def _make_embedded_particle_ferminets():
     for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
-            nhidden_fermions_per_spin,
             compute_input_streams,
             backflow,
             3,
@@ -158,6 +157,11 @@ def _make_embedded_particle_ferminets():
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
             models.weights.get_bias_initializer("uniform"),
+            orbitals_use_bias=True,
+            isotropic_decay=True,
+            determinant_fn=None,
+            determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
+            nhidden_fermions_per_spin=nhidden_fermions_per_spin,
             invariance_compute_input_streams=invariance_compute_input_streams,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(
