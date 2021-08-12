@@ -147,7 +147,6 @@ def get_model_from_config(
             )
             return EmbeddedParticleFermiNet(
                 spin_split,
-                model_config.nhidden_fermions_per_spin,
                 compute_input_streams,
                 backflow,
                 model_config.ndeterminants,
@@ -163,6 +162,11 @@ def get_model_from_config(
                 bias_initializer_orbital_linear=bias_init_constructor(
                     model_config.bias_init_orbital_linear
                 ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
+                determinant_fn=determinant_fn,
+                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
+                nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_compute_input_streams=invariance_compute_input_streams,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
@@ -171,12 +175,8 @@ def get_model_from_config(
                 invariance_bias_initializer=bias_init_constructor(
                     invariance_config.bias_initializer
                 ),
-                orbitals_use_bias=model_config.orbitals_use_bias,
-                isotropic_decay=model_config.isotropic_decay,
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
-                determinant_fn=determinant_fn,
-                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "extended_orbital_matrix_ferminet":
             invariance_config = model_config.invariance
@@ -756,12 +756,15 @@ class FermiNet(flax.linen.Module):
         )
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
-    def _get_norbitals_per_spin(self, elec_pos: jnp.ndarray) -> Tuple[int, ...]:
+    def _get_norbitals_per_spin(
+        self, elec_pos: jnp.ndarray, spin_split: SpinSplit
+    ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        return get_nelec_per_spin(self.spin_split, nelec_total)
+        return get_nelec_per_spin(spin_split, nelec_total)
 
     def _eval_orbitals(
         self,
+        spin_split: SpinSplit,
         norbitals_per_spin: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -773,7 +776,7 @@ class FermiNet(flax.linen.Module):
         del input_stream_2e
         return [
             FermiNetOrbitalLayer(
-                spin_split=self.spin_split,
+                spin_split=spin_split,
                 norbitals_per_spin=norbitals_per_spin,
                 kernel_initializer_linear=self.kernel_initializer_orbital_linear,
                 kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
@@ -784,6 +787,11 @@ class FermiNet(flax.linen.Module):
             )(stream_1e, r_ei)
             for _ in range(self.ndeterminants)
         ]
+
+    def _get_elec_pos_and_spin_split(
+        self, elec_pos: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, SpinSplit]:
+        return elec_pos, self.spin_split
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -800,14 +808,20 @@ class FermiNet(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
+        elec_pos, spin_split = self._get_elec_pos_and_spin_split(elec_pos)
         input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
-        norbitals_per_spin = self._get_norbitals_per_spin(elec_pos)
+        norbitals_per_spin = self._get_norbitals_per_spin(elec_pos, spin_split)
         orbitals = self._eval_orbitals(
-            norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e, r_ei
+            spin_split,
+            norbitals_per_spin,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+            r_ei,
         )
 
         # Orbitals shape is [nspins: (ndeterminants, ..., nelec[i], nelec[i])]
@@ -834,51 +848,12 @@ class FermiNet(flax.linen.Module):
         return log_psi
 
 
-class EmbeddedParticleFermiNet(flax.linen.Module):
+class EmbeddedParticleFermiNet(FermiNet):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
-            or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
         nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
             generate for each spin. Must have length nspins.
-        compute_input_streams (ComputeInputStreams): function to compute input
-            streams from electron positions. Has the signature
-            (elec_pos of shape (..., n, d)) -> (
-                stream_1e of shape (..., n, d'),
-                optional stream_2e of shape (..., nelec, nelec, d2),
-                optional r_ei of shape (..., n, nion, d),
-                optional r_ee of shape (..., n, n, d),
-            )
-        backflow (Callable): function which computes position features from the electron
-            positions. Has the signature
-            (
-                stream_1e of shape (..., n, d'),
-                optional stream_2e of shape (..., nelec, nelec, d2),
-            ) -> stream_1e of shape (..., n, d')
-        ndeterminants (int): number of determinants in the FermiNet model, i.e. the
-            number of distinct orbital layers applied
-        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
-            the linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
-            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
-            this initializes a single decay rate number per ion and orbital. If
-            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
-            linear combination over the ions of exponential envelopes. Has signature
-            (key, shape, dtype) -> jnp.ndarray
-        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
-            linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
         invariance_compute_input_streams (ComputeInputStreams): function to compute
             input streams from electron positions, for the invariance that is used to
             generate the hidden particle positions. Has the signature
@@ -898,65 +873,25 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
         invariance_bias_initializer (WeightInitializer): bias initializer for the
             invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
-        orbitals_use_bias (bool, optional): whether to add a bias term in the linear
-            part of the orbitals. Defaults to True.
-        isotropic_decay (bool, optional): whether the decay for each ion should be
-            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
-            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
-            exp(-||a(r - R||)) for a number a.
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
         invariance_register_kfac (bool, optional): whether to register the dense layer
             of the invariance with KFAC. Defaults to True.
-        determinant_fn (DeterminantFn, optional):  A function with signature
-            dout, [nspins: (..., ndeterminants)] -> (..., dout).
-            If provided, the function will be used to calculate Psi based on the
-            outputs of the orbital matrix determinants. Depending on the
-            determinant_fn_mode selected, this function can be used in one of several
-            ways. If the mode is SIGN_COVARIANCE, the function will use d=1
-            and will be explicitly symmetrized over the sign group, on a per-spin basis,
-            to be sign-covariant (odd). If PARALLEL_EVEN or PAIRWISE_EVEN are
-            selected, the function will be symmetrized to be spin-wise sign invariant
-            (even). For PARALLEL_EVEN, the function will use d=ndeterminants, and each
-            output will be multiplied by the product of corresponding determinants. That
-            is, for 2 spins, with up determinants u_i and down determinants d_i, the
-            ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function. For PAIRWISE_EVEN, the function will use
-            d=ndeterminants**nspins, and each output will again be multiplied by a
-            product of determinants, but this time the determinants will range over all
-            pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
-            supports nspins = 2. Defaults to None.
-        determinant_fn_mode (DeterminantFnMode, optional): One of SIGN_COVARIANCE,
-            PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
-            provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if no determinant_fn is provided. Defaults to PARALLEL_EVEN.
     """
 
-    spin_split: SpinSplit
     nhidden_fermions_per_spin: Sequence[int]
-    compute_input_streams: ComputeInputStreams
-    backflow: Backflow
-    ndeterminants: int
-    kernel_initializer_orbital_linear: WeightInitializer
-    kernel_initializer_envelope_dim: WeightInitializer
-    kernel_initializer_envelope_ion: WeightInitializer
-    bias_initializer_orbital_linear: WeightInitializer
     invariance_compute_input_streams: ComputeInputStreams
     invariance_backflow: Backflow
     invariance_kernel_initializer: WeightInitializer
     invariance_bias_initializer: WeightInitializer
-    orbitals_use_bias: bool = True
-    isotropic_decay: bool = False
     invariance_use_bias: bool = True
     invariance_register_kfac: bool = True
-    determinant_fn: Optional[DeterminantFn] = None
-    determinant_fn_mode: DeterminantFnMode = DeterminantFnMode.PARALLEL_EVEN
 
     def setup(self):
         """Setup EmbeddedParticleFermiNet."""
         # workaround MyPy's typing error for callable attribute, see
         # https://github.com/python/mypy/issues/708
+        super().setup()
         self._invariance_compute_input_streams = self.invariance_compute_input_streams
 
     def _get_invariant_tensor(
@@ -972,45 +907,9 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             self.invariance_register_kfac,
         )
 
-    def _get_ferminet(self, total_spin_split: SpinSplit) -> FermiNet:
-        return FermiNet(
-            total_spin_split,
-            self.compute_input_streams,
-            self.backflow,
-            self.ndeterminants,
-            self.kernel_initializer_orbital_linear,
-            self.kernel_initializer_envelope_dim,
-            self.kernel_initializer_envelope_ion,
-            self.bias_initializer_orbital_linear,
-            self.orbitals_use_bias,
-            self.isotropic_decay,
-            self.determinant_fn,
-            self.determinant_fn_mode,
-        )
-
-    @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
-        """Use invariance to generate hidden particles, then Ferminet to calculate Psi.
-
-        In this model, the set of input particles is expanded for each spin with a set
-        of permutation invariant "hidden" fermions. These extra hidden fermions
-        effectively move the problem into a higher dimensional space, resulting in
-        larger orbital matrices and potentially a more expressive ansatz than a regular
-        FermiNet. Due to the invariance of these hidden fermions with respect
-        to the original input particle permutation, the ansatz is still antisymmetric
-        with respect to the original input particles only.
-
-        Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
-
-        Returns:
-            jnp.ndarray: FermiNet output; logarithm of the absolute value of a
-            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
-            to the second-to-last axis of elec_pos. The anti-symmetry holds for
-            particles within the same split, but not for permutations which swap
-            particles across different spin splits. If the inputs have shape
-            (batch_dims, nelec, d), then the output has shape (batch_dims,).
-        """
+    def _get_elec_pos_and_spin_split(
+        self, elec_pos: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, SpinSplit]:
         visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
         visible_nelec_per_spin = get_nelec_per_spin(
@@ -1037,7 +936,6 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
         total_spin_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
-        ferminet = self._get_ferminet(total_spin_split)
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         (
@@ -1055,8 +953,7 @@ class EmbeddedParticleFermiNet(flax.linen.Module):
             for p in [split_input_particles[i], split_hidden_particles[i]]
         ]
         concat_all_particles = jnp.concatenate(split_all_particles, axis=-2)
-
-        return ferminet(concat_all_particles)
+        return concat_all_particles, total_spin_split
 
 
 class ExtendedOrbitalMatrixFermiNet(FermiNet):
@@ -1075,12 +972,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             the invariance dense layer. Has signature
                 (key, shape, dtype) -> jnp.ndarray.
             Defaults to a scaled random normal initializer.
-        orbitals_use_bias (bool, optional): whether to add a bias term in the linear
-            part of the orbitals. Defaults to True.
-        isotropic_decay (bool, optional): whether the decay for each ion should be
-            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
-            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
-            exp(-||a(r - R||)) for a number a.
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
         invariance_register_kfac (bool, optional): whether to register the dense layer
@@ -1132,11 +1023,11 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             for _ in range(self.ndeterminants)
         ]
 
-    def _get_norbitals_per_spin(self, elec_pos: jnp.ndarray) -> Tuple[int, ...]:
-
+    def _get_norbitals_per_spin(
+        self, elec_pos: jnp.ndarray, spin_split: SpinSplit
+    ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
-
+        nelec_per_spin = get_nelec_per_spin(spin_split, nelec_total)
         return tuple(
             nelec + self.extra_dims_per_spin[i]
             for i, nelec in enumerate(nelec_per_spin)
@@ -1144,6 +1035,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
     def _eval_orbitals(
         self,
+        spin_split: SpinSplit,
         norbitals_per_spin: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -1155,7 +1047,12 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e
         )
         equivariant_part = super()._eval_orbitals(
-            norbitals_per_spin, input_stream_1e, input_stream_2e, stream_1e, r_ei
+            spin_split,
+            norbitals_per_spin,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+            r_ei,
         )
         return [
             [
