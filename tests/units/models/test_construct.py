@@ -144,10 +144,11 @@ def _make_embedded_particle_ferminets():
     cyclic_spins = False
     compute_input_streams = _get_compute_input_streams(ion_pos)
     invariance_compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
     for extra_dims_per_spin in [(2, 3), (4, 0)]:
+        total_spin_split = (spin_split[0] + extra_dims_per_spin[0],)
+        backflow = _get_backflow(total_spin_split, ndense_list, cyclic_spins)
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             compute_input_streams,

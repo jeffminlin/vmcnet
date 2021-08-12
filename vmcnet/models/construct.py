@@ -136,6 +136,14 @@ def get_model_from_config(
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "embedded_particle_ferminet":
+            total_nelec = jnp.array(model_config.extra_dims_per_spin) + nelec
+            total_spin_split = tuple(jnp.cumsum(total_nelec)[:-1])
+
+            backflow = get_backflow_from_config(
+                model_config.backflow,
+                total_spin_split,
+                dtype=dtype,
+            )
             invariance_config = model_config.invariance
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
@@ -145,6 +153,7 @@ def get_model_from_config(
                 spin_split,
                 dtype=dtype,
             )
+
             return EmbeddedParticleFermiNet(
                 spin_split,
                 compute_input_streams,
@@ -851,6 +860,10 @@ class FermiNet(flax.linen.Module):
 
 class EmbeddedParticleFermiNet(FermiNet):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
+
+    Note: the backflow argument supplied for the construction of this model should use
+    the spin_split for the TOTAL number of particles, visible and hidden, for each spin,
+    not the standard spin_split for the visible particles only.
 
     Attributes:
         extra_dims_per_spin (Sequence[int]): number of hidden fermions to
