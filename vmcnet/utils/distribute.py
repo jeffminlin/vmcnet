@@ -71,6 +71,28 @@ def nanmean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
     return pmean_if_pmap(jnp.nanmean(x))
 
 
+def get_mean_fn(nan_safe: bool = True) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Get a function which averages over the first axis over all local devices.
+
+    Args:
+        nan_safe (bool, optional): whether to use jnp.nanmean or jnp.mean in the local
+            average computation. Defaults to True.
+
+    Returns:
+        Callable: function which averages an array over its first axis over all local
+        devices.
+    """
+    if nan_safe:
+        local_mean_fn = functools.partial(jnp.nanmean, axis=0)
+    else:
+        local_mean_fn = functools.partial(jnp.mean, axis=0)
+
+    def mean_fn(x: jnp.ndarray) -> jnp.ndarray:
+        return pmean_if_pmap(local_mean_fn(x))
+
+    return mean_fn
+
+
 p_split = pmap(lambda key: tuple(jax.random.split(key)))
 
 

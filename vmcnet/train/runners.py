@@ -240,6 +240,25 @@ def _get_clipping_fn(
     return clipping_fn
 
 
+def _get_energy_fns(
+    vmc_config: ConfigDict,
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
+    log_psi_apply: ModelApply[P],
+) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
+    clipping_fn = _get_clipping_fn(vmc_config)
+    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        log_psi_apply,
+        local_energy_fn,
+        vmc_config.nchains,
+        clipping_fn,
+        nan_safe=vmc_config.nan_safe,
+    )
+
+    return local_energy_fn, energy_data_val_and_grad
+
+
 def _get_learning_rate_schedule(vmc_config: ConfigDict) -> Callable[[int], jnp.float32]:
     if vmc_config.schedule_type == "constant":
 
@@ -262,12 +281,12 @@ def _get_learning_rate_schedule(vmc_config: ConfigDict) -> Callable[[int], jnp.f
 
 
 def _get_update_fn_and_init_optimizer(
-    vmc_config: ConfigDict,
     log_psi_apply: ModelApply[P],
-    local_energy_fn: ModelApply[P],
+    vmc_config: ConfigDict,
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: jnp.ndarray,
     apply_pmap: bool = True,
 ) -> Tuple[
@@ -275,99 +294,57 @@ def _get_update_fn_and_init_optimizer(
     OptimizerState,
     jnp.ndarray,
 ]:
-    learning_rate_schedule = _get_learning_rate_schedule(vmc_config)
-    clipping_fn = _get_clipping_fn(vmc_config)
 
-    if vmc_config.optimizer_type == "sr":
-        maxiter = (
-            vmc_config.optimizer.sr.maxiter
-            if vmc_config.optimizer.sr.maxiter >= 0
-            else None
+    learning_rate_schedule = _get_learning_rate_schedule(vmc_config)
+
+    if vmc_config.optimizer_type == "kfac":
+        return updates.parse_config._get_kfac_update_fn(
+            params,
+            data,
+            get_position_fn,
+            energy_data_val_and_grad,
+            key,
+            learning_rate_schedule,
+            vmc_config.optimizer.kfac,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
         )
-        get_energy_bwd = functools.partial(
-            updates.sr.get_sr_energy_bwd,
-            damping=vmc_config.optimizer.sr.damping,
-            maxiter=maxiter,
+    elif vmc_config.optimizer_type == "sgd":
+        update_param_fn, optimizer_state = updates.parse_config._get_sgd_update_fn(
+            params,
+            get_position_fn,
+            energy_data_val_and_grad,
+            learning_rate_schedule,
+            vmc_config.optimizer.sgd,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
         )
-        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        return update_param_fn, optimizer_state, key
+    elif vmc_config.optimizer_type == "adam":
+        update_param_fn, optimizer_state = updates.parse_config._get_adam_update_fn(
+            params,
+            get_position_fn,
+            energy_data_val_and_grad,
+            learning_rate_schedule,
+            vmc_config.optimizer.adam,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
+        )
+        return update_param_fn, optimizer_state, key
+    elif vmc_config.optimizer_type == "sr":
+        update_param_fn, optimizer_state = updates.parse_config._get_sr_update_fn(
             log_psi_apply,
-            local_energy_fn,
-            vmc_config.nchains,
-            clipping_fn,
+            params,
+            get_position_fn,
+            energy_data_val_and_grad,
+            learning_rate_schedule,
+            vmc_config.optimizer.sr,
+            vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
             nan_safe=vmc_config.nan_safe,
-            get_energy_bwd=get_energy_bwd,
         )
-        if vmc_config.optimizer.sr.descent_type == "adam":
-            update_param_fn, optimizer_state = updates.parse_config._get_adam_update_fn(
-                params,
-                get_position_fn,
-                energy_data_val_and_grad,
-                learning_rate_schedule,
-                vmc_config.optimizer.adam,
-                vmc_config.record_param_l1_norm,
-                apply_pmap=apply_pmap,
-            )
-            return update_param_fn, optimizer_state, key
-        elif vmc_config.optimizer.sr.descent_type == "sgd":
-            update_param_fn, optimizer_state = updates.parse_config._get_sgd_update_fn(
-                params,
-                get_position_fn,
-                energy_data_val_and_grad,
-                learning_rate_schedule,
-                vmc_config.optimizer.sgd,
-                vmc_config.record_param_l1_norm,
-                apply_pmap=apply_pmap,
-            )
-            return update_param_fn, optimizer_state, key
-        else:
-            raise ValueError(
-                "Requested descent type not supported; {} was requested".format(
-                    vmc_config.optimizer.sr.descent_type
-                )
-            )
-    elif vmc_config.optimizer_type in ["kfac", "adam", "sgd"]:
-        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-            log_psi_apply,
-            local_energy_fn,
-            vmc_config.nchains,
-            clipping_fn,
-            nan_safe=vmc_config.nan_safe,
-            get_energy_bwd=physics.core.get_default_energy_bwd,
-        )
-        if vmc_config.optimizer_type == "kfac":
-            return updates.parse_config._get_kfac_update_fn(
-                params,
-                data,
-                get_position_fn,
-                energy_data_val_and_grad,
-                key,
-                learning_rate_schedule,
-                vmc_config.optimizer.kfac,
-                vmc_config.record_param_l1_norm,
-                apply_pmap=apply_pmap,
-            )
-        elif vmc_config.optimizer_type == "adam":
-            update_param_fn, optimizer_state = updates.parse_config._get_adam_update_fn(
-                params,
-                get_position_fn,
-                energy_data_val_and_grad,
-                learning_rate_schedule,
-                vmc_config.optimizer.adam,
-                vmc_config.record_param_l1_norm,
-                apply_pmap=apply_pmap,
-            )
-            return update_param_fn, optimizer_state, key
-        else:
-            update_param_fn, optimizer_state = updates.parse_config._get_sgd_update_fn(
-                params,
-                get_position_fn,
-                energy_data_val_and_grad,
-                learning_rate_schedule,
-                vmc_config.optimizer.sgd,
-                vmc_config.record_param_l1_norm,
-                apply_pmap=apply_pmap,
-            )
-            return update_param_fn, optimizer_state, key
+        return update_param_fn, optimizer_state, key
     else:
         raise ValueError(
             "Requested optimizer type not supported; {} was requested".format(
@@ -426,18 +403,20 @@ def _setup_vmc(
         config.vmc, log_psi.apply, apply_pmap=apply_pmap
     )
 
-    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi.apply)
+    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
+        config.vmc, ion_pos, ion_charges, log_psi.apply
+    )
 
     # Setup parameter updates
     if apply_pmap:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
     update_param_fn, optimizer_state, key = _get_update_fn_and_init_optimizer(
-        config.vmc,
         log_psi.apply,
-        local_energy_fn,
+        config.vmc,
         params,
         data,
         pacore.get_position_from_data,
+        energy_data_val_and_grad,
         key,
         apply_pmap=apply_pmap,
     )

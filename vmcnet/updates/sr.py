@@ -1,5 +1,5 @@
-"""Stochastic reconfiguration routines."""
-from typing import Callable, Optional, Tuple
+"""Stochastic reconfiguration routine."""
+from typing import Callable, Optional
 
 import jax
 import jax.flatten_util
@@ -10,24 +10,23 @@ from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.typing import ModelApply, P
 
 
-def get_sr_energy_bwd(
+def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     mean_grad_fn: Callable[[jnp.ndarray], jnp.ndarray],
     damping: float = 0.001,
     maxiter: Optional[int] = None,
 ):
-    """Get a Fisher-preconditioned backward pass of the total energy.
+    """Get a Fisher-preconditioned update.
 
-    Given the standard gradient formula
+    Given a gradient update grad_E, the function returned here approximates
 
-        grad_E = 2 * E_p[(local_e - E_p[local_e]) * grad_log_psi],
+        (0.25 * F + damping * I)^{-1} * grad_E,
 
-    the function returned here approximates (0.25 * F + damping * I)^{-1}*grad_E, where
-    F is the Fisher information matrix. The inversion is approximated via the conjugate
-    gradient algorithm (possibly truncated to a finite number of iterations).
+    where F is the Fisher information matrix. The inversion is approximated via the
+    conjugate gradient algorithm (possibly truncated to a finite number of iterations).
 
-    This gradient update, when used as-is, is also known as the stochastic
-    reconfiguration algorithm.
+    This preconditioned gradient update, when used as-is, is also known as the
+    stochastic reconfiguration algorithm.
 
     Args:
         log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
@@ -56,42 +55,27 @@ def get_sr_energy_bwd(
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
-    def _get_raveled_energy_grad(raveled_batch_grads, centered_local_energies):
-        return 2.0 * mean_grad_fn(
-            centered_local_energies[..., None] * raveled_batch_grads
-        )
+    def precondition_grad_with_fisher(energy_grad, params, positions):
+        raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
-    def energy_bwd(res, cotangents) -> Tuple[P, None]:
-        energy, local_energies, params, positions = res
-        centered_local_energies = local_energies - energy
-
-        _, unravel_fn = jax.flatten_util.ravel_pytree(params)
-        log_grads = batch_raveled_log_psi_grad(params, positions)
-
-        mean_log_grads = mean_grad_fn(log_grads)
-        centered_log_grads = log_grads - mean_log_grads
+        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        mean_log_psi_grads = mean_grad_fn(log_psi_grads)
+        centered_log_psi_grads = log_psi_grads - mean_log_psi_grads
 
         def fisher_apply(x: jnp.ndarray) -> jnp.ndarray:
-            nchains_local = centered_log_grads.shape[0]
-            jvp = jnp.matmul(centered_log_grads, x)
-            Fx = jnp.matmul(jnp.transpose(centered_log_grads), jvp) / nchains_local
+            nchains_local = centered_log_psi_grads.shape[0]
+            jvp = jnp.matmul(centered_log_psi_grads, x)
+            Fx = jnp.matmul(jnp.transpose(centered_log_psi_grads), jvp) / nchains_local
             return pmean_if_pmap(Fx) + damping * x
 
-        def fisher_diag_inverse_apply(x: jnp.ndarray) -> jnp.ndarray:
-            diag_F = mean_grad_fn(jnp.square(centered_log_grads))
-            return x / (diag_F + damping)
-
-        partial_grad = _get_raveled_energy_grad(log_grads, centered_local_energies)
-        full_grad = cotangents[0] * partial_grad
-
+        # TODO(Jeffmin): explore preconditioners
         sr_grad, _ = jscp.sparse.linalg.cg(
             fisher_apply,
-            full_grad,
-            x0=full_grad,
+            raveled_energy_grad,
+            x0=raveled_energy_grad,
             maxiter=maxiter,
-            M=fisher_diag_inverse_apply,
         )
 
-        return unravel_fn(sr_grad), None
+        return unravel_fn(sr_grad)
 
-    return energy_bwd
+    return precondition_grad_with_fisher

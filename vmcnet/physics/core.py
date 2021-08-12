@@ -1,5 +1,4 @@
 """Core local energy and gradient construction routines."""
-import functools
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import jax
@@ -181,7 +180,7 @@ def get_default_energy_bwd(
     log_psi_apply: ModelApply[P],
     mean_grad_fn: Callable[[jnp.ndarray], jnp.ndarray],
 ):
-    """Use the standard variance reduction to get the bwd pass of the total energy.
+    """Use a standard variance reduction formula to get the bwd pass of the energy.
 
     The formula is 2 * E_p[(local_e - E_p[local_e]) * grad_log_psi], where the
     symbol E_p[] refers to the expectation over the probability distribution p defined
@@ -306,14 +305,7 @@ def create_value_and_grad_energy_fn(
         local_energies = output[1][1]
         return output, (energy, local_energies, params, positions)
 
-    if nan_safe:
-        local_mean_grad_fn = functools.partial(jnp.nanmean, axis=0)
-    else:
-        local_mean_grad_fn = functools.partial(jnp.mean, axis=0)
-
-    def mean_grad_fn(x: jnp.ndarray) -> jnp.ndarray:
-        return utils.distribute.pmean_if_pmap(local_mean_grad_fn(x))
-
+    mean_grad_fn = utils.distribute.get_mean_fn(nan_safe=nan_safe)
     energy_bwd = get_energy_bwd(log_psi_apply, mean_grad_fn)
 
     compute_energy_data.defvjp(energy_fwd, energy_bwd)
