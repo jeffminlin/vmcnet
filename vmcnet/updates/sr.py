@@ -64,6 +64,7 @@ def get_fisher_inverse_fn(
 
     # TODO(Jeffmin): explore preconditioners for speeding up convergence and to provide
     # more stability
+    # TODO(Jeffmin): investigate damping scheduling and possibly adaptive damping
     if mode == SRMode.DEBUG:
 
         def raveled_log_psi_grad(params, positions):

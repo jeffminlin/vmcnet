@@ -272,8 +272,8 @@ def get_default_vmc_config() -> ConfigDict:
                 "adam": {"b1": 0.9, "b2": 0.999, "eps": 1e-8, "eps_root": 0.0},
                 "sgd": {"momentum": 0.0, "nesterov": False},
                 "sr": {
-                    "damping": 0.1,  # needs to be tuned with everything else
-                    "maxiter": 20,  # when <= -1, uses default 10 * nparams
+                    "damping": 1.0,  # needs to be tuned with everything else
+                    "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                     "descent_type": "sgd",
                     "norm_constraint": 0.001,
                     "mode": "lazy",
