@@ -756,6 +756,11 @@ class FermiNet(flax.linen.Module):
         )
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
+    def _get_elec_pos_and_spin_split(
+        self, elec_pos: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, SpinSplit]:
+        return elec_pos, self.spin_split
+
     def _get_norbitals_per_spin(
         self, elec_pos: jnp.ndarray, spin_split: SpinSplit
     ) -> Tuple[int, ...]:
@@ -787,11 +792,6 @@ class FermiNet(flax.linen.Module):
             )(stream_1e, r_ei)
             for _ in range(self.ndeterminants)
         ]
-
-    def _get_elec_pos_and_spin_split(
-        self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, SpinSplit]:
-        return elec_pos, self.spin_split
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
