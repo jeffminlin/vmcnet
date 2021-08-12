@@ -37,7 +37,7 @@ def test_total_energy_grad():
     target_local_energies = jnp.array([3.0, 1.0, -1.0])
     target_energy = 1.0
     target_variance = 4.0
-    target_grad_energy = 2.0 * jnp.sum(
+    target_grad_energy = 2.0 * jnp.mean(
         (target_local_energies - target_energy) * log_psi_grad_x
     )
 
