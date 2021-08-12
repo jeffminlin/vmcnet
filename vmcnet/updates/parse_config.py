@@ -18,7 +18,7 @@ from .params import (
     create_grad_energy_update_param_fn,
     create_kfac_update_param_fn,
 )
-from .sr import get_fisher_inverse_fn
+from .sr import SRMode, get_fisher_inverse_fn
 
 
 def _get_kfac_update_fn(
@@ -159,7 +159,11 @@ def _get_sr_update_fn(
     maxiter = optimizer_config.maxiter if optimizer_config.maxiter >= 0 else None
     mean_grad_fn = utils.distribute.get_mean_fn(nan_safe=nan_safe)
     precondition_grad_fn = get_fisher_inverse_fn(
-        log_psi_apply, mean_grad_fn, damping=optimizer_config.damping, maxiter=maxiter
+        log_psi_apply,
+        mean_grad_fn,
+        damping=optimizer_config.damping,
+        maxiter=maxiter,
+        mode=SRMode[optimizer_config.mode.upper()],
     )
 
     if optimizer_config.descent_type == "adam":
