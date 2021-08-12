@@ -155,6 +155,7 @@ def get_default_model_config() -> ConfigDict:
             "products_covariance": {
                 "kernel_init": {"type": "orthogonal", "scale": 2.0},
                 "register_kfac": True,
+                "use_weights": False,
             },
             "multiply_by_eq_features": False,
         }

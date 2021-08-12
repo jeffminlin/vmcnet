@@ -307,18 +307,23 @@ class ProductsSignCovariance(flax.linen.Module):
     Only supports two spins at the moment. Given per-spin antiequivariant vectors
     a_1, a_2, ..., and b_1, b_2, ..., computes an antisymmetry of
     sum_{i,j} (w_{i,j} sum_{k} a_ik b_jk), or multiple such antisymmetries if
-    features>1.
+    features>1. If use_weights=False, then no weights are used, so that effectively
+    w_{i,j} = 1 for all i,j.
 
     Attributes:
-        features (int): the number of antisymmetric output features to generate.
+        features (int): the number of antisymmetric output features to generate. If
+            use_weights is False, must be equal to 1.
         kernel_init (WeightInitializer): initializer for the weights of the dense layer.
-        register_kfac (bool): whether to register the dense layer with KFAC. Defaults to
-            True.
+        register_kfac (bool, optional): whether to register the dense layer with KFAC.
+            Defaults to True.
+        use_weights (bool, optional): whether to use a weighted sum of products.
+            Defaults to False.
     """
 
     features: int
     kernel_init: WeightInitializer
     register_kfac: bool = True
+    use_weights: bool = False
 
     @flax.linen.compact
     def __call__(self, x: ArrayList) -> jnp.ndarray:
@@ -348,6 +353,14 @@ class ProductsSignCovariance(flax.linen.Module):
         pairwise_dots = jax.lax.dot_general(
             x[0], x[1], ((contraction_dim, contraction_dim), (batch_dims, batch_dims))
         )
+
+        if not self.use_weights:
+            if self.features != 1:
+                raise ValueError(
+                    "Can only return one output feature when use_weights is False. "
+                    "Received {} for features.".format(self.features)
+                )
+            return jnp.expand_dims(jnp.sum(pairwise_dots, axis=(-1, -2)), -1)
 
         shape = pairwise_dots.shape
         # flattened_dots has shape (..., nelec_up * nelec_down)

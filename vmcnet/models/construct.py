@@ -393,6 +393,7 @@ def get_sign_covariance_from_config(
             1,
             kernel_init_constructor(model_config.products_covariance.kernel_init),
             model_config.products_covariance.register_kfac,
+            use_weights=model_config.products_covariance.use_weights,
         )
 
     else:

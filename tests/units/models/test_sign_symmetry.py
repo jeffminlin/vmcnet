@@ -180,9 +180,7 @@ def test_make_sl_array_list_fn_sign_covariant():
     np.testing.assert_allclose(same_sign_result, result, atol=1e-6)
 
 
-@pytest.mark.slow
-def test_products_sign_covariance():
-    """Test ProductsSignCovariance can be evaluated and is sign covariant."""
+def _test_products_sign_covariance(dout: int, use_weights: bool):
     nbatch = 5
     nelec_per_spin = (2, 5)
     d = 2
@@ -194,9 +192,8 @@ def test_products_sign_covariance():
     flip_sign_inputs = [inputs[0], -inputs[1]]
     same_sign_inputs = [-inputs[0], -inputs[1]]
 
-    dout = 3
     model = sign_sym.ProductsSignCovariance(
-        dout, weights.get_kernel_initializer("orthogonal")
+        dout, weights.get_kernel_initializer("orthogonal"), use_weights=use_weights
     )
     result, params = model.init_with_output(subkey, inputs)
 
@@ -206,3 +203,10 @@ def test_products_sign_covariance():
 
     assert_pytree_allclose(flip_sign_result, -result)
     assert_pytree_allclose(same_sign_result, result)
+
+
+@pytest.mark.slow
+def test_products_sign_covariance():
+    """Test ProductsSignCovariance can be evaluated and is sign covariant."""
+    _test_products_sign_covariance(3, True)
+    _test_products_sign_covariance(1, False)
