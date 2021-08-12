@@ -168,7 +168,7 @@ def get_default_model_config() -> ConfigDict:
             "embedded_particle_ferminet": ConfigDict(
                 {
                     **base_ferminet_config,
-                    "nhidden_fermions_per_spin": (2, 2),
+                    "extra_dims_per_spin": (2, 2),
                     "invariance": ConfigDict(
                         {
                             "input_streams": embedded_particle_input_streams,

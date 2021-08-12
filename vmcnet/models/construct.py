@@ -166,7 +166,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
+                extra_dims_per_spin=model_config.extra_dims_per_spin,
                 invariance_compute_input_streams=invariance_compute_input_streams,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
@@ -853,7 +853,7 @@ class EmbeddedParticleFermiNet(FermiNet):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
     Attributes:
-        nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
+        extra_dims_per_spin (Sequence[int]): number of hidden fermions to
             generate for each spin. Must have length nspins.
         invariance_compute_input_streams (ComputeInputStreams): function to compute
             input streams from electron positions, for the invariance that is used to
@@ -880,7 +880,7 @@ class EmbeddedParticleFermiNet(FermiNet):
             of the invariance with KFAC. Defaults to True.
     """
 
-    nhidden_fermions_per_spin: Sequence[int]
+    extra_dims_per_spin: Sequence[int]
     invariance_compute_input_streams: ComputeInputStreams
     invariance_backflow: Backflow
     invariance_kernel_initializer: WeightInitializer
@@ -917,21 +917,19 @@ class EmbeddedParticleFermiNet(FermiNet):
             self.spin_split, visible_nelec_total
         )
         nspins = len(visible_nelec_per_spin)
-        if len(self.nhidden_fermions_per_spin) != nspins:
+        if len(self.extra_dims_per_spin) != nspins:
             raise ValueError(
-                "Length of nhidden_fermions_per_spin does not match number of spins. "
+                "Length of extra_dims_per_spin does not match number of spins. "
                 "Provided {} for {} spins.".format(
-                    len(self.nhidden_fermions_per_spin), nspins
+                    len(self.extra_dims_per_spin), nspins
                 )
             )
 
-        invariance_output_shape_per_spin = [
-            (n, d) for n in self.nhidden_fermions_per_spin
-        ]
+        invariance_output_shape_per_spin = [(n, d) for n in self.extra_dims_per_spin]
         invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
 
         total_nelec_per_spin = [
-            n + self.nhidden_fermions_per_spin[i]
+            n + self.extra_dims_per_spin[i]
             for i, n in enumerate(visible_nelec_per_spin)
         ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and

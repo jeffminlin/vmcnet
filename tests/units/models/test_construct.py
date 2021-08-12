@@ -147,7 +147,7 @@ def _make_embedded_particle_ferminets():
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
-    for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
+    for extra_dims_per_spin in [(2, 3), (4, 0)]:
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             compute_input_streams,
@@ -161,7 +161,7 @@ def _make_embedded_particle_ferminets():
             isotropic_decay=True,
             determinant_fn=None,
             determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
-            nhidden_fermions_per_spin=nhidden_fermions_per_spin,
+            extra_dims_per_spin=extra_dims_per_spin,
             invariance_compute_input_streams=invariance_compute_input_streams,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(
