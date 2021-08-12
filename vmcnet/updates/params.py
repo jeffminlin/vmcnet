@@ -8,7 +8,11 @@ from kfac_ferminet_alpha import optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.pytree_helpers import tree_inner_product, tree_reduce_l1
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+    tree_reduce_l1,
+)
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
@@ -253,6 +257,6 @@ def constrain_norm(
 
     max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
     coefficient = jnp.minimum(max_coefficient, 1)
-    constrained_grads = jax.tree_map(lambda x: coefficient * x, preconditioned_grads)
+    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
 
     return constrained_grads

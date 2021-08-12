@@ -16,6 +16,11 @@ def tree_prod(tree1: T, tree2: T) -> T:
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
 
 
+def multiply_tree_by_scalar(tree: T, scalar: jnp.float32) -> T:
+    """Multiply all leaves of a pytree by a scalar."""
+    return jax.tree_map(lambda x: scalar * x, tree)
+
+
 def tree_inner_product(tree1: T, tree2: T) -> jnp.ndarray:
     """Inner product of two pytrees with the same structure."""
     leaf_inner_prods = jax.tree_map(lambda a, b: jnp.sum(a * b), tree1, tree2)

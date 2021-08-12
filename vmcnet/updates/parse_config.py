@@ -177,9 +177,14 @@ def _get_sr_update_fn(
         learning_rate=learning_rate_schedule, **descent_config
     )
 
+    def get_optimizer_step_count(optimizer_state):
+        return optimizer_state[1].count
+
     def optimizer_apply(grad, params, optimizer_state, data):
+
         preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
-        learning_rate = learning_rate_schedule(optimizer_state[1].count)
+        step_count = get_optimizer_step_count(optimizer_state)
+        learning_rate = learning_rate_schedule(step_count)
         constrained_grad = constrain_norm(
             grad, preconditioned_grad, learning_rate, optimizer_config.norm_constraint
         )

@@ -252,7 +252,7 @@ def get_default_vmc_config() -> ConfigDict:
             "record_param_l1_norm": False,
             "clip_threshold": 5.0,
             "schedule_type": "inverse_time",  # constant or inverse_time
-            "learning_rate": 5e-2,
+            "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
             "learning_decay_rate": 1e-4,
             "nan_safe": True,
             "optimizer_type": "kfac",
@@ -272,10 +272,11 @@ def get_default_vmc_config() -> ConfigDict:
                 "adam": {"b1": 0.9, "b2": 0.999, "eps": 1e-8, "eps_root": 0.0},
                 "sgd": {"momentum": 0.0, "nesterov": False},
                 "sr": {
-                    "damping": 0.001,  # needs to be tuned with everything else
-                    "maxiter": 10,  # when <= -1, uses default 10 * nparams
-                    "descent_type": "adam",
-                    "norm_constraint": 0.0005,
+                    "damping": 0.1,  # needs to be tuned with everything else
+                    "maxiter": 20,  # when <= -1, uses default 10 * nparams
+                    "descent_type": "sgd",
+                    "norm_constraint": 0.001,
+                    "mode": "lazy",
                 },
             },
         }
