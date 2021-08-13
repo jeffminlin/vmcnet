@@ -21,7 +21,7 @@ from .params import (
 from .sr import SRMode, get_fisher_inverse_fn
 
 
-def _get_kfac_update_fn(
+def _get_kfac_update_fn_and_state(
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
@@ -71,7 +71,7 @@ def _init_optax_optimizer(
     return optimizer_state
 
 
-def _get_optax_update_fn(
+def _get_optax_update_fn_and_state(
     optimizer: optax.GradientTransformation,
     params: P,
     get_position_fn: GetPositionFromData[D],
@@ -98,7 +98,7 @@ def _get_optax_update_fn(
     return update_param_fn, optimizer_state
 
 
-def _get_adam_update_fn(
+def _get_adam_update_fn_and_state(
     params: P,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
@@ -109,7 +109,7 @@ def _get_adam_update_fn(
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
 
-    return _get_optax_update_fn(
+    return _get_optax_update_fn_and_state(
         optimizer,
         params,
         get_position_fn,
@@ -119,7 +119,7 @@ def _get_adam_update_fn(
     )
 
 
-def _get_sgd_update_fn(
+def _get_sgd_update_fn_and_state(
     params: P,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
@@ -134,7 +134,7 @@ def _get_sgd_update_fn(
         nesterov=optimizer_config.nesterov,
     )
 
-    return _get_optax_update_fn(
+    return _get_optax_update_fn_and_state(
         optimizer,
         params,
         get_position_fn,
@@ -144,7 +144,7 @@ def _get_sgd_update_fn(
     )
 
 
-def _get_sr_update_fn(
+def _get_sr_update_fn_and_state(
     log_psi_apply: ModelApply[P],
     params: P,
     get_position_fn: GetPositionFromData[D],

@@ -57,4 +57,4 @@ def test_total_energy_grad():
     np.testing.assert_allclose(local_energies, target_local_energies)
     np.testing.assert_allclose(energy, target_energy)
     np.testing.assert_allclose(variance, target_variance)
-    np.testing.assert_allclose(grad_energy, target_grad_energy)
+    np.testing.assert_allclose(grad_energy, target_grad_energy, rtol=1e-6)

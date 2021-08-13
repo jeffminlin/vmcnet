@@ -298,7 +298,7 @@ def _get_update_fn_and_init_optimizer(
     learning_rate_schedule = _get_learning_rate_schedule(vmc_config)
 
     if vmc_config.optimizer_type == "kfac":
-        return updates.parse_config._get_kfac_update_fn(
+        return updates.parse_config._get_kfac_update_fn_and_state(
             params,
             data,
             get_position_fn,
@@ -310,7 +310,10 @@ def _get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
-        update_param_fn, optimizer_state = updates.parse_config._get_sgd_update_fn(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = updates.parse_config._get_sgd_update_fn_and_state(
             params,
             get_position_fn,
             energy_data_val_and_grad,
@@ -321,7 +324,10 @@ def _get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "adam":
-        update_param_fn, optimizer_state = updates.parse_config._get_adam_update_fn(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = updates.parse_config._get_adam_update_fn_and_state(
             params,
             get_position_fn,
             energy_data_val_and_grad,
@@ -332,7 +338,10 @@ def _get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "sr":
-        update_param_fn, optimizer_state = updates.parse_config._get_sr_update_fn(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = updates.parse_config._get_sr_update_fn_and_state(
             log_psi_apply,
             params,
             get_position_fn,
