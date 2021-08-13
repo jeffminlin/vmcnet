@@ -101,11 +101,12 @@ def _make_ferminets():
     log_psis = []
     # No need for combinatorial testing over these flags; just make sure Ferminet is
     # tested with and without cyclic spins, and with each different determinant_fn_mode.
-    for (cyclic_spins, use_det_resnet, determinant_fn_mode) in [
-        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
-        (True, True, models.construct.DeterminantFnMode.SIGN_COVARIANCE),
-        (False, True, models.construct.DeterminantFnMode.PARALLEL_EVEN),
-        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN),
+    for cyclic_spins, use_det_resnet, determinant_fn_mode, full_det in [
+        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE, False),
+        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE, True),
+        (True, True, models.construct.DeterminantFnMode.SIGN_COVARIANCE, False),
+        (False, True, models.construct.DeterminantFnMode.PARALLEL_EVEN, False),
+        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN, False),
     ]:
         compute_input_streams = _get_compute_input_streams(ion_pos)
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
@@ -124,6 +125,7 @@ def _make_ferminets():
             isotropic_decay=True,
             determinant_fn=resnet_det_fn,
             determinant_fn_mode=determinant_fn_mode,
+            full_det=full_det,
         )
         log_psis.append(log_psi)
 
@@ -146,7 +148,7 @@ def _make_embedded_particle_ferminets():
     invariance_compute_input_streams = _get_compute_input_streams(ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
-    for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
+    for nhidden_fermions_per_spin, full_det in [((2, 3), False), ((4, 0), True)]:
         total_spin_split = (spin_split[0] + nhidden_fermions_per_spin[0],)
         backflow = _get_backflow(total_spin_split, ndense_list, cyclic_spins)
         log_psi = models.construct.EmbeddedParticleFermiNet(
@@ -162,6 +164,7 @@ def _make_embedded_particle_ferminets():
             isotropic_decay=True,
             determinant_fn=None,
             determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
+            full_det=full_det,
             nhidden_fermions_per_spin=nhidden_fermions_per_spin,
             invariance_compute_input_streams=invariance_compute_input_streams,
             invariance_backflow=invariance_backflow,
@@ -190,9 +193,9 @@ def _make_extended_orbital_matrix_ferminets():
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
     extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
-    for nhidden_fermions_per_spin, use_separate_invariance_backflow in [
-        ((2, 3), True),
-        ((4, 0), False),
+    for nhidden_fermions_per_spin, use_separate_invariance_backflow, full_det in [
+        ((2, 3), True, False),
+        ((4, 0), False, True),
     ]:
         if use_separate_invariance_backflow:
             invariance_backflow = extra_backflow
@@ -220,6 +223,7 @@ def _make_extended_orbital_matrix_ferminets():
             isotropic_decay=True,
             determinant_fn=None,
             determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
+            full_det=full_det,
             nhidden_fermions_per_spin=nhidden_fermions_per_spin,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(

@@ -130,6 +130,7 @@ def get_default_model_config() -> ConfigDict:
             "use_det_resnet": False,
             "det_resnet": determinant_resnet,
             "determinant_fn_mode": "parallel_even",
+            "full_det": False,
         }
     )
 
