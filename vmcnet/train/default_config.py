@@ -168,7 +168,7 @@ def get_default_model_config() -> ConfigDict:
             "embedded_particle_ferminet": ConfigDict(
                 {
                     **base_ferminet_config,
-                    "extra_dims_per_spin": (2, 2),
+                    "nhidden_fermions_per_spin": (2, 2),
                     "invariance": ConfigDict(
                         {
                             "input_streams": embedded_particle_input_streams,
@@ -184,7 +184,7 @@ def get_default_model_config() -> ConfigDict:
             "extended_orbital_matrix_ferminet": ConfigDict(
                 {
                     **base_ferminet_config,
-                    "extra_dims_per_spin": (2, 2),
+                    "nhidden_fermions_per_spin": (2, 2),
                     "use_separate_invariance_backflow": False,
                     "invariance": ConfigDict(
                         {

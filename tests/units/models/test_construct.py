@@ -146,8 +146,8 @@ def _make_embedded_particle_ferminets():
     invariance_compute_input_streams = _get_compute_input_streams(ion_pos)
     invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
-    for extra_dims_per_spin in [(2, 3), (4, 0)]:
-        total_spin_split = (spin_split[0] + extra_dims_per_spin[0],)
+    for nhidden_fermions_per_spin in [(2, 3), (4, 0)]:
+        total_spin_split = (spin_split[0] + nhidden_fermions_per_spin[0],)
         backflow = _get_backflow(total_spin_split, ndense_list, cyclic_spins)
         log_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
@@ -162,7 +162,7 @@ def _make_embedded_particle_ferminets():
             isotropic_decay=True,
             determinant_fn=None,
             determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
-            extra_dims_per_spin=extra_dims_per_spin,
+            nhidden_fermions_per_spin=nhidden_fermions_per_spin,
             invariance_compute_input_streams=invariance_compute_input_streams,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(
@@ -190,7 +190,7 @@ def _make_extended_orbital_matrix_ferminets():
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
     extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
 
-    for extra_dims_per_spin, use_separate_invariance_backflow in [
+    for nhidden_fermions_per_spin, use_separate_invariance_backflow in [
         ((2, 3), True),
         ((4, 0), False),
     ]:
@@ -220,7 +220,7 @@ def _make_extended_orbital_matrix_ferminets():
             isotropic_decay=True,
             determinant_fn=None,
             determinant_fn_mode=DeterminantFnMode.PARALLEL_EVEN,
-            extra_dims_per_spin=extra_dims_per_spin,
+            nhidden_fermions_per_spin=nhidden_fermions_per_spin,
             invariance_backflow=invariance_backflow,
             invariance_kernel_initializer=models.weights.get_kernel_initializer(
                 "he_normal"

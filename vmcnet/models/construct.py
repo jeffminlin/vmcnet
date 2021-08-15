@@ -136,7 +136,7 @@ def get_model_from_config(
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "embedded_particle_ferminet":
-            total_nelec = jnp.array(model_config.extra_dims_per_spin) + nelec
+            total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
             total_spin_split = tuple(jnp.cumsum(total_nelec)[:-1])
 
             backflow = get_backflow_from_config(
@@ -175,7 +175,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                extra_dims_per_spin=model_config.extra_dims_per_spin,
+                nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_compute_input_streams=invariance_compute_input_streams,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
@@ -218,7 +218,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                extra_dims_per_spin=model_config.extra_dims_per_spin,
+                nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
                     invariance_config.kernel_initializer
@@ -866,7 +866,7 @@ class EmbeddedParticleFermiNet(FermiNet):
     not the standard spin_split for the visible particles only.
 
     Attributes:
-        extra_dims_per_spin (Sequence[int]): number of hidden fermions to
+        nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
             generate for each spin. Must have length nspins.
         invariance_compute_input_streams (ComputeInputStreams): function to compute
             input streams from electron positions, for the invariance that is used to
@@ -893,7 +893,7 @@ class EmbeddedParticleFermiNet(FermiNet):
             of the invariance with KFAC. Defaults to True.
     """
 
-    extra_dims_per_spin: Sequence[int]
+    nhidden_fermions_per_spin: Sequence[int]
     invariance_compute_input_streams: ComputeInputStreams
     invariance_backflow: Backflow
     invariance_kernel_initializer: WeightInitializer
@@ -930,19 +930,21 @@ class EmbeddedParticleFermiNet(FermiNet):
             self.spin_split, visible_nelec_total
         )
         nspins = len(visible_nelec_per_spin)
-        if len(self.extra_dims_per_spin) != nspins:
+        if len(self.nhidden_fermions_per_spin) != nspins:
             raise ValueError(
-                "Length of extra_dims_per_spin does not match number of spins. "
+                "Length of nhidden_fermions_per_spin does not match number of spins. "
                 "Provided {} for {} spins.".format(
-                    len(self.extra_dims_per_spin), nspins
+                    len(self.nhidden_fermions_per_spin), nspins
                 )
             )
 
-        invariance_output_shape_per_spin = [(n, d) for n in self.extra_dims_per_spin]
+        invariance_output_shape_per_spin = [
+            (n, d) for n in self.nhidden_fermions_per_spin
+        ]
         invariance = self._get_invariant_tensor(invariance_output_shape_per_spin)
 
         total_nelec_per_spin = [
-            n + self.extra_dims_per_spin[i]
+            n + self.nhidden_fermions_per_spin[i]
             for i, n in enumerate(visible_nelec_per_spin)
         ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
@@ -972,10 +974,11 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     """FermiNet-based model with larger orbital matrices via padding with invariance.
 
     Attributes:
-        extra_dims_per_spin (Sequence[int], optional): sequence of integers specifying
-            how many extra hidden particle dimensions and corresponding virtual orbitals
-            to add to the orbital matrices. If not None, must have length nspins.
-            Defaults to None (no extra dims added, equivalent to FermiNet).
+        nhidden_fermions_per_spin (Sequence[int], optional): sequence of integers
+            specifying how many extra hidden particle dimensions and corresponding
+            virtual orbitals to add to the orbital matrices. If not None, must have
+            length nspins. Defaults to None (no extra dims added, equivalent to
+            FermiNet).
         invariance_kernel_initializer (WeightInitializer, optional): kernel initializer
             for the invariance dense layer. Has signature
                 (key, shape, dtype) -> jnp.ndarray.
@@ -994,7 +997,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             invariance. Defaults to None.
     """
 
-    extra_dims_per_spin: Sequence[int]
+    nhidden_fermions_per_spin: Sequence[int]
     invariance_kernel_initializer: WeightInitializer = get_kernel_initializer(
         "orthogonal"
     )
@@ -1012,7 +1015,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
             (extra_dim, norbitals_per_spin[i])
-            for i, extra_dim in enumerate(self.extra_dims_per_spin)
+            for i, extra_dim in enumerate(self.nhidden_fermions_per_spin)
         ]
 
         if self.invariance_backflow is not None:
@@ -1041,7 +1044,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         nelec_total = elec_pos.shape[-2]
         nelec_per_spin = get_nelec_per_spin(spin_split, nelec_total)
         return tuple(
-            nelec + self.extra_dims_per_spin[i]
+            nelec + self.nhidden_fermions_per_spin[i]
             for i, nelec in enumerate(nelec_per_spin)
         )
 
