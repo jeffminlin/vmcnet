@@ -136,6 +136,14 @@ def get_model_from_config(
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
             )
         elif model_config.type == "embedded_particle_ferminet":
+            total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
+            total_spin_split = tuple(jnp.cumsum(total_nelec)[:-1])
+
+            backflow = get_backflow_from_config(
+                model_config.backflow,
+                total_spin_split,
+                dtype=dtype,
+            )
             invariance_config = model_config.invariance
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
@@ -145,6 +153,7 @@ def get_model_from_config(
                 spin_split,
                 dtype=dtype,
             )
+
             return EmbeddedParticleFermiNet(
                 spin_split,
                 compute_input_streams,
@@ -209,7 +218,7 @@ def get_model_from_config(
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                extra_dims_per_spin=model_config.extra_dims_per_spin,
+                nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
                     invariance_config.kernel_initializer
@@ -852,6 +861,10 @@ class FermiNet(flax.linen.Module):
 class EmbeddedParticleFermiNet(FermiNet):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 
+    Note: the backflow argument supplied for the construction of this model should use
+    the spin_split for the TOTAL number of particles, visible and hidden, for each spin,
+    not the standard spin_split for the visible particles only.
+
     Attributes:
         nhidden_fermions_per_spin (Sequence[int]): number of hidden fermions to
             generate for each spin. Must have length nspins.
@@ -961,10 +974,11 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     """FermiNet-based model with larger orbital matrices via padding with invariance.
 
     Attributes:
-        extra_dims_per_spin (Sequence[int], optional): sequence of integers specifying
-            how many extra hidden particle dimensions and corresponding virtual orbitals
-            to add to the orbital matrices. If not None, must have length nspins.
-            Defaults to None (no extra dims added, equivalent to FermiNet).
+        nhidden_fermions_per_spin (Sequence[int], optional): sequence of integers
+            specifying how many extra hidden particle dimensions and corresponding
+            virtual orbitals to add to the orbital matrices. If not None, must have
+            length nspins. Defaults to None (no extra dims added, equivalent to
+            FermiNet).
         invariance_kernel_initializer (WeightInitializer, optional): kernel initializer
             for the invariance dense layer. Has signature
                 (key, shape, dtype) -> jnp.ndarray.
@@ -983,7 +997,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             invariance. Defaults to None.
     """
 
-    extra_dims_per_spin: Sequence[int]
+    nhidden_fermions_per_spin: Sequence[int]
     invariance_kernel_initializer: WeightInitializer = get_kernel_initializer(
         "orthogonal"
     )
@@ -1001,7 +1015,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
             (extra_dim, norbitals_per_spin[i])
-            for i, extra_dim in enumerate(self.extra_dims_per_spin)
+            for i, extra_dim in enumerate(self.nhidden_fermions_per_spin)
         ]
 
         if self.invariance_backflow is not None:
@@ -1030,7 +1044,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         nelec_total = elec_pos.shape[-2]
         nelec_per_spin = get_nelec_per_spin(spin_split, nelec_total)
         return tuple(
-            nelec + self.extra_dims_per_spin[i]
+            nelec + self.nhidden_fermions_per_spin[i]
             for i, nelec in enumerate(nelec_per_spin)
         )
 
