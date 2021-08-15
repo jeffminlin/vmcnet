@@ -251,32 +251,47 @@ def get_default_vmc_config() -> ConfigDict:
             "record_amplitudes": False,
             "record_param_l1_norm": False,
             "clip_threshold": 5.0,
-            "schedule_type": "inverse_time",  # constant or inverse_time
-            "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
-            "learning_decay_rate": 1e-4,
             "nan_safe": True,
             "optimizer_type": "kfac",
             "optimizer": {
-                "kfac": ConfigDict(
-                    {
-                        "l2_reg": 0.0,
-                        "norm_constraint": 0.001,
-                        "curvature_ema": 0.95,
-                        "inverse_update_period": 1,
-                        "min_damping": 1e-4,
-                        "register_only_generic": False,
-                        "estimation_mode": "fisher_exact",
-                        "damping": 0.001,
-                    }
-                ),
-                "adam": {"b1": 0.9, "b2": 0.999, "eps": 1e-8, "eps_root": 0.0},
-                "sgd": {"momentum": 0.0, "nesterov": False},
+                "kfac": {
+                    "l2_reg": 0.0,
+                    "norm_constraint": 0.001,
+                    "curvature_ema": 0.95,
+                    "inverse_update_period": 1,
+                    "min_damping": 1e-4,
+                    "register_only_generic": False,
+                    "estimation_mode": "fisher_exact",
+                    "damping": 0.001,
+                    "schedule_type": "inverse_time",  # constant or inverse_time
+                    "learning_rate": 5e-2,
+                    "learning_decay_rate": 1e-4,
+                },
+                "adam": {
+                    "b1": 0.9,
+                    "b2": 0.999,
+                    "eps": 1e-8,
+                    "eps_root": 0.0,
+                    "schedule_type": "inverse_time",  # constant or inverse_time
+                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_decay_rate": 1e-4,
+                },
+                "sgd": {
+                    "momentum": 0.0,
+                    "nesterov": False,
+                    "schedule_type": "inverse_time",  # constant or inverse_time
+                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_decay_rate": 1e-4,
+                },
                 "sr": {
                     "damping": 1.0,  # needs to be tuned with everything else
                     "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                     "descent_type": "sgd",
                     "norm_constraint": 0.001,
                     "mode": "lazy",
+                    "schedule_type": "inverse_time",  # constant or inverse_time
+                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_decay_rate": 1e-4,
                 },
             },
         }

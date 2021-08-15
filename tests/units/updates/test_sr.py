@@ -3,7 +3,6 @@ import functools
 
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 import vmcnet.updates as updates
 
@@ -22,9 +21,9 @@ def _setup_fisher():
     )
     nchains = len(positions)
 
-    Jac = positions
-    centered_Jac = Jac - jnp.mean(Jac, axis=0)
-    centered_JT_J = jnp.matmul(jnp.transpose(centered_Jac), centered_Jac)
+    jacobian = positions
+    centered_jacobian = jacobian - jnp.mean(jacobian, axis=0)
+    centered_JT_J = jnp.matmul(jnp.transpose(centered_jacobian), centered_jacobian)
     fisher = centered_JT_J / nchains  # technically 0.25 * Fisher
 
     def log_psi_apply(params, positions):
@@ -34,7 +33,6 @@ def _setup_fisher():
     return energy_grad, params, positions, fisher, log_psi_apply, mean_grad_fn
 
 
-@pytest.mark.slow
 def test_fisher_inverse_matches_exact_solve():
     """Check that the fisher inverse fn in lazy mode produces the solution to Fx = b."""
     (
@@ -51,16 +49,14 @@ def test_fisher_inverse_matches_exact_solve():
     )
 
     Finverse_grad = fisher_inverse_fn(energy_grad, params, positions)
-    desired_Finverse_grad = jnp.linalg.solve(fisher, energy_grad)
 
     np.testing.assert_allclose(
-        Finverse_grad, desired_Finverse_grad, rtol=1e-6, atol=1e-6
+        jnp.matmul(fisher, Finverse_grad), energy_grad, atol=1e-6
     )
 
 
-@pytest.mark.slow
 def test_lazy_and_debug_fisher_inverse_match():
-    """Check that fisher inverse fn in both lazy and debug moe give the same result."""
+    """Check that fisher inverse fn in both lazy and debug mode give the same result."""
     (
         energy_grad,
         params,
