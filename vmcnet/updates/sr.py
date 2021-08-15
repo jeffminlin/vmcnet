@@ -67,9 +67,9 @@ def get_fisher_inverse_fn(
             uses jnp.matmul to compute the Jacobian-vector products. Defaults to LAZY.
 
     Returns:
-        Callable: function which computes the backward pass in the custom vjp of the
-        total energy. The gradient is preconditioned with the inverse of the Fisher
-        information matrix. Has the signature (res, cotangents) -> (gradients, None)
+        Callable: function which computes the gradient preconditioned with the inverse
+        of the Fisher information matrix. Has the signature
+            (energy_grad, params, positions) -> preconditioned_grad
     """
     # TODO(Jeffmin): explore preconditioners for speeding up convergence and to provide
     # more stability
