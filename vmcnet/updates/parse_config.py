@@ -68,8 +68,8 @@ def get_update_fn_and_init_optimizer(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         key (jnp.ndarray): PRNGKey with which to initialize optimizer state
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
@@ -167,8 +167,8 @@ def get_kfac_update_fn_and_state(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         key (jnp.ndarray): PRNGKey with which to initialize optimizer state
         learning_rate_schedule (Callable): function which returns a learning rate from
@@ -270,8 +270,8 @@ def get_adam_update_fn_and_state(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
@@ -317,8 +317,8 @@ def get_sgd_update_fn_and_state(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
@@ -373,8 +373,8 @@ def get_sr_update_fn_and_state(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate

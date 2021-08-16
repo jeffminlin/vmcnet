@@ -262,8 +262,8 @@ def create_value_and_grad_energy_fn(
         Callable: function which computes the clipped energy value and gradient. Has the
         signature
             (params, x)
-            -> ((expected_energy, auxilliary_energy_data), grad_energy),
-        where auxilliary_energy_data is the tuple
+            -> ((expected_energy, auxiliary_energy_data), grad_energy),
+        where auxiliary_energy_data is the tuple
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 

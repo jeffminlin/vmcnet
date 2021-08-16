@@ -21,7 +21,7 @@ PyTree = Any
 T = TypeVar("T", bound=PyTree)
 
 # TypeVar for a pytree containing MCMC data, e.g. walker positions
-# and wave function amplitudes, or other auxilliary MCMC data
+# and wave function amplitudes, or other auxiliary MCMC data
 D = TypeVar("D", bound=PyTree)
 
 # TypeVar for MCMC metadata which is required to take a metropolis step.

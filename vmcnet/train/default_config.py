@@ -273,14 +273,14 @@ def get_default_vmc_config() -> ConfigDict:
                     "eps": 1e-8,
                     "eps_root": 0.0,
                     "schedule_type": "inverse_time",  # constant or inverse_time
-                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_rate": 5e-2,
                     "learning_decay_rate": 1e-4,
                 },
                 "sgd": {
                     "momentum": 0.0,
                     "nesterov": False,
                     "schedule_type": "inverse_time",  # constant or inverse_time
-                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_rate": 5e-2,
                     "learning_decay_rate": 1e-4,
                 },
                 "sr": {
@@ -290,7 +290,7 @@ def get_default_vmc_config() -> ConfigDict:
                     "norm_constraint": 0.001,
                     "mode": "lazy",
                     "schedule_type": "inverse_time",  # constant or inverse_time
-                    "learning_rate": 5e-2,  # may need to be tuned down for SR and KFAC
+                    "learning_rate": 5e-2,  # needs to be tuned with everything else
                     "learning_decay_rate": 1e-4,
                 },
             },

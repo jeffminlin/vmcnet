@@ -78,8 +78,8 @@ def create_grad_energy_update_param_fn(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         optimizer_apply (Callable): applies an update to the parameters. Has signature
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
