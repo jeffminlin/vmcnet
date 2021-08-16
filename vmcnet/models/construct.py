@@ -678,6 +678,16 @@ class FermiNet(flax.linen.Module):
             PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
             provided determinant_fn to calculate an ansatz for Psi; irrelevant
             if determinant_fn is set to None.
+        full_det (bool): If True, the model will use a single, "full" determinant with
+            orbitals from particles of all spins. For example, for a spin_split of
+            (2,2), the original FermiNet with ndeterminants=1 would calculate two
+            separate 2x2 orbital matrices and multiply their determinants together. A
+            full determinant model would instead calculate a single 4x4 matrix, with the
+            first two particle indices corresponding to the up-spin particles and the
+            last two particle indices corresponding to the down-spin particles. The
+            output of the model would then be the determinant of that single matrix, if
+            ndeterminants=1, or the sum of multiple such determinants if
+            ndeterminants>1.
     """
 
     spin_split: SpinSplit
