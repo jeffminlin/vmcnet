@@ -63,8 +63,8 @@ def get_nspins(spin_split: SpinSplit) -> int:
     """Get the number of spins from a spin split."""
     if isinstance(spin_split, int):
         return spin_split
-    else:
-        return len(spin_split) + 1
+
+    return len(spin_split) + 1
 
 
 def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:
