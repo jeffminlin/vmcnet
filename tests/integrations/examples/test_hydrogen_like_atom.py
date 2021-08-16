@@ -23,7 +23,7 @@ def _setup_hla_hyperparams_and_model():
     nepochs = 100
     nsteps_per_param_update = 5
     std_move = 0.4
-    learning_rate = 1e-2
+    learning_rate = 1.0
 
     # Initialize model and chains of walkers
     log_psi_model = hla.HydrogenLikeWavefunction(model_decay)

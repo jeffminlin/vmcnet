@@ -176,12 +176,55 @@ def get_statistics_from_local_energy(
     return energy, variance
 
 
+def get_default_energy_bwd(
+    log_psi_apply: ModelApply[P],
+    mean_grad_fn: Callable[[jnp.ndarray], jnp.ndarray],
+):
+    """Use a standard variance reduction formula to get the bwd pass of the energy.
+
+    The formula is 2 * E_p[(local_e - E_p[local_e]) * grad_log_psi], where the
+    symbol E_p[] refers to the expectation over the probability distribution p defined
+    by p(x) = |psi(x)|^2 / <psi | psi>. This is an unbiased estimator of the gradient
+    of E_p[local_e], and has a lower variance than directly differentiating E_p[local_e]
+    with respect to the parameters.
+
+    Args:
+        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
+            function is (params, x) -> log|psi(x)|
+        mean_grad_fn (Callable): function which is used to average the local gradient
+            terms over all local devices. Has the signature local_grads -> avg_grad / 2,
+            and should only average over the batch axis 0.
+
+    Returns:
+        Callable: function which computes the backward pass in the custom vjp of the
+        total energy. Has the signature (res, cotangents) -> (gradients, None)
+    """
+
+    def scaled_by_local_e(
+        params: P, positions: jnp.ndarray, centered_local_energies: jnp.ndarray
+    ) -> jnp.float32:
+        log_psi = log_psi_apply(params, positions)
+        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
+        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)
+
+    _get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
+
+    def energy_bwd(res, cotangents) -> Tuple[P, None]:
+        energy, local_energies, params, positions = res
+        centered_local_energies = local_energies - energy
+        gradient = _get_energy_grad(params, positions, centered_local_energies)
+        return jax.tree_map(lambda x: x * cotangents[0], gradient), None
+
+    return energy_bwd
+
+
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     nchains: int,
     clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
     nan_safe: bool = True,
+    get_energy_bwd: Callable = get_default_energy_bwd,
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -210,13 +253,17 @@ def create_value_and_grad_energy_fn(
             used instead of jnp.mean and jnp.sum for the terms in the gradient
             calculation. Can be set to False when debugging if trying to find the source
             of unexpected nans. Defaults to True.
+        get_energy_bwd (Callable): function which returns a custom backward pass for the
+            total energy calculation. Has the signature
+                (log_psi_apply, mean_grad_fn) -> energy_bwd.
+            Defaults to get_default_energy_bwd, which computes the formula above.
 
     Returns:
         Callable: function which computes the clipped energy value and gradient. Has the
         signature
             (params, x)
-            -> ((expected_energy, auxilliary_energy_data), grad_energy),
-        where auxilliary_energy_data is the tuple
+            -> ((expected_energy, auxiliary_energy_data), grad_energy),
+        where auxiliary_energy_data is the tuple
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 
@@ -258,23 +305,8 @@ def create_value_and_grad_energy_fn(
         local_energies = output[1][1]
         return output, (energy, local_energies, params, positions)
 
-    if nan_safe:
-        sum_grad_fn = jnp.nansum
-    else:
-        sum_grad_fn = jnp.sum
-
-    def scaled_by_local_e(params, positions, centered_local_energies):
-        log_psi = log_psi_apply(params, positions)
-        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
-        return 2.0 * sum_grad_fn(centered_local_energies * log_psi)
-
-    get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
-
-    def energy_bwd(res, cotangents):
-        energy, local_energies, params, positions = res
-        centered_local_energies = local_energies - energy
-        gradient = get_energy_grad(params, positions, centered_local_energies)
-        return jax.tree_map(lambda x: x * cotangents[0], gradient), None
+    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
+    energy_bwd = get_energy_bwd(log_psi_apply, mean_grad_fn)
 
     compute_energy_data.defvjp(energy_fwd, energy_bwd)
 

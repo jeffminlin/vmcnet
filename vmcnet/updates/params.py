@@ -8,7 +8,11 @@ from kfac_ferminet_alpha import optimizer as kfac_opt
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.pytree_helpers import tree_reduce_l1
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+    tree_reduce_l1,
+)
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
@@ -61,7 +65,7 @@ def _make_traced_fn_with_single_metrics(
 
 def create_grad_energy_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    optimizer_apply: Callable[[P, P, S], Tuple[P, S]],
+    optimizer_apply: Callable[[P, P, S, D], Tuple[P, S]],
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_param_l1_norm: bool = False,
@@ -74,8 +78,8 @@ def create_grad_energy_update_param_fn(
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
-                -> ((expected_energy, auxilliary_energy_data), grad_energy),
-            where auxilliary_energy_data is the tuple
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         optimizer_apply (Callable): applies an update to the parameters. Has signature
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
@@ -99,7 +103,9 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
-        params, optimizer_state = optimizer_apply(grad_energy, params, optimizer_state)
+        params, optimizer_state = optimizer_apply(
+            grad_energy, params, optimizer_state, data
+        )
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
@@ -233,3 +239,24 @@ def create_eval_update_param_fn(
     )
 
     return traced_fn
+
+
+def constrain_norm(
+    grads: P,
+    preconditioned_grads: P,
+    learning_rate: jnp.float32,
+    norm_constraint: jnp.float32 = 0.001,
+) -> P:
+    """Constrains the preconditioned norm of the update, adapted from KFAC."""
+    sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
+    sq_norm_scaled_grads = sq_norm_grads * learning_rate ** 2
+
+    # Sync the norms here, see:
+    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
+    sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
+
+    max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    coefficient = jnp.minimum(max_coefficient, 1)
+    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
+
+    return constrained_grads

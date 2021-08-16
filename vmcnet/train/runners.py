@@ -8,10 +8,7 @@ from typing import Callable, Optional, Tuple
 import flax
 import jax
 import jax.numpy as jnp
-import kfac_ferminet_alpha
-import kfac_ferminet_alpha.optimizer as kfac_opt
 import numpy as np
-import optax
 from absl import flags
 from ml_collections import ConfigDict
 
@@ -262,148 +259,6 @@ def _get_energy_fns(
     return local_energy_fn, energy_data_val_and_grad
 
 
-def _get_learning_rate_schedule(vmc_config: ConfigDict) -> Callable[[int], jnp.float32]:
-    if vmc_config.schedule_type == "constant":
-
-        def learning_rate_schedule(t):
-            return vmc_config.learning_rate
-
-    elif vmc_config.schedule_type == "inverse_time":
-
-        def learning_rate_schedule(t):
-            return vmc_config.learning_rate / (1.0 + vmc_config.learning_decay_rate * t)
-
-    else:
-        raise ValueError(
-            "Learning rate schedule type not supported; {} was requested".format(
-                vmc_config.schedule_type
-            )
-        )
-
-    return learning_rate_schedule
-
-
-def _get_kfac_update_fn(
-    params: P,
-    data: D,
-    get_position_fn: GetPositionFromData[D],
-    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: jnp.ndarray,
-    learning_rate_schedule: Callable[[int], jnp.float32],
-    optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
-    apply_pmap: bool = True,
-) -> Tuple[
-    updates.params.UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, jnp.ndarray
-]:
-    optimizer = kfac_ferminet_alpha.Optimizer(
-        energy_data_val_and_grad,
-        l2_reg=optimizer_config.l2_reg,
-        norm_constraint=optimizer_config.norm_constraint,
-        value_func_has_aux=True,
-        learning_rate_schedule=learning_rate_schedule,
-        curvature_ema=optimizer_config.curvature_ema,
-        inverse_update_period=optimizer_config.inverse_update_period,
-        min_damping=optimizer_config.min_damping,
-        num_burnin_steps=0,
-        register_only_generic=optimizer_config.register_only_generic,
-        estimation_mode=optimizer_config.estimation_mode,
-        multi_device=apply_pmap,
-        pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
-    )
-    key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)
-
-    optimizer_state = optimizer.init(params, subkey, get_position_fn(data))
-
-    update_param_fn = updates.params.create_kfac_update_param_fn(
-        optimizer,
-        optimizer_config.damping,
-        pacore.get_position_from_data,
-        record_param_l1_norm=record_param_l1_norm,
-    )
-
-    return update_param_fn, optimizer_state, key
-
-
-def _get_adam_update_fn(
-    params: P,
-    get_position_fn: GetPositionFromData[D],
-    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], jnp.float32],
-    optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
-    apply_pmap: bool = True,
-) -> Tuple[updates.params.UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
-
-    def optimizer_apply(grad, params, optimizer_state):
-        updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
-        params = optax.apply_updates(params, updates)
-        return params, optimizer_state
-
-    update_param_fn = updates.params.create_grad_energy_update_param_fn(
-        energy_data_val_and_grad,
-        optimizer_apply,
-        get_position_fn=get_position_fn,
-        record_param_l1_norm=record_param_l1_norm,
-        apply_pmap=apply_pmap,
-    )
-
-    optimizer_init = optimizer.init
-    if apply_pmap:
-        optimizer_init = utils.distribute.pmap(optimizer_init)
-    optimizer_state = optimizer_init(params)
-
-    return update_param_fn, optimizer_state
-
-
-def _get_update_fn_and_init_optimizer(
-    vmc_config: ConfigDict,
-    params: P,
-    data: D,
-    get_position_fn: GetPositionFromData[D],
-    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: jnp.ndarray,
-    apply_pmap: bool = True,
-) -> Tuple[
-    updates.params.UpdateParamFn[P, D, OptimizerState],
-    OptimizerState,
-    jnp.ndarray,
-]:
-
-    learning_rate_schedule = _get_learning_rate_schedule(vmc_config)
-
-    if vmc_config.optimizer_type == "kfac":
-        return _get_kfac_update_fn(
-            params,
-            data,
-            get_position_fn,
-            energy_data_val_and_grad,
-            key,
-            learning_rate_schedule,
-            vmc_config.optimizer.kfac,
-            vmc_config.record_param_l1_norm,
-            apply_pmap=apply_pmap,
-        )
-    elif vmc_config.optimizer_type == "adam":
-        update_param_fn, optimizer_state = _get_adam_update_fn(
-            params,
-            get_position_fn,
-            energy_data_val_and_grad,
-            learning_rate_schedule,
-            vmc_config.optimizer.adam,
-            vmc_config.record_param_l1_norm,
-            apply_pmap=apply_pmap,
-        )
-        return update_param_fn, optimizer_state, key
-    else:
-        raise ValueError(
-            "Requested optimizer type not supported; {} was requested".format(
-                vmc_config.optimizer_type
-            )
-        )
-
-
 # TODO: don't forget to update type hint to be more general when
 # _make_initial_distributed_data is more general
 def _setup_vmc(
@@ -461,7 +316,12 @@ def _setup_vmc(
     # Setup parameter updates
     if apply_pmap:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
-    update_param_fn, optimizer_state, key = _get_update_fn_and_init_optimizer(
+    (
+        update_param_fn,
+        optimizer_state,
+        key,
+    ) = updates.parse_config.get_update_fn_and_init_optimizer(
+        log_psi.apply,
         config.vmc,
         params,
         data,

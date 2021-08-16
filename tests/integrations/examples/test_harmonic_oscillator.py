@@ -72,7 +72,7 @@ def test_harmonic_oscillator_vmc(caplog):
     nepochs = 50
     nsteps_per_param_update = 5
     std_move = 0.25
-    learning_rate = 1e-4
+    learning_rate = 1e-2
 
     # Initialize model and chains of walkers
     (
@@ -127,7 +127,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
     nburn = 100
     nsteps_per_param_update = 5
     std_move = 0.25
-    learning_rate = 1e-4
+    learning_rate = 1e-2
 
     # Run 13 iterations, and checkpoint on the 10th to test reloading. Limit number
     # of reproduced iterations to 3 because with longer runs, nondeterminism in the
