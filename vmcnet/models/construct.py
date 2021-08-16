@@ -786,7 +786,7 @@ class FermiNet(flax.linen.Module):
         orbitals_split = 1 if self.full_det else self.spin_split
         return elec_pos, orbitals_split
 
-    def _get_norbitals_per_spin(
+    def _get_norbitals_per_split(
         self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
@@ -795,7 +795,7 @@ class FermiNet(flax.linen.Module):
     def _eval_orbitals(
         self,
         orbitals_split: SpinSplit,
-        norbitals_per_spin: Sequence[int],
+        norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
@@ -807,7 +807,7 @@ class FermiNet(flax.linen.Module):
         return [
             FermiNetOrbitalLayer(
                 spin_split=orbitals_split,
-                norbitals_per_spin=norbitals_per_spin,
+                norbitals_per_spin=norbitals_per_split,
                 kernel_initializer_linear=self.kernel_initializer_orbital_linear,
                 kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
                 kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
@@ -839,10 +839,10 @@ class FermiNet(flax.linen.Module):
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
-        norbitals_per_spin = self._get_norbitals_per_spin(elec_pos, orbitals_split)
+        norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
         orbitals = self._eval_orbitals(
             orbitals_split,
-            norbitals_per_spin,
+            norbitals_per_split,
             input_stream_1e,
             input_stream_2e,
             stream_1e,
@@ -1028,7 +1028,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
     def _get_invariance(
         self,
-        norbitals_per_spin: Sequence[int],
+        norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
@@ -1036,7 +1036,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         invariant_shape_per_spin = [
             (
                 extra_dim,
-                norbitals_per_spin[0] if self.full_det else norbitals_per_spin[i],
+                norbitals_per_split[0] if self.full_det else norbitals_per_split[i],
             )
             for i, extra_dim in enumerate(self.nhidden_fermions_per_spin)
         ]
@@ -1061,7 +1061,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             for _ in range(self.ndeterminants)
         ]
 
-    def _get_norbitals_per_spin(
+    def _get_norbitals_per_split(
         self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
@@ -1078,7 +1078,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     def _eval_orbitals(
         self,
         orbitals_split: SpinSplit,
-        norbitals_per_spin: Sequence[int],
+        norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
@@ -1086,14 +1086,14 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     ) -> List[ArrayList]:
 
         invariant_part = self._get_invariance(
-            norbitals_per_spin,
+            norbitals_per_split,
             input_stream_1e,
             input_stream_2e,
             stream_1e,
         )
         equivariant_part = super()._eval_orbitals(
             orbitals_split,
-            norbitals_per_spin,
+            norbitals_per_split,
             input_stream_1e,
             input_stream_2e,
             stream_1e,
