@@ -783,8 +783,7 @@ class FermiNet(flax.linen.Module):
     def _get_elec_pos_and_orbitals_split(
         self, elec_pos: jnp.ndarray
     ) -> Tuple[jnp.ndarray, SpinSplit]:
-        orbitals_split = 1 if self.full_det else self.spin_split
-        return elec_pos, orbitals_split
+        return elec_pos, self.spin_split
 
     def _get_norbitals_per_split(
         self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
@@ -834,6 +833,9 @@ class FermiNet(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+        if self.full_det:
+            orbitals_split = 1
+
         input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
             elec_pos
         )
@@ -967,8 +969,6 @@ class EmbeddedParticleFermiNet(FermiNet):
         orbitals_split: SpinSplit = tuple(
             np.cumsum(np.array(total_nelec_per_spin))[:-1]
         )
-        if self.full_det:
-            orbitals_split = 1
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         (
