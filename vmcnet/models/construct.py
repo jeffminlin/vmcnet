@@ -740,11 +740,12 @@ class FermiNet(flax.linen.Module):
         """Calculate psi as an even fn. times products of corresponding determinants.
 
         Arguments:
-            fn_inputs (ArrayList): input data of shape [norb_mats: (..., ndeterminants)]
+            fn_inputs (ArrayList): input data of shape
+                [norb_splits: (..., ndeterminants)]
         """
         # even_outputs has shape (..., ndeterminantss)
         even_outputs = self._symmetrized_det_fn(fn_inputs)
-        # stacked_dets has shape (..., ndeterminants, norb_mats)
+        # stacked_dets has shape (..., ndeterminants, norb_splits)
         stacked_dets = jnp.stack(fn_inputs, axis=-1)
         # prod_dets has shape (..., ndeterminants)
         prod_dets = jnp.prod(stacked_dets, axis=-1)
@@ -754,12 +755,13 @@ class FermiNet(flax.linen.Module):
         """Calculate psi as an even fn. times products of all pairs of determinants.
 
         Arguments:
-            fn_inputs (ArrayList): input data of shape [norb_mats: (..., ndeterminants)]
+            fn_inputs (ArrayList): input data of shape
+                [norb_splits: (..., ndeterminants)]
         """
         if len(fn_inputs) != 2:
             raise ValueError(
-                "For PAIRWISE_EVEN determinant_fn_mode, only norb_mats=2 is supported. "
-                "Received {} orbital matrices.".format(len(fn_inputs))
+                "For PAIRWISE_EVEN determinant_fn_mode, only norb_splits=2 is "
+                "supported, but received {} orbital splits.".format(len(fn_inputs))
             )
 
         # even_outputs is shape (..., ndeterminants**2)
@@ -851,13 +853,13 @@ class FermiNet(flax.linen.Module):
             r_ei,
         )
 
-        # Orbitals shape is [norb_mats: (ndeterminants, ..., nelec[i], nelec[i])]
+        # Orbitals shape is [norb_splits: (ndeterminants, ..., nelec[i], nelec[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
 
         if self._symmetrized_det_fn is not None:
-            # dets is ArrayList of shape [norb_mats: (ndeterminants, ...)]
+            # dets is ArrayList of shape [norb_splits: (ndeterminants, ...)]
             dets = jax.tree_map(jnp.linalg.det, orbitals)
-            # Move axis to get shape [norb_mats: (..., ndeterminants)]
+            # Move axis to get shape [norb_splits: (..., ndeterminants)]
             fn_inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, -1), dets)
             if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
                 psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
