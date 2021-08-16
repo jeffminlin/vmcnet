@@ -62,10 +62,9 @@ def get_alternating_signs(n: int) -> jnp.ndarray:
 def get_nspins(spin_split: SpinSplit) -> int:
     """Get the number of spins from a spin split."""
     if isinstance(spin_split, int):
-        nspins = spin_split
-    else:
-        nspins = len(spin_split) + 1
-    return nspins
+        return spin_split
+
+    return len(spin_split) + 1
 
 
 def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:
