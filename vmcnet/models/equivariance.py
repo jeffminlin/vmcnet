@@ -546,7 +546,7 @@ class SplitDense(flax.linen.Module):
             particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense_per_spin (Sequence[int]): sequence of integers specifying the number of
+        ndense_per_split (Sequence[int]): sequence of integers specifying the number of
             dense nodes in the unique dense layer applied to each split of the input.
             This determines the output shapes for each split, i.e. the outputs are
             shaped (..., split_size[i], ndense[i])
