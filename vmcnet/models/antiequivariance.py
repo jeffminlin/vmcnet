@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, ParticleSplit
-from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
+from .core import get_alternating_signs, get_nelec_per_split, is_tuple_of_arrays
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
 
@@ -218,7 +218,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        nelec_per_spin = get_nelec_per_split(self.spin_split, nelec_total)
         ferminet_orbital_layer = FermiNetOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
@@ -302,7 +302,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             shape (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        nelec_per_spin = get_nelec_per_split(self.spin_split, nelec_total)
         ferminet_orbital_layer = FermiNetOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
@@ -385,7 +385,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        nelec_per_spin = get_nelec_per_split(self.spin_split, nelec_total)
         equivariant_orbital_layer = DoublyEquivariantOrbitalLayer(
             self.spin_split,
             nelec_per_spin,
@@ -468,7 +468,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             shape (..., nelec, 1).
         """
         nelec_total = eq_inputs.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(self.spin_split, nelec_total)
+        nelec_per_spin = get_nelec_per_split(self.spin_split, nelec_total)
         equivariant_orbital_layer = DoublyEquivariantOrbitalLayer(
             self.spin_split,
             nelec_per_spin,

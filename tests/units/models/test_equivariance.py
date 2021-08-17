@@ -170,7 +170,7 @@ def test_doubly_equivariant_orbital_layer_shape_and_equivariance():
         key,
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
-    nelec_per_spin = models.core.get_nelec_per_spin(orbitals_split, nelec_total)
+    nelec_per_spin = models.core.get_nelec_per_split(orbitals_split, nelec_total)
     norbitals_per_split = [2 * n for n in nelec_per_spin]
     nspins = len(nelec_per_spin)
     kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
@@ -224,7 +224,7 @@ def test_doubly_equivariant_orbital_layer_no_batch_dims():
     input_1e = jnp.squeeze(input_1e, 0)
     input_ei - jnp.squeeze(input_ei, 0)
 
-    nelec_per_spin = models.core.get_nelec_per_spin(orbitals_split, nelec_total)
+    nelec_per_spin = models.core.get_nelec_per_split(orbitals_split, nelec_total)
     norbitals_per_split = [2 * n for n in nelec_per_spin]
     kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
     bias_initializer = models.weights.get_bias_initializer("uniform")

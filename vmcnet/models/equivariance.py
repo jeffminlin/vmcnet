@@ -15,7 +15,7 @@ from .core import (
     _split_mean,
     _valid_skip,
     compute_ee_norm_with_safe_diag,
-    get_nspins,
+    get_nsplits,
 )
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
@@ -568,7 +568,7 @@ class SplitDense(flax.linen.Module):
 
     def setup(self):
         """Set up the dense layers for each split."""
-        nsplits = get_nspins(self.split)
+        nsplits = get_nsplits(self.split)
 
         if len(self.ndense_per_split) != nsplits:
             raise ValueError(
@@ -595,7 +595,7 @@ class SplitDense(flax.linen.Module):
             x (jnp.ndarray): array of shape (..., n, d)
 
         Returns:
-            [(..., n[i], self.ndense_per_spin[i])]: list of length nsplits, where
+            [(..., n[i], self.ndense_per_split[i])]: list of length nsplits, where
             nsplits is the number of splits created by
             jnp.split(x, self.split, axis=-2), and the ith entry of the output is the
             ith split transformed by a dense layer with self.ndense_per_split[i] nodes.
@@ -611,7 +611,7 @@ def _compute_exponential_envelopes_on_leaf(
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
 ) -> jnp.ndarray:
-    """Calculate exponential envelopes for orbitals of a single spin."""
+    """Calculate exponential envelopes for orbitals of a single split."""
     if isotropic:
         scale_out = _isotropy_on_leaf(
             r_ei_leaf,
@@ -648,7 +648,7 @@ def _compute_exponential_envelopes_all_splits(
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
 ) -> ArrayList:
-    """Calculate exponential envelopes for all spins."""
+    """Calculate exponential envelopes for all splits."""
     r_ei_split = jnp.split(r_ei, orbitals_split, axis=-3)
     return jax.tree_map(
         functools.partial(

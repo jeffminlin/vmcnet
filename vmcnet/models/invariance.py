@@ -6,7 +6,7 @@ import flax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import ArrayList, Backflow, ParticleSplit
-from .core import Dense, _split_mean, get_nspins
+from .core import Dense, _split_mean, get_nsplits
 from .weights import WeightInitializer
 
 
@@ -45,7 +45,7 @@ class SplitMeanDense(flax.linen.Module):
 
     def setup(self):
         """Set up the dense layers for each split."""
-        nspins = get_nspins(self.spin_split)
+        nspins = get_nsplits(self.spin_split)
 
         if len(self.ndense_per_spin) != nspins:
             raise ValueError(
@@ -133,7 +133,7 @@ class InvariantTensor(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
 
-        nspins = get_nspins(self.spin_split)
+        nspins = get_nsplits(self.spin_split)
 
         if len(self.output_shape_per_spin) != nspins:
             raise ValueError(

@@ -23,7 +23,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_spin
+from .core import Activation, SimpleResNet, get_nelec_per_split
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -791,7 +791,7 @@ class FermiNet(flax.linen.Module):
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        return get_nelec_per_spin(orbitals_split, nelec_total)
+        return get_nelec_per_split(orbitals_split, nelec_total)
 
     def _eval_orbitals(
         self,
@@ -945,7 +945,7 @@ class EmbeddedParticleFermiNet(FermiNet):
     ) -> Tuple[jnp.ndarray, ParticleSplit]:
         visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
-        visible_nelec_per_spin = get_nelec_per_spin(
+        visible_nelec_per_spin = get_nelec_per_split(
             self.spin_split, visible_nelec_total
         )
         nspins = len(visible_nelec_per_spin)
@@ -1067,7 +1067,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(orbitals_split, nelec_total)
+        nelec_per_spin = get_nelec_per_split(orbitals_split, nelec_total)
 
         if self.full_det:
             return (nelec_per_spin[0] + sum(self.nhidden_fermions_per_spin),)
