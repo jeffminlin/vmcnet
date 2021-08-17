@@ -288,7 +288,13 @@ def get_adam_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    optimizer = optax.adam(learning_rate=learning_rate_schedule, **optimizer_config)
+    optimizer = optax.adam(
+        learning_rate=learning_rate_schedule,
+        b1=optimizer_config.b1,
+        b2=optimizer_config.b2,
+        eps=optimizer_config.eps,
+        eps_root=optimizer_config.eps_root,
+    )
 
     return _get_optax_update_fn_and_state(
         optimizer,
