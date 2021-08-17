@@ -1,4 +1,5 @@
 """Entry points for running standard jobs."""
+import argparse
 import datetime
 import functools
 import logging
@@ -459,14 +460,16 @@ def _burn_and_run_vmc(
     return params, optimizer_state, data, key
 
 
-def _compute_and_save_energy_statistics(eval_logdir: str) -> None:
-    local_energies = np.loadtxt(os.path.join(eval_logdir, "local_energies.txt"))
+def _compute_and_save_energy_statistics(
+    local_energies_file_path: str, output_dir: str, output_filename: str
+) -> None:
+    local_energies = np.loadtxt(local_energies_file_path)
     eval_statistics = mcmc.statistics.get_stats_summary(local_energies)
     eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
     utils.io.save_dict_to_json(
         eval_statistics,
-        eval_logdir,
-        "statistics",
+        output_dir,
+        output_filename,
     )
 
 
@@ -592,4 +595,32 @@ def run_molecule() -> None:
         os.path.join(eval_logdir, "local_energies.txt")
     )
     if config.eval.record_local_energies and local_es_were_recorded:
-        _compute_and_save_energy_statistics(eval_logdir)
+        local_energies_filepath = os.path.join(eval_logdir, "local_energies.txt")
+        _compute_and_save_energy_statistics(
+            local_energies_filepath, eval_logdir, "statistics"
+        )
+
+
+def vmc_statistics() -> None:
+    """Calculate statistics from a VMC evaluation run and write them to disc."""
+    parser = argparse.ArgumentParser(
+        description="Calculate statistics from a VMC evaluation run and write them "
+        "to disc."
+    )
+    parser.add_argument(
+        "local_energies_file_path",
+        type=str,
+        help="File path to load local energies from",
+    )
+    parser.add_argument(
+        "output_file_path",
+        type=str,
+        help="File path to which to write the output statistics. The '.json' suffix "
+        "will be appended to the supplied path.",
+    )
+    args = parser.parse_args()
+
+    output_dir, output_filename = os.path.split(args.output_file_path)
+    _compute_and_save_energy_statistics(
+        args.local_energies_file_path, output_dir, output_filename
+    )

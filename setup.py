@@ -22,6 +22,9 @@ setup(
     install_requires=REQUIRED_PACKAGES,
     extras_require=EXTRA_PACKAGES,
     entry_points={
-        "console_scripts": ["vmc-molecule=vmcnet.train.runners:run_molecule"],
+        "console_scripts": [
+            "vmc-molecule=vmcnet.train.runners:run_molecule",
+            "vmc-statistics=vmcnet.train.runners:vmc_statistics",
+        ],
     },
 )
