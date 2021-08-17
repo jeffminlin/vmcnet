@@ -1037,10 +1037,10 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
             (
-                extra_dim,
+                nhidden,
                 norbitals_per_split[0] if self.full_det else norbitals_per_split[i],
             )
-            for i, extra_dim in enumerate(self.nhidden_fermions_per_spin)
+            for i, nhidden in enumerate(self.nhidden_fermions_per_spin)
         ]
 
         if self.invariance_backflow is not None:
@@ -1067,14 +1067,14 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        nelec_per_spin = get_nelec_per_split(orbitals_split, nelec_total)
+        nelec_per_split = get_nelec_per_split(orbitals_split, nelec_total)
 
         if self.full_det:
-            return (nelec_per_spin[0] + sum(self.nhidden_fermions_per_spin),)
+            return (nelec_per_split[0] + sum(self.nhidden_fermions_per_spin),)
 
         return tuple(
             nelec + self.nhidden_fermions_per_spin[i]
-            for i, nelec in enumerate(nelec_per_spin)
+            for i, nelec in enumerate(nelec_per_split)
         )
 
     def _eval_orbitals(
@@ -1116,9 +1116,9 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             return [
                 [
                     jnp.concatenate(
-                        [orbital_matrix, invariant_part[det_idx][spin_idx]], axis=-2
+                        [orbital_matrix, invariant_part[det_idx][split_idx]], axis=-2
                     )
-                    for spin_idx, orbital_matrix in enumerate(orbital_matrices)
+                    for split_idx, orbital_matrix in enumerate(orbital_matrices)
                 ]
                 for det_idx, orbital_matrices in enumerate(equivariant_part)
             ]
