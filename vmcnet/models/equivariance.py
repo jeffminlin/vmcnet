@@ -539,9 +539,9 @@ class SplitDense(flax.linen.Module):
     Attributes:
         split (ParticleSplit): number of pieces to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            E.g., if nelec = 10, and `split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `split` is a sequence, there will be one more
             split than the length of the sequence. In the original use-case of spin-1/2
             particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
@@ -668,13 +668,13 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     Attributes:
         orbitals_split (ParticleSplit): number of pieces to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            split than the length of the sequence. In the original use-case of spin-1/2
-            particles, `split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
+            E.g., if nelec = 10, and `orbitals_split` = 2, then the input is split
+            (5, 5). If nelec = 10, and `orbitals_split` = (2, 4), then the input is
+            split into (2, 4, 4) -- note when `orbitals_split` is a sequence, there will
+            be one more split than the length of the sequence. In the original use-case
+            of spin-1/2 particles, `split` should be either the number 2 (for
+            closed-shell systems) or should be a Sequence with length 1 whose element is
+            less than the total number of electrons.
         norbitals_per_split (Sequence[int]): sequence of integers specifying the number
             of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
@@ -769,17 +769,17 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
     ensure that the orbital values decay to zero far from the ions.
 
     Attributes:
-        spin_split (ParticleSplit): number of spins to split inputs equally,
-            or specified sequence of locations to split along the electron axis. E.g.,
-            if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
-            of orbitals to create for each spin. This determines the output shapes for
+        orbitals_split (ParticleSplit): number of pieces to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `orbitals_split` = 2, then the input is split
+            (5, 5). If nelec = 10, and `orbitals_split` = (2, 4), then the input is
+            split into (2, 4, 4) -- note when `orbitals_split` is a sequence, there will
+            be one more split than the length of the sequence. In the original use-case
+            of spin-1/2 particles, `split` should be either the number 2 (for
+            closed-shell systems) or should be a Sequence with length 1 whose element is
+            less than the total number of electrons.
+        norbitals_per_split (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
@@ -801,8 +801,8 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: ParticleSplit
-    norbitals_per_spin: Sequence[int]
+    orbitals_split: ParticleSplit
+    norbitals_per_split: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -817,10 +817,10 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _get_orbital_matrices_one_spin(
+    def _get_orbital_matrices_one_split(
         self, x: jnp.ndarray, norbitals: int
     ) -> jnp.ndarray:
-        """Get the equivariant orbital matrices for a single spin.
+        """Get the equivariant orbital matrices for a single split.
 
         Args:
             x (jnp.ndarray): input array of shape (..., nelec[i], d).
@@ -828,7 +828,7 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
                 norbitals should equal nelec[i]
 
         Returns:
-            (jnp.ndarray): the equivariant orbitals for this spin block, as an array
+            (jnp.ndarray): the equivariant orbitals for this split block, as an array
                 of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
                 are equivariant with respect to the input particles.
         """
@@ -870,29 +870,29 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
 
         Returns:
-            (ArrayList): list of length nspins of arrays of shape
-            (..., nelec[i], nelec[i], self.norbitals_per_spin[i]). Here nelec[i] is the
+            (ArrayList): list of length nsplits of arrays of shape
+            (..., nelec[i], nelec[i], self.norbitals_per_split[i]). Here nelec[i] is the
             number of particles in the ith split. The output arrays have both their -2
             and -3 axes equivariant with respect to the input particles. The exponential
             envelopes are computed only when r_ei is not None (so, when connected to
             FermiNetBackflow, when ion locations are specified). To output square
             matrices, say in order to be able to take antiequivariant per-particle
-            determinants, nelec[i] should be equal to self.norbitals_per_spin[i].
+            determinants, nelec[i] should be equal to self.norbitals_per_split[i].
         """
-        # split_x is a list of nspins arrays of shape (..., nelec[i], d)]
-        split_x = jnp.split(x, self.spin_split, -2)
-        # orbs is a list of nspins arrays of shape
+        # split_x is a list of nsplits arrays of shape (..., nelec[i], d)]
+        split_x = jnp.split(x, self.orbitals_split, -2)
+        # orbs is a list of nsplits arrays of shape
         # (..., nelec[i], nelec[i], norbitals[i])
         orbs = [
-            self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
+            self._get_orbital_matrices_one_split(x, self.norbitals_per_split[i])
             for (i, x) in enumerate(split_x)
         ]
 
         if r_ei is not None:
             exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
-                self.spin_split,
-                self.norbitals_per_spin,
+                self.orbitals_split,
+                self.norbitals_per_split,
                 self._kernel_initializer_envelope_dim,
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
