@@ -1052,8 +1052,8 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
         return [
             InvariantTensor(
-                spin_split=self.spin_split,
-                output_shape_per_spin=invariant_shape_per_spin,
+                split=self.spin_split,
+                output_shape_per_split=invariant_shape_per_spin,
                 backflow=invariance_backflow,
                 kernel_initializer=self.invariance_kernel_initializer,
                 bias_initializer=self.invariance_bias_initializer,

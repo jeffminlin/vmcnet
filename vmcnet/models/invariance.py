@@ -87,22 +87,22 @@ class SplitMeanDense(flax.linen.Module):
 
 
 class InvariantTensor(flax.linen.Module):
-    """Spinful invariance via averaged backflow, with desired shape via a dense layer.
+    """Split invariance via averaged backflow, with desired shape via a dense layer.
 
     Attributes:
-        spin_split (ParticleSplit): number of spins to split the input equally,
+        split (ParticleSplit): number of pieces to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
+            E.g., if nelec = 10, and `split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `split` is a sequence, there will be one more
+            split than the length of the sequence. In the original use-case of spin-1/2
+            particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        output_shape_per_spin (Sequence[Iterable[int]]): sequence of iterables which
+        output_shape_per_split (Sequence[Iterable[int]]): sequence of iterables which
             correspond to the desired non-batch output shapes of for each split of the
             input. This determines the output shapes for each split, i.e. the outputs
-            are shaped [(batch_dims, output_shape_per_spin[i])].
+            are shaped [(batch_dims, output_shape_per_split[i])].
         backflow (Callable or None): function which computes position features from the
             electron positions. Has the signature
             (
@@ -119,8 +119,8 @@ class InvariantTensor(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: ParticleSplit
-    output_shape_per_spin: Sequence[Iterable[int]]
+    split: ParticleSplit
+    output_shape_per_split: Sequence[Iterable[int]]
     backflow: Optional[Backflow]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -133,21 +133,21 @@ class InvariantTensor(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._backflow = self.backflow
 
-        nspins = get_nsplits(self.spin_split)
+        nspins = get_nsplits(self.split)
 
-        if len(self.output_shape_per_spin) != nspins:
+        if len(self.output_shape_per_split) != nspins:
             raise ValueError(
-                "Incorrect number of output shapes specified for number of spins, "
-                "should be one shape per spin: shapes {} specified for the given "
-                "spin_split {}".format(self.output_shape_per_spin, self.spin_split)
+                "Incorrect number of output shapes specified for number of splits, "
+                "should be one shape per split: shapes {} specified for the given "
+                "split {}".format(self.output_shape_per_split, self.split)
             )
 
-        self._ndense_per_spin = [
-            math.prod(shape) for shape in self.output_shape_per_spin
+        self._ndense_per_split = [
+            math.prod(shape) for shape in self.output_shape_per_split
         ]
 
     def _reshape_dense_outputs(self, dense_out: jnp.ndarray, i: int):
-        output_shape = dense_out.shape[:-1] + tuple(self.output_shape_per_spin[i])
+        output_shape = dense_out.shape[:-1] + tuple(self.output_shape_per_split[i])
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
@@ -165,15 +165,15 @@ class InvariantTensor(flax.linen.Module):
         Returns:
             ArrayList: list of invariant arrays which are invariant with respect to
             permutations within each split, where the last axes of these arrays are
-            specified by self.output_shape_per_spin, and the other axes are shared batch
-            axes
+            specified by self.output_shape_per_split, and the other axes are shared
+            batch axes
         """
         if self._backflow is not None:
             stream_1e = self._backflow(stream_1e, stream_2e)
 
         flattened_invariant_out = SplitMeanDense(
-            self.spin_split,
-            self._ndense_per_spin,
+            self.split,
+            self._ndense_per_split,
             self.kernel_initializer,
             self.bias_initializer,
             self.use_bias,

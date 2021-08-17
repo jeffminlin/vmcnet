@@ -28,10 +28,10 @@ def test_invariant_tensor():
 
     kernel_init = models.weights.get_kernel_initializer("orthogonal")
     bias_init = models.weights.get_bias_initializer("normal")
-    output_shape_per_spin = ((2, 3), (12,))
+    output_shape_per_split = ((2, 3), (12,))
     invariant_model = models.invariance.InvariantTensor(
-        spin_split=spin_split,
-        output_shape_per_spin=output_shape_per_spin,
+        split=spin_split,
+        output_shape_per_split=output_shape_per_split,
         backflow=backflow,
         kernel_initializer=kernel_init,
         bias_initializer=bias_init,
@@ -46,6 +46,6 @@ def test_invariant_tensor():
     perm_output = invariant_model.apply(params, perm_stream_1e, perm_stream_2e)
 
     chex.assert_shape(
-        output, [(nchains,) + output_shape for output_shape in output_shape_per_spin]
+        output, [(nchains,) + output_shape for output_shape in output_shape_per_split]
     )
     assert_pytree_allclose(output, perm_output, rtol=1e-4)
