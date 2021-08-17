@@ -8,14 +8,14 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
-from vmcnet.utils.typing import ArrayList, InputStreams, SpinSplit
+from vmcnet.utils.typing import ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
     _split_mean,
     _valid_skip,
     compute_ee_norm_with_safe_diag,
-    get_nspins,
+    get_nsplits,
 )
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer
@@ -158,7 +158,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -198,7 +198,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             true spin equivariance. Defaults to False (original FermiNet).
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     ndense: int
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
@@ -537,16 +537,16 @@ class SplitDense(flax.linen.Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        split (ParticleSplit): number of pieces to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
+            E.g., if nelec = 10, and `split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `split` is a sequence, there will be one more
+            split than the length of the sequence. In the original use-case of spin-1/2
+            particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        ndense_per_spin (Sequence[int]): sequence of integers specifying the number of
+        ndense_per_split (Sequence[int]): sequence of integers specifying the number of
             dense nodes in the unique dense layer applied to each split of the input.
             This determines the output shapes for each split, i.e. the outputs are
             shaped (..., split_size[i], ndense[i])
@@ -559,8 +559,8 @@ class SplitDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: SpinSplit
-    ndense_per_spin: Sequence[int]
+    split: ParticleSplit
+    ndense_per_split: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
@@ -568,24 +568,24 @@ class SplitDense(flax.linen.Module):
 
     def setup(self):
         """Set up the dense layers for each split."""
-        nspins = get_nspins(self.spin_split)
+        nsplits = get_nsplits(self.split)
 
-        if len(self.ndense_per_spin) != nspins:
+        if len(self.ndense_per_split) != nsplits:
             raise ValueError(
                 "Incorrect number of dense output shapes specified for number of "
-                "spins, should be one shape per spin: shapes {} specified for the "
-                "given spin_split {}".format(self.ndense_per_spin, self.spin_split)
+                "splits, should be one shape per split: shapes {} specified for the "
+                "given split {}".format(self.ndense_per_split, self.split)
             )
 
         self._dense_layers = [
             Dense(
-                self.ndense_per_spin[i],
+                self.ndense_per_split[i],
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
                 register_kfac=self.register_kfac,
             )
-            for i in range(nspins)
+            for i in range(nsplits)
         ]
 
     def __call__(self, x: jnp.ndarray) -> ArrayList:
@@ -595,13 +595,13 @@ class SplitDense(flax.linen.Module):
             x (jnp.ndarray): array of shape (..., n, d)
 
         Returns:
-            [(..., n[i], self.ndense_per_spin[i])]: list of length nspins, where nspins
-            is the number of splits created by jnp.split(x, self.spin_split, axis=-2),
-            and the ith entry of the output is the ith split transformed by a dense
-            layer with self.ndense_per_spin[i] nodes.
+            [(..., n[i], self.ndense_per_split[i])]: list of length nsplits, where
+            nsplits is the number of splits created by
+            jnp.split(x, self.split, axis=-2), and the ith entry of the output is the
+            ith split transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
-        x_split = jnp.split(x, self.spin_split, axis=-2)
-        return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
+        x_split = jnp.split(x, self.split, axis=-2)
+        return [self._dense_layers[i](split) for i, split in enumerate(x_split)]
 
 
 def _compute_exponential_envelopes_on_leaf(
@@ -611,7 +611,7 @@ def _compute_exponential_envelopes_on_leaf(
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
 ) -> jnp.ndarray:
-    """Calculate exponential envelopes for orbitals of a single spin."""
+    """Calculate exponential envelopes for orbitals of a single split."""
     if isotropic:
         scale_out = _isotropy_on_leaf(
             r_ei_leaf,
@@ -640,16 +640,16 @@ def _compute_exponential_envelopes_on_leaf(
     return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
 
-def _compute_exponential_envelopes_all_spins(
+def _compute_exponential_envelopes_all_splits(
     r_ei: jnp.ndarray,
-    spin_split: SpinSplit,
+    orbitals_split: ParticleSplit,
     norbitals_per_spin: Sequence[int],
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
 ) -> ArrayList:
-    """Calculate exponential envelopes for all spins."""
-    r_ei_split = jnp.split(r_ei, spin_split, axis=-3)
+    """Calculate exponential envelopes for all splits."""
+    r_ei_split = jnp.split(r_ei, orbitals_split, axis=-3)
     return jax.tree_map(
         functools.partial(
             _compute_exponential_envelopes_on_leaf,
@@ -666,17 +666,17 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split inputs equally,
-            or specified sequence of locations to split along the electron axis. E.g.,
-            if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
-            of orbitals to create for each spin. This determines the output shapes for
+        orbitals_split (ParticleSplit): number of pieces to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `orbitals_split` = 2, then the input is split
+            (5, 5). If nelec = 10, and `orbitals_split` = (2, 4), then the input is
+            split into (2, 4, 4) -- note when `orbitals_split` is a sequence, there will
+            be one more split than the length of the sequence. In the original use-case
+            of spin-1/2 particles, `split` should be either the number 2 (for
+            closed-shell systems) or should be a Sequence with length 1 whose element is
+            less than the total number of electrons.
+        norbitals_per_split (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
@@ -698,8 +698,8 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
-    norbitals_per_spin: Sequence[int]
+    orbitals_split: ParticleSplit
+    norbitals_per_split: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -716,33 +716,33 @@ class FermiNetOrbitalLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
-        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
+        """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
         Args:
             x (jnp.ndarray): array of shape (..., nelec, d)
             r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
 
         Returns:
-            [(..., nelec[i], self.norbitals_per_spin[i])]: list of FermiNet orbital
+            [(..., nelec[i], self.norbitals_per_split[i])]: list of FermiNet orbital
             matrices computed from an output stream x and the electron-ion displacements
             r_ei. Here n[i] is the number of particles in the ith split. The exponential
             envelopes are computed only when r_ei is not None (so, when connected to
             FermiNetBackflow, when ion locations are specified). To output square
             matrices, say for composing with the determinant anti-symmetry,
-            nelec[i] should be equal to self.norbitals_per_spin[i].
+            nelec[i] should be equal to self.norbitals_per_split[i].
         """
         orbs = SplitDense(
-            self.spin_split,
-            self.norbitals_per_spin,
+            self.orbitals_split,
+            self.norbitals_per_split,
             self.kernel_initializer_linear,
             self.bias_initializer_linear,
             use_bias=self.use_bias,
         )(x)
         if r_ei is not None:
-            exp_envelopes = _compute_exponential_envelopes_all_spins(
+            exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
-                self.spin_split,
-                self.norbitals_per_spin,
+                self.orbitals_split,
+                self.norbitals_per_split,
                 self._kernel_initializer_envelope_dim,
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
@@ -769,17 +769,17 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
     ensure that the orbital values decay to zero far from the ions.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split inputs equally,
-            or specified sequence of locations to split along the electron axis. E.g.,
-            if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
-            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
-            systems) or should be a Sequence with length 1 whose element is less than
-            the total number of electrons.
-        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
-            of orbitals to create for each spin. This determines the output shapes for
+        orbitals_split (ParticleSplit): number of pieces to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `orbitals_split` = 2, then the input is split
+            (5, 5). If nelec = 10, and `orbitals_split` = (2, 4), then the input is
+            split into (2, 4, 4) -- note when `orbitals_split` is a sequence, there will
+            be one more split than the length of the sequence. In the original use-case
+            of spin-1/2 particles, `split` should be either the number 2 (for
+            closed-shell systems) or should be a Sequence with length 1 whose element is
+            less than the total number of electrons.
+        norbitals_per_split (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
@@ -801,8 +801,8 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
-    norbitals_per_spin: Sequence[int]
+    orbitals_split: ParticleSplit
+    norbitals_per_split: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -817,10 +817,10 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _get_orbital_matrices_one_spin(
+    def _get_orbital_matrices_one_split(
         self, x: jnp.ndarray, norbitals: int
     ) -> jnp.ndarray:
-        """Get the equivariant orbital matrices for a single spin.
+        """Get the equivariant orbital matrices for a single split.
 
         Args:
             x (jnp.ndarray): input array of shape (..., nelec[i], d).
@@ -828,7 +828,7 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
                 norbitals should equal nelec[i]
 
         Returns:
-            (jnp.ndarray): the equivariant orbitals for this spin block, as an array
+            (jnp.ndarray): the equivariant orbitals for this split block, as an array
                 of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
                 are equivariant with respect to the input particles.
         """
@@ -870,29 +870,29 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
 
         Returns:
-            (ArrayList): list of length nspins of arrays of shape
-            (..., nelec[i], nelec[i], self.norbitals_per_spin[i]). Here nelec[i] is the
+            (ArrayList): list of length nsplits of arrays of shape
+            (..., nelec[i], nelec[i], self.norbitals_per_split[i]). Here nelec[i] is the
             number of particles in the ith split. The output arrays have both their -2
             and -3 axes equivariant with respect to the input particles. The exponential
             envelopes are computed only when r_ei is not None (so, when connected to
             FermiNetBackflow, when ion locations are specified). To output square
             matrices, say in order to be able to take antiequivariant per-particle
-            determinants, nelec[i] should be equal to self.norbitals_per_spin[i].
+            determinants, nelec[i] should be equal to self.norbitals_per_split[i].
         """
-        # split_x is a list of nspins arrays of shape (..., nelec[i], d)]
-        split_x = jnp.split(x, self.spin_split, -2)
-        # orbs is a list of nspins arrays of shape
+        # split_x is a list of nsplits arrays of shape (..., nelec[i], d)]
+        split_x = jnp.split(x, self.orbitals_split, -2)
+        # orbs is a list of nsplits arrays of shape
         # (..., nelec[i], nelec[i], norbitals[i])
         orbs = [
-            self._get_orbital_matrices_one_spin(x, self.norbitals_per_spin[i])
+            self._get_orbital_matrices_one_split(x, self.norbitals_per_split[i])
             for (i, x) in enumerate(split_x)
         ]
 
         if r_ei is not None:
-            exp_envelopes = _compute_exponential_envelopes_all_spins(
+            exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
-                self.spin_split,
-                self.norbitals_per_spin,
+                self.orbitals_split,
+                self.norbitals_per_split,
                 self._kernel_initializer_envelope_dim,
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,

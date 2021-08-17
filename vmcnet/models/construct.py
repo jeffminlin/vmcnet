@@ -16,14 +16,14 @@ from vmcnet.utils.typing import (
     Backflow,
     ComputeInputStreams,
     Jastrow,
-    SpinSplit,
+    ParticleSplit,
 )
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_spin
+from .core import Activation, SimpleResNet, get_nelec_per_split
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -395,7 +395,7 @@ def get_backflow_from_config(
 
 def get_sign_covariance_from_config(
     model_config: ConfigDict,
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
     kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
     dtype: jnp.dtype,
 ) -> Callable[[ArrayList], jnp.ndarray]:
@@ -444,7 +444,7 @@ class ComposedModel(flax.linen.Module):
 
 
 def get_residual_blocks_for_ferminet_backflow(
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
     ndense_list: List[Tuple[int, ...]],
     kernel_initializer_unmixed: WeightInitializer,
     kernel_initializer_mixed: WeightInitializer,
@@ -599,7 +599,7 @@ class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -690,7 +690,7 @@ class FermiNet(flax.linen.Module):
             ndeterminants>1.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     ndeterminants: int
@@ -784,18 +784,18 @@ class FermiNet(flax.linen.Module):
 
     def _get_elec_pos_and_orbitals_split(
         self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, SpinSplit]:
+    ) -> Tuple[jnp.ndarray, ParticleSplit]:
         return elec_pos, self.spin_split
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
+        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        return get_nelec_per_spin(orbitals_split, nelec_total)
+        return get_nelec_per_split(orbitals_split, nelec_total)
 
     def _eval_orbitals(
         self,
-        orbitals_split: SpinSplit,
+        orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -807,8 +807,8 @@ class FermiNet(flax.linen.Module):
         del input_stream_2e
         return [
             FermiNetOrbitalLayer(
-                spin_split=orbitals_split,
-                norbitals_per_spin=norbitals_per_split,
+                orbitals_split=orbitals_split,
+                norbitals_per_split=norbitals_per_split,
                 kernel_initializer_linear=self.kernel_initializer_orbital_linear,
                 kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
                 kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
@@ -942,10 +942,10 @@ class EmbeddedParticleFermiNet(FermiNet):
 
     def _get_elec_pos_and_orbitals_split(
         self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, SpinSplit]:
+    ) -> Tuple[jnp.ndarray, ParticleSplit]:
         visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
-        visible_nelec_per_spin = get_nelec_per_spin(
+        visible_nelec_per_spin = get_nelec_per_split(
             self.spin_split, visible_nelec_total
         )
         nspins = len(visible_nelec_per_spin)
@@ -968,7 +968,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
-        orbitals_split: SpinSplit = tuple(
+        orbitals_split: ParticleSplit = tuple(
             np.cumsum(np.array(total_nelec_per_spin))[:-1]
         )
 
@@ -1037,10 +1037,10 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
             (
-                extra_dim,
+                nhidden,
                 norbitals_per_split[0] if self.full_det else norbitals_per_split[i],
             )
-            for i, extra_dim in enumerate(self.nhidden_fermions_per_spin)
+            for i, nhidden in enumerate(self.nhidden_fermions_per_spin)
         ]
 
         if self.invariance_backflow is not None:
@@ -1052,8 +1052,8 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
         return [
             InvariantTensor(
-                spin_split=self.spin_split,
-                output_shape_per_spin=invariant_shape_per_spin,
+                split=self.spin_split,
+                output_shape_per_split=invariant_shape_per_spin,
                 backflow=invariance_backflow,
                 kernel_initializer=self.invariance_kernel_initializer,
                 bias_initializer=self.invariance_bias_initializer,
@@ -1064,22 +1064,22 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
+        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
-        nelec_per_spin = get_nelec_per_spin(orbitals_split, nelec_total)
+        nelec_per_split = get_nelec_per_split(orbitals_split, nelec_total)
 
         if self.full_det:
-            return (nelec_per_spin[0] + sum(self.nhidden_fermions_per_spin),)
+            return (nelec_per_split[0] + sum(self.nhidden_fermions_per_spin),)
 
         return tuple(
             nelec + self.nhidden_fermions_per_spin[i]
-            for i, nelec in enumerate(nelec_per_spin)
+            for i, nelec in enumerate(nelec_per_split)
         )
 
     def _eval_orbitals(
         self,
-        orbitals_split: SpinSplit,
+        orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -1116,9 +1116,9 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             return [
                 [
                     jnp.concatenate(
-                        [orbital_matrix, invariant_part[det_idx][spin_idx]], axis=-2
+                        [orbital_matrix, invariant_part[det_idx][split_idx]], axis=-2
                     )
-                    for spin_idx, orbital_matrix in enumerate(orbital_matrices)
+                    for split_idx, orbital_matrix in enumerate(orbital_matrices)
                 ]
                 for det_idx, orbital_matrices in enumerate(equivariant_part)
             ]
@@ -1128,7 +1128,7 @@ class AntiequivarianceNet(flax.linen.Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1167,7 +1167,7 @@ class AntiequivarianceNet(flax.linen.Module):
             Defaults to False.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
@@ -1215,7 +1215,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1263,7 +1263,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNets. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
@@ -1330,7 +1330,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1377,7 +1377,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNet. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow

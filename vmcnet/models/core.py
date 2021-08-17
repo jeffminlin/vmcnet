@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import ArrayList, PyTree, SLArray, SpinSplit
+from vmcnet.utils.typing import ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 Activation = Callable[[jnp.ndarray], jnp.ndarray]
@@ -18,7 +18,7 @@ SLActivation = Callable[[SLArray], SLArray]
 
 def _split_mean(
     x: jnp.ndarray,
-    splits: SpinSplit,
+    splits: ParticleSplit,
     axis: int = -2,
     keepdims: bool = True,
 ) -> ArrayList:
@@ -59,26 +59,26 @@ def get_alternating_signs(n: int) -> jnp.ndarray:
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
 
-def get_nspins(spin_split: SpinSplit) -> int:
-    """Get the number of spins from a spin split."""
-    if isinstance(spin_split, int):
-        return spin_split
+def get_nsplits(split: ParticleSplit) -> int:
+    """Get the number of splits from a particle split specification."""
+    if isinstance(split, int):
+        return split
 
-    return len(spin_split) + 1
+    return len(split) + 1
 
 
-def get_nelec_per_spin(spin_split: SpinSplit, nelec_total: int) -> Tuple[int, ...]:
-    """From a spin_split and nelec_total, get the number of particles per spin.
+def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ...]:
+    """From a particle split and nelec_total, get the number of particles per split.
 
-    If the number of particles per spin is nelec_per_spin = (n1, n2, ..., nk), then
-    spin_split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
+    If the number of particles per split is nelec_per_spin = (n1, n2, ..., nk), then
+    split should be jnp.cumsum(nelec_per_spin)[:-1], or an integer of these are all
     equal. This function is the inverse of this operation.
     """
-    if isinstance(spin_split, int):
-        return (nelec_total // spin_split,) * spin_split
+    if isinstance(split, int):
+        return (nelec_total // split,) * split
     else:
-        spin_diffs = tuple(jnp.diff(jnp.array(spin_split)))
-        return (spin_split[0],) + spin_diffs + (nelec_total - spin_split[-1],)
+        spin_diffs = tuple(jnp.diff(jnp.array(split)))
+        return (split[0],) + spin_diffs + (nelec_total - split[-1],)
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
