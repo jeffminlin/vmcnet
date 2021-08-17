@@ -599,7 +599,7 @@ class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1128,7 +1128,7 @@ class AntiequivarianceNet(flax.linen.Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1215,7 +1215,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -1330,7 +1330,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     because this is asymptotically correct for molecules).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into

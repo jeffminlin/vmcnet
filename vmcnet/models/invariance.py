@@ -14,7 +14,7 @@ class SplitMeanDense(flax.linen.Module):
     """Split mean of input on 2nd-to-last axis, apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -90,7 +90,7 @@ class InvariantTensor(flax.linen.Module):
     """Spinful invariance via averaged backflow, with desired shape via a dense layer.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into

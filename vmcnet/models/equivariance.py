@@ -158,7 +158,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -537,7 +537,7 @@ class SplitDense(flax.linen.Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -666,7 +666,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split inputs equally,
+        spin_split (ParticleSplit): number of spins to split inputs equally,
             or specified sequence of locations to split along the electron axis. E.g.,
             if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
@@ -769,7 +769,7 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
     ensure that the orbital values decay to zero far from the ions.
 
     Attributes:
-        spin_split (SpinSplit): number of spins to split inputs equally,
+        spin_split (ParticleSplit): number of spins to split inputs equally,
             or specified sequence of locations to split along the electron axis. E.g.,
             if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
