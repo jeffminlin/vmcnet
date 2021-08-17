@@ -216,6 +216,30 @@ def get_kfac_update_fn_and_state(
     return update_param_fn, optimizer_state, key
 
 
+def _get_adam_optax_optimizer(
+    learning_rate_schedule: Callable[[int], jnp.float32],
+    optimizer_config: ConfigDict,
+) -> optax.GradientTransformation:
+    return optax.adam(
+        learning_rate=learning_rate_schedule,
+        b1=optimizer_config.b1,
+        b2=optimizer_config.b2,
+        eps=optimizer_config.eps,
+        eps_root=optimizer_config.eps_root,
+    )
+
+
+def _get_sgd_optax_optimizer(
+    learning_rate_schedule: Callable[[int], jnp.float32],
+    optimizer_config: ConfigDict,
+) -> optax.GradientTransformation:
+    return optax.sgd(
+        learning_rate=learning_rate_schedule,
+        momentum=optimizer_config.momentum if optimizer_config.momentum != 0 else None,
+        nesterov=optimizer_config.nesterov,
+    )
+
+
 def _init_optax_optimizer(
     optimizer: optax.GradientTransformation, params: P, apply_pmap: bool = True
 ) -> optax.OptState:
@@ -288,13 +312,7 @@ def get_adam_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    optimizer = optax.adam(
-        learning_rate=learning_rate_schedule,
-        b1=optimizer_config.b1,
-        b2=optimizer_config.b2,
-        eps=optimizer_config.eps,
-        eps_root=optimizer_config.eps_root,
-    )
+    optimizer = _get_adam_optax_optimizer(learning_rate_schedule, optimizer_config)
 
     return _get_optax_update_fn_and_state(
         optimizer,
@@ -341,11 +359,7 @@ def get_sgd_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    optimizer = optax.sgd(
-        learning_rate=learning_rate_schedule,
-        momentum=optimizer_config.momentum if optimizer_config.momentum != 0 else None,
-        nesterov=optimizer_config.nesterov,
-    )
+    optimizer = _get_sgd_optax_optimizer(learning_rate_schedule, optimizer_config)
 
     return _get_optax_update_fn_and_state(
         optimizer,
@@ -417,19 +431,19 @@ def get_sr_update_fn_and_state(
     )
 
     if optimizer_config.descent_type == "adam":
-        descent_opt_constructor = optax.adam
+        descent_optimizer = _get_adam_optax_optimizer(
+            learning_rate_schedule, descent_config
+        )
     elif optimizer_config.descent_type == "sgd":
-        descent_opt_constructor = optax.sgd
+        descent_optimizer = _get_sgd_optax_optimizer(
+            learning_rate_schedule, descent_config
+        )
     else:
         raise ValueError(
             "Requested descent type not supported; {} was requested".format(
                 optimizer_config.descent_type
             )
         )
-
-    descent_optimizer = descent_opt_constructor(
-        learning_rate=learning_rate_schedule, **descent_config
-    )
 
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
