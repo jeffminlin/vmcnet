@@ -666,17 +666,17 @@ class FermiNetOrbitalLayer(flax.linen.Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
-        spin_split (ParticleSplit): number of spins to split inputs equally,
-            or specified sequence of locations to split along the electron axis. E.g.,
-            if nelec = 10, and `spin_split` = 2, then the electrons are split (5, 5).
-            If nelec = 10, and `spin_split` = (2, 4), then the electrons are split into
+        orbitals_split (ParticleSplit): number of pieces to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
             (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
+            split than the length of the sequence. In the original use-case of spin-1/2
+            particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
-        norbitals_per_spin (Sequence[int]): sequence of integers specifying the number
-            of orbitals to create for each spin. This determines the output shapes for
+        norbitals_per_split (Sequence[int]): sequence of integers specifying the number
+            of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
@@ -698,8 +698,8 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: ParticleSplit
-    norbitals_per_spin: Sequence[int]
+    orbitals_split: ParticleSplit
+    norbitals_per_split: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -716,24 +716,24 @@ class FermiNetOrbitalLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
-        """Apply a dense layer R -> R^n for each spin and multiply by exp envelopes.
+        """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
         Args:
             x (jnp.ndarray): array of shape (..., nelec, d)
             r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
 
         Returns:
-            [(..., nelec[i], self.norbitals_per_spin[i])]: list of FermiNet orbital
+            [(..., nelec[i], self.norbitals_per_split[i])]: list of FermiNet orbital
             matrices computed from an output stream x and the electron-ion displacements
             r_ei. Here n[i] is the number of particles in the ith split. The exponential
             envelopes are computed only when r_ei is not None (so, when connected to
             FermiNetBackflow, when ion locations are specified). To output square
             matrices, say for composing with the determinant anti-symmetry,
-            nelec[i] should be equal to self.norbitals_per_spin[i].
+            nelec[i] should be equal to self.norbitals_per_split[i].
         """
         orbs = SplitDense(
-            self.spin_split,
-            self.norbitals_per_spin,
+            self.orbitals_split,
+            self.norbitals_per_split,
             self.kernel_initializer_linear,
             self.bias_initializer_linear,
             use_bias=self.use_bias,
@@ -741,8 +741,8 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         if r_ei is not None:
             exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
-                self.spin_split,
-                self.norbitals_per_spin,
+                self.orbitals_split,
+                self.norbitals_per_split,
                 self._kernel_initializer_envelope_dim,
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,

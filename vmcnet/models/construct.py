@@ -807,8 +807,8 @@ class FermiNet(flax.linen.Module):
         del input_stream_2e
         return [
             FermiNetOrbitalLayer(
-                spin_split=orbitals_split,
-                norbitals_per_spin=norbitals_per_split,
+                orbitals_split=orbitals_split,
+                norbitals_per_split=norbitals_per_split,
                 kernel_initializer_linear=self.kernel_initializer_orbital_linear,
                 kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
                 kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
