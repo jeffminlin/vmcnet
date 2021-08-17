@@ -640,16 +640,16 @@ def _compute_exponential_envelopes_on_leaf(
     return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
 
-def _compute_exponential_envelopes_all_spins(
+def _compute_exponential_envelopes_all_splits(
     r_ei: jnp.ndarray,
-    spin_split: ParticleSplit,
+    orbitals_split: ParticleSplit,
     norbitals_per_spin: Sequence[int],
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
 ) -> ArrayList:
     """Calculate exponential envelopes for all spins."""
-    r_ei_split = jnp.split(r_ei, spin_split, axis=-3)
+    r_ei_split = jnp.split(r_ei, orbitals_split, axis=-3)
     return jax.tree_map(
         functools.partial(
             _compute_exponential_envelopes_on_leaf,
@@ -739,7 +739,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             use_bias=self.use_bias,
         )(x)
         if r_ei is not None:
-            exp_envelopes = _compute_exponential_envelopes_all_spins(
+            exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
                 self.spin_split,
                 self.norbitals_per_spin,
@@ -889,7 +889,7 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         ]
 
         if r_ei is not None:
-            exp_envelopes = _compute_exponential_envelopes_all_spins(
+            exp_envelopes = _compute_exponential_envelopes_all_splits(
                 r_ei,
                 self.spin_split,
                 self.norbitals_per_spin,
