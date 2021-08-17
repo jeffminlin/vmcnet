@@ -537,13 +537,13 @@ class SplitDense(flax.linen.Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
-        spin_split (ParticleSplit): number of spins to split the input equally,
+        split (ParticleSplit): number of pieces to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
             (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
-            spin than the length of the sequence. In the original use-case of spin-1/2
-            particles, `spin_split` should be either the number 2 (for closed-shell
+            split than the length of the sequence. In the original use-case of spin-1/2
+            particles, `split` should be either the number 2 (for closed-shell
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
         ndense_per_spin (Sequence[int]): sequence of integers specifying the number of
@@ -559,8 +559,8 @@ class SplitDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: ParticleSplit
-    ndense_per_spin: Sequence[int]
+    split: ParticleSplit
+    ndense_per_split: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
@@ -568,24 +568,24 @@ class SplitDense(flax.linen.Module):
 
     def setup(self):
         """Set up the dense layers for each split."""
-        nspins = get_nspins(self.spin_split)
+        nsplits = get_nspins(self.split)
 
-        if len(self.ndense_per_spin) != nspins:
+        if len(self.ndense_per_split) != nsplits:
             raise ValueError(
                 "Incorrect number of dense output shapes specified for number of "
-                "spins, should be one shape per spin: shapes {} specified for the "
-                "given spin_split {}".format(self.ndense_per_spin, self.spin_split)
+                "splits, should be one shape per split: shapes {} specified for the "
+                "given split {}".format(self.ndense_per_split, self.split)
             )
 
         self._dense_layers = [
             Dense(
-                self.ndense_per_spin[i],
+                self.ndense_per_split[i],
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
                 register_kfac=self.register_kfac,
             )
-            for i in range(nspins)
+            for i in range(nsplits)
         ]
 
     def __call__(self, x: jnp.ndarray) -> ArrayList:
@@ -595,13 +595,13 @@ class SplitDense(flax.linen.Module):
             x (jnp.ndarray): array of shape (..., n, d)
 
         Returns:
-            [(..., n[i], self.ndense_per_spin[i])]: list of length nspins, where nspins
-            is the number of splits created by jnp.split(x, self.spin_split, axis=-2),
-            and the ith entry of the output is the ith split transformed by a dense
-            layer with self.ndense_per_spin[i] nodes.
+            [(..., n[i], self.ndense_per_spin[i])]: list of length nsplits, where
+            nsplits is the number of splits created by
+            jnp.split(x, self.split, axis=-2), and the ith entry of the output is the
+            ith split transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
-        x_split = jnp.split(x, self.spin_split, axis=-2)
-        return [self._dense_layers[i](x_spin) for i, x_spin in enumerate(x_split)]
+        x_split = jnp.split(x, self.split, axis=-2)
+        return [self._dense_layers[i](split) for i, split in enumerate(x_split)]
 
 
 def _compute_exponential_envelopes_on_leaf(

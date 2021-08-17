@@ -124,13 +124,13 @@ def test_split_dense_shape():
     nelec_total = jnp.sum(nelec_per_spin)
     d = 5
 
-    spin_split = (3, 4, 8)  # = jnp.cumsum(nspins)[:-1], locations to split at
+    split = (3, 4, 8)  # = jnp.cumsum(nspins)[:-1], locations to split at
     ndense = (4, 2, 7, 5)
     kernel_initializer = models.weights.get_kernel_initializer("xavier_normal")
     bias_initializer = models.weights.get_bias_initializer("uniform")
 
     split_dense_layer = models.equivariance.SplitDense(
-        spin_split, ndense, kernel_initializer, bias_initializer
+        split, ndense, kernel_initializer, bias_initializer
     )
 
     key = jax.random.PRNGKey(0)
