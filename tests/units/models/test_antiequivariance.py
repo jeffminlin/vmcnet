@@ -10,7 +10,7 @@ import pytest
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import SpinSplit
+from vmcnet.utils.typing import ParticleSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
@@ -142,7 +142,7 @@ def _assert_permuted_slog_values_allclose(
 
 
 def _test_layer_antiequivariance(
-    build_layer: Callable[[SpinSplit], flax.linen.Module],
+    build_layer: Callable[[ParticleSplit], flax.linen.Module],
     logabs: bool = False,
     rtol: float = 1e-7,
     atol: float = 0.0,

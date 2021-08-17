@@ -5,7 +5,7 @@ from typing import Iterable, Optional, Sequence
 import flax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import ArrayList, Backflow, SpinSplit
+from vmcnet.utils.typing import ArrayList, Backflow, ParticleSplit
 from .core import Dense, _split_mean, get_nspins
 from .weights import WeightInitializer
 
@@ -36,7 +36,7 @@ class SplitMeanDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     ndense_per_spin: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -119,7 +119,7 @@ class InvariantTensor(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     output_shape_per_spin: Sequence[Iterable[int]]
     backflow: Optional[Backflow]
     kernel_initializer: WeightInitializer

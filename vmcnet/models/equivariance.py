@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
-from vmcnet.utils.typing import ArrayList, InputStreams, SpinSplit
+from vmcnet.utils.typing import ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
@@ -198,7 +198,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             true spin equivariance. Defaults to False (original FermiNet).
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     ndense: int
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
@@ -559,7 +559,7 @@ class SplitDense(flax.linen.Module):
             KFAC. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     ndense_per_spin: Sequence[int]
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
@@ -642,7 +642,7 @@ def _compute_exponential_envelopes_on_leaf(
 
 def _compute_exponential_envelopes_all_spins(
     r_ei: jnp.ndarray,
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
     norbitals_per_spin: Sequence[int],
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
@@ -698,7 +698,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
@@ -801,7 +801,7 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     norbitals_per_spin: Sequence[int]
     kernel_initializer_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer

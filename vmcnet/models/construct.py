@@ -16,7 +16,7 @@ from vmcnet.utils.typing import (
     Backflow,
     ComputeInputStreams,
     Jastrow,
-    SpinSplit,
+    ParticleSplit,
 )
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
@@ -395,7 +395,7 @@ def get_backflow_from_config(
 
 def get_sign_covariance_from_config(
     model_config: ConfigDict,
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
     kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
     dtype: jnp.dtype,
 ) -> Callable[[ArrayList], jnp.ndarray]:
@@ -444,7 +444,7 @@ class ComposedModel(flax.linen.Module):
 
 
 def get_residual_blocks_for_ferminet_backflow(
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
     ndense_list: List[Tuple[int, ...]],
     kernel_initializer_unmixed: WeightInitializer,
     kernel_initializer_mixed: WeightInitializer,
@@ -690,7 +690,7 @@ class FermiNet(flax.linen.Module):
             ndeterminants>1.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     ndeterminants: int
@@ -784,18 +784,18 @@ class FermiNet(flax.linen.Module):
 
     def _get_elec_pos_and_orbitals_split(
         self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, SpinSplit]:
+    ) -> Tuple[jnp.ndarray, ParticleSplit]:
         return elec_pos, self.spin_split
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
+        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
         return get_nelec_per_spin(orbitals_split, nelec_total)
 
     def _eval_orbitals(
         self,
-        orbitals_split: SpinSplit,
+        orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -942,7 +942,7 @@ class EmbeddedParticleFermiNet(FermiNet):
 
     def _get_elec_pos_and_orbitals_split(
         self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, SpinSplit]:
+    ) -> Tuple[jnp.ndarray, ParticleSplit]:
         visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
         visible_nelec_per_spin = get_nelec_per_spin(
@@ -968,7 +968,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
-        orbitals_split: SpinSplit = tuple(
+        orbitals_split: ParticleSplit = tuple(
             np.cumsum(np.array(total_nelec_per_spin))[:-1]
         )
 
@@ -1064,7 +1064,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: SpinSplit
+        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
         nelec_per_spin = get_nelec_per_spin(orbitals_split, nelec_total)
@@ -1079,7 +1079,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
 
     def _eval_orbitals(
         self,
-        orbitals_split: SpinSplit,
+        orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
@@ -1167,7 +1167,7 @@ class AntiequivarianceNet(flax.linen.Module):
             Defaults to False.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
@@ -1263,7 +1263,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNets. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
@@ -1377,7 +1377,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             of the antisymmetrized ResNet. Defaults to True.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow

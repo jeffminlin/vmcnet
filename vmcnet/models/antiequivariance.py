@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
-from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, SpinSplit
+from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, ParticleSplit
 from .core import get_alternating_signs, get_nelec_per_spin, is_tuple_of_arrays
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
@@ -107,7 +107,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
 def multiply_antieq_by_eq_features(
     split_antieq: ArrayList,
     eq_features: jnp.ndarray,
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
 ) -> ArrayList:
     """Multiply equivariant input array with a spin-split antiequivariance.
 
@@ -128,7 +128,7 @@ def multiply_antieq_by_eq_features(
 def multiply_slog_antieq_by_eq_features(
     split_slog_antieq: SLArrayList,
     eq_features: jnp.ndarray,
-    spin_split: SpinSplit,
+    spin_split: ParticleSplit,
 ) -> SLArrayList:
     """Multiply equivariant input array with a spin-split slog-form antiequivariance.
 
@@ -188,7 +188,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -272,7 +272,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -356,7 +356,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
@@ -439,7 +439,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             exp(-||a(r - R||)) for a number a.
     """
 
-    spin_split: SpinSplit
+    spin_split: ParticleSplit
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer

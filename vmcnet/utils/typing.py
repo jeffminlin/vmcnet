@@ -56,7 +56,7 @@ SLArray = Tuple[jnp.ndarray, jnp.ndarray]
 
 SLArrayList = List[SLArray]
 
-SpinSplit = Union[int, Sequence[int]]
+ParticleSplit = Union[int, Sequence[int]]
 
 InputStreams = Tuple[
     jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray], Optional[jnp.ndarray]
