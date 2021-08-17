@@ -620,7 +620,7 @@ def vmc_statistics() -> None:
     )
     args = parser.parse_args()
 
-    output_dir, output_filename = os.path.split(args.output_file_path)
+    output_dir, output_filename = os.path.split(os.path.abspath(args.output_file_path))
     _compute_and_save_energy_statistics(
         args.local_energies_file_path, output_dir, output_filename
     )
