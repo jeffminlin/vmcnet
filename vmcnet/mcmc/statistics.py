@@ -135,7 +135,8 @@ def get_stats_summary(samples: np.ndarray) -> Dict[str, np.float32]:
         dictionary: a summary of the statistics, with keys "average", "variance",
         "std_err", and "integrated_autocorrelation"
     """
-    average = np.mean(samples)
+    # Nested mean may be more numerically stable than single mean
+    average = np.mean(np.mean(samples, axis=-1), axis=-1)
     autocorr_curve, variance = multi_chain_autocorr_and_variance(samples)
     iac = tau(autocorr_curve)
     std_err = np.sqrt(iac * variance / np.size(samples))
