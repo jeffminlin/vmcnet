@@ -23,7 +23,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_split
+from .core import Activation, SimpleResNet, get_nelec_per_split, get_nsplits
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -791,6 +791,11 @@ class FermiNet(flax.linen.Module):
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
+
+        if self.full_det:
+            nsplits = get_nsplits(orbitals_split)
+            return (nelec_total,) * nsplits
+
         return get_nelec_per_split(orbitals_split, nelec_total)
 
     def _eval_orbitals(
@@ -835,8 +840,6 @@ class FermiNet(flax.linen.Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
-        if self.full_det:
-            orbitals_split = 1
 
         input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
             elec_pos
@@ -853,8 +856,10 @@ class FermiNet(flax.linen.Module):
             r_ei,
         )
 
-        # Orbitals shape is [norb_splits: (ndeterminants, ..., nelec[i], nelec[i])]
+        # Orbitals shape is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
         orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
+        if self.full_det:
+            orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
         if self._symmetrized_det_fn is not None:
             # dets is ArrayList of shape [norb_splits: (ndeterminants, ...)]
@@ -1036,10 +1041,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         stream_1e: jnp.ndarray,
     ) -> List[ArrayList]:
         invariant_shape_per_spin = [
-            (
-                nhidden,
-                norbitals_per_split[0] if self.full_det else norbitals_per_split[i],
-            )
+            (nhidden, norbitals_per_split[i])
             for i, nhidden in enumerate(self.nhidden_fermions_per_spin)
         ]
 
@@ -1066,15 +1068,17 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     def _get_norbitals_per_split(
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
-        nelec_total = elec_pos.shape[-2]
-        nelec_per_split = get_nelec_per_split(orbitals_split, nelec_total)
+        visible_nelec_total = elec_pos.shape[-2]
+        all_nelec_total = visible_nelec_total + sum(self.nhidden_fermions_per_spin)
 
         if self.full_det:
-            return (nelec_per_split[0] + sum(self.nhidden_fermions_per_spin),)
+            nsplits = get_nsplits(orbitals_split)
+            return (all_nelec_total,) * nsplits
 
+        nelec_per_split = get_nelec_per_split(orbitals_split, visible_nelec_total)
         return tuple(
-            nelec + self.nhidden_fermions_per_spin[i]
-            for i, nelec in enumerate(nelec_per_split)
+            nelec_i + self.nhidden_fermions_per_spin[i]
+            for i, nelec_i in enumerate(nelec_per_split)
         )
 
     def _eval_orbitals(
@@ -1101,27 +1105,16 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             stream_1e,
             r_ei,
         )
-        if self.full_det:
-            return [
-                [
-                    # No need to intermingle the equivariant and invariant parts in the
-                    # canonical order; just tack all the invariances on the end.
-                    jnp.concatenate(
-                        [orbital_matrices[0], *invariant_part[det_idx]], axis=-2
-                    )
-                ]
-                for det_idx, orbital_matrices in enumerate(equivariant_part)
+
+        return [
+            [
+                jnp.concatenate(
+                    [orbital_matrix, invariant_part[det_idx][split_idx]], axis=-2
+                )
+                for split_idx, orbital_matrix in enumerate(orbital_matrices)
             ]
-        else:
-            return [
-                [
-                    jnp.concatenate(
-                        [orbital_matrix, invariant_part[det_idx][split_idx]], axis=-2
-                    )
-                    for split_idx, orbital_matrix in enumerate(orbital_matrices)
-                ]
-                for det_idx, orbital_matrices in enumerate(equivariant_part)
-            ]
+            for det_idx, orbital_matrices in enumerate(equivariant_part)
+        ]
 
 
 class AntiequivarianceNet(flax.linen.Module):
