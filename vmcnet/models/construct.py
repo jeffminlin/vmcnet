@@ -1069,9 +1069,9 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         visible_nelec_total = elec_pos.shape[-2]
-        all_nelec_total = visible_nelec_total + sum(self.nhidden_fermions_per_spin)
 
         if self.full_det:
+            all_nelec_total = visible_nelec_total + sum(self.nhidden_fermions_per_spin)
             nsplits = get_nsplits(orbitals_split)
             return (all_nelec_total,) * nsplits
 
