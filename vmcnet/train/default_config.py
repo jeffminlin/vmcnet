@@ -1,4 +1,5 @@
 """Create configuration of hyperparameters."""
+import copy
 import os
 from typing import Dict
 
@@ -109,7 +110,7 @@ def get_default_model_config() -> Dict:
 
     base_ferminet_config = {
         "input_streams": input_streams.copy(),
-        "backflow": ferminet_backflow.copy(),
+        "backflow": copy.deepcopy(ferminet_backflow),
         "ndeterminants": 1,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
@@ -118,7 +119,7 @@ def get_default_model_config() -> Dict:
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_det_resnet": False,
-        "det_resnet": determinant_resnet.copy(),
+        "det_resnet": copy.deepcopy(determinant_resnet),
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
     }
@@ -130,7 +131,7 @@ def get_default_model_config() -> Dict:
 
     antieq_config = {
         "input_streams": input_streams.copy(),
-        "backflow": ferminet_backflow.copy(),
+        "backflow": copy.deepcopy(ferminet_backflow),
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
@@ -138,7 +139,7 @@ def get_default_model_config() -> Dict:
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_products_covariance": True,
-        "invariance": invariance_for_antieq.copy(),
+        "invariance": copy.deepcopy(invariance_for_antieq),
         "products_covariance": {
             "kernel_init": {"type": "orthogonal", "scale": 2.0},
             "register_kfac": True,
@@ -149,13 +150,13 @@ def get_default_model_config() -> Dict:
 
     config = {
         "type": "ferminet",
-        "ferminet": base_ferminet_config.copy(),
+        "ferminet": base_ferminet_config,
         "embedded_particle_ferminet": {
             **base_ferminet_config,
             "nhidden_fermions_per_spin": (2, 2),
             "invariance": {
                 "input_streams": input_streams.copy(),
-                "backflow": ferminet_backflow.copy(),
+                "backflow": copy.deepcopy(ferminet_backflow.copy()),
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                 "bias_initializer": normal_init.copy(),
                 "use_bias": True,
@@ -167,7 +168,7 @@ def get_default_model_config() -> Dict:
             "nhidden_fermions_per_spin": (2, 2),
             "use_separate_invariance_backflow": False,
             "invariance": {
-                "backflow": ferminet_backflow.copy(),
+                "backflow": copy.deepcopy(ferminet_backflow),
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                 "bias_initializer": normal_init.copy(),
                 "use_bias": True,
@@ -176,11 +177,11 @@ def get_default_model_config() -> Dict:
         },
         # TODO (ggoldsh): these two should probably be subtypes of a single
         # "antiequivariance" model type
-        "orbital_cofactor_net": antieq_config.copy(),
-        "per_particle_dets_net": antieq_config.copy(),
+        "orbital_cofactor_net": antieq_config,
+        "per_particle_dets_net": antieq_config,
         "brute_force_antisym": {
             "input_streams": input_streams.copy(),
-            "backflow": ferminet_backflow.copy(),
+            "backflow": copy.deepcopy(ferminet_backflow),
             "antisym_type": "double",
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
