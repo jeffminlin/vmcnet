@@ -78,15 +78,13 @@ def get_default_model_config() -> Dict:
         "include_ee_norm": True,
     }
 
-    embedded_particle_input_streams = input_streams
-
     base_backflow_config = {
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
-        "kernel_init_mixed": orthogonal_init,
-        "kernel_init_2e_1e_stream": orthogonal_init,
+        "kernel_init_mixed": orthogonal_init.copy(),
+        "kernel_init_2e_1e_stream": orthogonal_init.copy(),
         "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
-        "bias_init_1e_stream": normal_init,
-        "bias_init_2e_stream": normal_init,
+        "bias_init_1e_stream": normal_init.copy(),
+        "bias_init_2e_stream": normal_init.copy(),
         "activation_fn": "tanh",
         "use_bias": True,
         "skip_connection": True,
@@ -98,32 +96,29 @@ def get_default_model_config() -> Dict:
         **base_backflow_config,
     }
 
-    embedded_particle_fermion_backflow = ferminet_backflow
-    extended_orbital_matrix_backflow = ferminet_backflow
-
     determinant_resnet = {
         "ndense": 10,
         "nlayers": 3,
         "activation": "gelu",
         "kernel_init": {"type": "orthogonal", "scale": 2.0},
-        "bias_init": normal_init,
+        "bias_init": normal_init.copy(),
         "use_bias": True,
         "register_kfac": False,
         "mode": "parallel_even",
     }
 
     base_ferminet_config = {
-        "input_streams": input_streams,
-        "backflow": ferminet_backflow,
+        "input_streams": input_streams.copy(),
+        "backflow": ferminet_backflow.copy(),
         "ndeterminants": 1,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init,
+        "bias_init_orbital_linear": normal_init.copy(),
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_det_resnet": False,
-        "det_resnet": determinant_resnet,
+        "det_resnet": determinant_resnet.copy(),
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
     }
@@ -134,16 +129,16 @@ def get_default_model_config() -> Dict:
     }
 
     antieq_config = {
-        "input_streams": input_streams,
-        "backflow": ferminet_backflow,
+        "input_streams": input_streams.copy(),
+        "backflow": ferminet_backflow.copy(),
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init,
+        "bias_init_orbital_linear": normal_init.copy(),
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_products_covariance": True,
-        "invariance": invariance_for_antieq,
+        "invariance": invariance_for_antieq.copy(),
         "products_covariance": {
             "kernel_init": {"type": "orthogonal", "scale": 2.0},
             "register_kfac": True,
@@ -154,15 +149,15 @@ def get_default_model_config() -> Dict:
 
     config = {
         "type": "ferminet",
-        "ferminet": base_ferminet_config,
+        "ferminet": base_ferminet_config.copy(),
         "embedded_particle_ferminet": {
             **base_ferminet_config,
             "nhidden_fermions_per_spin": (2, 2),
             "invariance": {
-                "input_streams": embedded_particle_input_streams,
-                "backflow": embedded_particle_fermion_backflow,
+                "input_streams": input_streams.copy(),
+                "backflow": ferminet_backflow.copy(),
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init,
+                "bias_initializer": normal_init.copy(),
                 "use_bias": True,
                 "register_kfac": True,
             },
@@ -172,26 +167,26 @@ def get_default_model_config() -> Dict:
             "nhidden_fermions_per_spin": (2, 2),
             "use_separate_invariance_backflow": False,
             "invariance": {
-                "backflow": extended_orbital_matrix_backflow,
+                "backflow": ferminet_backflow.copy(),
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init,
+                "bias_initializer": normal_init.copy(),
                 "use_bias": True,
                 "register_kfac": True,
             },
         },
         # TODO (ggoldsh): these two should probably be subtypes of a single
         # "antiequivariance" model type
-        "orbital_cofactor_net": antieq_config,
-        "per_particle_dets_net": antieq_config,
+        "orbital_cofactor_net": antieq_config.copy(),
+        "per_particle_dets_net": antieq_config.copy(),
         "brute_force_antisym": {
-            "input_streams": input_streams,
-            "backflow": ferminet_backflow,
+            "input_streams": input_streams.copy(),
+            "backflow": ferminet_backflow.copy(),
             "antisym_type": "double",
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},
             "kernel_init_jastrow": {"type": "ones"},
-            "bias_init_resnet": normal_init,
+            "bias_init_resnet": normal_init.copy(),
             "activation_fn_resnet": "tanh",
             "resnet_use_bias": True,
         },
