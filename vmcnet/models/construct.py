@@ -1046,22 +1046,21 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
         if self.invariance_backflow is not None:
-            invariance_backflow: Optional[Backflow] = self.invariance_backflow
-            invariance_in_1e, invariance_in_2e = input_stream_1e, input_stream_2e
-        else:
-            invariance_backflow = None
-            invariance_in_1e, invariance_in_2e = stream_1e, None
+            # Compute the backflow a single time here rather than in the
+            # InvariantTensors below to avoid duplicating the computation for each
+            # determinant and having kfac complain about duplicate registrations.
+            stream_1e = self.invariance_backflow(input_stream_1e, input_stream_2e)
 
         return [
             InvariantTensor(
                 split=self.spin_split,
                 output_shape_per_split=invariant_shape_per_spin,
-                backflow=invariance_backflow,
+                backflow=None,
                 kernel_initializer=self.invariance_kernel_initializer,
                 bias_initializer=self.invariance_bias_initializer,
                 use_bias=self.invariance_use_bias,
                 register_kfac=self.invariance_register_kfac,
-            )(invariance_in_1e, invariance_in_2e)
+            )(stream_1e, None)
             for _ in range(self.ndeterminants)
         ]
 
