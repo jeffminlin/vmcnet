@@ -1,5 +1,4 @@
 """Create configuration of hyperparameters."""
-import copy
 import os
 from typing import Dict
 
@@ -9,6 +8,34 @@ from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
 
 NO_RELOAD_LOG_DIR = "NONE"
 DEFAULT_CONFIG_FILE_NAME = "config.json"
+
+
+def copy_all_dicts(config: Dict) -> Dict:
+    """Recursively copy the top-level Dict and all sub-Dicts.
+
+    This ensures that command line flags used to override fields of the config will only
+    apply to the intended flag, even if the code used to generate the default values is
+    shared among several different configuration flags. For example, the following code
+    could be problematic:
+
+    subconfig = {"val": 2}
+    config = {
+        "sub1": subconfig,
+        "sub2": subconfig
+    }
+
+    If this config is used directly, setting a command line flag like
+    --config.sub1.val=3 will override both config.sub1.a AND config.sub2.a, which is
+    not the intended behavior. Calling config=copy_all_dicts(config) before turning this
+    into a ConfigDict solves the problem by making separate copies of both subconfigs.
+    """
+    result = {}
+    for key in config:
+        if isinstance(config[key], Dict):
+            result[key] = copy_all_dicts(config[key])
+        else:
+            result[key] = config[key]
+    return result
 
 
 def get_default_reload_config() -> ConfigDict:
@@ -27,24 +54,26 @@ def get_default_reload_config() -> ConfigDict:
 def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
     config = ConfigDict(
-        {
-            "problem": get_default_molecular_config(),
-            "model": get_default_model_config(),
-            "vmc": get_default_vmc_config(),
-            "eval": get_default_eval_config(),
-            "logdir": os.path.join(
-                os.curdir,  # this will be relative to the calling script
-                "logs",
-            ),
-            # if save_to_current_datetime_subfolder=True, will log into a subfolder
-            # named according to the datetime at start
-            "save_to_current_datetime_subfolder": True,
-            "logging_level": "WARNING",
-            "dtype": "float32",
-            "distribute": True,
-            "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
-            "initial_seed": 0,
-        }
+        copy_all_dicts(
+            {
+                "problem": get_default_molecular_config(),
+                "model": get_default_model_config(),
+                "vmc": get_default_vmc_config(),
+                "eval": get_default_eval_config(),
+                "logdir": os.path.join(
+                    os.curdir,  # this will be relative to the calling script
+                    "logs",
+                ),
+                # if save_to_current_datetime_subfolder=True, will log into a subfolder
+                # named according to the datetime at start
+                "save_to_current_datetime_subfolder": True,
+                "logging_level": "WARNING",
+                "dtype": "float32",
+                "distribute": True,
+                "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
+                "initial_seed": 0,
+            }
+        )
     )
     return config
 
@@ -81,11 +110,11 @@ def get_default_model_config() -> Dict:
 
     base_backflow_config = {
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
-        "kernel_init_mixed": orthogonal_init.copy(),
-        "kernel_init_2e_1e_stream": orthogonal_init.copy(),
+        "kernel_init_mixed": orthogonal_init,
+        "kernel_init_2e_1e_stream": orthogonal_init,
         "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
-        "bias_init_1e_stream": normal_init.copy(),
-        "bias_init_2e_stream": normal_init.copy(),
+        "bias_init_1e_stream": normal_init,
+        "bias_init_2e_stream": normal_init,
         "activation_fn": "tanh",
         "use_bias": True,
         "skip_connection": True,
@@ -102,24 +131,24 @@ def get_default_model_config() -> Dict:
         "nlayers": 3,
         "activation": "gelu",
         "kernel_init": {"type": "orthogonal", "scale": 2.0},
-        "bias_init": normal_init.copy(),
+        "bias_init": normal_init,
         "use_bias": True,
         "register_kfac": False,
         "mode": "parallel_even",
     }
 
     base_ferminet_config = {
-        "input_streams": input_streams.copy(),
-        "backflow": copy.deepcopy(ferminet_backflow),
+        "input_streams": input_streams,
+        "backflow": ferminet_backflow,
         "ndeterminants": 1,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init.copy(),
+        "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_det_resnet": False,
-        "det_resnet": copy.deepcopy(determinant_resnet),
+        "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
     }
@@ -130,16 +159,16 @@ def get_default_model_config() -> Dict:
     }
 
     antieq_config = {
-        "input_streams": input_streams.copy(),
-        "backflow": copy.deepcopy(ferminet_backflow),
+        "input_streams": input_streams,
+        "backflow": ferminet_backflow,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init.copy(),
+        "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "use_products_covariance": True,
-        "invariance": copy.deepcopy(invariance_for_antieq),
+        "invariance": invariance_for_antieq,
         "products_covariance": {
             "kernel_init": {"type": "orthogonal", "scale": 2.0},
             "register_kfac": True,
@@ -155,10 +184,10 @@ def get_default_model_config() -> Dict:
             **base_ferminet_config,
             "nhidden_fermions_per_spin": (2, 2),
             "invariance": {
-                "input_streams": input_streams.copy(),
-                "backflow": copy.deepcopy(ferminet_backflow.copy()),
+                "input_streams": input_streams,
+                "backflow": ferminet_backflow,
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init.copy(),
+                "bias_initializer": normal_init,
                 "use_bias": True,
                 "register_kfac": True,
             },
@@ -168,9 +197,9 @@ def get_default_model_config() -> Dict:
             "nhidden_fermions_per_spin": (2, 2),
             "use_separate_invariance_backflow": False,
             "invariance": {
-                "backflow": copy.deepcopy(ferminet_backflow),
+                "backflow": ferminet_backflow,
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init.copy(),
+                "bias_initializer": normal_init,
                 "use_bias": True,
                 "register_kfac": True,
             },
@@ -180,14 +209,14 @@ def get_default_model_config() -> Dict:
         "orbital_cofactor_net": antieq_config,
         "per_particle_dets_net": antieq_config,
         "brute_force_antisym": {
-            "input_streams": input_streams.copy(),
-            "backflow": copy.deepcopy(ferminet_backflow),
+            "input_streams": input_streams,
+            "backflow": ferminet_backflow,
             "antisym_type": "double",
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},
             "kernel_init_jastrow": {"type": "ones"},
-            "bias_init_resnet": normal_init.copy(),
+            "bias_init_resnet": normal_init,
             "activation_fn_resnet": "tanh",
             "resnet_use_bias": True,
         },
