@@ -25,7 +25,7 @@ def _copy_all_dicts(config: Dict) -> Dict:
     }
 
     If this config is used directly, setting a command line flag like
-    --config.sub1.val=3 will override both config.sub1.a and config.sub2.a, which is
+    --config.sub1.val=3 will override both config.sub1.val and config.sub2.val, which is
     not the intended behavior. Calling config=copy_all_dicts(config) before turning this
     into a ConfigDict solves the problem by making separate copies of both subconfigs.
 
