@@ -10,7 +10,7 @@ NO_RELOAD_LOG_DIR = "NONE"
 DEFAULT_CONFIG_FILE_NAME = "config.json"
 
 
-def copy_all_dicts(config: Dict) -> Dict:
+def _copy_all_dicts(config: Dict) -> Dict:
     """Recursively copy the top-level Dict and all sub-Dicts.
 
     This ensures that command line flags used to override fields of the config will only
@@ -25,14 +25,20 @@ def copy_all_dicts(config: Dict) -> Dict:
     }
 
     If this config is used directly, setting a command line flag like
-    --config.sub1.val=3 will override both config.sub1.a AND config.sub2.a, which is
+    --config.sub1.val=3 will override both config.sub1.a and config.sub2.a, which is
     not the intended behavior. Calling config=copy_all_dicts(config) before turning this
     into a ConfigDict solves the problem by making separate copies of both subconfigs.
+
+    Note: using copy.deepcopy is not a valid replacement for this method, as deepcopy
+    will not generate multiple copies of the same object if encountered multiple times.
+    In the example above, deepcopy will make a single copy subconfig_copy of subconfig,
+    and use it for both sub1 and sub2 in the returned copy. This does not solve the
+    problem!
     """
     result = {}
     for key in config:
         if isinstance(config[key], Dict):
-            result[key] = copy_all_dicts(config[key])
+            result[key] = _copy_all_dicts(config[key])
         else:
             result[key] = config[key]
     return result
@@ -54,7 +60,7 @@ def get_default_reload_config() -> ConfigDict:
 def get_default_config() -> ConfigDict:
     """Make a default configuration (single det FermiNet on LiH)."""
     config = ConfigDict(
-        copy_all_dicts(
+        _copy_all_dicts(
             {
                 "problem": get_default_molecular_config(),
                 "model": get_default_model_config(),
