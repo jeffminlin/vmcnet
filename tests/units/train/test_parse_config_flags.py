@@ -69,6 +69,23 @@ def test_parse_config_with_valid_flags_including_tuple(mocker):
     _assert_configs_equal(config, expected_config)
 
 
+def test_setting_duplicated_config_flag_sets_only_desired_flag(mocker):
+    """Test changing normal_init.type only affects the desired instance of the flag.
+
+    This is a regression test as reuse of the same Dict object used to mean that setting
+    any instance of normal_init.type would change all other instances too.
+    """
+    flag_values = flags.FlagValues()
+    mocker.patch(
+        "sys.argv",
+        ["vmcnet", "--config.model.ferminet.bias_init_orbital_linear.type=CHANGED"],
+    )
+    _, config = parse_flags(flag_values)
+
+    assert config.model.bias_init_orbital_linear.type == "CHANGED"
+    assert config.model.backflow.bias_init_1e_stream.type == "normal"
+
+
 def test_parse_config_with_invalid_reload_param(mocker):
     """Verify that error is thrown when an invalid reload flag is passed."""
     flag_values = flags.FlagValues()
