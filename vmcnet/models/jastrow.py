@@ -1,12 +1,14 @@
 """Jastrow factors."""
+from typing import Sequence, Union
+
 import flax
 import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Jastrow
-from .core import compute_ee_norm_with_safe_diag
-from .weights import WeightInitializer, zeros
+from .core import Dense, compute_ee_norm_with_safe_diag
+from .weights import WeightInitializer, get_single_number_init, zeros
 
 
 def _isotropy_on_leaf(
@@ -84,7 +86,7 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
         exp(-sum_ij ||a_j * (elec_i - ion_j)||)
 
     or the logarithm if logabs is True. The tensor a_j * (elec_i - ion_j) is computed
-    with a depthwise 2d convolution.
+    with a split dense operation.
 
     Attributes:
         kernel_initializer (WeightInitializer): kernel initializer for the decay rates
@@ -134,81 +136,121 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
         return jnp.exp(-abs_lin_comb_distances)
 
 
-def make_molecular_decay(
-    ion_charges: jnp.ndarray,
-    strength: float = 1.0,
-    log_scale_factor: float = 0.0,
-    logabs: bool = True,
-) -> Jastrow:
-    """Make an exp decay jastrow with both electron-ion and electron-electron effects.
+class IsotropicMolecularExpDecay(flax.linen.Module):
+    """Isotropic exponential decay two-body Jastrow model.
 
-    This jastrow has the form
+    The decay is isotropic in the sense that each electron-nuclei and electron-electron
+    term is isotropic, i.e. radially symmetric. The computed interactions are:
 
-        exp(sum_i (-sum_j Z_j ||elec_i - ion_j|| + sum_k ||elec_i - elec_k||)
+        sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k Q ||elec_i - elec_k||)
+
+    or the exponential if logabs is False. Z_j and Q are initialized to init_ei_strength
+    and init_ee_strength, respectively, and are trainable if trainable is True.
 
     Args:
-        ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
-            elementary charge (the charge of one electron)
-        strength (float, optional): amount to multiply the overall interaction by.
-            Defaults to 1.0.
+        init_ei_strength (jnp.ndarray or Sequence[float]): 1-d array or sequence of
+            length nion which gives the initial strength of the electron-nucleus
+            interaction per ion
+        init_ee_strength (float, optional): initial strength of the electron-electron
+            interaction. Defaults to 1.0.
         log_scale_factor (float, optional): Amount to add to the log jastrow (amounts to
             a multiplicative factor after exponentiation). Defaults to 0.0.
+        register_kfac (bool, optional): whether to register the computation with KFAC.
+            Defaults to True.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
             (False). Defaults to True.
-
-    Returns:
-        Callable: a function with signature (r_ei, r_ee) -> jastrow or log jastrow
+        trainable (bool, optional): whether to allow the jastrow to be trainable.
+            Defaults to True.
     """
 
-    def molecular_decay(r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
+    init_ei_strength: Union[jnp.ndarray, Sequence[float]]
+    init_ee_strength: float = 1.0
+    log_scale_factor: float = 0.0
+    register_kfac: bool = True
+    logabs: bool = True
+    trainable: bool = True
+
+    @flax.linen.compact
+    def __call__(self, r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
         """Non-trainable jastrow with both electron-ion and electron-electron effects.
 
         Args:
             r_ei (jnp.ndarray): electron-ion displacements with shape
-                (..., nion, nelec, d)
+                (..., nelec, nion, d)
             r_ee (jnp.ndarray): electron-electron displacements with shape
                 (..., nelec, nelec, d)
 
         Returns:
             jnp.ndarray:
 
-                sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k ||elec_i - elec_k||)
+                sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k Q ||elec_i - elec_k||),
 
-            if logabs is True, or exp of that if logabs is False
+            where Z_j and Q are trainable if trainable is true, and a exponential is
+            taken if logabs is False
         """
-        scaled_ei_distances = ion_charges * jnp.linalg.norm(r_ei, axis=-1)
+        ei_distances = jnp.linalg.norm(r_ei, axis=-1)
         ee_distances = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), axis=-1)
+        sum_ee_effect = jnp.sum(jnp.triu(ee_distances), axis=-1, keepdims=True)
 
-        sum_ion_effect = jnp.sum(jnp.triu(ee_distances), axis=-1)
-        sum_elec_effect = jnp.sum(scaled_ei_distances, axis=-1)
-        unscaled_interaction = jnp.sum(sum_ion_effect - sum_elec_effect, axis=-1)
-        interaction = strength * (unscaled_interaction + log_scale_factor)
+        if self.trainable:
+            split_over_ions = jnp.split(ei_distances, ei_distances.shape[-1], axis=-1)
+            split_scaled_ei_distances = [
+                Dense(
+                    1,
+                    kernel_init=get_single_number_init(self.init_ei_strength[i]),
+                    use_bias=False,
+                    register_kfac=self.register_kfac,
+                )(single_ion_displacement)
+                for i, single_ion_displacement in enumerate(split_over_ions)
+            ]
+            scaled_ei_distances = jnp.concatenate(split_scaled_ei_distances, axis=-1)
 
-        if logabs:
+            sum_ee_effect = Dense(
+                1,
+                kernel_init=get_single_number_init(self.init_ee_strength),
+                use_bias=False,
+                register_kfac=self.register_kfac,
+            )(sum_ee_effect)
+        else:
+            scaled_ei_distances = self.init_ei_strength * ei_distances
+            sum_ee_effect = self.init_ee_strength * sum_ee_effect
+
+        sum_ee_effect = jnp.squeeze(sum_ee_effect, axis=-1)
+        sum_ei_effect = jnp.sum(scaled_ei_distances, axis=-1)
+        unscaled_interaction = jnp.sum(sum_ee_effect - sum_ei_effect, axis=-1)
+        interaction = unscaled_interaction + self.log_scale_factor
+
+        if self.logabs:
             return interaction
 
         return jnp.exp(interaction)
 
-    return molecular_decay
-
 
 def get_mol_decay_scaled_for_chargeless_molecules(
-    ion_pos: jnp.ndarray, ion_charges: jnp.ndarray, logabs: bool = True
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
+    register_kfac: bool = True,
+    logabs: bool = True,
+    trainable: bool = True,
 ) -> Jastrow:
-    """Make fixed molecular decay jastrow, scaled for chargeless molecules.
+    """Make molecular decay jastrow, scaled for chargeless molecules.
 
-    The scale factor is chosen so that the log jastrow is 0 when electrons are at ion
-    positions.
+    The scale factor is chosen so that the log jastrow is initialized to 0 when
+    electrons are at ion positions.
 
     Args:
-        ion_pos (jnp.ndarray): [description]
+        ion_pos (jnp.ndarray): an (nion, d) array of ion positions.
         ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
+        register_kfac (bool, optional): whether to register the computation with KFAC.
+            Defaults to True.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
             (False). Defaults to True.
+        trainable (bool, optional): whether to allow the jastrow to be trainable.
+            Defaults to True.
 
     Returns:
-        Callable: a function with signature (r_ei, r_ee) -> jastrow or log jastrow
+        Callable: a flax Module with signature (r_ei, r_ee) -> jastrow or log jastrow
     """
     r_ii, charge_charge_prods = physics.potential._get_ion_ion_info(
         ion_pos, ion_charges
@@ -216,7 +258,12 @@ def get_mol_decay_scaled_for_chargeless_molecules(
     jastrow_scale_factor = 0.5 * jnp.sum(
         jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
     )
-    jastrow = make_molecular_decay(
-        ion_charges, log_scale_factor=jastrow_scale_factor, logabs=logabs
+    jastrow = IsotropicMolecularExpDecay(
+        ion_charges,
+        1.0,
+        log_scale_factor=jastrow_scale_factor,
+        register_kfac=register_kfac,
+        logabs=logabs,
+        trainable=trainable,
     )
     return jastrow

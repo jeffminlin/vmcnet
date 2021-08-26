@@ -101,3 +101,20 @@ def get_bias_init_from_config(config, dtype=jnp.float32):
     to the initializer constructor.
     """
     return get_bias_initializer(config.type, dtype=dtype)
+
+
+def get_single_number_init(init_number: float):
+    """Get a weight initializer for a single number which ignores the key and dtype.
+
+    The shape provided to this initializer is therefore required to have only 1s in any
+    axis, so that the reshape is possible.
+
+    Args:
+        init_number (float): the number to initialize to
+    """
+
+    def init_fn(key, shape, dtype=jnp.float32):
+        del key, dtype
+        return jnp.reshape(jnp.array(init_number), shape)
+
+    return init_fn
