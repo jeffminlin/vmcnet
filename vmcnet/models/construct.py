@@ -285,7 +285,9 @@ def get_model_from_config(
 
     elif model_config.type == "brute_force_antisym":
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
-        jastrow = get_mol_decay_scaled_for_chargeless_molecules(ion_pos, ion_charges)
+        jastrow = get_mol_decay_scaled_for_chargeless_molecules(
+            ion_pos, ion_charges, trainable=model_config.trainable_jastrow
+        )
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,

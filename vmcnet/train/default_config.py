@@ -225,6 +225,7 @@ def get_default_model_config() -> Dict:
             "bias_init_resnet": normal_init,
             "activation_fn_resnet": "tanh",
             "resnet_use_bias": True,
+            "trainable_jastrow": True,
         },
     }
     return config
