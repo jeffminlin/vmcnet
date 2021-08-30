@@ -1,12 +1,13 @@
 """Jastrow factors."""
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 import flax
 import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Jastrow
+from vmcnet.utils.typing import Backflow, Jastrow
+
 from .core import Dense, compute_ee_norm_with_safe_diag
 from .weights import WeightInitializer, get_single_number_init, zeros
 
@@ -107,10 +108,20 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
         self._kernel_initializer = self.kernel_initializer
 
     @flax.linen.compact
-    def __call__(self, r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self,
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: jnp.ndarray,
+        stream_1e: jnp.ndarray,
+        r_ei: jnp.ndarray,
+        r_ee: jnp.ndarray,
+    ) -> jnp.ndarray:
         """Transform electron-ion displacements into an exp decay one-body Jastrow.
 
         Args:
+            input_stream_1e (jnp.ndarray): input one-electron stream; unused
+            input_stream_2e (jnp.ndarray): input two-electron stream; unused
+            stream_1e (jnp.ndarray): one-electron stream, post-backflow; unused
             r_ei (jnp.ndarray): electron-ion displacements of shape
                 (..., nelec, nion, d)
             r_ee (jnp.ndarray): electron-electron displacements of shape
@@ -121,7 +132,7 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
             or exp of that expression when self.logabs is False. If the input has shape
             (batch_dims, nelec, nion, d), then the output has shape (batch_dims,)
         """
-        del r_ee
+        del input_stream_1e, input_stream_2e, stream_1e, r_ee
         # scale_out has shape (..., nelec, 1, nion, d)
         scale_out = _isotropy_on_leaf(
             r_ei, 1, self._kernel_initializer, register_kfac=True
@@ -147,7 +158,7 @@ class IsotropicMolecularExpDecay(flax.linen.Module):
     or the exponential if logabs is False. Z_j and Q are initialized to init_ei_strength
     and init_ee_strength, respectively, and are trainable if trainable is True.
 
-    Args:
+    Attributes:
         init_ei_strength (jnp.ndarray or Sequence[float]): 1-d array or sequence of
             length nion which gives the initial strength of the electron-nucleus
             interaction per ion
@@ -171,10 +182,20 @@ class IsotropicMolecularExpDecay(flax.linen.Module):
     trainable: bool = True
 
     @flax.linen.compact
-    def __call__(self, r_ei: jnp.ndarray, r_ee: jnp.ndarray) -> jnp.ndarray:
-        """Non-trainable jastrow with both electron-ion and electron-electron effects.
+    def __call__(
+        self,
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: jnp.ndarray,
+        stream_1e: jnp.ndarray,
+        r_ei: jnp.ndarray,
+        r_ee: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute jastrow with both electron-ion and electron-electron effects.
 
         Args:
+            input_stream_1e (jnp.ndarray): input one-electron stream; unused
+            input_stream_2e (jnp.ndarray): input two-electron stream; unused
+            stream_1e (jnp.ndarray): one-electron stream, post-backflow; unused
             r_ei (jnp.ndarray): electron-ion displacements with shape
                 (..., nelec, nion, d)
             r_ee (jnp.ndarray): electron-electron displacements with shape
@@ -188,6 +209,7 @@ class IsotropicMolecularExpDecay(flax.linen.Module):
             where Z_j and Q are trainable if trainable is true, and a exponential is
             taken if logabs is False
         """
+        del input_stream_1e, input_stream_2e, stream_1e
         ei_distances = jnp.linalg.norm(r_ei, axis=-1)
         ee_distances = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), axis=-1)
         sum_ee_effect = jnp.sum(jnp.triu(ee_distances), axis=-1, keepdims=True)
@@ -267,3 +289,64 @@ def get_mol_decay_scaled_for_chargeless_molecules(
         trainable=trainable,
     )
     return jastrow
+
+
+class BackflowJastrow(flax.linen.Module):
+    """Backflow-based general permutation invariant Jastrow.
+
+    Attributes:
+        backflow (Callable or None): function which computes position features from the
+            electron positions. Has the signature
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d').
+            Can pass None here to use a stream_1e from an already computed backflow.
+        logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
+            (False). Defaults to True.
+    """
+
+    backflow: Optional[Backflow]
+    logabs: bool = True
+
+    def setup(self):
+        """Set up the dense layers for each split."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._backflow = self.backflow
+
+    @flax.linen.compact
+    def __call__(
+        self,
+        input_stream_1e: jnp.ndarray,
+        input_stream_2e: jnp.ndarray,
+        stream_1e: jnp.ndarray,
+        r_ei: jnp.ndarray,
+        r_ee: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute backflow-based general permutation invariant Jastrow.
+
+        Args:
+            input_stream_1e (jnp.ndarray): input one-electron stream
+            input_stream_2e (jnp.ndarray): input two-electron stream
+            stream_1e (jnp.ndarray): one-electron stream, post-backflow
+            r_ei (jnp.ndarray): electron-ion displacements with shape
+                (..., nelec, nion, d); unused
+            r_ee (jnp.ndarray): electron-electron displacements with shape
+                (..., nelec, nelec, d); unused
+
+        Returns:
+            jnp.ndarray: -mean_i ||Backflow_i||, or exp(-mean_i ||Backflow_i||) if
+            logabs is False
+        """
+        del r_ei, r_ee
+
+        if self._backflow is not None:
+            stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        log_jastrow = -jnp.mean(jnp.linalg.norm(stream_1e, axis=-1), axis=-1)
+
+        if self.logabs:
+            return log_jastrow
+
+        return jnp.exp(log_jastrow)

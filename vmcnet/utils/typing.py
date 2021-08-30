@@ -65,7 +65,9 @@ ComputeInputStreams = Callable[[jnp.ndarray], InputStreams]
 
 Backflow = Callable[[jnp.ndarray, Optional[jnp.ndarray]], jnp.ndarray]
 
-Jastrow = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+Jastrow = Callable[
+    [jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray], jnp.ndarray
+]
 
 ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
 

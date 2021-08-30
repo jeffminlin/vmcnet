@@ -33,7 +33,7 @@ from .equivariance import (
     compute_input_streams,
 )
 from .invariance import InvariantTensor
-from .jastrow import get_mol_decay_scaled_for_chargeless_molecules
+from .jastrow import BackflowJastrow, get_mol_decay_scaled_for_chargeless_molecules
 from .sign_symmetry import (
     ProductsSignCovariance,
     make_array_list_fn_sign_covariant,
@@ -285,9 +285,36 @@ def get_model_from_config(
 
     elif model_config.type == "brute_force_antisym":
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
-        jastrow = get_mol_decay_scaled_for_chargeless_molecules(
-            ion_pos, ion_charges, trainable=model_config.trainable_jastrow
-        )
+        jastrow_config = model_config.jastrow
+
+        def _get_mol_decay_jastrow():
+            return get_mol_decay_scaled_for_chargeless_molecules(
+                ion_pos, ion_charges, trainable=jastrow_config.mol_decay.trainable
+            )
+
+        def _get_backflow_based_jastrow():
+            if jastrow_config.backflow_based.use_separate_jastrow_backflow:
+                jastrow_backflow = get_backflow_from_config(
+                    jastrow_config.backflow_based.backflow,
+                    spin_split,
+                    dtype=dtype,
+                )
+            else:
+                jastrow_backflow = None
+            return BackflowJastrow(backflow=jastrow_backflow)
+
+        if jastrow_config.type == "mol_decay":
+            jastrow = _get_mol_decay_jastrow()
+        elif jastrow_config.type == "backflow_based":
+            jastrow = _get_backflow_based_jastrow()
+        elif jastrow_config.type == "mol_decay_and_backflow_based":
+            mol_decay_jastrow = _get_mol_decay_jastrow()
+            backflow_jastrow = _get_backflow_based_jastrow()
+            jastrow = AddedModel([mol_decay_jastrow, backflow_jastrow])
+        else:
+            raise ValueError(
+                "Unsupported jastrow type; {} was requested".format(jastrow_config.type)
+            )
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
@@ -298,9 +325,6 @@ def get_model_from_config(
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
                     model_config.kernel_init_resnet
-                ),
-                kernel_initializer_jastrow=kernel_init_constructor(
-                    model_config.kernel_init_jastrow
                 ),
                 bias_initializer_resnet=bias_init_constructor(
                     model_config.bias_init_resnet
@@ -320,9 +344,6 @@ def get_model_from_config(
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
                     model_config.kernel_init_resnet
-                ),
-                kernel_initializer_jastrow=kernel_init_constructor(
-                    model_config.kernel_init_jastrow
                 ),
                 bias_initializer_resnet=bias_init_constructor(
                     model_config.bias_init_resnet
@@ -424,6 +445,23 @@ def get_sign_covariance_from_config(
             backflow_based_equivariance, axis=-3
         )
         return lambda x: jnp.sum(odd_equivariance(x), axis=-2)
+
+
+class AddedModel(flax.linen.Module):
+    """A model made from added parts.
+
+    Attributes:
+        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
+            functions or flax.linen.Modules which are called on the same args and can be
+            added
+    """
+
+    submodels: Sequence[Union[Callable, flax.linen.Module]]
+
+    @flax.linen.compact
+    def __call__(self, *args):
+        """Add the outputs of the submodels."""
+        return sum(submodel(*args) for submodel in self.submodels)
 
 
 class ComposedModel(flax.linen.Module):
@@ -1245,9 +1283,6 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNets. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
-            decay rates in the exponential decay Jastrow factor. Has signature
-            (key, shape, dtype) -> jnp.ndarray
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNets. Has signature
             (key, shape, dtype) -> jnp.ndarray
@@ -1264,7 +1299,6 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
-    kernel_initializer_jastrow: WeightInitializer
     bias_initializer_resnet: WeightInitializer
     activation_fn_resnet: Activation
     resnet_use_bias: bool = True
@@ -1292,8 +1326,10 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, stream_2e, r_ei, r_ee = self._compute_input_streams(elec_pos)
-        stream_1e = self._backflow(stream_1e, stream_2e)
+        input_stream_1e, input_stream_2e, r_ei, r_ee = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = SplitBruteForceAntisymmetrize(
             [
@@ -1309,7 +1345,9 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 for _ in split_spins
             ]
         )(split_spins)
-        jastrow_part = self._jastrow(r_ei, r_ee)
+        jastrow_part = self._jastrow(
+            input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
+        )
 
         return antisymmetric_part + jastrow_part
 
@@ -1359,9 +1397,6 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNet. Has signature
             (key, shape, dtype) -> jnp.ndarray
-        kernel_initializer_jastrow (WeightInitializer): kernel initializer for the
-            decay rates in the exponential decay Jastrow factor. Has signature
-            (key, shape, dtype) -> jnp.ndarray
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNet. Has signature
             (key, shape, dtype) -> jnp.ndarray
@@ -1378,7 +1413,6 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
-    kernel_initializer_jastrow: WeightInitializer
     bias_initializer_resnet: WeightInitializer
     activation_fn_resnet: Activation
     resnet_use_bias: bool = True
@@ -1406,8 +1440,10 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-        stream_1e, stream_2e, r_ei, r_ee = self._compute_input_streams(elec_pos)
-        stream_1e = self._backflow(stream_1e, stream_2e)
+        input_stream_1e, input_stream_2e, r_ei, r_ee = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
         antisymmetric_part = ComposedBruteForceAntisymmetrize(
             SimpleResNet(
@@ -1420,6 +1456,8 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 use_bias=self.resnet_use_bias,
             )
         )(split_spins)
-        jastrow_part = self._jastrow(r_ei, r_ee)
+        jastrow_part = self._jastrow(
+            input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
+        )
 
         return antisymmetric_part + jastrow_part

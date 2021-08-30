@@ -221,11 +221,31 @@ def get_default_model_config() -> Dict:
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},
-            "kernel_init_jastrow": {"type": "ones"},
             "bias_init_resnet": normal_init,
             "activation_fn_resnet": "tanh",
             "resnet_use_bias": True,
-            "trainable_jastrow": True,
+            "jastrow": {
+                # choose between:
+                #   mol_decay, backflow_based, or mol_decay_and_backflow_based
+                "type": "backflow_based",
+                "mol_decay": {"trainable": True},
+                "backflow_based": {
+                    "use_separate_jastrow_backflow": True,
+                    "backflow": {
+                        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
+                        "kernel_init_unmixed": orthogonal_init,
+                        "kernel_init_mixed": orthogonal_init,
+                        "kernel_init_2e_1e_stream": orthogonal_init,
+                        "kernel_init_2e_2e_stream": orthogonal_init,
+                        "bias_init_1e_stream": normal_init,
+                        "bias_init_2e_stream": normal_init,
+                        "activation_fn": "gelu",
+                        "use_bias": True,
+                        "skip_connection": True,
+                        "cyclic_spins": cyclic_spins,
+                    },
+                },
+            },
         },
     }
     return config
