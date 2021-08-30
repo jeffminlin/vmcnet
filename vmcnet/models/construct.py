@@ -33,7 +33,11 @@ from .equivariance import (
     compute_input_streams,
 )
 from .invariance import InvariantTensor
-from .jastrow import BackflowJastrow, get_mol_decay_scaled_for_chargeless_molecules
+from .jastrow import (
+    BackflowJastrow,
+    OneBodyExpDecay,
+    get_mol_decay_scaled_for_chargeless_molecules,
+)
 from .sign_symmetry import (
     ProductsSignCovariance,
     make_array_list_fn_sign_covariant,
@@ -287,7 +291,7 @@ def get_model_from_config(
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         jastrow_config = model_config.jastrow
 
-        def _get_mol_decay_jastrow():
+        def _get_two_body_decay_jastrow():
             return get_mol_decay_scaled_for_chargeless_molecules(
                 ion_pos, ion_charges, trainable=jastrow_config.mol_decay.trainable
             )
@@ -303,12 +307,18 @@ def get_model_from_config(
                 jastrow_backflow = None
             return BackflowJastrow(backflow=jastrow_backflow)
 
-        if jastrow_config.type == "mol_decay":
-            jastrow = _get_mol_decay_jastrow()
+        if jastrow_config.type == "one_body_decay":
+            jastrow = OneBodyExpDecay(
+                kernel_initializer=kernel_init_constructor(
+                    jastrow_config.one_body_decay.kernel_init
+                )
+            )
+        elif jastrow_config.type == "two_body_decay":
+            jastrow = _get_two_body_decay_jastrow()
         elif jastrow_config.type == "backflow_based":
             jastrow = _get_backflow_based_jastrow()
         elif jastrow_config.type == "mol_decay_and_backflow_based":
-            mol_decay_jastrow = _get_mol_decay_jastrow()
+            mol_decay_jastrow = _get_two_body_decay_jastrow()
             backflow_jastrow = _get_backflow_based_jastrow()
             jastrow = AddedModel([mol_decay_jastrow, backflow_jastrow])
         else:

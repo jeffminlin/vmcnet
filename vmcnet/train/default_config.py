@@ -226,9 +226,13 @@ def get_default_model_config() -> Dict:
             "resnet_use_bias": True,
             "jastrow": {
                 # choose between:
-                #   mol_decay, backflow_based, or mol_decay_and_backflow_based
+                #   one_body_decay,
+                #   two_body_decay,
+                #   backflow_based, or
+                #   two_body_decay_and_backflow_based
                 "type": "backflow_based",
-                "mol_decay": {"trainable": True},
+                "one_body_decay": {"kernel_init": {"type": "ones"}},
+                "two_body_decay": {"trainable": True},
                 "backflow_based": {
                     "use_separate_jastrow_backflow": True,
                     "backflow": {

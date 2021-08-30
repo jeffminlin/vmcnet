@@ -77,7 +77,7 @@ def _anisotropy_on_leaf(
     return out
 
 
-class IsotropicAtomicExpDecay(flax.linen.Module):
+class OneBodyExpDecay(flax.linen.Module):
     """Creates an isotropic exponential decay one-body Jastrow model.
 
     The decay is centered at the coordinates of the nuclei, and the electron-nuclei
@@ -147,7 +147,7 @@ class IsotropicAtomicExpDecay(flax.linen.Module):
         return jnp.exp(-abs_lin_comb_distances)
 
 
-class IsotropicMolecularExpDecay(flax.linen.Module):
+class TwoBodyExpDecay(flax.linen.Module):
     """Isotropic exponential decay two-body Jastrow model.
 
     The decay is isotropic in the sense that each electron-nuclei and electron-electron
@@ -280,7 +280,7 @@ def get_mol_decay_scaled_for_chargeless_molecules(
     jastrow_scale_factor = 0.5 * jnp.sum(
         jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
     )
-    jastrow = IsotropicMolecularExpDecay(
+    jastrow = TwoBodyExpDecay(
         ion_charges,
         1.0,
         log_scale_factor=jastrow_scale_factor,
