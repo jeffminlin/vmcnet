@@ -116,6 +116,7 @@ def get_model_from_config(
                 resnet_config.register_kfac,
             )
 
+        # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         if model_config.type == "ferminet":
             return FermiNet(
                 spin_split,
@@ -288,7 +289,6 @@ def get_model_from_config(
         )
 
     elif model_config.type == "brute_force_antisym":
-        # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         jastrow_config = model_config.jastrow
 
         def _get_two_body_decay_jastrow():
