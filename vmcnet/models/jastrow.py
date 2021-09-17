@@ -9,7 +9,7 @@ import vmcnet.physics as physics
 from vmcnet.utils.typing import Backflow, Jastrow
 
 from .core import Dense, compute_ee_norm_with_safe_diag
-from .weights import WeightInitializer, get_single_number_init, zeros
+from .weights import WeightInitializer, get_constant_init, zeros
 
 
 def _isotropy_on_leaf(
@@ -84,9 +84,9 @@ class OneBodyExpDecay(flax.linen.Module):
     displacements are multiplied by trainable params before a sum and exp(-x). The decay
     is isotropic and equal for all electrons, so it computes
 
-        exp(-sum_ij ||a_j * (elec_i - ion_j)||)
+        -sum_ij ||a_j * (elec_i - ion_j)||
 
-    or the logarithm if logabs is True. The tensor a_j * (elec_i - ion_j) is computed
+    or the exponential if logabs is False. The tensor a_j * (elec_i - ion_j) is computed
     with a split dense operation.
 
     Attributes:
@@ -206,7 +206,7 @@ class TwoBodyExpDecay(flax.linen.Module):
 
                 sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k Q ||elec_i - elec_k||),
 
-            where Z_j and Q are trainable if trainable is true, and a exponential is
+            where Z_j and Q are trainable if trainable is true, and an exponential is
             taken if logabs is False
         """
         del input_stream_1e, input_stream_2e, stream_1e
@@ -219,7 +219,7 @@ class TwoBodyExpDecay(flax.linen.Module):
             split_scaled_ei_distances = [
                 Dense(
                     1,
-                    kernel_init=get_single_number_init(self.init_ei_strength[i]),
+                    kernel_init=get_constant_init(self.init_ei_strength[i]),
                     use_bias=False,
                     register_kfac=self.register_kfac,
                 )(single_ion_displacement)
@@ -229,7 +229,7 @@ class TwoBodyExpDecay(flax.linen.Module):
 
             sum_ee_effect = Dense(
                 1,
-                kernel_init=get_single_number_init(self.init_ee_strength),
+                kernel_init=get_constant_init(self.init_ee_strength),
                 use_bias=False,
                 register_kfac=self.register_kfac,
             )(sum_ee_effect)
@@ -251,6 +251,7 @@ class TwoBodyExpDecay(flax.linen.Module):
 def get_mol_decay_scaled_for_chargeless_molecules(
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
+    init_ee_strength: float = 1.0,
     register_kfac: bool = True,
     logabs: bool = True,
     trainable: bool = True,
@@ -264,6 +265,8 @@ def get_mol_decay_scaled_for_chargeless_molecules(
         ion_pos (jnp.ndarray): an (nion, d) array of ion positions.
         ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
+        init_ee_strength (float, optional): the initial strength of the
+            electron-electron interaction. Defaults to 1.0.
         register_kfac (bool, optional): whether to register the computation with KFAC.
             Defaults to True.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
@@ -282,7 +285,7 @@ def get_mol_decay_scaled_for_chargeless_molecules(
     )
     jastrow = TwoBodyExpDecay(
         ion_charges,
-        1.0,
+        init_ee_strength,
         log_scale_factor=jastrow_scale_factor,
         register_kfac=register_kfac,
         logabs=logabs,

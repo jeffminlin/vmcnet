@@ -1,6 +1,6 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Tuple, cast
+from typing import Callable, Sequence, Tuple, Union, cast
 
 import flax
 import jax
@@ -87,6 +87,42 @@ def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
 
 def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
+
+
+class AddedModel(flax.linen.Module):
+    """A model made from added parts.
+
+    Attributes:
+        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
+            functions or flax.linen.Modules which are called on the same args and can be
+            added
+    """
+
+    submodels: Sequence[Union[Callable, flax.linen.Module]]
+
+    @flax.linen.compact
+    def __call__(self, *args):
+        """Add the outputs of the submodels."""
+        return sum(submodel(*args) for submodel in self.submodels)
+
+
+class ComposedModel(flax.linen.Module):
+    """A model made from composable parts.
+
+    Attributes:
+        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
+            functions or flax.linen.Modules which can be composed sequentially
+    """
+
+    submodels: Sequence[Union[Callable, flax.linen.Module]]
+
+    @flax.linen.compact
+    def __call__(self, x):
+        """Call submodels on the output of the previous one one at a time."""
+        outputs = x
+        for model in self.submodels:
+            outputs = model(outputs)
+        return outputs
 
 
 class Dense(flax.linen.Module):

@@ -1,7 +1,7 @@
 """Combine pieces to form full models."""
 from enum import Enum
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import flax
 import jax
@@ -23,7 +23,7 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, SimpleResNet, get_nelec_per_split, get_nsplits
+from .core import Activation, AddedModel, SimpleResNet, get_nelec_per_split, get_nsplits
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -49,6 +49,13 @@ from .weights import (
     get_kernel_init_from_config,
     get_kernel_initializer,
 )
+
+VALID_JASTROW_TYPES = [
+    "one_body_decay",
+    "two_body_decay",
+    "backflow_based",
+    "two_body_decay_and_backflow_based",
+]
 
 
 class DeterminantFnMode(Enum):
@@ -293,7 +300,10 @@ def get_model_from_config(
 
         def _get_two_body_decay_jastrow():
             return get_mol_decay_scaled_for_chargeless_molecules(
-                ion_pos, ion_charges, trainable=jastrow_config.mol_decay.trainable
+                ion_pos,
+                ion_charges,
+                init_ee_strength=jastrow_config.mol_decay.init_ee_strength,
+                trainable=jastrow_config.mol_decay.trainable,
             )
 
         def _get_backflow_based_jastrow():
@@ -317,13 +327,15 @@ def get_model_from_config(
             jastrow = _get_two_body_decay_jastrow()
         elif jastrow_config.type == "backflow_based":
             jastrow = _get_backflow_based_jastrow()
-        elif jastrow_config.type == "mol_decay_and_backflow_based":
+        elif jastrow_config.type == "two_body_decay_and_backflow_based":
             mol_decay_jastrow = _get_two_body_decay_jastrow()
             backflow_jastrow = _get_backflow_based_jastrow()
             jastrow = AddedModel([mol_decay_jastrow, backflow_jastrow])
         else:
             raise ValueError(
-                "Unsupported jastrow type; {} was requested".format(jastrow_config.type)
+                "Unsupported jastrow type; {} was requested, but the only supported "
+                "types are ".format(jastrow_config.type)
+                + ", ".join(VALID_JASTROW_TYPES)
             )
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
@@ -455,42 +467,6 @@ def get_sign_covariance_from_config(
             backflow_based_equivariance, axis=-3
         )
         return lambda x: jnp.sum(odd_equivariance(x), axis=-2)
-
-
-class AddedModel(flax.linen.Module):
-    """A model made from added parts.
-
-    Attributes:
-        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
-            functions or flax.linen.Modules which are called on the same args and can be
-            added
-    """
-
-    submodels: Sequence[Union[Callable, flax.linen.Module]]
-
-    @flax.linen.compact
-    def __call__(self, *args):
-        """Add the outputs of the submodels."""
-        return sum(submodel(*args) for submodel in self.submodels)
-
-
-class ComposedModel(flax.linen.Module):
-    """A model made from composable parts.
-
-    Attributes:
-        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
-            functions or flax.linen.Modules which can be composed sequentially
-    """
-
-    submodels: Sequence[Union[Callable, flax.linen.Module]]
-
-    @flax.linen.compact
-    def __call__(self, x):
-        """Call submodels on the output of the previous one one at a time."""
-        outputs = x
-        for model in self.submodels:
-            outputs = model(outputs)
-        return outputs
 
 
 def get_residual_blocks_for_ferminet_backflow(

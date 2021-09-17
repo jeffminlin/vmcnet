@@ -225,14 +225,10 @@ def get_default_model_config() -> Dict:
             "activation_fn_resnet": "tanh",
             "resnet_use_bias": True,
             "jastrow": {
-                # choose between:
-                #   one_body_decay,
-                #   two_body_decay,
-                #   backflow_based, or
-                #   two_body_decay_and_backflow_based
+                # type must be a value in models.jastrow.VALID_JASTROW_TYPES
                 "type": "backflow_based",
                 "one_body_decay": {"kernel_init": {"type": "ones"}},
-                "two_body_decay": {"trainable": True},
+                "two_body_decay": {"init_ee_strength": 1.0, "trainable": True},
                 "backflow_based": {
                     "use_separate_jastrow_backflow": True,
                     "backflow": {

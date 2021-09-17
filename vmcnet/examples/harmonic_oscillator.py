@@ -141,7 +141,7 @@ def make_harmonic_oscillator_spin_half_model(
     orbitals = HarmonicOscillatorOrbitals(model_omega_init)
     logdet_fn = models.antisymmetry.logdet_product
 
-    return models.construct.ComposedModel([split_spin_fn, orbitals, logdet_fn])
+    return models.core.ComposedModel([split_spin_fn, orbitals, logdet_fn])
 
 
 def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.float32:
