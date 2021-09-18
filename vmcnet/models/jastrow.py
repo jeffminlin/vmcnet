@@ -216,6 +216,7 @@ class TwoBodyExpDecay(flax.linen.Module):
 
         if self.trainable:
             split_over_ions = jnp.split(ei_distances, ei_distances.shape[-1], axis=-1)
+            # TODO: potentially add support for this to SplitDense or otherwise?
             split_scaled_ei_distances = [
                 Dense(
                     1,
