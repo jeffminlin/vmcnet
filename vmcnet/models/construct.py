@@ -334,8 +334,9 @@ def get_model_from_config(
         else:
             raise ValueError(
                 "Unsupported jastrow type; {} was requested, but the only supported "
-                "types are ".format(jastrow_config.type)
-                + ", ".join(VALID_JASTROW_TYPES)
+                "types are: {}".format(
+                    jastrow_config.type, ", ".join(VALID_JASTROW_TYPES)
+                )
             )
         if model_config.antisym_type == "rank_one":
             return SplitBruteForceAntisymmetryWithDecay(
