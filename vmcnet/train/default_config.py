@@ -218,7 +218,7 @@ def get_default_model_config() -> Dict:
             "input_streams": input_streams,
             "backflow": ferminet_backflow,
             "antisym_type": "double",
-            "nresnets": 1,  # Only relevant for antisym_type=rank_k
+            "rank": 1,  # Only relevant for antisym_type=rank_k
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},

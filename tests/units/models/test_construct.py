@@ -383,14 +383,14 @@ def _make_split_antisymmetries():
             compute_input_streams,
             backflow,
             jastrow,
-            nresnets,
+            rank,
             32,
             3,
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_bias_initializer("uniform"),
             jnp.tanh,
         )
-        for nresnets in (1, 3)
+        for rank in (1, 3)
     ]
 
     return key, init_pos, log_psis

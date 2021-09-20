@@ -344,7 +344,7 @@ def get_model_from_config(
                 compute_input_streams,
                 backflow,
                 jastrow,
-                nresnets=model_config.nresnets,
+                rank=model_config.rank,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
@@ -1265,9 +1265,9 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 r_ee of shape (batch_dims, n, n, d),
             )
                 -> log jastrow of shape (batch_dims,)
-        nresnets (int): number of resnets to antisymmetrize for each spin. Selecting k
-            here will result in a "rank-k" brute-force antisymmetry. This is analogous
-            to ndeterminants for regular FermiNet.
+        rank (int): The rank of the brute-force antisymmetry. In practical terms, the
+            number of resnets to antisymmetrize for each spin. This is analogous to
+            ndeterminants for regular FermiNet.
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
             ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
@@ -1287,7 +1287,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
-    nresnets: int
+    rank: int
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -1340,7 +1340,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 ],
                 logabs=False,
             )(split_spins)
-            for _ in range(self.nresnets)
+            for _ in range(self.rank)
         ]
         antisymmetric_part = jnp.log(
             jnp.abs(jnp.sum(jnp.stack(antisymmetries), axis=0))
