@@ -1,13 +1,16 @@
 """Test model invariant components."""
 import chex
 import functools
-import jax.numpy as jnp
 import pytest
 
 import vmcnet.models as models
 
 from tests.test_utils import assert_pytree_allclose
-from .utils import get_elec_and_ion_pos_from_hyperparams, get_elec_hyperparams
+from .utils import (
+    simple_backflow,
+    get_elec_and_ion_pos_from_hyperparams,
+    get_elec_hyperparams,
+)
 
 
 @pytest.mark.slow
@@ -22,17 +25,13 @@ def test_invariant_tensor():
         models.equivariance.compute_input_streams, ion_pos=ion_pos
     )
 
-    def backflow(stream_1e, _stream_2e):
-        """Simple equivariance with linear and quadratic features."""
-        return jnp.concatenate([2.0 * stream_1e, jnp.square(stream_1e)], axis=-1)
-
     kernel_init = models.weights.get_kernel_initializer("orthogonal")
     bias_init = models.weights.get_bias_initializer("normal")
     output_shape_per_split = ((2, 3), (12,))
     invariant_model = models.invariance.InvariantTensor(
         split=spin_split,
         output_shape_per_split=output_shape_per_split,
-        backflow=backflow,
+        backflow=simple_backflow,
         kernel_initializer=kernel_init,
         bias_initializer=bias_init,
     )

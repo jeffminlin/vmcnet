@@ -78,3 +78,8 @@ def get_input_streams_from_hyperparams(
         perm_input_ei,
         key,
     )
+
+
+def simple_backflow(stream_1e, _stream_2e):
+    """Simple equivariance with linear and quadratic features."""
+    return jnp.concatenate([2.0 * stream_1e, jnp.square(stream_1e)], axis=-1)

@@ -29,7 +29,7 @@ def test_compose_negative_with_three_body_antisymmetry():
         antisymmetry_tree = jax.tree_map(three_body_antisymmetry, xs)
         return functools.reduce(lambda a, b: a * b, jax.tree_leaves(antisymmetry_tree))
 
-    model = models.construct.ComposedModel([equivariance, product_antisymmetry])
+    model = models.core.ComposedModel([equivariance, product_antisymmetry])
 
     x = [
         jnp.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]]),  # antisymmetry gives [-2, -2]
@@ -385,7 +385,6 @@ def _make_split_antisymmetry():
         32,
         3,
         models.weights.get_kernel_initializer("lecun_normal"),
-        models.weights.get_kernel_initializer("ones"),
         models.weights.get_bias_initializer("uniform"),
         jnp.tanh,
     )
@@ -415,7 +414,6 @@ def _make_double_antisymmetry():
         32,
         3,
         models.weights.get_kernel_initializer("lecun_normal"),
-        models.weights.get_kernel_initializer("ones"),
         models.weights.get_bias_initializer("uniform"),
         jnp.tanh,
     )
