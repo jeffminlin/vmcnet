@@ -1,4 +1,5 @@
 """Test model antisymmetries."""
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -103,6 +104,7 @@ def test_split_brute_force_antisymmetrize_vandermonde_product():
         key = jax.random.PRNGKey(0)
         output, _ = split_layer.init_with_output(key, xs)
 
+        chex.assert_shape(output, (1,))
         if logabs:
             np.testing.assert_allclose(output, logdet_product)
         else:

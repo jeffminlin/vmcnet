@@ -116,9 +116,9 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
     Attributes:
         fns_to_antisymmetrize (pytree): pytree of functions with the same tree structure
             as the input pytree, each of which is a Callable with signature
-            jnp.ndarray of shape (..., ninput_dim) -> jnp.ndarray of shape (..., 1).
-            On the ith leaf, ninput_dim = n[i] * d[i], where n[i] is the size of the
-            second-to-last axis and d[i] is the size of the last axis of the input xs.
+            jnp.ndarray of shape (..., ninput_dim) -> jnp.ndarray of shape (..., dout).
+            On the ith leaf, ninput_dim = n[i] * din[i], where n[i] is the size of the
+            second-to-last axis and din[i] is the size of the last axis of the input xs.
         logabs (bool, optional): whether to compute sum_i log(abs(psi_i)) if logabs is
             True, or prod_i psi_i if logabs is False, where psi_i is the output from
             antisymmetrizing the ith function on the ith input. Defaults to True.
@@ -131,17 +131,19 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         self, fn_to_antisymmetrize: Callable[[jnp.ndarray], jnp.ndarray], x: jnp.ndarray
     ) -> jnp.ndarray:
         n = x.shape[-2]
-        d = x.shape[-1]
+        din = x.shape[-1]
 
         x_perm, signs = ParallelPermutations(n)(x)
-        x_perm = jnp.reshape(x_perm, x_perm.shape[:-2] + (n * d,))  # (..., n!, n * d)
+        x_perm = jnp.reshape(
+            x_perm, x_perm.shape[:-2] + (n * din,)
+        )  # (..., n!, n * din)
         signs = jnp.expand_dims(signs, axis=-1)  # (n!, 1)
 
-        # perms_out has shape (..., n!, 1)
+        # perms_out has shape (..., n!, dout)
         perms_out = fn_to_antisymmetrize(x_perm)
         signed_perms_out = signs * perms_out
 
-        return jnp.sum(signed_perms_out, axis=(-1, -2))
+        return jnp.sum(signed_perms_out, axis=-2)
 
     @flax.linen.compact
     def __call__(self, xs: PyTree) -> jnp.ndarray:

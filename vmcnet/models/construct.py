@@ -1324,27 +1324,26 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
 
-        antisymmetries = [
-            SplitBruteForceAntisymmetrize(
-                [
-                    SimpleResNet(
-                        self.ndense_resnet,
-                        1,
-                        self.nlayers_resnet,
-                        self.activation_fn_resnet,
-                        self.kernel_initializer_resnet,
-                        self.bias_initializer_resnet,
-                        use_bias=self.resnet_use_bias,
-                    )
-                    for _ in split_spins
-                ],
-                logabs=False,
-            )(split_spins)
-            for _ in range(self.rank)
-        ]
-        antisymmetric_part = jnp.log(
-            jnp.abs(jnp.sum(jnp.stack(antisymmetries), axis=0))
-        )
+        def fn_to_antisymmetrize(x_one_spin):
+            resnet_outputs = [
+                SimpleResNet(
+                    self.ndense_resnet,
+                    1,
+                    self.nlayers_resnet,
+                    self.activation_fn_resnet,
+                    self.kernel_initializer_resnet,
+                    self.bias_initializer_resnet,
+                    use_bias=self.resnet_use_bias,
+                )(x_one_spin)
+                for _ in range(self.rank)
+            ]
+            return jnp.concatenate(resnet_outputs, axis=-1)
+
+        antisymmetries = SplitBruteForceAntisymmetrize(
+            [fn_to_antisymmetrize for _ in split_spins],
+            logabs=False,
+        )(split_spins)
+        antisymmetric_part = jnp.log(jnp.abs(jnp.sum(antisymmetries, axis=-1)))
 
         jastrow_part = self._jastrow(
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
