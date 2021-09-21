@@ -837,19 +837,25 @@ class FermiNet(flax.linen.Module):
         # Input streams unused in orbitals for regular FermiNet
         del input_stream_1e
         del input_stream_2e
-        return [
-            FermiNetOrbitalLayer(
-                orbitals_split=orbitals_split,
-                norbitals_per_split=norbitals_per_split,
-                kernel_initializer_linear=self.kernel_initializer_orbital_linear,
-                kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
-                kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
-                bias_initializer_linear=self.bias_initializer_orbital_linear,
-                use_bias=self.orbitals_use_bias,
-                isotropic_decay=self.isotropic_decay,
-            )(stream_1e, r_ei)
-            for _ in range(self.ndeterminants)
+        # Multiply norbitals by ndetermiannts to generate all orbitals in one go.
+        norbitals_per_split = [n * self.ndeterminants for n in norbitals_per_split]
+        # orbitals is shape [nspins: (..., nelec[i], norbitals[i] * ndeterminants)]
+        orbitals = FermiNetOrbitalLayer(
+            orbitals_split=orbitals_split,
+            norbitals_per_split=norbitals_per_split,
+            kernel_initializer_linear=self.kernel_initializer_orbital_linear,
+            kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
+            kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
+            bias_initializer_linear=self.bias_initializer_orbital_linear,
+            use_bias=self.orbitals_use_bias,
+            isotropic_decay=self.isotropic_decay,
+        )(stream_1e, r_ei)
+        # Split to shape [nspins: [ndeterminants: (..., nelec[i], norbitals[i])]]
+        split_orbitals = [
+            jnp.split(orbs, self.ndeterminants, axis=-1) for orbs in orbitals
         ]
+        # Transpose to [ndeterminants: [nspins: (..., nelec[i], norbitals[i])]]
+        return [list(i) for i in zip(*split_orbitals)]
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
