@@ -338,12 +338,13 @@ def get_model_from_config(
                     jastrow_config.type, ", ".join(VALID_JASTROW_TYPES)
                 )
             )
-        if model_config.antisym_type == "rank_one":
+        if model_config.antisym_type == "rank_k":
             return SplitBruteForceAntisymmetryWithDecay(
                 spin_split,
                 compute_input_streams,
                 backflow,
                 jastrow,
+                rank=model_config.rank,
                 ndense_resnet=model_config.ndense_resnet,
                 nlayers_resnet=model_config.nlayers_resnet,
                 kernel_initializer_resnet=kernel_init_constructor(
@@ -1228,7 +1229,7 @@ class AntiequivarianceNet(flax.linen.Module):
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
-    """Model with FermiNet backflow and a product of brute-force antisym. ResNets.
+    """FermiNet backflow with a sum of products of brute-force antisym. ResNets.
 
     A simple isotropic exponential decay is added to ensure square-integrability (and
     because this is asymptotically correct for molecules).
@@ -1264,6 +1265,9 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                 r_ee of shape (batch_dims, n, n, d),
             )
                 -> log jastrow of shape (batch_dims,)
+        rank (int): The rank of the brute-force antisymmetry. In practical terms, the
+            number of resnets to antisymmetrize for each spin. This is analogous to
+            ndeterminants for regular FermiNet.
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized
             ResNet
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
@@ -1283,6 +1287,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
     jastrow: Jastrow
+    rank: int
     ndense_resnet: int
     nlayers_resnet: int
     kernel_initializer_resnet: WeightInitializer
@@ -1318,8 +1323,9 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        antisymmetric_part = SplitBruteForceAntisymmetrize(
-            [
+
+        def fn_to_antisymmetrize(x_one_spin):
+            resnet_outputs = [
                 SimpleResNet(
                     self.ndense_resnet,
                     1,
@@ -1328,10 +1334,17 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
                     self.kernel_initializer_resnet,
                     self.bias_initializer_resnet,
                     use_bias=self.resnet_use_bias,
-                )
-                for _ in split_spins
+                )(x_one_spin)
+                for _ in range(self.rank)
             ]
+            return jnp.concatenate(resnet_outputs, axis=-1)
+
+        antisymmetries = SplitBruteForceAntisymmetrize(
+            [fn_to_antisymmetrize for _ in split_spins],
+            logabs=False,
         )(split_spins)
+        antisymmetric_part = jnp.log(jnp.abs(jnp.sum(antisymmetries, axis=-1)))
+
         jastrow_part = self._jastrow(
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
         )

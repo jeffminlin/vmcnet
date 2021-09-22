@@ -361,7 +361,7 @@ def _make_per_particle_dets_nets():
     return key, init_pos, [log_psi_eq, log_psi_sign_cov]
 
 
-def _make_split_antisymmetry():
+def _make_split_antisymmetries():
     (
         key,
         ion_pos,
@@ -377,19 +377,23 @@ def _make_split_antisymmetry():
         ion_pos, ion_charges
     )
 
-    log_psi = models.construct.SplitBruteForceAntisymmetryWithDecay(
-        spin_split,
-        compute_input_streams,
-        backflow,
-        jastrow,
-        32,
-        3,
-        models.weights.get_kernel_initializer("lecun_normal"),
-        models.weights.get_bias_initializer("uniform"),
-        jnp.tanh,
-    )
+    log_psis = [
+        models.construct.SplitBruteForceAntisymmetryWithDecay(
+            spin_split,
+            compute_input_streams,
+            backflow,
+            jastrow,
+            rank,
+            32,
+            3,
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_bias_initializer("uniform"),
+            jnp.tanh,
+        )
+        for rank in (1, 3)
+    ]
 
-    return key, init_pos, log_psi
+    return key, init_pos, log_psis
 
 
 def _make_double_antisymmetry():
@@ -505,14 +509,17 @@ def test_per_particle_dets_net_can_be_evaluated():
 
 def test_split_antisymmetry_can_be_constructed():
     """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    _make_split_antisymmetry()
+    _make_split_antisymmetries()
 
 
 @pytest.mark.slow
 def test_split_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, log_psi = _make_split_antisymmetry()
-    _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+    key, init_pos, log_psis = _make_split_antisymmetries()
+    [
+        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+        for log_psi in log_psis
+    ]
 
 
 def test_composed_antisymmetry_can_be_constructed():
@@ -552,7 +559,7 @@ def test_get_model_from_default_config():
         )
 
     for model_type in ["brute_force_antisym"]:
-        for subtype in ["rank_one", "double"]:
+        for subtype in ["rank_k", "double"]:
             _construct_model(model_type, brute_force_subtype=subtype)
     for model_type in [
         "ferminet",
