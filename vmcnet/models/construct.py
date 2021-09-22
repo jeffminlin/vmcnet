@@ -1,4 +1,5 @@
 """Combine pieces to form full models."""
+# TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple
