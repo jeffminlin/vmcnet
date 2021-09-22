@@ -622,9 +622,21 @@ def get_resnet_determinant_fn_for_ferminet(
     return fn
 
 
-def _reshape_raw_ferminet_orbitals(orbitals: ArrayList, ndeterminants: int):
-    # Input should be [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)].
-    # Reshape to [norb_splits: (..., nelec[i], norbitals[i], ndeterminants)]
+def _reshape_raw_ferminet_orbitals(
+    orbitals: ArrayList, ndeterminants: int
+) -> ArrayList:
+    """Reshape orbitals returned from FermiNetOrbitalLayer for use by FermiNet.
+
+    Args:
+        orbitals (Arraylist): orbitals generated from the FermiNetOrbitalLayer,
+            of shape [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)].
+        ndeterminants (int): the number of determinants used.
+
+    Returns:
+        ArrayList: input orbitals reshaped to
+        [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+    """
+    # Reshape to [norb_splits: (..., nhidden[i], norbitals[i], ndeterminants)]
     orbitals = [
         jnp.reshape(
             orb,
@@ -851,11 +863,11 @@ class FermiNet(flax.linen.Module):
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
         r_ei: Optional[jnp.ndarray],
-    ) -> List[ArrayList]:
+    ) -> ArrayList:
         # Input streams unused in orbitals for regular FermiNet
         del input_stream_1e
         del input_stream_2e
-        # Multiply norbitals by ndetermiannts to generate all orbitals in one go.
+        # Multiply norbitals by ndeterminants to generate all orbitals in one go.
         norbitals_per_split = [n * self.ndeterminants for n in norbitals_per_split]
         # orbitals is shape [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)]
         orbitals = FermiNetOrbitalLayer(
@@ -1133,15 +1145,8 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
         r_ei: Optional[jnp.ndarray],
-    ) -> List[ArrayList]:
-        # Shape is [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
-        invariant_part = self._get_invariance(
-            norbitals_per_split,
-            input_stream_1e,
-            input_stream_2e,
-            stream_1e,
-        )
-        # Shape is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+    ) -> ArrayList:
+        # Shape is [norb_splits: (ndeterminants, ..., nvisible[i], norbitals[i])]
         equivariant_part = super()._eval_orbitals(
             orbitals_split,
             norbitals_per_split,
@@ -1150,7 +1155,14 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             stream_1e,
             r_ei,
         )
-        # Return shape [norb_splits: (ndeterminants, ..., norbitals[i], norbitals[i])]
+        # Shape is [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
+        invariant_part = self._get_invariance(
+            norbitals_per_split,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+        )
+        # Return shape [norb_splits: (ndeterminants, ..., ntotal[i], norbitals[i])]
         return [
             jnp.concatenate([eq, inv], axis=-2)
             for (eq, inv) in zip(equivariant_part, invariant_part)
