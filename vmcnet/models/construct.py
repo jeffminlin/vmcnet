@@ -1,4 +1,5 @@
 """Combine pieces to form full models."""
+# TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -623,6 +624,36 @@ def get_resnet_determinant_fn_for_ferminet(
     return fn
 
 
+def _reshape_raw_ferminet_orbitals(
+    orbitals: ArrayList, ndeterminants: int
+) -> ArrayList:
+    """Reshape orbitals returned from FermiNetOrbitalLayer for use by FermiNet.
+
+    Args:
+        orbitals (Arraylist): orbitals generated from the FermiNetOrbitalLayer,
+            of shape [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)].
+        ndeterminants (int): the number of determinants used.
+
+    Returns:
+        ArrayList: input orbitals reshaped to
+        [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+    """
+    # Reshape to [norb_splits: (..., nhidden[i], norbitals[i], ndeterminants)]
+    orbitals = [
+        jnp.reshape(
+            orb,
+            (
+                *orb.shape[:-1],
+                orb.shape[-1] // ndeterminants,
+                ndeterminants,
+            ),
+        )
+        for orb in orbitals
+    ]
+    # Move axis to [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+    return [jnp.moveaxis(orb, -1, 0) for orb in orbitals]
+
+
 class FermiNet(flax.linen.Module):
     """FermiNet/generalized Slater determinant model.
 
@@ -834,23 +865,25 @@ class FermiNet(flax.linen.Module):
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
         r_ei: Optional[jnp.ndarray],
-    ) -> List[ArrayList]:
+    ) -> ArrayList:
         # Input streams unused in orbitals for regular FermiNet
         del input_stream_1e
         del input_stream_2e
-        return [
-            FermiNetOrbitalLayer(
-                orbitals_split=orbitals_split,
-                norbitals_per_split=norbitals_per_split,
-                kernel_initializer_linear=self.kernel_initializer_orbital_linear,
-                kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
-                kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
-                bias_initializer_linear=self.bias_initializer_orbital_linear,
-                use_bias=self.orbitals_use_bias,
-                isotropic_decay=self.isotropic_decay,
-            )(stream_1e, r_ei)
-            for _ in range(self.ndeterminants)
-        ]
+        # Multiply norbitals by ndeterminants to generate all orbitals in one go.
+        norbitals_per_split = [n * self.ndeterminants for n in norbitals_per_split]
+        # orbitals is shape [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)]
+        orbitals = FermiNetOrbitalLayer(
+            orbitals_split=orbitals_split,
+            norbitals_per_split=norbitals_per_split,
+            kernel_initializer_linear=self.kernel_initializer_orbital_linear,
+            kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
+            kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
+            bias_initializer_linear=self.bias_initializer_orbital_linear,
+            use_bias=self.orbitals_use_bias,
+            isotropic_decay=self.isotropic_decay,
+        )(stream_1e, r_ei)
+        # Reshape to [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+        return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
     def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
@@ -875,6 +908,7 @@ class FermiNet(flax.linen.Module):
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
         norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
+        # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
         orbitals = self._eval_orbitals(
             orbitals_split,
             norbitals_per_split,
@@ -884,8 +918,6 @@ class FermiNet(flax.linen.Module):
             r_ei,
         )
 
-        # Orbitals shape is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
-        orbitals = jax.tree_map(lambda *args: jnp.stack(args), *orbitals)
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
@@ -1067,9 +1099,9 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         input_stream_1e: jnp.ndarray,
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
-    ) -> List[ArrayList]:
+    ) -> ArrayList:
         invariant_shape_per_spin = [
-            (nhidden, norbitals_per_split[i])
+            (nhidden, norbitals_per_split[i] * self.ndeterminants)
             for i, nhidden in enumerate(self.nhidden_fermions_per_spin)
         ]
 
@@ -1079,18 +1111,17 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             # determinant and having kfac complain about duplicate registrations.
             stream_1e = self.invariance_backflow(input_stream_1e, input_stream_2e)
 
-        return [
-            InvariantTensor(
-                split=self.spin_split,
-                output_shape_per_split=invariant_shape_per_spin,
-                backflow=None,
-                kernel_initializer=self.invariance_kernel_initializer,
-                bias_initializer=self.invariance_bias_initializer,
-                use_bias=self.invariance_use_bias,
-                register_kfac=self.invariance_register_kfac,
-            )(stream_1e, None)
-            for _ in range(self.ndeterminants)
-        ]
+        invariance = InvariantTensor(
+            split=self.spin_split,
+            output_shape_per_split=invariant_shape_per_spin,
+            backflow=None,
+            kernel_initializer=self.invariance_kernel_initializer,
+            bias_initializer=self.invariance_bias_initializer,
+            use_bias=self.invariance_use_bias,
+            register_kfac=self.invariance_register_kfac,
+        )(stream_1e, None)
+        # Reshape to [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
+        return _reshape_raw_ferminet_orbitals(invariance, self.ndeterminants)
 
     def _get_norbitals_per_split(
         self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
@@ -1116,14 +1147,8 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         input_stream_2e: Optional[jnp.ndarray],
         stream_1e: jnp.ndarray,
         r_ei: Optional[jnp.ndarray],
-    ) -> List[ArrayList]:
-
-        invariant_part = self._get_invariance(
-            norbitals_per_split,
-            input_stream_1e,
-            input_stream_2e,
-            stream_1e,
-        )
+    ) -> ArrayList:
+        # Shape is [norb_splits: (ndeterminants, ..., nvisible[i], norbitals[i])]
         equivariant_part = super()._eval_orbitals(
             orbitals_split,
             norbitals_per_split,
@@ -1132,15 +1157,17 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             stream_1e,
             r_ei,
         )
-
+        # Shape is [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
+        invariant_part = self._get_invariance(
+            norbitals_per_split,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+        )
+        # Return shape [norb_splits: (ndeterminants, ..., ntotal[i], norbitals[i])]
         return [
-            [
-                jnp.concatenate(
-                    [orbital_matrix, invariant_part[det_idx][split_idx]], axis=-2
-                )
-                for split_idx, orbital_matrix in enumerate(orbital_matrices)
-            ]
-            for det_idx, orbital_matrices in enumerate(equivariant_part)
+            jnp.concatenate([eq, inv], axis=-2)
+            for (eq, inv) in zip(equivariant_part, invariant_part)
         ]
 
 
