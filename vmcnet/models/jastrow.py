@@ -249,7 +249,7 @@ class TwoBodyExpDecay(flax.linen.Module):
         return jnp.exp(interaction)
 
 
-def get_mol_decay_scaled_for_chargeless_molecules(
+def get_two_body_decay_scaled_for_chargeless_molecules(
     ion_pos: jnp.ndarray,
     ion_charges: jnp.ndarray,
     init_ee_strength: float = 1.0,

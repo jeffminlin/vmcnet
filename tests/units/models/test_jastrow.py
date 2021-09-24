@@ -48,7 +48,7 @@ def _get_ion_and_elec_pos_and_scaled_mol_decay_jastrow():
         ),
         axis=0,
     )
-    jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
+    jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges, trainable=False
     )
 
