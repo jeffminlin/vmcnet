@@ -37,7 +37,7 @@ from .invariance import InvariantTensor
 from .jastrow import (
     BackflowJastrow,
     OneBodyExpDecay,
-    get_mol_decay_scaled_for_chargeless_molecules,
+    get_two_body_decay_scaled_for_chargeless_molecules,
 )
 from .sign_symmetry import (
     ProductsSignCovariance,
@@ -300,11 +300,11 @@ def get_model_from_config(
         jastrow_config = model_config.jastrow
 
         def _get_two_body_decay_jastrow():
-            return get_mol_decay_scaled_for_chargeless_molecules(
+            return get_two_body_decay_scaled_for_chargeless_molecules(
                 ion_pos,
                 ion_charges,
-                init_ee_strength=jastrow_config.mol_decay.init_ee_strength,
-                trainable=jastrow_config.mol_decay.trainable,
+                init_ee_strength=jastrow_config.two_body_decay.init_ee_strength,
+                trainable=jastrow_config.two_body_decay.trainable,
             )
 
         def _get_backflow_based_jastrow():
@@ -329,9 +329,9 @@ def get_model_from_config(
         elif jastrow_config.type == "backflow_based":
             jastrow = _get_backflow_based_jastrow()
         elif jastrow_config.type == "two_body_decay_and_backflow_based":
-            mol_decay_jastrow = _get_two_body_decay_jastrow()
+            two_body_decay_jastrow = _get_two_body_decay_jastrow()
             backflow_jastrow = _get_backflow_based_jastrow()
-            jastrow = AddedModel([mol_decay_jastrow, backflow_jastrow])
+            jastrow = AddedModel([two_body_decay_jastrow, backflow_jastrow])
         else:
             raise ValueError(
                 "Unsupported jastrow type; {} was requested, but the only supported "
