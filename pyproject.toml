@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=42.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+
+[[tool.mypy.overrides]]
+module = [
+    "absl.*",
+    "flax.*",
+    "kfac_ferminet_alpha.*",
+    "ml_collections.*",
+    "optax.*",
+]
+ignore_missing_imports = true
+
+[tool.pydocstyle]
+match = '(.)*\.py'
+add-ignore = "D401"
