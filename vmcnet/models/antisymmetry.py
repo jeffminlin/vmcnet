@@ -1,13 +1,14 @@
 """Antisymmetry parts to compose into a model."""
 import functools
 import itertools
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Union
 
 import flax
 import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import SLArray, PyTree
+from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from .core import get_alternating_signs, is_tuple_of_arrays
 
 
@@ -146,7 +147,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         return jnp.sum(signed_perms_out, axis=-2)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> jnp.ndarray:
+    def __call__(self, xs: PyTree) -> Union[jnp.ndarray, SLArray]:
         """Antisymmetrize the leaves of self.fns_to_antisymmetrize on the leaves of xs.
 
         Args:
@@ -155,9 +156,11 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
                 and the ith antisymmetrization happens with respect to n[i].
 
         Returns:
-            jnp.ndarray: sum_i log(abs(psi_i)) if self.logabs is True, or prod_i psi_i
-            if self.logabs is False, where psi_i is the output from antisymmetrizing the
-            ith function on the ith input.
+            jnp.ndarray or SLArray:
+                prod_i psi_i if self.logabs is False, or
+                prod_i sign(psi_i), sum_i log(abs(psi_i)) if self.logabs is True,
+            where psi_i is the output from antisymmetrizing the ith function on the ith
+            input.
         """
         # Flatten the trees for fns_to_antisymmetrize and xs, because flax.linen.Module
         # freezes all instances of lists to tuples, so this can cause treedef
@@ -170,8 +173,8 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
-        log_antisyms = jax.tree_map(lambda x: jnp.log(jnp.abs(x)), antisyms)
-        return _reduce_sum_over_leaves(log_antisyms)
+        slog_antisyms = array_list_to_slog(jax.tree_leaves(antisyms))
+        return functools.reduce(slog_multiply, slog_antisyms)
 
 
 class ComposedBruteForceAntisymmetrize(flax.linen.Module):
@@ -209,7 +212,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> jnp.ndarray:
+    def __call__(self, xs: PyTree) -> Union[jnp.ndarray, SLArray]:
         """Antisymmetrize self.fn_to_antisymmetrize over the leaves of xs.
 
         Args:
@@ -219,8 +222,10 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
                 n[i].
 
         Returns:
-            jnp.ndarray: log(abs(psi)) if self.logabs is True, or psi if logabs is
-            False, where psi is the output from antisymmetrizing
+            jnp.ndarray:
+                psi if logabs is False, or
+                sign(psi), log(abs(psi)) if self.logabs is True,
+            where psi is the output from antisymmetrizing
             self.fn_to_antisymmetrize on all leaves of xs.
         """
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
@@ -271,7 +276,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         antisymmetrized_out = jnp.sum(
             signed_perms_out, axis=tuple(-i for i in range(1, nleaves + 2))
         )
-        if self.logabs:
-            return jnp.log(jnp.abs(antisymmetrized_out))
+        if not self.logabs:
+            return antisymmetrized_out
 
-        return antisymmetrized_out
+        return array_to_slog(antisymmetrized_out)

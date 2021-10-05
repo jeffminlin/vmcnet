@@ -2,7 +2,7 @@
 # TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple, TypeVar
 
 import flax
 import jax
@@ -11,13 +11,14 @@ import numpy as np
 from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
-from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
 from vmcnet.utils.typing import (
     ArrayList,
     Backflow,
     ComputeInputStreams,
     Jastrow,
     ParticleSplit,
+    SLArray,
 )
 from .antisymmetry import (
     ComposedBruteForceAntisymmetrize,
@@ -58,6 +59,8 @@ VALID_JASTROW_TYPES = [
     "two_body_decay_and_backflow_based",
 ]
 
+T = TypeVar("T")
+
 
 class DeterminantFnMode(Enum):
     """Enum specifying how to use determinant resnet in FermiNet model."""
@@ -83,6 +86,17 @@ def _get_dtype_init_constructors(dtype):
     )
     bias_init_constructor = functools.partial(get_bias_init_from_config, dtype=dtype)
     return kernel_init_constructor, bias_init_constructor
+
+
+class LogPsiModel(flax.linen.Module):
+    """Model which returns log|psi| given a model which returns sign(psi), log|psi|."""
+
+    slog_psi: Callable[..., SLArray]
+
+    @flax.linen.compact
+    def __call__(self, *args) -> jnp.ndarray:
+        """Return the second output (index 1) of self.slog_psi."""
+        return self.slog_psi(*args)[1]
 
 
 def get_model_from_config(
@@ -886,7 +900,7 @@ class FermiNet(flax.linen.Module):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
@@ -934,12 +948,11 @@ class FermiNet(flax.linen.Module):
                 psi = self._calculate_psi_pairwise_even(fn_inputs)
             else:
                 raise self._get_bad_determinant_fn_mode_error()
-            return jnp.log(jnp.abs(psi))
+            return array_to_slog(psi)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
-        _, log_psi = slog_sum_over_axis(slog_det_prods)
-        return log_psi
+        return slog_sum_over_axis(slog_det_prods)
 
 
 class EmbeddedParticleFermiNet(FermiNet):
@@ -1231,7 +1244,7 @@ class AntiequivarianceNet(flax.linen.Module):
         self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
         """Compose backflow -> antiequivariance -> sign covariant equivariance -> sum.
 
         Args:
@@ -1252,7 +1265,7 @@ class AntiequivarianceNet(flax.linen.Module):
             )
 
         antisym_vector = self._array_list_sign_covariance(antiequivariant_out)
-        return jnp.log(jnp.abs(jnp.sum(antisym_vector, axis=-1)))
+        return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
 class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
@@ -1331,7 +1344,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
         """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
 
         Args:
@@ -1366,17 +1379,16 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             ]
             return jnp.concatenate(resnet_outputs, axis=-1)
 
-        antisymmetries = SplitBruteForceAntisymmetrize(
-            [fn_to_antisymmetrize for _ in split_spins],
-            logabs=False,
+        slog_antisyms = SplitBruteForceAntisymmetrize(
+            [fn_to_antisymmetrize for _ in split_spins]
         )(split_spins)
-        antisymmetric_part = jnp.log(jnp.abs(jnp.sum(antisymmetries, axis=-1)))
+        sign_psi, log_antisyms = slog_sum_over_axis(slog_antisyms, axis=-1)
 
         jastrow_part = self._jastrow(
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
         )
 
-        return antisymmetric_part + jastrow_part
+        return sign_psi, log_antisyms + jastrow_part
 
 
 class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
@@ -1453,7 +1465,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
         """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
 
         Args:
@@ -1472,7 +1484,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        antisymmetric_part = ComposedBruteForceAntisymmetrize(
+        sign_psi, log_antisym = ComposedBruteForceAntisymmetrize(
             SimpleResNet(
                 self.ndense_resnet,
                 1,
@@ -1487,4 +1499,4 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
         )
 
-        return antisymmetric_part + jastrow_part
+        return sign_psi, log_antisym + jastrow_part

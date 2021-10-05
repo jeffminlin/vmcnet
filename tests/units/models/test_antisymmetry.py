@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import vmcnet.models as models
+from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
 
 
 def test_slogdet_product():
@@ -94,7 +95,7 @@ def test_split_brute_force_antisymmetrize_vandermonde_product():
         (2 - 1) * (3 - 1) * (4 - 1) * (3 - 2) * (4 - 2) * (4 - 3),
     ]
     det_product = vandermonde_dets[0] * vandermonde_dets[1]
-    logdet_product = jnp.log(jnp.abs(det_product))
+    slogdet_product = array_to_slog(det_product)
 
     for logabs in [False, True]:
         split_layer = models.antisymmetry.SplitBruteForceAntisymmetrize(
@@ -104,10 +105,13 @@ def test_split_brute_force_antisymmetrize_vandermonde_product():
         key = jax.random.PRNGKey(0)
         output, _ = split_layer.init_with_output(key, xs)
 
-        chex.assert_shape(output, (1,))
         if logabs:
-            np.testing.assert_allclose(output, logdet_product)
+            chex.assert_shape(output, ((1,), (1,)))
+            np.testing.assert_allclose(
+                slog_sum_over_axis(output, axis=-1), slogdet_product
+            )
         else:
+            chex.assert_shape(output, (1,))
             np.testing.assert_allclose(output, det_product)
 
 
@@ -133,7 +137,7 @@ def test_composed_brute_force_antisymmetrize_product():
     ]
     dets = [jnp.linalg.det(x) for x in x_matrices]
     det_product = dets[0] * dets[1]
-    logdet_product = jnp.log(jnp.abs(det_product))
+    slogdet_product = array_to_slog(det_product)
 
     def fn_to_antisymmetrize(concat_flattened_matrices):
         prod_0 = _diagonal_product(concat_flattened_matrices[..., :9], 3)
@@ -150,6 +154,6 @@ def test_composed_brute_force_antisymmetrize_product():
         output, _ = composed_layer.init_with_output(key, x_matrices)
 
         if logabs:
-            np.testing.assert_allclose(output, logdet_product, rtol=1e-6)
+            np.testing.assert_allclose(output, slogdet_product, rtol=1e-6)
         else:
             np.testing.assert_allclose(output, det_product, rtol=1e-6)
