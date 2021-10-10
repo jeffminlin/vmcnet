@@ -2,7 +2,7 @@
 # TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple, TypeVar
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import flax
 import jax
@@ -58,8 +58,6 @@ VALID_JASTROW_TYPES = [
     "backflow_based",
     "two_body_decay_and_backflow_based",
 ]
-
-T = TypeVar("T")
 
 
 class DeterminantFnMode(Enum):

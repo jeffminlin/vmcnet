@@ -531,8 +531,7 @@ def test_composed_antisymmetry_can_be_constructed():
 def test_ferminet_composed_antisymmetry_can_be_evaluated():
     """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
     key, init_pos, slog_psi = _make_double_antisymmetry()
-    log_psi = models.construct.LogPsiModel(slog_psi)
-    _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+    _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
 
 
 def test_get_model_from_default_config():
