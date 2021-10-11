@@ -1044,9 +1044,11 @@ class EmbeddedParticleFermiNet(FermiNet):
         ]
         # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
         # complaining when it gets used within the constructed FermiNet.
-        orbitals_split: ParticleSplit = tuple(
-            np.cumsum(np.array(total_nelec_per_spin))[:-1]
-        )
+        orbitals_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
+        # Ensure orbitals_split contains ints so it plays nicely with the type-checking
+        # in get_nsplits when it's used as a split in the computation of the exponential
+        # envelopes.
+        orbitals_split = tuple([int(i) for i in orbitals_split])
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         (

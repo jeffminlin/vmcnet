@@ -18,7 +18,7 @@ from .core import (
     get_nsplits,
 )
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
-from .weights import WeightInitializer
+from .weights import WeightInitializer, get_bias_initializer
 
 
 def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
@@ -553,7 +553,8 @@ class SplitDense(flax.linen.Module):
         kernel_initializer (WeightInitializer): kernel initializer. Has signature
             (key, shape, dtype) -> jnp.ndarray
         bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> jnp.ndarray. Defaults to random normal
+            initialization.
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         register_kfac (bool, optional): whether to register the dense computations with
             KFAC. Defaults to True.
@@ -562,7 +563,7 @@ class SplitDense(flax.linen.Module):
     split: ParticleSplit
     ndense_per_split: Sequence[int]
     kernel_initializer: WeightInitializer
-    bias_initializer: WeightInitializer
+    bias_initializer: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
     register_kfac: bool = True
 
@@ -630,12 +631,16 @@ def _compute_exponential_envelopes_on_leaf(
     distances = jnp.linalg.norm(scale_out, axis=-1)
     inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
 
-    lin_comb_nion = Dense(
-        1,
-        kernel_init=kernel_initializer_ion,
+    # norbitals parallel maps return shape [norbitals: (..., nelec, 1, 1)]
+    lin_comb_nion = SplitDense(
+        norbitals,
+        (1,) * norbitals,
+        kernel_initializer=kernel_initializer_ion,
         use_bias=False,
         register_kfac=False,
     )(inv_exp_distances)
+    # Concatenate to shape (..., nelec, norbitals, 1)
+    lin_comb_nion = jnp.concatenate(lin_comb_nion, axis=-2)
 
     return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
 
