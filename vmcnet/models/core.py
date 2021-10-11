@@ -78,7 +78,11 @@ def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ..
         return (nelec_total // split,) * split
     else:
         spin_diffs = tuple(jnp.diff(jnp.array(split)))
-        return (split[0],) + spin_diffs + (nelec_total - split[-1],)
+        return (
+            split[0],
+            *tuple([int(i) for i in spin_diffs]),
+            nelec_total - split[-1],
+        )
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
