@@ -7,7 +7,6 @@ from typing import Callable, List, Optional, Sequence, Tuple
 import flax
 import jax
 import jax.numpy as jnp
-import numpy as np
 from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
@@ -25,7 +24,14 @@ from .antisymmetry import (
     SplitBruteForceAntisymmetrize,
     slogdet_product,
 )
-from .core import Activation, AddedModel, SimpleResNet, get_nelec_per_split, get_nsplits
+from .core import (
+    Activation,
+    AddedModel,
+    SimpleResNet,
+    get_nelec_per_split,
+    get_nsplits,
+    get_spin_split,
+)
 from .equivariance import (
     FermiNetBackflow,
     FermiNetOneElectronLayer,
@@ -105,7 +111,7 @@ def get_model_from_config(
     dtype=jnp.float32,
 ) -> flax.linen.Module:
     """Get a model from a hyperparameter config."""
-    spin_split = tuple(jnp.cumsum(nelec)[:-1])
+    spin_split = get_spin_split(nelec)[:-1]
 
     compute_input_streams = get_compute_input_streams_from_config(
         model_config.input_streams, ion_pos
@@ -163,7 +169,7 @@ def get_model_from_config(
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
-            total_spin_split = tuple(jnp.cumsum(total_nelec)[:-1])
+            total_spin_split = get_spin_split(total_nelec[:-1])
 
             backflow = get_backflow_from_config(
                 model_config.backflow,
@@ -1042,13 +1048,7 @@ class EmbeddedParticleFermiNet(FermiNet):
             n + self.nhidden_fermions_per_spin[i]
             for i, n in enumerate(visible_nelec_per_spin)
         ]
-        # Using numpy not jnp here to avoid Jax thinking this is a dynamic value and
-        # complaining when it gets used within the constructed FermiNet.
-        orbitals_split = tuple(np.cumsum(np.array(total_nelec_per_spin))[:-1])
-        # Ensure orbitals_split contains ints so it plays nicely with the type-checking
-        # in get_nsplits when it's used as a split in the computation of the exponential
-        # envelopes.
-        orbitals_split = tuple([int(i) for i in orbitals_split])
+        orbitals_split = get_spin_split(total_nelec_per_spin[:-1])
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         (
