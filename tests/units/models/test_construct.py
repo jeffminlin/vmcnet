@@ -98,7 +98,7 @@ def _make_ferminets():
         ndense_list,
     ) = _get_initial_pos_and_hyperparams()
 
-    log_psis = []
+    slog_psis = []
     # No need for combinatorial testing over these flags; just make sure Ferminet is
     # tested with and without cyclic spins, and with each different determinant_fn_mode.
     for cyclic_spins, use_det_resnet, determinant_fn_mode, full_det in [
@@ -112,7 +112,7 @@ def _make_ferminets():
         backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
         resnet_det_fn = _get_det_resnet_fn() if use_det_resnet else None
 
-        log_psi = models.construct.FermiNet(
+        slog_psi = models.construct.FermiNet(
             spin_split,
             compute_input_streams,
             backflow,
@@ -127,9 +127,9 @@ def _make_ferminets():
             determinant_fn_mode=determinant_fn_mode,
             full_det=full_det,
         )
-        log_psis.append(log_psi)
+        slog_psis.append(slog_psi)
 
-    return key, init_pos, log_psis
+    return key, init_pos, slog_psis
 
 
 def _make_embedded_particle_ferminets():
@@ -151,7 +151,7 @@ def _make_embedded_particle_ferminets():
     for nhidden_fermions_per_spin, full_det in [((2, 3), False), ((4, 0), True)]:
         total_spin_split = (spin_split[0] + nhidden_fermions_per_spin[0],)
         backflow = _get_backflow(total_spin_split, ndense_list, cyclic_spins)
-        log_psi = models.construct.EmbeddedParticleFermiNet(
+        slog_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             compute_input_streams,
             backflow,
@@ -173,7 +173,7 @@ def _make_embedded_particle_ferminets():
             ),
             invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
         )
-        log_psis.append(log_psi)
+        log_psis.append(slog_psi)
 
     return key, init_pos, log_psis
 
@@ -202,7 +202,7 @@ def _make_extended_orbital_matrix_ferminets():
         else:
             invariance_backflow = None
 
-        log_psi = models.construct.ExtendedOrbitalMatrixFermiNet(
+        slog_psi = models.construct.ExtendedOrbitalMatrixFermiNet(
             spin_split=spin_split,
             compute_input_streams=_get_compute_input_streams(ion_pos),
             backflow=backflow,
@@ -231,7 +231,7 @@ def _make_extended_orbital_matrix_ferminets():
             ),
             invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
         )
-        log_psis.append(log_psi)
+        log_psis.append(slog_psi)
 
     return key, init_pos, log_psis
 
@@ -260,7 +260,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
     def array_list_sign_covariance(x: ArrayList) -> jnp.ndarray:
         return jnp.sum(odd_equivariance(x), axis=-2)
 
-    log_psi = models.construct.AntiequivarianceNet(
+    slog_psi = models.construct.AntiequivarianceNet(
         spin_split,
         compute_input_streams,
         backflow,
@@ -269,7 +269,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
         multiply_by_eq_features=multiply_by_eq_features,
     )
 
-    return log_psi
+    return slog_psi
 
 
 def _make_antiequivariance_net_with_products_sign_covariance(
@@ -410,7 +410,7 @@ def _make_double_antisymmetry():
     jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
-    log_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
+    slog_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
         spin_split,
         compute_input_streams,
         backflow,
@@ -422,7 +422,7 @@ def _make_double_antisymmetry():
         jnp.tanh,
     )
 
-    return key, init_pos, log_psi
+    return key, init_pos, slog_psi
 
 
 def _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi):
@@ -530,8 +530,8 @@ def test_composed_antisymmetry_can_be_constructed():
 @pytest.mark.slow
 def test_ferminet_composed_antisymmetry_can_be_evaluated():
     """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, log_psi = _make_double_antisymmetry()
-    _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
+    key, init_pos, slog_psi = _make_double_antisymmetry()
+    _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
 
 
 def test_get_model_from_default_config():

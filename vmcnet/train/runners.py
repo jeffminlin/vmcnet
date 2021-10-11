@@ -84,9 +84,10 @@ def _get_and_init_model(
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
-    log_psi = models.construct.get_model_from_config(
+    slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
+    log_psi = models.construct.LogPsiModel(slog_psi)
     key, subkey = jax.random.split(key)
     params = log_psi.init(subkey, init_pos[0:1])
     if apply_pmap:
