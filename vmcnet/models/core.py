@@ -88,7 +88,7 @@ def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ..
 
 def get_spin_split(n_per_split: Union[Sequence[int], jnp.ndarray]) -> Tuple[int, ...]:
     """Calculate spin split from n_per_split, making sure to output a Tuple of ints."""
-    cumsum = np.cumsum(n_per_split)
+    cumsum = np.cumsum(n_per_split[:-1])
     # Convert to tuple of python ints.
     return tuple([int(i) for i in cumsum])
 

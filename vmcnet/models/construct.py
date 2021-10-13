@@ -111,7 +111,7 @@ def get_model_from_config(
     dtype=jnp.float32,
 ) -> flax.linen.Module:
     """Get a model from a hyperparameter config."""
-    spin_split = get_spin_split(nelec)[:-1]
+    spin_split = get_spin_split(nelec)
 
     compute_input_streams = get_compute_input_streams_from_config(
         model_config.input_streams, ion_pos
@@ -169,7 +169,7 @@ def get_model_from_config(
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
-            total_spin_split = get_spin_split(total_nelec[:-1])
+            total_spin_split = get_spin_split(total_nelec)
 
             backflow = get_backflow_from_config(
                 model_config.backflow,
@@ -1048,7 +1048,7 @@ class EmbeddedParticleFermiNet(FermiNet):
             n + self.nhidden_fermions_per_spin[i]
             for i, n in enumerate(visible_nelec_per_spin)
         ]
-        orbitals_split = get_spin_split(total_nelec_per_spin[:-1])
+        orbitals_split = get_spin_split(total_nelec_per_spin)
 
         split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
         (
