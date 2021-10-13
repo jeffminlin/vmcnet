@@ -5,6 +5,7 @@ from typing import Callable, Sequence, Tuple, Union, cast
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
@@ -77,8 +78,19 @@ def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ..
     if isinstance(split, int):
         return (nelec_total // split,) * split
     else:
-        spin_diffs = tuple(jnp.diff(jnp.array(split)))
-        return (split[0],) + spin_diffs + (nelec_total - split[-1],)
+        spin_diffs = jnp.diff(jnp.array(split))
+        return (
+            split[0],
+            *tuple([int(i) for i in spin_diffs]),
+            nelec_total - split[-1],
+        )
+
+
+def get_spin_split(n_per_split: Union[Sequence[int], jnp.ndarray]) -> Tuple[int, ...]:
+    """Calculate spin split from n_per_split, making sure to output a Tuple of ints."""
+    cumsum = np.cumsum(n_per_split[:-1])
+    # Convert to tuple of python ints.
+    return tuple([int(i) for i in cumsum])
 
 
 def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
