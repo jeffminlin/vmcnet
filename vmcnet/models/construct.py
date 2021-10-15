@@ -656,20 +656,22 @@ def _reshape_raw_ferminet_orbitals(
         ArrayList: input orbitals reshaped to
         [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
     """
-    # Reshape to [norb_splits: (..., nhidden[i], norbitals[i], ndeterminants)]
+    # Reshape to [norb_splits: (..., nhidden[i], ndeterminants, norbitals[i])]
     orbitals = [
         jnp.reshape(
             orb,
             (
                 *orb.shape[:-1],
-                orb.shape[-1] // ndeterminants,
+                # This ordering ensures elements corresponding to a single determinant
+                # come from adjacent blocks of the raw orbitals.
                 ndeterminants,
+                orb.shape[-1] // ndeterminants,
             ),
         )
         for orb in orbitals
     ]
     # Move axis to [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
-    return [jnp.moveaxis(orb, -1, 0) for orb in orbitals]
+    return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
 
 
 class FermiNet(flax.linen.Module):
