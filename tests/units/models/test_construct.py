@@ -373,7 +373,7 @@ def _make_split_antisymmetries():
 
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=False)
-    jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
+    jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
 
@@ -407,7 +407,7 @@ def _make_double_antisymmetry():
     ) = _get_initial_pos_and_hyperparams()
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=True)
-    jastrow = models.jastrow.get_mol_decay_scaled_for_chargeless_molecules(
+    jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
     slog_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
