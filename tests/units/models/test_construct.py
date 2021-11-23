@@ -188,7 +188,7 @@ def _make_extended_orbital_matrix_ferminets():
         ndense_list,
     ) = _get_initial_pos_and_hyperparams()
 
-    log_psis = []
+    slog_psis = []
     cyclic_spins = False
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
     extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
@@ -231,9 +231,9 @@ def _make_extended_orbital_matrix_ferminets():
             ),
             invariance_bias_initializer=models.weights.get_bias_initializer("uniform"),
         )
-        log_psis.append(slog_psi)
+        slog_psis.append(slog_psi)
 
-    return key, init_pos, log_psis
+    return key, init_pos, slog_psis
 
 
 def _make_antiequivariance_net_with_resnet_sign_covariance(
@@ -282,7 +282,7 @@ def _make_antiequivariance_net_with_products_sign_covariance(
         1, models.weights.get_kernel_initializer("orthogonal")
     )
 
-    log_psi = models.construct.AntiequivarianceNet(
+    slog_psi = models.construct.AntiequivarianceNet(
         spin_split,
         compute_input_streams,
         backflow,
@@ -290,7 +290,7 @@ def _make_antiequivariance_net_with_products_sign_covariance(
         array_list_sign_covariance,
     )
 
-    return log_psi
+    return slog_psi
 
 
 def _make_orbital_cofactor_nets():
@@ -311,7 +311,7 @@ def _make_orbital_cofactor_nets():
         models.weights.get_bias_initializer("uniform"),
     )
 
-    log_psi_no_features = _make_antiequivariance_net_with_resnet_sign_covariance(
+    slog_psi_no_features = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split,
         ndense_list,
         antiequivariance,
@@ -319,7 +319,7 @@ def _make_orbital_cofactor_nets():
         ion_pos=ion_pos,
         multiply_by_eq_features=False,
     )
-    log_psi_with_features = _make_antiequivariance_net_with_resnet_sign_covariance(
+    slog_psi_with_features = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split,
         ndense_list,
         antiequivariance,
@@ -328,7 +328,7 @@ def _make_orbital_cofactor_nets():
         multiply_by_eq_features=True,
     )
 
-    return key, init_pos, [log_psi_no_features, log_psi_with_features]
+    return key, init_pos, [slog_psi_no_features, slog_psi_with_features]
 
 
 def _make_per_particle_dets_nets():
@@ -351,14 +351,14 @@ def _make_per_particle_dets_nets():
         )
     )
 
-    log_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
+    slog_psi_eq = _make_antiequivariance_net_with_resnet_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=False, ion_pos=ion_pos
     )
-    log_psi_sign_cov = _make_antiequivariance_net_with_products_sign_covariance(
+    slog_psi_sign_cov = _make_antiequivariance_net_with_products_sign_covariance(
         spin_split, ndense_list, antiequivariance, cyclic_spins=True, ion_pos=ion_pos
     )
 
-    return key, init_pos, [log_psi_eq, log_psi_sign_cov]
+    return key, init_pos, [slog_psi_eq, slog_psi_sign_cov]
 
 
 def _make_split_antisymmetries():
@@ -377,7 +377,7 @@ def _make_split_antisymmetries():
         ion_pos, ion_charges
     )
 
-    log_psis = [
+    slog_psis = [
         models.construct.SplitBruteForceAntisymmetryWithDecay(
             spin_split,
             compute_input_streams,
@@ -393,7 +393,7 @@ def _make_split_antisymmetries():
         for rank in (1, 3)
     ]
 
-    return key, init_pos, log_psis
+    return key, init_pos, slog_psis
 
 
 def _make_double_antisymmetry():
@@ -425,10 +425,10 @@ def _make_double_antisymmetry():
     return key, init_pos, slog_psi
 
 
-def _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi):
+def _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi):
     key, subkey = jax.random.split(key)
-    params = log_psi.init(subkey, init_pos)
-    results = jax.jit(log_psi.apply)(params, init_pos)
+    params = slog_psi.init(subkey, init_pos)
+    results = jax.jit(slog_psi.apply)(params, init_pos)
     chex.assert_shape(results, init_pos.shape[:-2])
 
 
@@ -440,10 +440,10 @@ def test_ferminet_can_be_constructed():
 @pytest.mark.slow
 def test_ferminet_can_be_evaluated():
     """Check evaluation of FermiNet does not fail."""
-    key, init_pos, log_psis = _make_ferminets()
+    key, init_pos, slog_psis = _make_ferminets()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 
@@ -455,10 +455,10 @@ def test_embedded_particle_ferminet_can_be_constructed():
 @pytest.mark.slow
 def test_embedded_particle_ferminet_can_be_evaluated():
     """Check evaluation of EmbeddedParticleFerminet does not fail."""
-    key, init_pos, log_psis = _make_embedded_particle_ferminets()
+    key, init_pos, slog_psis = _make_embedded_particle_ferminets()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 
@@ -470,10 +470,10 @@ def test_extended_orbital_matrix_ferminet_can_be_constructed():
 @pytest.mark.slow
 def test_extended_orbital_matrix_ferminet_can_be_evaluated():
     """Check evaluation of ExtendedOrbitalMatrixFermiNet does not fail."""
-    key, init_pos, log_psis = _make_extended_orbital_matrix_ferminets()
+    key, init_pos, slog_psis = _make_extended_orbital_matrix_ferminets()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 
@@ -485,10 +485,10 @@ def test_orbital_cofactor_net_can_be_constructed():
 @pytest.mark.slow
 def test_orbital_cofactor_net_can_be_evaluated():
     """Check evaluation of the orbital cofactor AntiequivarianceNet."""
-    key, init_pos, log_psis = _make_orbital_cofactor_nets()
+    key, init_pos, slog_psis = _make_orbital_cofactor_nets()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 
@@ -500,10 +500,10 @@ def test_per_particle_dets_net_can_be_constructed():
 @pytest.mark.slow
 def test_per_particle_dets_net_can_be_evaluated():
     """Check evaluation of the per-particle dets AntiequivarianceNet."""
-    key, init_pos, log_psis = _make_per_particle_dets_nets()
+    key, init_pos, slog_psis = _make_per_particle_dets_nets()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 
@@ -515,10 +515,10 @@ def test_split_antisymmetry_can_be_constructed():
 @pytest.mark.slow
 def test_split_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, log_psis = _make_split_antisymmetries()
+    key, init_pos, slog_psis = _make_split_antisymmetries()
     [
-        _jit_eval_model_and_verify_output_shape(key, init_pos, log_psi)
-        for log_psi in log_psis
+        _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
+        for slog_psi in slog_psis
     ]
 
 

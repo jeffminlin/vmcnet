@@ -87,12 +87,12 @@ def _get_and_init_model(
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
-    log_psi = models.construct.LogPsiModel(slog_psi)
     key, subkey = jax.random.split(key)
-    params = log_psi.init(subkey, init_pos[0:1])
+    params = slog_psi.init(subkey, init_pos[0:1])
     if apply_pmap:
         params = utils.distribute.replicate_all_local_devices(params)
-    return log_psi, params, key
+    log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
+    return log_psi_apply, params, key
 
 
 # TODO: figure out how to merge this and other distributing logic with the current
@@ -289,7 +289,7 @@ def _setup_vmc(
     )
 
     # Make the model
-    log_psi, params, key = _get_and_init_model(
+    log_psi_apply, params, key = _get_and_init_model(
         config.model,
         ion_pos,
         ion_charges,
@@ -302,17 +302,17 @@ def _setup_vmc(
 
     # Make initial data
     data = _make_initial_data(
-        log_psi.apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
+        log_psi_apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
     get_amplitude_fn = pacore.get_amplitude_from_data
 
     # Setup metropolis step
     burning_step, walker_fn = _get_mcmc_fns(
-        config.vmc, log_psi.apply, apply_pmap=apply_pmap
+        config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
     local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi.apply
+        config.vmc, ion_pos, ion_charges, log_psi_apply
     )
 
     # Setup parameter updates
@@ -323,7 +323,7 @@ def _setup_vmc(
         optimizer_state,
         key,
     ) = updates.parse_config.get_update_fn_and_init_optimizer(
-        log_psi.apply,
+        log_psi_apply,
         config.vmc,
         params,
         data,
@@ -334,7 +334,7 @@ def _setup_vmc(
     )
 
     return (
-        log_psi,
+        log_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -491,7 +491,7 @@ def run_molecule() -> None:
     key = jax.random.PRNGKey(config.initial_seed)
 
     (
-        log_psi,
+        log_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -556,7 +556,7 @@ def run_molecule() -> None:
 
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
         config,
-        log_psi.apply,
+        log_psi_apply,
         local_energy_fn,
         pacore.get_position_from_data,
         apply_pmap=config.distribute,
@@ -567,7 +567,7 @@ def run_molecule() -> None:
     if not config.eval.use_data_from_training or not eval_and_vmc_nchains_match:
         key, data = _make_new_data_for_eval(
             config,
-            log_psi.apply,
+            log_psi_apply,
             params,
             ion_pos,
             ion_charges,
