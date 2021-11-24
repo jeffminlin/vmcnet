@@ -92,15 +92,15 @@ def _get_dtype_init_constructors(dtype):
     return kernel_init_constructor, bias_init_constructor
 
 
-class LogPsiModel(flax.linen.Module):
-    """Model which returns log|psi| given a model which returns sign(psi), log|psi|."""
+def slog_psi_to_log_psi_apply(
+    slog_psi_apply: Callable[..., SLArray]
+) -> Callable[..., jnp.ndarray]:
+    """Get a log|psi| model apply callable from a sign(psi), log|psi| apply callable."""
 
-    slog_psi: Callable[..., SLArray]
+    def log_psi_apply(*args) -> jnp.ndarray:
+        return slog_psi_apply(*args)[1]
 
-    @flax.linen.compact
-    def __call__(self, *args) -> jnp.ndarray:
-        """Return the second output (index 1) of self.slog_psi."""
-        return self.slog_psi(*args)[1]
+    return log_psi_apply
 
 
 def get_model_from_config(
