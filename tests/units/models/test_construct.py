@@ -361,7 +361,7 @@ def _make_per_particle_dets_nets():
     return key, init_pos, [slog_psi_eq, slog_psi_sign_cov]
 
 
-def _make_split_antisymmetries():
+def _make_factored_antisymmetries():
     (
         key,
         ion_pos,
@@ -378,7 +378,7 @@ def _make_split_antisymmetries():
     )
 
     slog_psis = [
-        models.construct.SplitBruteForceAntisymmetryWithDecay(
+        models.construct.FactoredAntisymmetry(
             spin_split,
             compute_input_streams,
             backflow,
@@ -396,7 +396,7 @@ def _make_split_antisymmetries():
     return key, init_pos, slog_psis
 
 
-def _make_double_antisymmetry():
+def _make_generic_antisymmetry():
     (
         key,
         ion_pos,
@@ -410,7 +410,7 @@ def _make_double_antisymmetry():
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
-    slog_psi = models.construct.ComposedBruteForceAntisymmetryWithDecay(
+    slog_psi = models.construct.GenericAntisymmetry(
         spin_split,
         compute_input_streams,
         backflow,
@@ -507,30 +507,30 @@ def test_per_particle_dets_net_can_be_evaluated():
     ]
 
 
-def test_split_antisymmetry_can_be_constructed():
+def test_factored_antisymmetry_can_be_constructed():
     """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    _make_split_antisymmetries()
+    _make_factored_antisymmetries()
 
 
 @pytest.mark.slow
-def test_split_antisymmetry_can_be_evaluated():
+def test_factored_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, slog_psis = _make_split_antisymmetries()
+    key, init_pos, slog_psis = _make_factored_antisymmetries()
     [
         _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
         for slog_psi in slog_psis
     ]
 
 
-def test_composed_antisymmetry_can_be_constructed():
+def test_generic_antisymmetry_can_be_constructed():
     """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
-    _make_double_antisymmetry()
+    _make_generic_antisymmetry()
 
 
 @pytest.mark.slow
-def test_ferminet_composed_antisymmetry_can_be_evaluated():
+def test_generic_antisymmetry_can_be_evaluated():
     """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, slog_psi = _make_double_antisymmetry()
+    key, init_pos, slog_psi = _make_generic_antisymmetry()
     _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
 
 
@@ -559,7 +559,7 @@ def test_get_model_from_default_config():
         )
 
     for model_type in ["brute_force_antisym"]:
-        for subtype in ["rank_k", "double"]:
+        for subtype in ["factored", "generic"]:
             _construct_model(model_type, brute_force_subtype=subtype)
     for model_type in [
         "ferminet",

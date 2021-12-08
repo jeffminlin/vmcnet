@@ -20,8 +20,8 @@ from vmcnet.utils.typing import (
     SLArray,
 )
 from .antisymmetry import (
-    ComposedBruteForceAntisymmetrize,
-    SplitBruteForceAntisymmetrize,
+    GenericAntisymmetrize,
+    FactoredAntisymmetrize,
     slogdet_product,
 )
 from .core import (
@@ -357,8 +357,8 @@ def get_model_from_config(
                     jastrow_config.type, ", ".join(VALID_JASTROW_TYPES)
                 )
             )
-        if model_config.antisym_type == "rank_k":
-            return SplitBruteForceAntisymmetryWithDecay(
+        if model_config.antisym_type == "factored":
+            return FactoredAntisymmetry(
                 spin_split,
                 compute_input_streams,
                 backflow,
@@ -377,8 +377,8 @@ def get_model_from_config(
                 ),
                 resnet_use_bias=model_config.resnet_use_bias,
             )
-        elif model_config.antisym_type == "double":
-            return ComposedBruteForceAntisymmetryWithDecay(
+        elif model_config.antisym_type == "generic":
+            return GenericAntisymmetry(
                 spin_split,
                 compute_input_streams,
                 backflow,
@@ -1270,11 +1270,14 @@ class AntiequivarianceNet(flax.linen.Module):
         return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
-class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
-    """FermiNet backflow with a sum of products of brute-force antisym. ResNets.
+class FactoredAntisymmetry(flax.linen.Module):
+    """A sum of products of brute-force antisymmetrized ResNets, composed with backflow.
 
-    A simple isotropic exponential decay is added to ensure square-integrability (and
-    because this is asymptotically correct for molecules).
+    This connects the computational graph between a backflow, a factored antisymmetrized
+    ResNet, and a jastrow.
+
+    See https://arxiv.org/abs/2112.03491 for a description of the factored antisymmetric
+    layer.
 
     Attributes:
         spin_split (ParticleSplit): number of spins to split the input equally,
@@ -1381,7 +1384,7 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
             ]
             return jnp.concatenate(resnet_outputs, axis=-1)
 
-        slog_antisyms = SplitBruteForceAntisymmetrize(
+        slog_antisyms = FactoredAntisymmetrize(
             [fn_to_antisymmetrize for _ in split_spins]
         )(split_spins)
         sign_psi, log_antisyms = slog_sum_over_axis(slog_antisyms, axis=-1)
@@ -1393,14 +1396,17 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         return sign_psi, log_antisyms + jastrow_part
 
 
-class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
-    """Model with FermiNet backflow and a single antisymmetrized ResNet.
+class GenericAntisymmetry(flax.linen.Module):
+    """A single ResNet antisymmetrized over all input leaves, composed with backflow.
 
     The ResNet is antisymmetrized with respect to each spin split separately (i.e. the
     antisymmetrization operators for each spin are composed and applied).
 
-    A simple isotropic exponential decay is added to ensure square-integrability (and
-    because this is asymptotically correct for molecules).
+    This connects the computational graph between a backflow, a generic antisymmetrized
+    ResNet, and a jastrow.
+
+    See https://arxiv.org/abs/2112.03491 for a description of the generic antisymmetric
+    layer.
 
     Attributes:
         spin_split (ParticleSplit): number of spins to split the input equally,
@@ -1486,7 +1492,7 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
         split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        sign_psi, log_antisym = ComposedBruteForceAntisymmetrize(
+        sign_psi, log_antisym = GenericAntisymmetrize(
             SimpleResNet(
                 self.ndense_resnet,
                 1,

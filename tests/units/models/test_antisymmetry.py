@@ -98,7 +98,7 @@ def test_split_brute_force_antisymmetrize_vandermonde_product():
     slogdet_product = array_to_slog(det_product)
 
     for logabs in [False, True]:
-        split_layer = models.antisymmetry.SplitBruteForceAntisymmetrize(
+        split_layer = models.antisymmetry.FactoredAntisymmetrize(
             [_vandermonde_product, _vandermonde_product], logabs=logabs
         )
 
@@ -145,7 +145,7 @@ def test_composed_brute_force_antisymmetrize_product():
         return prod_0 * prod_1
 
     for logabs in [False, True]:
-        composed_layer = models.antisymmetry.ComposedBruteForceAntisymmetrize(
+        composed_layer = models.antisymmetry.GenericAntisymmetrize(
             fn_to_antisymmetrize,
             logabs=logabs,
         )

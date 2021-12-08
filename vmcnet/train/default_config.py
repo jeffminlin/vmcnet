@@ -217,8 +217,8 @@ def get_default_model_config() -> Dict:
         "brute_force_antisym": {
             "input_streams": input_streams,
             "backflow": ferminet_backflow,
-            "antisym_type": "double",
-            "rank": 1,  # Only relevant for antisym_type=rank_k
+            "antisym_type": "generic",  # factored or generic
+            "rank": 1,  # Only relevant for antisym_type=factored
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},
