@@ -19,10 +19,12 @@ from jax.nn.initializers import (
 )
 from ml_collections import ConfigDict
 
+from vmcnet.utils.typing import Array
+
 Key = Any
 Shape = Iterable[int]
 Dtype = Any
-WeightInitializer = Callable[[Key, Shape, Dtype], jnp.ndarray]
+WeightInitializer = Callable[[Key, Shape, Dtype], Array]
 
 INITIALIZER_CONSTRUCTORS: Dict[str, Callable] = {
     "zeros": lambda dtype=jnp.float32: functools.partial(zeros, dtype=dtype),

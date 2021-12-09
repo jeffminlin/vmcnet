@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.mcmc.position_amplitude_core as pacore
+from vmcnet.utils.typing import Array
 
 from tests.test_utils import make_dummy_data_params_and_key, dummy_model_apply
 
@@ -31,9 +32,9 @@ def test_gaussian_proposal_with_nonzero_step_width():
 def _get_data_for_test_update() -> Tuple[
     pacore.PositionAmplitudeData,
     pacore.PositionAmplitudeData,
-    jnp.ndarray,
-    jnp.ndarray,
-    jnp.ndarray,
+    Array,
+    Array,
+    Array,
 ]:
     pos = jnp.array([[0, 0], [0, 0], [0, 0], [0, 0]])
     proposed_pos = jnp.array([[1, 1], [2, 2], [3, 4], [4, 3]])

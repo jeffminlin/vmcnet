@@ -7,7 +7,7 @@ import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
-from vmcnet.utils.typing import D, P, PyTree, S, T
+from vmcnet.utils.typing import Array, D, P, PyTree, S, T
 
 
 # axis name to pmap over
@@ -42,7 +42,7 @@ def replicate_all_local_devices(obj: T) -> T:
     return broadcast_all_local_devices(obj_stacked)
 
 
-def make_different_rng_key_on_all_devices(rng: jnp.ndarray) -> jnp.ndarray:
+def make_different_rng_key_on_all_devices(rng: Array) -> Array:
     """Split a PRNG key to all local devices."""
     rng = jax.random.fold_in(rng, jax.process_index())
     rng = jax.random.split(rng, jax.local_device_count())
@@ -61,19 +61,19 @@ def get_first(obj: T) -> T:
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
 
 
-def mean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
+def mean_all_local_devices(x: Array) -> jnp.float32:
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
 
-def nanmean_all_local_devices(x: jnp.ndarray) -> jnp.float32:
+def nanmean_all_local_devices(x: Array) -> jnp.float32:
     """Compute a nan-safe mean over all local devices."""
     return pmean_if_pmap(jnp.nanmean(x))
 
 
 def get_mean_over_first_axis_fn(
     nan_safe: bool = True,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
+) -> Callable[[Array], Array]:
     """Get a function which averages over the first axis over all local devices.
 
     Args:
@@ -89,7 +89,7 @@ def get_mean_over_first_axis_fn(
     else:
         local_mean_fn = functools.partial(jnp.mean, axis=0)
 
-    def mean_fn(x: jnp.ndarray) -> jnp.ndarray:
+    def mean_fn(x: Array) -> Array:
         return pmean_if_pmap(local_mean_fn(x))
 
     return mean_fn
@@ -98,14 +98,12 @@ def get_mean_over_first_axis_fn(
 p_split = pmap(lambda key: tuple(jax.random.split(key)))
 
 
-def split_or_psplit_key(
-    key: jnp.ndarray, multi_device: bool = True
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+def split_or_psplit_key(key: Array, multi_device: bool = True) -> Tuple[Array, Array]:
     """Split PRNG key, potentially on multiple devices."""
     return p_split(key) if multi_device else jax.random.split(key)
 
 
-def reshape_data_leaves_for_distribution(data_leaf: jnp.ndarray) -> jnp.ndarray:
+def reshape_data_leaves_for_distribution(data_leaf: Array) -> Array:
     """For a leaf of a pytree, reshape it for distributing to all local devices."""
     num_devices = jax.local_device_count()
     nchains = data_leaf.shape[0]
@@ -130,9 +128,9 @@ def distribute_vmc_state(
     data: D,
     params: P,
     optimizer_state: S,
-    key: jnp.ndarray,
+    key: Array,
     distribute_data_fn: Callable[[D], D] = default_distribute_data,
-) -> Tuple[D, P, S, jnp.ndarray]:
+) -> Tuple[D, P, S, Array]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
     Args:
@@ -145,7 +143,7 @@ def distribute_vmc_state(
             the devices. Default works if there is no data that requires replication.
 
     Returns:
-        Tuple[D, P, O, jnp.ndarray]: tuple of data, params, optimizer_state, and key,
+        Tuple[D, P, O, Array]: tuple of data, params, optimizer_state, and key,
         each of which has been either distributed or replicated across all devices,
         as appopriate.
     """
@@ -161,8 +159,8 @@ def distribute_vmc_state_from_checkpoint(
     data: D,
     params: P,
     optimizer_state: S,
-    key: jnp.ndarray,
-) -> Tuple[D, P, S, jnp.ndarray]:
+    key: Array,
+) -> Tuple[D, P, S, Array]:
     """Distribute vmc state that was reloaded from a saved checkpoint.
 
     Data and key are saved independently for each device, so on reload

@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 import vmcnet.physics as physics
 import vmcnet.models as models
-from vmcnet.utils.typing import P, ModelApply
+from vmcnet.utils.typing import Array, P, ModelApply
 
 
 class HydrogenLikeWavefunction(flax.linen.Module):
@@ -27,15 +27,15 @@ class HydrogenLikeWavefunction(flax.linen.Module):
     init_decay_rate: jnp.float32
 
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, x: Array) -> Array:
         """Log of isotropic exponential decay. Computes -decay_rate * ||x||.
 
         Args:
-            x (jnp.ndarray): single electron positions, of shape (..., 1, d), where d
+            x (Array): single electron positions, of shape (..., 1, d), where d
                 is the dimension of the system
 
         Returns:
-            jnp.ndarray: log of exponential decay wavefunction, with shape x.shape[:-2]
+            Array: log of exponential decay wavefunction, with shape x.shape[:-2]
         """
         r = jnp.linalg.norm(x, axis=-1)
         scaled_r = models.core.Dense(
@@ -49,7 +49,7 @@ class HydrogenLikeWavefunction(flax.linen.Module):
 
 
 def make_hydrogen_like_local_energy(
-    log_psi_apply: Callable[[P, jnp.ndarray], Union[jnp.float32, jnp.ndarray]],
+    log_psi_apply: Callable[[P, Array], Union[jnp.float32, Array]],
     charge: jnp.float32,
     d: int = 3,
 ) -> ModelApply[P]:

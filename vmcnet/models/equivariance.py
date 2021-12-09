@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.physics.potential import _compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
-from vmcnet.utils.typing import ArrayList, InputStreams, ParticleSplit
+from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
@@ -21,7 +21,7 @@ from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer, get_bias_initializer
 
 
-def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
+def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> Array:
     """Concatenate a list of arrays starting from the nth and wrapping back around.
 
     The input list of arrays must all have the same shapes, except for along `axis`.
@@ -30,8 +30,8 @@ def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> jnp.ndarray:
 
 
 def compute_input_streams(
-    elec_pos: jnp.ndarray,
-    ion_pos: jnp.ndarray = None,
+    elec_pos: Array,
+    ion_pos: Array = None,
     include_2e_stream: bool = True,
     include_ei_norm: bool = True,
     include_ee_norm: bool = True,
@@ -49,8 +49,8 @@ def compute_input_streams(
     concatenating pairwise distances onto the stream.
 
     Args:
-        elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
+        elec_pos (Array): electron positions of shape (..., nelec, d)
+        ion_pos (Array, optional): locations of (stationary) ions to compute
             relative electron positions, 2-d array of shape (nion, d). Defaults to None.
         include_2e_stream (bool, optional): whether to compute pairwise electron
             displacements/distances. Defaults to True.
@@ -61,10 +61,10 @@ def compute_input_streams(
 
     Returns:
         (
-            jnp.ndarray,
-            Optional[jnp.ndarray],
-            Optional[jnp.ndarray],
-            Optional[jnp.ndarray],
+            Array,
+            Optional[Array],
+            Optional[Array],
+            Optional[Array],
         ):
 
         first output: one-electron input of shape (..., nelec, d'), where
@@ -92,19 +92,19 @@ def compute_input_streams(
 
 
 def compute_electron_ion(
-    elec_pos: jnp.ndarray, ion_pos: jnp.ndarray = None, include_ei_norm: bool = True
-) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+    elec_pos: Array, ion_pos: Array = None, include_ei_norm: bool = True
+) -> Tuple[Array, Optional[Array]]:
     """Compute electron-ion displacements and optionally add on the distances.
 
     Args:
-        elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
-        ion_pos (jnp.ndarray, optional): locations of (stationary) ions to compute
+        elec_pos (Array): electron positions of shape (..., nelec, d)
+        ion_pos (Array, optional): locations of (stationary) ions to compute
             relative electron positions, 2-d array of shape (nion, d). Defaults to None.
         include_ei_norm (bool, optional): whether to include electron-ion distances in
             the one-electron input. Defaults to True.
 
     Returns:
-        (jnp.ndarray, Optional[jnp.ndarray]):
+        (Array, Optional[Array]):
 
         first output: one-electron input of shape (..., nelec, d'), where
             d' = d if `ion_pos` is None,
@@ -128,17 +128,17 @@ def compute_electron_ion(
 
 
 def compute_electron_electron(
-    elec_pos: jnp.ndarray, include_ee_norm: bool = True
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    elec_pos: Array, include_ee_norm: bool = True
+) -> Tuple[Array, Array]:
     """Compute electron-electron displacements and optionally add on the distances.
 
     Args:
-        elec_pos (jnp.ndarray): electron positions of shape (..., nelec, d)
+        elec_pos (Array): electron positions of shape (..., nelec, d)
         include_ee_norm (bool, optional): whether to include electron-electron distances
             in the two-electron input. Defaults to True.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray):
+        (Array, Array):
 
         first output: two-electron input of shape (..., nelec, nelec, d'), where
             d' = d if `include_ee_norm` is False, and
@@ -171,20 +171,20 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         kernel_initializer_mixed (WeightInitializer): kernel initializer for the
             mixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+            stream output. Has signature (key, shape, dtype) -> Array
         kernel_initializer_2e (WeightInitializer): kernel initializer for the
             two-electron part of the one-electron stream. This initializes the part of
             the dense kernel which multiplies the average of the previous two-electron
             stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         activation_fn (Activation): activation function. Has the signature
-            jnp.ndarray -> jnp.ndarray (shape is preserved)
+            Array -> Array (shape is preserved)
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         skip_connection (bool, optional): whether to add residual skip connections
             whenever the shapes of the input and output match. Defaults to True.
@@ -272,7 +272,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
             dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
-    def _compute_transformed_2e_means(self, in_2e: jnp.ndarray) -> ArrayList:
+    def _compute_transformed_2e_means(self, in_2e: Array) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 2e stream.
 
         The mixing of the two-electron part of the one-electron stream takes the form
@@ -318,7 +318,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-    def __call__(self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None) -> jnp.ndarray:
+    def __call__(self, in_1e: Array, in_2e: Array = None) -> Array:
         """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
 
         This implementation breaks the one-electron stream into three parts:
@@ -350,12 +350,12 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         non-linearity is then applied and a skip connection optionally added.
 
         Args:
-            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
-            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+            in_1e (Array): array of shape (..., n_total, d_1e)
+            in_2e (Array, optional): array of shape (..., n_total, n_total, d_2e).
                 Defaults to None.
 
         Returns:
-            jnp.ndarray of shape (..., n_total, self.ndense), the output one-electron
+            Array of shape (..., n_total, self.ndense), the output one-electron
             stream
         """
         dense_unmixed = self._unmixed_dense(in_1e)
@@ -388,11 +388,11 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
     Attributes:
         ndense (int): number of dense nodes
         kernel_initializer (WeightInitializer): kernel initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         activation_fn (Activation): activation function. Has the signature
-            jnp.ndarray -> jnp.ndarray (shape is preserved)
+            Array -> Array (shape is preserved)
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         skip_connection (bool, optional): whether to add residual skip connections
             whenever the shapes of the input and output match. Defaults to True.
@@ -417,7 +417,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
             use_bias=self.use_bias,
         )
 
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, x: Array) -> Array:
         """Apply a Dense layer in parallel to all electron pairs.
 
         The expected use-case of this is to batch apply a dense layer to an input x of
@@ -451,8 +451,8 @@ class FermiNetResidualBlock(flax.linen.Module):
             array of shape (..., n, n, d_2e) -> array of shape (..., n, n, d_2e')
     """
 
-    one_electron_layer: Callable[[jnp.ndarray, Optional[jnp.ndarray]], jnp.ndarray]
-    two_electron_layer: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None
+    one_electron_layer: Callable[[Array, Optional[Array]], Array]
+    two_electron_layer: Optional[Callable[[Array], Array]] = None
 
     def setup(self):
         """Setup called one- and two- electron layers."""
@@ -460,17 +460,17 @@ class FermiNetResidualBlock(flax.linen.Module):
         self._two_electron_layer = self.two_electron_layer
 
     def __call__(
-        self, in_1e: jnp.ndarray, in_2e: jnp.ndarray = None
-    ) -> Tuple[jnp.ndarray, Optional[jnp.ndarray]]:
+        self, in_1e: Array, in_2e: Array = None
+    ) -> Tuple[Array, Optional[Array]]:
         """Apply the one-electron layer and optionally the two-electron layer.
 
         Args:
-            in_1e (jnp.ndarray): array of shape (..., n_total, d_1e)
-            in_2e (jnp.ndarray, optional): array of shape (..., n_total, n_total, d_2e).
+            in_1e (Array): array of shape (..., n_total, d_1e)
+            in_2e (Array, optional): array of shape (..., n_total, n_total, d_2e).
                 Defaults to None.
 
         Returns:
-            (jnp.ndarray, optional jnp.ndarray): tuple of (out_1e, out_2e) where out_1e
+            (Array, optional Array): tuple of (out_1e, out_2e) where out_1e
             is the output from the one-electron layer and out_2e is the output of the
             two-electron stream
         """
@@ -501,8 +501,8 @@ class FermiNetBackflow(flax.linen.Module):
 
     residual_blocks: Sequence[
         Callable[
-            [jnp.ndarray, Optional[jnp.ndarray]],
-            Tuple[jnp.ndarray, Optional[jnp.ndarray]],
+            [Array, Optional[Array]],
+            Tuple[Array, Optional[Array]],
         ]
     ]
 
@@ -512,19 +512,19 @@ class FermiNetBackflow(flax.linen.Module):
 
     def __call__(
         self,
-        stream_1e: jnp.ndarray,
-        stream_2e: Optional[jnp.ndarray] = None,
-    ) -> jnp.ndarray:
+        stream_1e: Array,
+        stream_2e: Optional[Array] = None,
+    ) -> Array:
         """Iteratively apply residual blocks to Ferminet input streams.
 
         Args:
-            stream_1e (jnp.ndarray): one-electron input stream of shape
+            stream_1e (Array): one-electron input stream of shape
                 (..., nelec, d1).
-            stream_2e (jnp.ndarray, optional): two-electron input of shape
+            stream_2e (Array, optional): two-electron input of shape
                 (..., nelec, nelec, d2).
 
         Returns:
-            (jnp.ndarray): the output of the one-electron stream after applying
+            (Array): the output of the one-electron stream after applying
             self.residual_blocks to the initial input streams.
         """
         for block in self._residual_block_list:
@@ -551,9 +551,9 @@ class SplitDense(flax.linen.Module):
             This determines the output shapes for each split, i.e. the outputs are
             shaped (..., split_size[i], ndense[i])
         kernel_initializer (WeightInitializer): kernel initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray. Defaults to random normal
+            (key, shape, dtype) -> Array. Defaults to random normal
             initialization.
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         register_kfac (bool, optional): whether to register the dense computations with
@@ -589,11 +589,11 @@ class SplitDense(flax.linen.Module):
             for i in range(nsplits)
         ]
 
-    def __call__(self, x: jnp.ndarray) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:
         """Split the input and apply a dense layer to each split.
 
         Args:
-            x (jnp.ndarray): array of shape (..., n, d)
+            x (Array): array of shape (..., n, d)
 
         Returns:
             [(..., n[i], self.ndense_per_split[i])]: list of length nsplits, where
@@ -606,12 +606,12 @@ class SplitDense(flax.linen.Module):
 
 
 def _compute_exponential_envelopes_on_leaf(
-    r_ei_leaf: jnp.ndarray,
+    r_ei_leaf: Array,
     norbitals: int,
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
-) -> jnp.ndarray:
+) -> Array:
     """Calculate exponential envelopes for orbitals of a single split."""
     if isotropic:
         scale_out = _isotropy_on_leaf(
@@ -646,7 +646,7 @@ def _compute_exponential_envelopes_on_leaf(
 
 
 def _compute_exponential_envelopes_all_splits(
-    r_ei: jnp.ndarray,
+    r_ei: Array,
     orbitals_split: ParticleSplit,
     norbitals_per_spin: Sequence[int],
     kernel_initializer_dim: WeightInitializer,
@@ -684,17 +684,17 @@ class FermiNetOrbitalLayer(flax.linen.Module):
             of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+            part of the orbitals. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
             decay rate in the exponential envelopes. If `isotropic_decay` is True, then
             this initializes a single decay rate number per ion and orbital. If
             `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
             linear combination over the ions of exponential envelopes. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer_linear (WeightInitializer): bias initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+            part of the orbitals. Has signature (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term to the linear part of the
             orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should be
@@ -720,12 +720,12 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
+    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
         """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
         Args:
-            x (jnp.ndarray): array of shape (..., nelec, d)
-            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+            x (Array): array of shape (..., nelec, d)
+            r_ei (Array): array of shape (..., nelec, nion, d)
 
         Returns:
             [(..., nelec[i], self.norbitals_per_split[i])]: list of FermiNet orbital
@@ -787,17 +787,17 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
             of orbitals to create for each split. This determines the output shapes for
             each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
         kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+            part of the orbitals. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
             decay rate in the exponential envelopes. If `isotropic_decay` is True, then
             this initializes a single decay rate number per ion and orbital. If
             `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
             linear combination over the ions of exponential envelopes. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer_linear (WeightInitializer): bias initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> jnp.ndarray
+            part of the orbitals. Has signature (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term to the linear part of the
             orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should be
@@ -822,18 +822,16 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
-    def _get_orbital_matrices_one_split(
-        self, x: jnp.ndarray, norbitals: int
-    ) -> jnp.ndarray:
+    def _get_orbital_matrices_one_split(self, x: Array, norbitals: int) -> Array:
         """Get the equivariant orbital matrices for a single split.
 
         Args:
-            x (jnp.ndarray): input array of shape (..., nelec[i], d).
+            x (Array): input array of shape (..., nelec[i], d).
             norbitals (int): number of orbitals to generate. For square matrices,
                 norbitals should equal nelec[i]
 
         Returns:
-            (jnp.ndarray): the equivariant orbitals for this split block, as an array
+            (Array): the equivariant orbitals for this split block, as an array
                 of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
                 are equivariant with respect to the input particles.
         """
@@ -867,12 +865,12 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         )(dense_inputs)
 
     @flax.linen.compact
-    def __call__(self, x: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
+    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
         """Calculate an equivariant orbital matrix for each input particle.
 
         Args:
-            x (jnp.ndarray): array of shape (..., nelec, d)
-            r_ei (jnp.ndarray): array of shape (..., nelec, nion, d)
+            x (Array): array of shape (..., nelec, d)
+            r_ei (Array): array of shape (..., nelec, nion, d)
 
         Returns:
             (ArrayList): list of length nsplits of arrays of shape

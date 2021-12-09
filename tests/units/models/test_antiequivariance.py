@@ -10,7 +10,7 @@ import pytest
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
 from vmcnet.utils.slog_helpers import slog_sum_over_axis
-from vmcnet.utils.typing import ParticleSplit
+from vmcnet.utils.typing import Array, ParticleSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 
@@ -114,7 +114,7 @@ def test_slog_cofactor_antiequivariance():
 
 def _assert_slogabs_signs_allclose_to_one(
     nchains: int,
-    output_i: Tuple[jnp.ndarray, jnp.ndarray],
+    output_i: Tuple[Array, Array],
     nelec_i: int,
 ):
     assert len(output_i) == 2
@@ -127,8 +127,8 @@ def _assert_slogabs_signs_allclose_to_one(
 
 def _assert_permuted_slog_values_allclose(
     split_perm_i: Tuple[int, ...],
-    output_i: Tuple[jnp.ndarray, jnp.ndarray],
-    perm_output_i: Tuple[jnp.ndarray, jnp.ndarray],
+    output_i: Tuple[Array, Array],
+    perm_output_i: Tuple[Array, Array],
     flips_i: int,
     rtol: float = 1e-7,
     atol: float = 1e-7,

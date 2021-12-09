@@ -3,14 +3,14 @@ from typing import Optional
 
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import SLArray
+from vmcnet.utils.typing import Array, SLArray
 from vmcnet.utils.kfac import register_batch_dense
 
 
 def log_linear_exp(
-    signs: jnp.ndarray,
-    vals: jnp.ndarray,
-    weights: Optional[jnp.ndarray] = None,
+    signs: Array,
+    vals: Array,
+    weights: Optional[Array] = None,
     axis: int = 0,
     register_kfac: bool = True,
 ) -> SLArray:
@@ -29,11 +29,11 @@ def log_linear_exp(
     exp(val_i) is approximately 0 for all i.
 
     Args:
-        signs (jnp.ndarray): array of signs of the input x with shape (..., d, ...),
+        signs (Array): array of signs of the input x with shape (..., d, ...),
             where d is the size of the given axis
-        vals (jnp.ndarray): array of log|abs(x)| with shape (..., d, ...), where d is
+        vals (Array): array of log|abs(x)| with shape (..., d, ...), where d is
             the size of the given axis
-        weights (jnp.ndarray, optional): weights of a linear transformation to apply to
+        weights (Array, optional): weights of a linear transformation to apply to
             the given axis, with shape (d, d'). If not provided, a simple sum is taken
             instead, equivalent to (d, 1) weights equal to 1. Defaults to None.
         axis (int, optional): axis along which to take the sum and max. Defaults to 0.

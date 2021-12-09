@@ -5,7 +5,7 @@ import pytest
 
 import vmcnet.models as models
 from vmcnet.utils.slog_helpers import array_to_slog
-from vmcnet.utils.typing import SLArray
+from vmcnet.utils.typing import Array, SLArray
 
 from tests.test_utils import (
     get_dense_and_log_domain_dense_same_params,
@@ -44,7 +44,7 @@ def test_resnet_in_regular_and_log_domain_match():
     nlayers = 5
 
     # Define activation function with simple analog in log domain
-    def activation_fn(x: jnp.ndarray) -> jnp.ndarray:
+    def activation_fn(x: Array) -> Array:
         return jnp.sign(x) * (x ** 2) / 10
 
     # Define log domain version of the same activation function

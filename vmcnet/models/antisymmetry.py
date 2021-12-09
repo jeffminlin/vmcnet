@@ -7,16 +7,16 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import SLArray, PyTree
+from vmcnet.utils.typing import Array, SLArray, PyTree
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from .core import get_alternating_signs, is_tuple_of_arrays
 
 
-def _reduce_sum_over_leaves(xs: PyTree) -> jnp.ndarray:
+def _reduce_sum_over_leaves(xs: PyTree) -> Array:
     return functools.reduce(lambda a, b: a + b, jax.tree_leaves(xs))
 
 
-def _reduce_prod_over_leaves(xs: PyTree) -> jnp.ndarray:
+def _reduce_prod_over_leaves(xs: PyTree) -> Array:
     return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
 
 
@@ -30,7 +30,7 @@ def slogdet_product(xs: PyTree) -> SLArray:
             for all leaves.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): the product of the sign_dets and the sum of the
+        (Array, Array): the product of the sign_dets and the sum of the
         log_dets over all leaves of the pytree xs
     """
     slogdets = jax.tree_map(jnp.linalg.slogdet, xs)
@@ -42,7 +42,7 @@ def slogdet_product(xs: PyTree) -> SLArray:
     return sign_prod, log_prod
 
 
-def logdet_product(xs: PyTree) -> jnp.ndarray:
+def logdet_product(xs: PyTree) -> Array:
     """Compute the log|prod_x det(x)| of the leaves x of a pytree (throwing away sign).
 
     Because we don't need to carry sign, the logic can be made slightly simpler and
@@ -55,7 +55,7 @@ def logdet_product(xs: PyTree) -> jnp.ndarray:
             for all leaves.
 
     Returns:
-        jnp.ndarray: the sum of the log_dets over all leaves of the pytree xs, which is
+        Array: the sum of the log_dets over all leaves of the pytree xs, which is
         equal to the log of the product of the dets over all leaves of xs
     """
     logdets = jax.tree_map(lambda x: jnp.linalg.slogdet(x)[1], xs)
@@ -63,7 +63,7 @@ def logdet_product(xs: PyTree) -> jnp.ndarray:
     return log_prod
 
 
-def _get_lexicographic_signs(n: int) -> jnp.ndarray:
+def _get_lexicographic_signs(n: int) -> Array:
     """Get the signs of the n! permutations of (1,...,n) in lexicographic order."""
     signs = jnp.ones(1)
 
@@ -97,14 +97,14 @@ class ParallelPermutations(flax.linen.Module):
         self.permutation_list = list(itertools.permutations(range(self.n)))
         self.signs = _get_lexicographic_signs(self.n)
 
-    def __call__(self, x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, x: Array) -> Tuple[Array, Array]:
         """Collect all permutations of x and the signs of these permutations.
 
         Args:
-            x (jnp.ndarray): an array of particles with shape (..., n, d)
+            x (Array): an array of particles with shape (..., n, d)
 
         Returns:
-            (jnp.ndarray, jnp.ndarray): all permutations of x along the second axis,
+            (Array, Array): all permutations of x along the second axis,
             with shape (..., n!, n, d), and the signs of the permutations in the same
             order as the third-to-last axis (lexicographic order)
         """
@@ -117,7 +117,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
     Attributes:
         fns_to_antisymmetrize (pytree): pytree of functions with the same tree structure
             as the input pytree, each of which is a Callable with signature
-            jnp.ndarray of shape (..., ninput_dim) -> jnp.ndarray of shape (..., dout).
+            Array of shape (..., ninput_dim) -> Array of shape (..., dout).
             On the ith leaf, ninput_dim = n[i] * din[i], where n[i] is the size of the
             second-to-last axis and din[i] is the size of the last axis of the input xs.
         logabs (bool, optional): whether to compute sum_i log(abs(psi_i)) if logabs is
@@ -129,8 +129,8 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
     logabs: bool = True
 
     def _single_leaf_call(
-        self, fn_to_antisymmetrize: Callable[[jnp.ndarray], jnp.ndarray], x: jnp.ndarray
-    ) -> jnp.ndarray:
+        self, fn_to_antisymmetrize: Callable[[Array], Array], x: Array
+    ) -> Array:
         n = x.shape[-2]
         din = x.shape[-1]
 
@@ -147,7 +147,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         return jnp.sum(signed_perms_out, axis=-2)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[jnp.ndarray, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
         """Antisymmetrize the leaves of self.fns_to_antisymmetrize on the leaves of xs.
 
         Args:
@@ -156,7 +156,7 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
                 and the ith antisymmetrization happens with respect to n[i].
 
         Returns:
-            jnp.ndarray or SLArray:
+            Array or SLArray:
                 prod_i psi_i if self.logabs is False, or
                 prod_i sign(psi_i), sum_i log(abs(psi_i)) if self.logabs is True,
             where psi_i is the output from antisymmetrizing the ith function on the ith
@@ -188,7 +188,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
 
     Attributes:
         fn_to_antisymmetrize (Callable): Callable with signature
-            jnp.ndarray with shape (..., ninput_dim) -> (..., 1). This is the function
+            Array with shape (..., ninput_dim) -> (..., 1). This is the function
             to be antisymmetrized. ninput_dim is equal to
                 n[1] * d[1] + ... + n[k] * d[k],
             where n[i] is the size of the second-to-last axis and d[i] is the size of
@@ -198,7 +198,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
             self.fn_to_antisymmetrize. Defaults to True.
     """
 
-    fn_to_antisymmetrize: Callable[[jnp.ndarray], jnp.ndarray]
+    fn_to_antisymmetrize: Callable[[Array], Array]
     logabs: bool = True
 
     def setup(self):
@@ -207,12 +207,12 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
         # https://github.com/python/mypy/issues/708
         self._fn_to_antisymmetrize = self.fn_to_antisymmetrize
 
-    def _get_single_leaf_perm(self, x: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def _get_single_leaf_perm(self, x: Array) -> Tuple[Array, Array]:
         n = x.shape[-2]
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[jnp.ndarray, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
         """Antisymmetrize self.fn_to_antisymmetrize over the leaves of xs.
 
         Args:
@@ -222,7 +222,7 @@ class ComposedBruteForceAntisymmetrize(flax.linen.Module):
                 n[i].
 
         Returns:
-            jnp.ndarray:
+            Array:
                 psi if logabs is False, or
                 sign(psi), log(abs(psi)) if self.logabs is True,
             where psi is the output from antisymmetrizing

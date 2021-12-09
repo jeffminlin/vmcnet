@@ -13,7 +13,7 @@ from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_list_to_slog,
 )
-from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList
+from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
 
 from tests.test_utils import assert_pytree_allclose
 
@@ -69,8 +69,8 @@ def test_get_sign_orbit_slog_array_list():
 
 
 def _make_simple_nn_layers(
-    dinput: int, dout: int, key: jnp.ndarray
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    dinput: int, dout: int, key: Array
+) -> Callable[[Array], Array]:
     dhidden = 4
     key, subkey = jax.random.split(key)
     # Biases important here to avoid starting with a perfectly odd function
@@ -79,7 +79,7 @@ def _make_simple_nn_layers(
     weights1 = jax.random.normal(key, (dinput, dhidden))
     weights2 = jax.random.normal(subkey, (dhidden, dout))
 
-    def apply_layers(x: jnp.ndarray) -> jnp.ndarray:
+    def apply_layers(x: Array) -> Array:
         output = jnp.matmul(x + biases, weights1)
         output = jnp.tanh(output)
         output = jnp.matmul(output, weights2)
@@ -105,7 +105,7 @@ def _test_sign_covariance_or_invariance(is_invariance: bool, atol: float):
     dout = 3
     nn_layers = _make_simple_nn_layers(nelec_total * d, dout, subkey)
 
-    def fn(x: ArrayList) -> jnp.ndarray:
+    def fn(x: ArrayList) -> Array:
         all_vals = jnp.concatenate(x, axis=-1)
         return nn_layers(all_vals)
 

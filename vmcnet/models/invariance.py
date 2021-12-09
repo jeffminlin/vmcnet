@@ -5,7 +5,7 @@ from typing import Iterable, Optional, Sequence
 import flax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import ArrayList, Backflow, ParticleSplit
+from vmcnet.utils.typing import Array, ArrayList, Backflow, ParticleSplit
 from .core import Dense, _split_mean, get_nsplits
 from .weights import WeightInitializer
 
@@ -28,9 +28,9 @@ class SplitMeanDense(flax.linen.Module):
             This determines the output shapes for each split, i.e. the outputs are
             shaped (..., split_size[i], ndense[i])
         kernel_initializer (WeightInitializer): kernel initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         register_kfac (bool, optional): whether to register the dense computations with
             KFAC. Defaults to True.
@@ -65,11 +65,11 @@ class SplitMeanDense(flax.linen.Module):
             for i in range(nspins)
         ]
 
-    def __call__(self, x: jnp.ndarray) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:
         """Split the input and apply a dense layer to each split.
 
         Args:
-            x (jnp.ndarray): array of shape (..., n, d)
+            x (Array): array of shape (..., n, d)
 
         Returns:
             [(..., self.ndense_per_spin[i])]: list of length nsplits, where nsplits
@@ -111,9 +111,9 @@ class InvariantTensor(flax.linen.Module):
             ) -> stream_1e of shape (..., n, d').
             Can pass None here to only apply SplitMeanDense followed by reshaping.
         kernel_initializer (WeightInitializer): kernel initializer for the dense
-            layer(s). Has signature (key, shape, dtype) -> jnp.ndarray
+            layer(s). Has signature (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer for the dense layer(s).
-            Has signature (key, shape, dtype) -> jnp.ndarray
+            Has signature (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         register_kfac (bool, optional): whether to register the dense computations with
             KFAC. Defaults to True.
@@ -146,20 +146,20 @@ class InvariantTensor(flax.linen.Module):
             math.prod(shape) for shape in self.output_shape_per_split
         ]
 
-    def _reshape_dense_outputs(self, dense_out: jnp.ndarray, i: int):
+    def _reshape_dense_outputs(self, dense_out: Array, i: int):
         output_shape = dense_out.shape[:-1] + tuple(self.output_shape_per_split[i])
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
     def __call__(
-        self, stream_1e: jnp.ndarray, stream_2e: Optional[jnp.ndarray] = None
+        self, stream_1e: Array, stream_2e: Optional[Array] = None
     ) -> ArrayList:
         """Backflow -> split mean dense to get invariance -> reshape.
 
         Args:
-            stream_1e (jnp.ndarray): one-electron input stream of shape
+            stream_1e (Array): one-electron input stream of shape
                 (..., nelec, d1).
-            stream_2e (jnp.ndarray, optional): two-electron input of shape
+            stream_2e (Array, optional): two-electron input of shape
                 (..., nelec, nelec, d2).
 
         Returns:

@@ -6,18 +6,18 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Backflow, Jastrow
+from vmcnet.utils.typing import Array, Backflow, Jastrow
 
 from .core import Dense, compute_ee_norm_with_safe_diag
 from .weights import WeightInitializer, get_constant_init, zeros
 
 
 def _isotropy_on_leaf(
-    r_ei_leaf: jnp.ndarray,
+    r_ei_leaf: Array,
     norbitals: int,
     kernel_initializer: WeightInitializer,
     register_kfac: bool = True,
-) -> jnp.ndarray:
+) -> Array:
     """Isotropic scaling of the electron-ion displacements."""
     nion = r_ei_leaf.shape[-2]
 
@@ -45,11 +45,11 @@ def _isotropy_on_leaf(
 
 
 def _anisotropy_on_leaf(
-    r_ei_leaf: jnp.ndarray,
+    r_ei_leaf: Array,
     norbitals: int,
     kernel_initializer: WeightInitializer,
     register_kfac: bool = True,
-) -> jnp.ndarray:
+) -> Array:
     """Anisotropic scaling of the electron-ion displacements."""
     batch_shapes = r_ei_leaf.shape[:-2]
     nion = r_ei_leaf.shape[-2]
@@ -92,7 +92,7 @@ class OneBodyExpDecay(flax.linen.Module):
     Attributes:
         kernel_initializer (WeightInitializer): kernel initializer for the decay rates
             a_j. This initializes a single decay rate number per ion. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         logabs (bool, optional): whether to compute -sum_ij ||a_j * (elec_i - ion_j)||,
             when logabs is True, or exp of that expression when logabs is False.
             Defaults to True.
@@ -110,25 +110,25 @@ class OneBodyExpDecay(flax.linen.Module):
     @flax.linen.compact
     def __call__(
         self,
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: jnp.ndarray,
-        stream_1e: jnp.ndarray,
-        r_ei: jnp.ndarray,
-        r_ee: jnp.ndarray,
-    ) -> jnp.ndarray:
+        input_stream_1e: Array,
+        input_stream_2e: Array,
+        stream_1e: Array,
+        r_ei: Array,
+        r_ee: Array,
+    ) -> Array:
         """Transform electron-ion displacements into an exp decay one-body Jastrow.
 
         Args:
-            input_stream_1e (jnp.ndarray): input one-electron stream; unused
-            input_stream_2e (jnp.ndarray): input two-electron stream; unused
-            stream_1e (jnp.ndarray): one-electron stream, post-backflow; unused
-            r_ei (jnp.ndarray): electron-ion displacements of shape
+            input_stream_1e (Array): input one-electron stream; unused
+            input_stream_2e (Array): input two-electron stream; unused
+            stream_1e (Array): one-electron stream, post-backflow; unused
+            r_ei (Array): electron-ion displacements of shape
                 (..., nelec, nion, d)
-            r_ee (jnp.ndarray): electron-electron displacements of shape
+            r_ee (Array): electron-electron displacements of shape
                 (..., nelec, nelec, d); unused
 
         Returns:
-            jnp.ndarray: -sum_ij ||a_j * (elec_i - ion_j)||, when self.logabs is True,
+            Array: -sum_ij ||a_j * (elec_i - ion_j)||, when self.logabs is True,
             or exp of that expression when self.logabs is False. If the input has shape
             (batch_dims, nelec, nion, d), then the output has shape (batch_dims,)
         """
@@ -159,7 +159,7 @@ class TwoBodyExpDecay(flax.linen.Module):
     and init_ee_strength, respectively, and are trainable if trainable is True.
 
     Attributes:
-        init_ei_strength (jnp.ndarray or Sequence[float]): 1-d array or sequence of
+        init_ei_strength (Array or Sequence[float]): 1-d array or sequence of
             length nion which gives the initial strength of the electron-nucleus
             interaction per ion
         init_ee_strength (float, optional): initial strength of the electron-electron
@@ -174,7 +174,7 @@ class TwoBodyExpDecay(flax.linen.Module):
             Defaults to True.
     """
 
-    init_ei_strength: Union[jnp.ndarray, Sequence[float]]
+    init_ei_strength: Union[Array, Sequence[float]]
     init_ee_strength: float = 1.0
     log_scale_factor: float = 0.0
     register_kfac: bool = True
@@ -184,25 +184,25 @@ class TwoBodyExpDecay(flax.linen.Module):
     @flax.linen.compact
     def __call__(
         self,
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: jnp.ndarray,
-        stream_1e: jnp.ndarray,
-        r_ei: jnp.ndarray,
-        r_ee: jnp.ndarray,
-    ) -> jnp.ndarray:
+        input_stream_1e: Array,
+        input_stream_2e: Array,
+        stream_1e: Array,
+        r_ei: Array,
+        r_ee: Array,
+    ) -> Array:
         """Compute jastrow with both electron-ion and electron-electron effects.
 
         Args:
-            input_stream_1e (jnp.ndarray): input one-electron stream; unused
-            input_stream_2e (jnp.ndarray): input two-electron stream; unused
-            stream_1e (jnp.ndarray): one-electron stream, post-backflow; unused
-            r_ei (jnp.ndarray): electron-ion displacements with shape
+            input_stream_1e (Array): input one-electron stream; unused
+            input_stream_2e (Array): input two-electron stream; unused
+            stream_1e (Array): one-electron stream, post-backflow; unused
+            r_ei (Array): electron-ion displacements with shape
                 (..., nelec, nion, d)
-            r_ee (jnp.ndarray): electron-electron displacements with shape
+            r_ee (Array): electron-electron displacements with shape
                 (..., nelec, nelec, d)
 
         Returns:
-            jnp.ndarray:
+            Array:
 
                 sum_i(-sum_j Z_j ||elec_i - ion_j|| + sum_k Q ||elec_i - elec_k||),
 
@@ -250,8 +250,8 @@ class TwoBodyExpDecay(flax.linen.Module):
 
 
 def get_two_body_decay_scaled_for_chargeless_molecules(
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
     init_ee_strength: float = 1.0,
     register_kfac: bool = True,
     logabs: bool = True,
@@ -263,8 +263,8 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
     electrons are at ion positions.
 
     Args:
-        ion_pos (jnp.ndarray): an (nion, d) array of ion positions.
-        ion_charges (jnp.ndarray): an (nion,) array of ion charges, in units of one
+        ion_pos (Array): an (nion, d) array of ion positions.
+        ion_charges (Array): an (nion,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
         init_ee_strength (float, optional): the initial strength of the
             electron-electron interaction. Defaults to 1.0.
@@ -322,25 +322,25 @@ class BackflowJastrow(flax.linen.Module):
     @flax.linen.compact
     def __call__(
         self,
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: jnp.ndarray,
-        stream_1e: jnp.ndarray,
-        r_ei: jnp.ndarray,
-        r_ee: jnp.ndarray,
-    ) -> jnp.ndarray:
+        input_stream_1e: Array,
+        input_stream_2e: Array,
+        stream_1e: Array,
+        r_ei: Array,
+        r_ee: Array,
+    ) -> Array:
         """Compute backflow-based general permutation invariant Jastrow.
 
         Args:
-            input_stream_1e (jnp.ndarray): input one-electron stream
-            input_stream_2e (jnp.ndarray): input two-electron stream
-            stream_1e (jnp.ndarray): one-electron stream, post-backflow
-            r_ei (jnp.ndarray): electron-ion displacements with shape
+            input_stream_1e (Array): input one-electron stream
+            input_stream_2e (Array): input two-electron stream
+            stream_1e (Array): one-electron stream, post-backflow
+            r_ei (Array): electron-ion displacements with shape
                 (..., nelec, nion, d); unused
-            r_ee (jnp.ndarray): electron-electron displacements with shape
+            r_ee (Array): electron-electron displacements with shape
                 (..., nelec, nelec, d); unused
 
         Returns:
-            jnp.ndarray: -mean_i ||Backflow_i||, or exp(-mean_i ||Backflow_i||) if
+            Array: -mean_i ||Backflow_i||, or exp(-mean_i ||Backflow_i||) if
             logabs is False
         """
         del r_ei, r_ee

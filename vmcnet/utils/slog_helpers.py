@@ -3,14 +3,14 @@
 import jax.numpy as jnp
 
 from .log_linear_exp import log_linear_exp
-from .typing import SLArray, ArrayList, SLArrayList
+from .typing import Array, SLArray, ArrayList, SLArrayList
 
 
-def array_to_slog(x: jnp.ndarray) -> SLArray:
+def array_to_slog(x: Array) -> SLArray:
     """Converts a regular array into (sign, logabs) form.
 
     Args:
-        x (jnp.ndarray): input data.
+        x (Array): input data.
 
     Returns:
         (SLArray): data in form (sign(x), log(abs(x)))
@@ -18,7 +18,7 @@ def array_to_slog(x: jnp.ndarray) -> SLArray:
     return (jnp.sign(x), jnp.log(jnp.abs(x)))
 
 
-def array_from_slog(x: SLArray) -> jnp.ndarray:
+def array_from_slog(x: SLArray) -> Array:
     """Converts an slog data tuple into a regular array.
 
     Args:
@@ -26,7 +26,7 @@ def array_from_slog(x: SLArray) -> jnp.ndarray:
         (sign(z), log(abs(z))) for some z which represents the underlying data.
 
     Returns:
-        (jnp.ndarray): the data as a single, regular array. In other words, the z
+        (Array): the data as a single, regular array. In other words, the z
         such that x = (sign(z), log(abs(z)))
     """
     return x[0] * jnp.exp(x[1])

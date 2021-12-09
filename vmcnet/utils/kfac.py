@@ -7,11 +7,11 @@ Some names are slightly modified (e.g. repeated_dense -> batch_dense).
 """
 from typing import Mapping, Union
 
-import jax.numpy as jnp
-
 from kfac_ferminet_alpha import curvature_blocks as blocks
 from kfac_ferminet_alpha import layers_and_loss_tags as tags
 from kfac_ferminet_alpha import utils as kfac_utils
+
+from vmcnet.utils.typing import Array
 
 BATCH_DENSE_TAG_NAME = "batch_dense_tag"
 batch_dense_tag = tags.LayerTag(BATCH_DENSE_TAG_NAME, 1, 1)
@@ -30,7 +30,7 @@ def register_batch_dense(y, x, w, b):
 class BatchDenseBlock(blocks.DenseTwoKroneckerFactored):
     """Dense curvature block corresponding to inputs of shape (..., d)."""
 
-    def compute_extra_scale(self) -> jnp.ndarray:
+    def compute_extra_scale(self) -> Array:
         """Extra scale factor for the curvature block (relative to other blocks)."""
         (x_shape,) = self.inputs_shapes
         return kfac_utils.product(x_shape) // (x_shape[0] * x_shape[-1])
@@ -39,8 +39,8 @@ class BatchDenseBlock(blocks.DenseTwoKroneckerFactored):
         self,
         info: Mapping[str, blocks._Arrays],
         batch_size: int,
-        ema_old: Union[float, jnp.ndarray],
-        ema_new: Union[float, jnp.ndarray],
+        ema_old: Union[float, Array],
+        ema_new: Union[float, Array],
         pmap_axis_name: str,
     ) -> None:
         """Satsify kfac_ferminet_alpha's assumption that the inputs are 2d.

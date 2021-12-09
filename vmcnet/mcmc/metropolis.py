@@ -6,17 +6,17 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, P
+from vmcnet.utils.typing import Array, D, P
 
-MetropolisStep = Callable[[P, D, jnp.ndarray], Tuple[jnp.float32, D, jnp.ndarray]]
+MetropolisStep = Callable[[P, D, Array], Tuple[jnp.float32, D, Array]]
 WalkerFn = MetropolisStep[P, D]
-BurningStep = Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]]
+BurningStep = Callable[[P, D, Array], Tuple[D, Array]]
 
 
 def make_metropolis_step(
-    proposal_fn: Callable[[P, D, jnp.ndarray], Tuple[D, jnp.ndarray]],
-    acceptance_fn: Callable[[P, D, D], jnp.ndarray],
-    update_data_fn: Callable[[D, D, jnp.ndarray], D],
+    proposal_fn: Callable[[P, D, Array], Tuple[D, Array]],
+    acceptance_fn: Callable[[P, D, D], Array],
+    update_data_fn: Callable[[D, D, Array], D],
 ) -> MetropolisStep[P, D]:
     """Factory to create a function which takes a single metropolis step.
 
@@ -36,7 +36,7 @@ def make_metropolis_step(
             the signature (params, data, key) -> proposed_data, key
         acceptance_fn (Callable): acceptance function which produces a vector of numbers
             used to create a mask for accepting the proposals. Has the signature
-            (params, data, proposed_data) -> jnp.ndarray: acceptance probabilities
+            (params, data, proposed_data) -> Array: acceptance probabilities
         update_data_fn (Callable): function used to update the data given the original
             data, the proposed data, and the array mask identifying which proposals to
             accept. Has the signature
@@ -48,15 +48,13 @@ def make_metropolis_step(
         one)
     """
 
-    def metrop_step_fn(
-        params: P, data: D, key: jnp.ndarray
-    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
+    def metrop_step_fn(params: P, data: D, key: Array) -> Tuple[jnp.float32, D, Array]:
         """Take a single metropolis step."""
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
         accept_prob = acceptance_fn(params, data, proposed_data)
         move_mask = cast(
-            jnp.ndarray,
+            Array,
             jax.random.uniform(subkey, shape=accept_prob.shape) < accept_prob,
         )
         new_data = update_data_fn(data, proposed_data, move_mask)
@@ -70,9 +68,9 @@ def walk_data(
     nsteps: int,
     params: P,
     data: D,
-    key: jnp.ndarray,
+    key: Array,
     metrop_step_fn: MetropolisStep[P, D],
-) -> Tuple[jnp.float32, D, jnp.ndarray]:
+) -> Tuple[jnp.float32, D, Array]:
     """Take multiple Metropolis-Hastings steps.
 
     This function is roughly equivalent to:
@@ -92,14 +90,14 @@ def walk_data(
         data (pytree-like): data to walk (update) with each step
         params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
             model params
-        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+        key (Array): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
 
     Returns:
-        (jnp.float32, pytree-like, jnp.ndarray): acceptance probability, new data,
+        (jnp.float32, pytree-like, Array): acceptance probability, new data,
             new jax PRNG key split (possibly multiple times) from previous one
     """
 
@@ -139,7 +137,7 @@ def make_jitted_burning_step(
         with jax.pmap optionally applied if apply_pmap is True.
     """
 
-    def burning_step(params: P, data: D, key: jnp.ndarray) -> Tuple[D, jnp.ndarray]:
+    def burning_step(params: P, data: D, key: Array) -> Tuple[D, Array]:
         _, data, key = metrop_step_fn(params, data, key)
         return data, key
 
@@ -177,9 +175,7 @@ def make_jitted_walker_fn(
         apply_pmap is False.
     """
 
-    def walker_fn(
-        params: P, data: D, key: jnp.ndarray
-    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
+    def walker_fn(params: P, data: D, key: Array) -> Tuple[jnp.float32, D, Array]:
         accept_ratio, data, key = walk_data(nsteps, params, data, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -190,8 +186,8 @@ def make_jitted_walker_fn(
     pmapped_walker_fn = utils.distribute.pmap(walker_fn)
 
     def pmapped_walker_fn_with_single_accept_ratio(
-        params: P, data: D, key: jnp.ndarray
-    ) -> Tuple[jnp.float32, D, jnp.ndarray]:
+        params: P, data: D, key: Array
+    ) -> Tuple[jnp.float32, D, Array]:
         accept_ratio, data, key = pmapped_walker_fn(params, data, key)
         accept_ratio = utils.distribute.get_first(accept_ratio)
         return accept_ratio, data, key
@@ -204,8 +200,8 @@ def burn_data(
     nsteps_to_burn: int,
     params: P,
     data: D,
-    key: jnp.ndarray,
-) -> Tuple[D, jnp.ndarray]:
+    key: Array,
+) -> Tuple[D, Array]:
     """Repeatedly apply a burning step.
 
     Args:
@@ -214,12 +210,12 @@ def burn_data(
         nsteps_to_burn (int): number of times to call burning_step
         data (pytree-like): initial data
         params (pytree-like): parameters passed to the burning step
-        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key passed
+        key (Array): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
 
     Returns:
-        (pytree-like, jnp.ndarray): new data, new key
+        (pytree-like, Array): new data, new key
     """
     logging.info("Burning data for %d steps", nsteps_to_burn)
     for _ in range(nsteps_to_burn):
@@ -228,25 +224,25 @@ def burn_data(
 
 
 def gaussian_proposal(
-    positions: jnp.ndarray, std_move: jnp.float32, key: jnp.ndarray
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    positions: Array, std_move: jnp.float32, key: Array
+) -> Tuple[Array, Array]:
     """Simple symmetric gaussian proposal in all positions at once.
 
     Args:
-        positions (jnp.ndarray): original positions
+        positions (Array): original positions
         std_move (jnp.float32): standard deviation of the moves
-        key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key
+        key (Array): an array with shape (2,) representing a jax PRNG key
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): (new positions, new key split from previous)
+        (Array, Array): (new positions, new key split from previous)
     """
     key, subkey = jax.random.split(key)
     return positions + std_move * jax.random.normal(subkey, shape=positions.shape), key
 
 
 def metropolis_symmetric_acceptance(
-    amplitude: jnp.ndarray, proposed_amplitude: jnp.ndarray, logabs: bool = True
-) -> jnp.ndarray:
+    amplitude: Array, proposed_amplitude: Array, logabs: bool = True
+) -> Array:
     """Standard Metropolis acceptance ratio for a symmetric proposal function.
 
     The general Metropolis-Hastings choice of acceptance ratio for moves from state i to
@@ -262,16 +258,16 @@ def metropolis_symmetric_acceptance(
     refers to |psi(i)|^2.
 
     Args:
-        amplitude (jnp.ndarray): one-dimensional array of wavefunction amplitudes for
+        amplitude (Array): one-dimensional array of wavefunction amplitudes for
             the current state, or log wavefunction amplitudes if logabs is True
-        proposed_amplitude (jnp.ndarray): one-dimensional array of wavefunction
+        proposed_amplitude (Array): one-dimensional array of wavefunction
             amplitudes for the proposed state, or log wavefunction amplitudes if logabs
             is True
         logabs (bool, optional): whether the provided amplitudes represent psi
             (logabs = False) or log|psi| (logabs = True). Defaults to True.
 
     Returns:
-        jnp.ndarray: one-dimensional array of acceptance ratios for the Metropolis
+        Array: one-dimensional array of acceptance ratios for the Metropolis
         algorithm
     """
     if not logabs:

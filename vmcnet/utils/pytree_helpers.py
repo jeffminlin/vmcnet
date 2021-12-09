@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import jax.flatten_util
 
-from vmcnet.utils.typing import PyTree, T
+from vmcnet.utils.typing import Array, PyTree, T
 
 
 def tree_sum(tree1: T, tree2: T) -> T:
@@ -21,7 +21,7 @@ def multiply_tree_by_scalar(tree: T, scalar: jnp.float32) -> T:
     return jax.tree_map(lambda x: scalar * x, tree)
 
 
-def tree_inner_product(tree1: T, tree2: T) -> jnp.ndarray:
+def tree_inner_product(tree1: T, tree2: T) -> Array:
     """Inner product of two pytrees with the same structure."""
     leaf_inner_prods = jax.tree_map(lambda a, b: jnp.sum(a * b), tree1, tree2)
     return jnp.sum(jax.flatten_util.ravel_pytree(leaf_inner_prods)[0])
