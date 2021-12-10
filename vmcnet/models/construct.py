@@ -12,6 +12,7 @@ from ml_collections import ConfigDict
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
 from vmcnet.utils.typing import (
+    Array,
     ArrayList,
     Backflow,
     ComputeInputStreams,
@@ -94,10 +95,10 @@ def _get_dtype_init_constructors(dtype):
 
 def slog_psi_to_log_psi_apply(
     slog_psi_apply: Callable[..., SLArray]
-) -> Callable[..., jnp.ndarray]:
+) -> Callable[..., Array]:
     """Get a log|psi| model apply callable from a sign(psi), log|psi| apply callable."""
 
-    def log_psi_apply(*args) -> jnp.ndarray:
+    def log_psi_apply(*args) -> Array:
         return slog_psi_apply(*args)[1]
 
     return log_psi_apply
@@ -105,9 +106,9 @@ def slog_psi_to_log_psi_apply(
 
 def get_model_from_config(
     model_config: ConfigDict,
-    nelec: jnp.ndarray,
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
+    nelec: Array,
+    ion_pos: Array,
+    ion_charges: Array,
     dtype=jnp.float32,
 ) -> flax.linen.Module:
     """Get a model from a hyperparameter config."""
@@ -409,7 +410,7 @@ def get_model_from_config(
 
 
 def get_compute_input_streams_from_config(
-    input_streams_config: ConfigDict, ion_pos: Optional[jnp.ndarray] = None
+    input_streams_config: ConfigDict, ion_pos: Optional[Array] = None
 ) -> ComputeInputStreams:
     """Get a function for computing input streams from a model configuration."""
     return functools.partial(
@@ -464,7 +465,7 @@ def get_sign_covariance_from_config(
     spin_split: ParticleSplit,
     kernel_init_constructor: Callable[[ConfigDict], WeightInitializer],
     dtype: jnp.dtype,
-) -> Callable[[ArrayList], jnp.ndarray]:
+) -> Callable[[ArrayList], Array]:
     """Get a sign covariance from a model config, for use in AntiequivarianceNet."""
     if model_config.use_products_covariance:
         return ProductsSignCovariance(
@@ -476,7 +477,7 @@ def get_sign_covariance_from_config(
 
     else:
 
-        def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
+        def backflow_based_equivariance(x: ArrayList) -> Array:
             concat_x = jnp.concatenate(x, axis=-2)
             return get_backflow_from_config(
                 model_config.invariance,
@@ -526,24 +527,24 @@ def get_residual_blocks_for_ferminet_backflow(
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the previous one-electron stream output. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         kernel_initializer_mixed (WeightInitializer): kernel initializer for the
             mixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the average of the previous one-electron
-            stream output. Has signature (key, shape, dtype) -> jnp.ndarray
+            stream output. Has signature (key, shape, dtype) -> Array
         kernel_initializer_2e_1e_stream (WeightInitializer): kernel initializer for the
             two-electron part of the one-electron stream. This initializes the part of
             the dense kernel which multiplies the average of the previous two-electron
             stream which is mixed into the one-electron stream. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+            two-electron stream. Has signature (key, shape, dtype) -> Array
         bias_initializer_1e_stream (WeightInitializer): bias initializer for the
-            one-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+            one-electron stream. Has signature (key, shape, dtype) -> Array
         bias_initializer_2e_stream (WeightInitializer): bias initializer for the
-            two-electron stream. Has signature (key, shape, dtype) -> jnp.ndarray
+            two-electron stream. Has signature (key, shape, dtype) -> Array
         activation_fn (Activation): activation function in the electron streams. Has
-            the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+            the signature Array -> Array (shape is preserved)
         use_bias (bool, optional): whether to add a bias term in the electron streams.
             Defaults to True.
         skip_connection (bool, optional): whether to add residual skip connections
@@ -588,7 +589,7 @@ def get_residual_blocks_for_ferminet_backflow(
     return residual_blocks
 
 
-DeterminantFn = Callable[[int, ArrayList], jnp.ndarray]
+DeterminantFn = Callable[[int, ArrayList], Array]
 
 
 def get_resnet_determinant_fn_for_ferminet(
@@ -626,7 +627,7 @@ def get_resnet_determinant_fn_for_ferminet(
         dout, [nspins: (..., ndeterminants)] -> (..., dout).
     """
 
-    def fn(dout: int, det_values: ArrayList) -> jnp.ndarray:
+    def fn(dout: int, det_values: ArrayList) -> Array:
         concat_values = jnp.concatenate(det_values, axis=-1)
         return SimpleResNet(
             ndense,
@@ -705,18 +706,18 @@ class FermiNet(flax.linen.Module):
             number of distinct orbital layers applied
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
             decay rate in the exponential envelopes. If `isotropic_decay` is True, then
             this initializes a single decay rate number per ion and orbital. If
             `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
             linear combination over the ions of exponential envelopes. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         orbitals_use_bias (bool): whether to add a bias term in the linear part of the
             orbitals.
         isotropic_decay (bool): whether the decay for each ion should be anisotropic
@@ -862,12 +863,12 @@ class FermiNet(flax.linen.Module):
         return jnp.sum(prod_dets * even_outputs, axis=-1)
 
     def _get_elec_pos_and_orbitals_split(
-        self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, ParticleSplit]:
+        self, elec_pos: Array
+    ) -> Tuple[Array, ParticleSplit]:
         return elec_pos, self.spin_split
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
+        self, elec_pos: Array, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         nelec_total = elec_pos.shape[-2]
 
@@ -881,10 +882,10 @@ class FermiNet(flax.linen.Module):
         self,
         orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: Optional[jnp.ndarray],
-        stream_1e: jnp.ndarray,
-        r_ei: Optional[jnp.ndarray],
+        input_stream_1e: Array,
+        input_stream_2e: Optional[Array],
+        stream_1e: Array,
+        r_ei: Optional[Array],
     ) -> ArrayList:
         # Input streams unused in orbitals for regular FermiNet
         del input_stream_1e
@@ -906,14 +907,14 @@ class FermiNet(flax.linen.Module):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+            elec_pos (Array): array of particle positions (..., nelec, d)
 
         Returns:
-            jnp.ndarray: FermiNet output; logarithm of the absolute value of a
+            Array: FermiNet output; logarithm of the absolute value of a
             anti-symmetric function of elec_pos, where the anti-symmetry is with respect
             to the second-to-last axis of elec_pos. The anti-symmetry holds for
             particles within the same split, but not for permutations which swap
@@ -987,9 +988,9 @@ class EmbeddedParticleFermiNet(FermiNet):
                 optional stream_2e of shape (..., nelec, nelec, d2),
             ) -> stream_1e of shape (..., n, d')
         invariance_kernel_initializer (WeightInitializer): kernel initializer for the
-            invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
+            invariance dense layer. Has signature (key, shape, dtype) -> Array
         invariance_bias_initializer (WeightInitializer): bias initializer for the
-            invariance dense layer. Has signature (key, shape, dtype) -> jnp.ndarray
+            invariance dense layer. Has signature (key, shape, dtype) -> Array
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
         invariance_register_kfac (bool, optional): whether to register the dense layer
@@ -1025,8 +1026,8 @@ class EmbeddedParticleFermiNet(FermiNet):
         )
 
     def _get_elec_pos_and_orbitals_split(
-        self, elec_pos: jnp.ndarray
-    ) -> Tuple[jnp.ndarray, ParticleSplit]:
+        self, elec_pos: Array
+    ) -> Tuple[Array, ParticleSplit]:
         visible_nelec_total = elec_pos.shape[-2]
         d = elec_pos.shape[-1]
         visible_nelec_per_spin = get_nelec_per_split(
@@ -1083,11 +1084,11 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             FermiNet).
         invariance_kernel_initializer (WeightInitializer, optional): kernel initializer
             for the invariance dense layer. Has signature
-                (key, shape, dtype) -> jnp.ndarray.
+                (key, shape, dtype) -> Array.
             Defaults to an orthogonal initializer.
         invariance_bias_initializer (WeightInitializer, optional): bias initializer for
             the invariance dense layer. Has signature
-                (key, shape, dtype) -> jnp.ndarray.
+                (key, shape, dtype) -> Array.
             Defaults to a scaled random normal initializer.
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
@@ -1111,9 +1112,9 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     def _get_invariance(
         self,
         norbitals_per_split: Sequence[int],
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: Optional[jnp.ndarray],
-        stream_1e: jnp.ndarray,
+        input_stream_1e: Array,
+        input_stream_2e: Optional[Array],
+        stream_1e: Array,
     ) -> ArrayList:
         invariant_shape_per_spin = [
             (nhidden, norbitals_per_split[i] * self.ndeterminants)
@@ -1139,7 +1140,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         return _reshape_raw_ferminet_orbitals(invariance, self.ndeterminants)
 
     def _get_norbitals_per_split(
-        self, elec_pos: jnp.ndarray, orbitals_split: ParticleSplit
+        self, elec_pos: Array, orbitals_split: ParticleSplit
     ) -> Tuple[int, ...]:
         visible_nelec_total = elec_pos.shape[-2]
 
@@ -1158,10 +1159,10 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         self,
         orbitals_split: ParticleSplit,
         norbitals_per_split: Sequence[int],
-        input_stream_1e: jnp.ndarray,
-        input_stream_2e: Optional[jnp.ndarray],
-        stream_1e: jnp.ndarray,
-        r_ei: Optional[jnp.ndarray],
+        input_stream_1e: Array,
+        input_stream_2e: Optional[Array],
+        stream_1e: Array,
+        r_ei: Optional[Array],
     ) -> ArrayList:
         # Shape is [norb_splits: (ndeterminants, ..., nvisible[i], norbitals[i])]
         equivariant_part = super()._eval_orbitals(
@@ -1232,8 +1233,8 @@ class AntiequivarianceNet(flax.linen.Module):
     spin_split: ParticleSplit
     compute_input_streams: ComputeInputStreams
     backflow: Backflow
-    antiequivariant_layer: Callable[[jnp.ndarray, jnp.ndarray], ArrayList]
-    array_list_sign_covariance: Callable[[ArrayList], jnp.ndarray]
+    antiequivariant_layer: Callable[[Array, Array], ArrayList]
+    array_list_sign_covariance: Callable[[ArrayList], Array]
     multiply_by_eq_features: bool = False
 
     def setup(self):
@@ -1246,14 +1247,14 @@ class AntiequivarianceNet(flax.linen.Module):
         self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:
         """Compose backflow -> antiequivariance -> sign covariant equivariance -> sum.
 
         Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+            elec_pos (Array): array of particle positions (..., nelec, d)
 
         Returns:
-            jnp.ndarray: log(abs(psi)), where psi is a general odd invariance of an
+            Array: log(abs(psi)), where psi is a general odd invariance of an
             anti-equivariant backflow. If the inputs have shape (batch_dims, nelec, d),
             then the output has shape (batch_dims,).
         """
@@ -1315,12 +1316,12 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNets. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNets. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         activation_fn_resnet (Activation): activation function in the antisymmetrized
-            ResNets. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+            ResNets. Has the signature Array -> Array (shape is preserved)
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNets. Defaults to True.
     """
@@ -1346,14 +1347,14 @@ class SplitBruteForceAntisymmetryWithDecay(flax.linen.Module):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:
         """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
 
         Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+            elec_pos (Array): array of particle positions (..., nelec, d)
 
         Returns:
-            jnp.ndarray: spinful antisymmetrized output; logarithm of the absolute value
+            Array: spinful antisymmetrized output; logarithm of the absolute value
             of a anti-symmetric function of elec_pos, where the anti-symmetry is with
             respect to the second-to-last axis of elec_pos. The anti-symmetry holds for
             particles within the same split, but not for permutations which swap
@@ -1437,12 +1438,12 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         nlayers_resnet (int): number of layers in each antisymmetrized ResNet
         kernel_initializer_resnet (WeightInitializer): kernel initializer for
             the dense layers in the antisymmetrized ResNet. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         bias_initializer_resnet (WeightInitializer): bias initializer for the
             dense layers in the antisymmetrized ResNet. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         activation_fn_resnet (Activation): activation function in the antisymmetrized
-            ResNet. Has the signature jnp.ndarray -> jnp.ndarray (shape is preserved)
+            ResNet. Has the signature Array -> Array (shape is preserved)
         resnet_use_bias (bool, optional): whether to add a bias term in the dense layers
             of the antisymmetrized ResNet. Defaults to True.
     """
@@ -1467,14 +1468,14 @@ class ComposedBruteForceAntisymmetryWithDecay(flax.linen.Module):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: jnp.ndarray) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:
         """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
 
         Args:
-            elec_pos (jnp.ndarray): array of particle positions (..., nelec, d)
+            elec_pos (Array): array of particle positions (..., nelec, d)
 
         Returns:
-            jnp.ndarray: spinful antisymmetrized output; logarithm of the absolute value
+            Array: spinful antisymmetrized output; logarithm of the absolute value
             of a anti-symmetric function of elec_pos, where the anti-symmetry is with
             respect to the second-to-last axis of elec_pos. The anti-symmetry holds for
             particles within the same split, but not for permutations which swap

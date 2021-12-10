@@ -9,7 +9,7 @@ import jax.scipy as jscp
 
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
-from vmcnet.utils.typing import ModelApply, P
+from vmcnet.utils.typing import Array, ModelApply, P
 
 
 class SRMode(Enum):
@@ -27,7 +27,7 @@ class SRMode(Enum):
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
-    mean_grad_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    mean_grad_fn: Callable[[Array], Array],
     damping: float = 0.001,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,
@@ -76,14 +76,14 @@ def get_fisher_inverse_fn(
     # TODO(Jeffmin): investigate damping scheduling and possibly adaptive damping
     if mode == SRMode.DEBUG:
 
-        def raveled_log_psi_grad(params: P, positions: jnp.ndarray) -> jnp.ndarray:
+        def raveled_log_psi_grad(params: P, positions: Array) -> Array:
             log_grads = jax.grad(log_psi_apply)(params, positions)
             return jax.flatten_util.ravel_pytree(log_grads)[0]
 
         batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
         def precondition_grad_with_fisher(
-            energy_grad: P, params: P, positions: jnp.ndarray
+            energy_grad: P, params: P, positions: Array
         ) -> P:
             raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
@@ -93,7 +93,7 @@ def get_fisher_inverse_fn(
                 log_psi_grads - mean_log_psi_grads
             )  # shape (nchains, nparams)
 
-            def fisher_apply(x: jnp.ndarray) -> jnp.ndarray:
+            def fisher_apply(x: Array) -> Array:
                 # x is shape (nparams,)
                 nchains_local = centered_log_psi_grads.shape[0]
                 centered_jacobian_vector_prod = jnp.matmul(centered_log_psi_grads, x)
@@ -119,14 +119,14 @@ def get_fisher_inverse_fn(
     elif mode == SRMode.LAZY:
 
         def precondition_grad_with_fisher(
-            energy_grad: P, params: P, positions: jnp.ndarray
+            energy_grad: P, params: P, positions: Array
         ) -> P:
-            def partial_log_psi_apply(params: P) -> jnp.ndarray:
+            def partial_log_psi_apply(params: P) -> Array:
                 return log_psi_apply(params, positions)
 
             _, vjp_fn = jax.vjp(partial_log_psi_apply, params)
 
-            def fisher_apply(x: jnp.ndarray) -> jnp.ndarray:
+            def fisher_apply(x: Array) -> Array:
                 # x is a pytree with same structure as params
                 nchains_local = positions.shape[0]
                 _, jacobian_vector_prod = jax.jvp(

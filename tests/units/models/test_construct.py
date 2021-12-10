@@ -9,7 +9,7 @@ import pytest
 import vmcnet.models as models
 import vmcnet.models.sign_symmetry as sign_sym
 from vmcnet.models.construct import DeterminantFnMode
-from vmcnet.utils.typing import ArrayList
+from vmcnet.utils.typing import Array, ArrayList
 
 from tests.test_utils import get_default_config_with_chosen_model
 
@@ -247,7 +247,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
 
-    def backflow_based_equivariance(x: ArrayList) -> jnp.ndarray:
+    def backflow_based_equivariance(x: ArrayList) -> Array:
         concat_x = jnp.concatenate(x, axis=-2)
         return _get_backflow(spin_split, ((9,), (2,), (1,)), cyclic_spins=True)(
             concat_x
@@ -257,7 +257,7 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
         backflow_based_equivariance, axis=-3
     )
 
-    def array_list_sign_covariance(x: ArrayList) -> jnp.ndarray:
+    def array_list_sign_covariance(x: ArrayList) -> Array:
         return jnp.sum(odd_equivariance(x), axis=-2)
 
     slog_psi = models.construct.AntiequivarianceNet(

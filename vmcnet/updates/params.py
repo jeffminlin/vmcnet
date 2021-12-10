@@ -14,6 +14,7 @@ from vmcnet.utils.pytree_helpers import (
     tree_reduce_l1,
 )
 from vmcnet.utils.typing import (
+    Array,
     D,
     GetPositionFromData,
     ModelApply,
@@ -23,7 +24,7 @@ from vmcnet.utils.typing import (
     S,
 )
 
-UpdateParamFn = Callable[[P, D, S, jnp.ndarray], Tuple[P, S, Dict, jnp.ndarray]]
+UpdateParamFn = Callable[[P, D, S, Array], Tuple[P, S, Dict, Array]]
 
 
 def _update_metrics_with_noclip(
@@ -121,7 +122,7 @@ def create_grad_energy_update_param_fn(
 
 def _get_traced_compute_param_norm(
     apply_pmap: bool = True,
-) -> Callable[[PyTree], jnp.ndarray]:
+) -> Callable[[PyTree], Array]:
     if not apply_pmap:
         return jax.jit(tree_reduce_l1)
 
@@ -141,7 +142,7 @@ def create_kfac_update_param_fn(
             kfac_ferminet_alpha
         damping (jnp.float32): damping coefficient
         get_position_fn (GetPositionFromData): function which gets the walker positions
-            from the data. Has signature data -> jnp.ndarray
+            from the data. Has signature data -> Array
 
     Returns:
         Callable: function which updates the parameters given the current data, params,

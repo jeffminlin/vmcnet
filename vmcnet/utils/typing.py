@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
 
+Array = jnp.ndarray
 
 # Currently using PyTree = Any just to improve readability in the code.
 # A pytree is a "tree-like structure built out of container-like Python objects": see
@@ -47,29 +48,25 @@ ModelParams = frozen_dict.FrozenDict
 #  3. The model parameters
 #  4. The optimizer state
 #  5. The RNG key
-CheckpointData = Tuple[int, D, P, S, jnp.ndarray]
+CheckpointData = Tuple[int, D, P, S, Array]
 
-ArrayList = List[jnp.ndarray]
+ArrayList = List[Array]
 
 # Single array in (sign, logabs) form
-SLArray = Tuple[jnp.ndarray, jnp.ndarray]
+SLArray = Tuple[Array, Array]
 
 SLArrayList = List[SLArray]
 
 ParticleSplit = Union[int, Sequence[int]]
 
-InputStreams = Tuple[
-    jnp.ndarray, Optional[jnp.ndarray], Optional[jnp.ndarray], Optional[jnp.ndarray]
-]
-ComputeInputStreams = Callable[[jnp.ndarray], InputStreams]
+InputStreams = Tuple[Array, Optional[Array], Optional[Array], Optional[Array]]
+ComputeInputStreams = Callable[[Array], InputStreams]
 
-Backflow = Callable[[jnp.ndarray, Optional[jnp.ndarray]], jnp.ndarray]
+Backflow = Callable[[Array, Optional[Array]], Array]
 
-Jastrow = Callable[
-    [jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray], jnp.ndarray
-]
+Jastrow = Callable[[Array, Array, Array, Array, Array], Array]
 
-ModelApply = Callable[[P, jnp.ndarray], jnp.ndarray]
+ModelApply = Callable[[P, Array], Array]
 
-GetPositionFromData = Callable[[D], jnp.ndarray]
+GetPositionFromData = Callable[[D], Array]
 GetAmplitudeFromData = GetPositionFromData[D]

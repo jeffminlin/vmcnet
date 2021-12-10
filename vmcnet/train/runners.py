@@ -22,6 +22,7 @@ import vmcnet.train as train
 import vmcnet.updates as updates
 import vmcnet.utils as utils
 from vmcnet.utils.typing import (
+    Array,
     P,
     D,
     S,
@@ -67,7 +68,7 @@ def _get_dtype(config: ConfigDict) -> jnp.dtype:
 
 def _get_electron_ion_config_as_arrays(
     config: ConfigDict, dtype=jnp.float32
-) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> Tuple[Array, Array, Array]:
     ion_pos = jnp.array(config.problem.ion_pos, dtype=dtype)
     ion_charges = jnp.array(config.problem.ion_charges, dtype=dtype)
     nelec = jnp.array(config.problem.nelec)
@@ -76,14 +77,14 @@ def _get_electron_ion_config_as_arrays(
 
 def _get_and_init_model(
     model_config: ConfigDict,
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
-    nelec: jnp.ndarray,
-    init_pos: jnp.ndarray,
-    key: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
+    nelec: Array,
+    init_pos: Array,
+    key: Array,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[flax.linen.Module, flax.core.FrozenDict, jnp.ndarray]:
+) -> Tuple[flax.linen.Module, flax.core.FrozenDict, Array]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -103,22 +104,22 @@ def _get_and_init_model(
 # (params, potentially-multiple-args-not-necessarily-arrays...) -> array
 #
 # The easiest, but somewhat inaccurate solution might be to just do
-# Callable[[P, Union[jnp.ndarray, SLArray]], jnp.ndarray]
+# Callable[[P, Union[Array, SLArray]], Array]
 #
-# The ideal would probably be something like Callable[[P, ...], jnp.ndarray], but this
+# The ideal would probably be something like Callable[[P, ...], Array], but this
 # is not allowed (probably for good reason)
 #
 # The correct solution is probably something like this involving Protocols (PEP 544):
 #
 #     class ModelApply(Protocol[P]):
-#         def __call__(params: P, *args) -> jnp.ndarray:
+#         def __call__(params: P, *args) -> Array:
 #             ...
 #
 # which creates a Generic class called ModelApply with only the first argument typed
 def _make_initial_distributed_data(
     distributed_log_psi_apply: ModelApply[P],
     run_config: ConfigDict,
-    init_pos: jnp.ndarray,
+    init_pos: Array,
     params: P,
 ) -> dwpa.DWPAData:
     # Need to use distributed_log_psi_apply here, in the case where there is not enough
@@ -138,7 +139,7 @@ def _make_initial_distributed_data(
 def _make_initial_single_device_data(
     log_psi_apply: ModelApply[P],
     run_config: ConfigDict,
-    init_pos: jnp.ndarray,
+    init_pos: Array,
     params: P,
 ) -> dwpa.DWPAData:
     amplitudes = log_psi_apply(params, init_pos)
@@ -154,7 +155,7 @@ def _make_initial_single_device_data(
 def _make_initial_data(
     log_psi_apply: ModelApply[P],
     run_config: ConfigDict,
-    init_pos: jnp.ndarray,
+    init_pos: Array,
     params: P,
     apply_pmap: bool = True,
 ) -> dwpa.DWPAData:
@@ -194,8 +195,8 @@ def _get_mcmc_fns(
 
 # TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
     # Define parameter updates
@@ -233,7 +234,7 @@ def total_variation_clipping_fn(local_energies, threshold=5.0):
 # instead of total variation
 def _get_clipping_fn(
     vmc_config: ConfigDict,
-) -> Optional[Callable[[jnp.ndarray], jnp.ndarray]]:
+) -> Optional[Callable[[Array], Array]]:
     clipping_fn = None
     if vmc_config.clip_threshold > 0.0:
         clipping_fn = functools.partial(
@@ -244,8 +245,8 @@ def _get_clipping_fn(
 
 def _get_energy_fns(
     vmc_config: ConfigDict,
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
     log_psi_apply: ModelApply[P],
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
@@ -265,10 +266,10 @@ def _get_energy_fns(
 # _make_initial_distributed_data is more general
 def _setup_vmc(
     config: ConfigDict,
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
-    nelec: jnp.ndarray,
-    key: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
+    nelec: Array,
+    key: Array,
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[
@@ -281,7 +282,7 @@ def _setup_vmc(
     flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
-    jnp.ndarray,
+    Array,
 ]:
     nelec_total = jnp.sum(nelec)
     key, init_pos = physics.core.initialize_molecular_pos(
@@ -377,12 +378,12 @@ def _make_new_data_for_eval(
     config: ConfigDict,
     log_psi_apply: ModelApply[P],
     params: P,
-    ion_pos: jnp.ndarray,
-    ion_charges: jnp.ndarray,
-    nelec: jnp.ndarray,
-    key: jnp.ndarray,
+    ion_pos: Array,
+    ion_charges: Array,
+    nelec: Array,
+    key: Array,
     dtype=jnp.float32,
-) -> Tuple[jnp.ndarray, dwpa.DWPAData]:
+) -> Tuple[Array, dwpa.DWPAData]:
     nelec_total = jnp.sum(nelec)
     # grab the first key if distributed
     key = utils.distribute.get_first_if_distributed(key)
@@ -414,9 +415,9 @@ def _burn_and_run_vmc(
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
     get_amplitude_fn: GetAmplitudeFromData[D],
-    key: jnp.ndarray,
+    key: Array,
     should_checkpoint: bool = True,
-) -> Tuple[P, S, D, jnp.ndarray]:
+) -> Tuple[P, S, D, Array]:
     if should_checkpoint:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every

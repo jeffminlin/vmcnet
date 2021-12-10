@@ -10,7 +10,7 @@ from .position_amplitude_core import (
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
-from vmcnet.utils.typing import P, ModelApply
+from vmcnet.utils.typing import Array, P, ModelApply
 
 
 class SimplePositionAmplitudeData(TypedDict):
@@ -23,14 +23,12 @@ class SimplePositionAmplitudeData(TypedDict):
 SPAData = SimplePositionAmplitudeData
 
 
-def make_simple_position_amplitude_data(
-    position: jnp.ndarray, amplitude: jnp.ndarray
-) -> SPAData:
+def make_simple_position_amplitude_data(position: Array, amplitude: Array) -> SPAData:
     """Create SimplePositionAmplitudeData from position and amplitude.
 
     Args:
-        position (jnp.ndarray): the particle positions
-        amplitude (jnp.ndarray): the wavefunction amplitudes
+        position (Array): the particle positions
+        amplitude (Array): the wavefunction amplitudes
 
     Returns:
         SPAData

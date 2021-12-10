@@ -9,7 +9,7 @@ from vmcnet.utils.distribute import (
     replicate_all_local_devices,
     default_distribute_data,
 )
-from vmcnet.utils.typing import P, M, ModelApply
+from vmcnet.utils.typing import Array, P, M, ModelApply
 
 
 class PositionAmplitudeWalkerData(TypedDict):
@@ -22,12 +22,12 @@ class PositionAmplitudeWalkerData(TypedDict):
     more dimensions.
 
     Attributes:
-        position (jnp.ndarray): array of shape (n, ...)
-        amplitude (jnp.ndarray): array of shape (n,)
+        position (Array): array of shape (n, ...)
+        amplitude (Array): array of shape (n,)
     """
 
-    position: jnp.ndarray
-    amplitude: jnp.ndarray
+    position: Array
+    amplitude: Array
 
 
 class PositionAmplitudeData(TypedDict):
@@ -47,14 +47,12 @@ class PositionAmplitudeData(TypedDict):
     move_metadata: Any
 
 
-def make_position_amplitude_data(
-    position: jnp.ndarray, amplitude: jnp.ndarray, move_metadata: Any
-):
+def make_position_amplitude_data(position: Array, amplitude: Array, move_metadata: Any):
     """Create PositionAmplitudeData from position, amplitude, and move_metadata.
 
     Args:
-        position (jnp.ndarray): the particle positions
-        amplitude (jnp.ndarray): the wavefunction amplitudes
+        position (Array): the particle positions
+        amplitude (Array): the wavefunction amplitudes
         move_metadata (Any): other required metadata for the metropolis algorithm
 
     Returns:
@@ -66,31 +64,31 @@ def make_position_amplitude_data(
     )
 
 
-def get_position_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
+def get_position_from_data(data: PositionAmplitudeData) -> Array:
     """Get the position data from PositionAmplitudeData.
 
     Args:
         data (PositionAmplitudeData): the data
 
     Returns:
-        jnp.ndarray: the particle positions from the data
+        Array: the particle positions from the data
     """
     return data["walker_data"]["position"]
 
 
-def get_amplitude_from_data(data: PositionAmplitudeData) -> jnp.ndarray:
+def get_amplitude_from_data(data: PositionAmplitudeData) -> Array:
     """Get the amplitude data from PositionAmplitudeData.
 
     Args:
         data (PositionAmplitudeData): the data
 
     Returns:
-        jnp.ndarray: the wave function amplitudes from the data
+        Array: the wave function amplitudes from the data
     """
     return data["walker_data"]["amplitude"]
 
 
-def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[jnp.ndarray, jnp.ndarray, Any]:
+def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[Array, Array, Any]:
     """Returns data as a (position, amplitude, move_metadata) tuple.
 
     Useful for quickly assigning all three pieces to local variables for further use.
@@ -123,10 +121,7 @@ def distribute_position_amplitude_data(
 def make_position_amplitude_gaussian_proposal(
     model_apply: ModelApply[P],
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
-) -> Callable[
-    [P, PositionAmplitudeData, jnp.ndarray],
-    Tuple[PositionAmplitudeData, jnp.ndarray],
-]:
+) -> Callable[[P, PositionAmplitudeData, Array], Tuple[PositionAmplitudeData, Array]]:
     """Create a gaussian proposal fn on PositionAmplitudeData.
 
     Positions are perturbed by a guassian; amplitudes are evaluated using the supplied
@@ -162,7 +157,7 @@ def make_position_amplitude_gaussian_proposal(
 
 def make_position_amplitude_metropolis_symmetric_acceptance(
     logabs: bool = True,
-) -> Callable[[P, PositionAmplitudeData, PositionAmplitudeData], jnp.ndarray]:
+) -> Callable[[P, PositionAmplitudeData, PositionAmplitudeData], Array]:
     """Create a Metropolis acceptance function on PositionAmplitudeData.
 
     Args:
@@ -189,12 +184,12 @@ def make_position_amplitude_metropolis_symmetric_acceptance(
 
 
 def make_position_amplitude_update(
-    update_move_metadata_fn: Optional[Callable[[M, jnp.ndarray], M]] = None
+    update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None
 ) -> Callable[
     [
         PositionAmplitudeData,
         PositionAmplitudeData,
-        jnp.ndarray,
+        Array,
     ],
     PositionAmplitudeData,
 ]:
@@ -206,7 +201,7 @@ def make_position_amplitude_update(
     `adjust_std_move_fn`.
 
     The moves in `move_mask` are applied along the first axis of the position data, and
-    should be the same shape as the amplitude data (one-dimensional jnp.ndarray).
+    should be the same shape as the amplitude data (one-dimensional Array).
 
     Args:
         update_move_metadata_fn (Callable): function which calculates the new
@@ -214,7 +209,7 @@ def make_position_amplitude_update(
 
     Returns:
         Callable: function with signature
-            (PositionAmplitudeData, PositionAmplitudeData, jnp.ndarray) ->
+            (PositionAmplitudeData, PositionAmplitudeData, Array) ->
                 (PositionAmplitudeData),
             which takes in the original PositionAmplitudeData, the proposed
             PositionAmplitudeData, and a move mask. Uses
@@ -224,9 +219,9 @@ def make_position_amplitude_update(
     def update_position_amplitude(
         data: PositionAmplitudeData,
         proposed_data: PositionAmplitudeData,
-        move_mask: jnp.ndarray,
+        move_mask: Array,
     ) -> PositionAmplitudeData:
-        def mask_on_first_dimension(old_data: jnp.ndarray, proposal: jnp.ndarray):
+        def mask_on_first_dimension(old_data: Array, proposal: Array):
             shaped_mask = jnp.reshape(move_mask, (-1, *((1,) * (old_data.ndim - 1))))
             return jnp.where(shaped_mask, proposal, old_data)
 
@@ -250,7 +245,7 @@ def make_position_amplitude_update(
 def make_position_amplitude_gaussian_metropolis_step(
     model_apply: ModelApply[P],
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
-    update_move_metadata_fn: Optional[Callable[[M, jnp.ndarray], M]] = None,
+    update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None,
     logabs: bool = True,
 ) -> metropolis.MetropolisStep[P, PositionAmplitudeData]:
     """Make a gaussian proposal with Metropolis acceptance for PositionAmplitudeData.

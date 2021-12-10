@@ -7,22 +7,22 @@ import jax.numpy as jnp
 
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
-from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList, ParticleSplit
+from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList, ParticleSplit
 from .core import get_alternating_signs, get_nelec_per_split, is_tuple_of_arrays
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
 
 
-def get_submatrices_along_first_col(x: jnp.ndarray) -> Tuple[int, jnp.ndarray]:
+def get_submatrices_along_first_col(x: Array) -> Tuple[int, Array]:
     """Get the submatrices of x by deleting row i and col 0, for all rows of x.
 
     Args:
-        x (jnp.ndarray): a tensor of orbital matrices which is square in the last two
+        x (Array): a tensor of orbital matrices which is square in the last two
             dimensions, thus of shape (..., n, n). The second last dimension is the
             particle dimension, and the last is the orbital dimension.
 
     Returns:
-        (int, jnp.ndarray): n, submatrices of shape (..., n, n-1, n-1), obtained by
+        (int, Array): n, submatrices of shape (..., n, n-1, n-1), obtained by
         deleting row (..., i, :) and deleted column is (..., :, 0), for 0 <= i <= n - 1.
     """
     if len(x.shape) < 2 or x.shape[-1] != x.shape[-2]:
@@ -38,7 +38,7 @@ def get_submatrices_along_first_col(x: jnp.ndarray) -> Tuple[int, jnp.ndarray]:
     return n, stacked_submats
 
 
-def cofactor_antieq(x: jnp.ndarray) -> jnp.ndarray:
+def cofactor_antieq(x: Array) -> Array:
     """Compute a cofactor-based antiequivariance.
 
     Input must be square in the last two dimensions, of shape (..., n, n). The second
@@ -57,12 +57,12 @@ def cofactor_antieq(x: jnp.ndarray) -> jnp.ndarray:
     particle indices permuted, and 2) ALL values multiplied by -1.
 
     Args:
-        x (jnp.ndarray): a tensor of orbital matrices which is square in the last two
+        x (Array): a tensor of orbital matrices which is square in the last two
             dimensions, thus of shape (..., n, n). The second last dimension is the
             particle dimension, and the last is the orbital dimension.
 
     Returns:
-        (jnp.ndarray): array of shape (..., n), with the ith output (along the last
+        (Array): array of shape (..., n), with the ith output (along the last
         axis) given by the ith term in the cofactor expansion of det(x) along the first
         entry of the last axis
     """
@@ -72,7 +72,7 @@ def cofactor_antieq(x: jnp.ndarray) -> jnp.ndarray:
     return first_orbital_vals * cofactors
 
 
-def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
+def slog_cofactor_antieq(x: Array) -> SLArray:
     """Compute a cofactor-based antiequivariance, returning results in slogabs form.
 
     See :func:`~vmcnet.models.antiequivariance.cofactor_antieq`. This function performs
@@ -80,12 +80,12 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
     a jnp.linalg.slogdet call instead of a jnp.linalg.det call.
 
     Args:
-        x (jnp.ndarray): a tensor of orbital matrices which is square in the last two
+        x (Array): a tensor of orbital matrices which is square in the last two
             dimensions, thus of shape (..., n, n). The second last dimension is the
             particle dimension, and the last is the orbital dimension.
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): tuple of arrays, each of shape (..., n). The first
+        (Array, Array): tuple of arrays, each of shape (..., n). The first
         is sign(result), and the second is log(abs(result)).
     """
     # Calculate x_(i, 0) by selecting orbital index 0
@@ -106,7 +106,7 @@ def slog_cofactor_antieq(x: jnp.ndarray) -> SLArray:
 
 def multiply_antieq_by_eq_features(
     split_antieq: ArrayList,
-    eq_features: jnp.ndarray,
+    eq_features: Array,
     spin_split: ParticleSplit,
 ) -> ArrayList:
     """Multiply equivariant input array with a spin-split antiequivariance.
@@ -114,7 +114,7 @@ def multiply_antieq_by_eq_features(
     Args:
         split_antieq (ArrayList): list of arrays containing nspins arrays of shape
             broadcastable to (..., nelec[i], 1)
-        eq_features (jnp.ndarray): array of shape (..., nelec, d)
+        eq_features (Array): array of shape (..., nelec, d)
         spin_split (ParticleSplit): the spin split.
 
     Returns:
@@ -127,7 +127,7 @@ def multiply_antieq_by_eq_features(
 
 def multiply_slog_antieq_by_eq_features(
     split_slog_antieq: SLArrayList,
-    eq_features: jnp.ndarray,
+    eq_features: Array,
     spin_split: ParticleSplit,
 ) -> SLArrayList:
     """Multiply equivariant input array with a spin-split slog-form antiequivariance.
@@ -135,7 +135,7 @@ def multiply_slog_antieq_by_eq_features(
     Args:
         split_slog_antieq (SLArrayList): SLArrayList containing nspins arrays of shape
             broadcastable to (..., nelec[i], 1)
-        eq_features (jnp.ndarray): array of shape (..., nelec, d)
+        eq_features (Array): array of shape (..., nelec, d)
         spin_split (ParticleSplit): the spin split.
 
     Returns:
@@ -168,18 +168,18 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             the total number of electrons.
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         orbitals_use_bias (bool, optional): whether to add a bias term to the linear
             part of the orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should
@@ -197,7 +197,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
+    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the the orbital matrix is M, and the cofactor matrix of
@@ -206,10 +206,10 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         in this same way.
 
         Args:
-            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
+            eq_inputs: (Array): array of shape (..., nelec, d), which should
                 contain values that are equivariant with respect to the particle
                 positions.
-            r_ei (jnp.ndarray, optional): array of shape (..., nelec, nion, d)
+            r_ei (Array, optional): array of shape (..., nelec, nion, d)
                 representing electron-ion displacements, which if present will be used
                 as an extra input to the orbital layer.
 
@@ -252,18 +252,18 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
             the total number of electrons.
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         orbitals_use_bias (bool, optional): whether to add a bias term to the linear
             part of the orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should
@@ -281,7 +281,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
+    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the orbital matrix is M, and the cofactor matrix of the
@@ -290,10 +290,10 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         in this same way.
 
         Args:
-            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
+            eq_inputs: (Array): array of shape (..., nelec, d), which should
                 contain values that are equivariant with respect to the particle
                 positions.
-            r_ei (jnp.ndarray, optional): array of shape (..., nelec, nion, d)
+            r_ei (Array, optional): array of shape (..., nelec, nion, d)
                 representing electron-ion displacements, which if present will be used
                 as an extra input to the orbital layer.
 
@@ -336,18 +336,18 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             the total number of electrons.
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         orbitals_use_bias (bool, optional): whether to add a bias term to the linear
             part of the orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should
@@ -365,7 +365,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> ArrayList:
+    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the orbital matrix for particle p is M_p, the output at
@@ -373,10 +373,10 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         separately in this same way.
 
         Args:
-            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
+            eq_inputs: (Array): array of shape (..., nelec, d), which should
                 contain values that are equivariant with respect to the particle
                 positions.
-            r_ei (jnp.ndarray, optional): array of shape (..., nelec, nion, d)
+            r_ei (Array, optional): array of shape (..., nelec, nion, d)
                 representing electron-ion displacements, which if present will be used
                 as an extra input to the orbital layer.
 
@@ -419,18 +419,18 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
             the total number of electrons.
         kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
             the linear  part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         kernel_initializer_envelope_dim (WeightInitializer): kernel initializer
             for the decay rate in the exponential envelopes. If `isotropic_decay` is
             True, then this initializes a single decay rate number per ion and orbital.
             If`isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> jnp.ndarray
+            orbital. Has signature (key, shape, dtype) -> Array
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer
             for the linear combination over the ions of exponential envelopes. Has
-            signature (key, shape, dtype) -> jnp.ndarray
+            signature (key, shape, dtype) -> Array
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
-            (key, shape, dtype) -> jnp.ndarray
+            (key, shape, dtype) -> Array
         orbitals_use_bias (bool, optional): whether to add a bias term to the linear
             part of the orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should
@@ -448,7 +448,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: jnp.ndarray, r_ei: jnp.ndarray = None) -> SLArrayList:
+    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the the orbital matrix for particle p is M_p, the output
@@ -456,10 +456,10 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         separately in this same way.
 
         Args:
-            eq_inputs: (jnp.ndarray): array of shape (..., nelec, d), which should
+            eq_inputs: (Array): array of shape (..., nelec, d), which should
                 contain values that are equivariant with respect to the particle
                 positions.
-            r_ei (jnp.ndarray, optional): array of shape (..., nelec, nion, d)
+            r_ei (Array, optional): array of shape (..., nelec, nion, d)
                 representing electron-ion displacements, which if present will be used
                 as an extra input to the orbital layer.
 

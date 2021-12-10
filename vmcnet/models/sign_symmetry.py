@@ -9,13 +9,13 @@ import jax.numpy as jnp
 from vmcnet.models.core import Dense
 from vmcnet.models.weights import WeightInitializer
 from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
-from vmcnet.utils.typing import ArrayList, SLArray, SLArrayList
+from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
 
-# TypeVar used for representing either a jnp.ndarray or a SLArray
-A = TypeVar("A", jnp.ndarray, SLArray)
+# TypeVar used for representing either an Array or a SLArray
+A = TypeVar("A", Array, SLArray)
 
 
-def _get_sign_array_1d(i: int, nsyms: int) -> jnp.ndarray:
+def _get_sign_array_1d(i: int, nsyms: int) -> Array:
     """Calculate array of nsyms signs that alternate every 2**i entries."""
     sym_ints = jnp.arange(nsyms)
 
@@ -28,8 +28,8 @@ def _get_sign_array_1d(i: int, nsyms: int) -> jnp.ndarray:
 
 
 def _reshape_sign_array_for_orbit(
-    signs: jnp.ndarray, x_shape: Tuple[int, ...], axis: int, nsyms: int
-) -> jnp.ndarray:
+    signs: Array, x_shape: Tuple[int, ...], axis: int, nsyms: int
+) -> Array:
     """Reshape 1D sign array to shape (1, 1, ..., nsyms, 1, ..., 1).
 
     Resulting shape has one more axis than x and has dimension 1 on every axis except
@@ -41,12 +41,12 @@ def _reshape_sign_array_for_orbit(
 
 
 def _get_sign_orbit_single_array(
-    x: jnp.ndarray, i: int, n_total: int, axis: int
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    x: Array, i: int, n_total: int, axis: int
+) -> Tuple[Array, Array]:
     """Generates the sign orbit of a single array within a larger ArrayList.
 
     Args:
-        x (jnp.ndarray): input data to be symmetrized.
+        x (Array): input data to be symmetrized.
         i (int): the index of this data in the ArrayList. This is used to
             decide how often the sign should flip as the orbit is generated. For
             i = 0, the sign will flip every time; for i = 1, it will flip every other
@@ -61,7 +61,7 @@ def _get_sign_orbit_single_array(
             (3,2,32,4).
 
     Returns:
-        (jnp.ndarray, jnp.ndarray): First entry is the resulting orbit of x as a
+        (Array, Array): First entry is the resulting orbit of x as a
         jnp array. This will look something like [x, x, -x, -x, x, x, ...]
         (if i=2), but stacked along the specified axis. Second entry is the
         associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
@@ -75,7 +75,7 @@ def _get_sign_orbit_single_array(
 
 def _get_sign_orbit_single_sl_array(
     x: SLArray, i: int, n_total: int, axis: int
-) -> Tuple[SLArray, jnp.ndarray]:
+) -> Tuple[SLArray, Array]:
     """Generates the sign orbit of a single SLArray within a larger SLArrayList.
 
     Args:
@@ -94,7 +94,7 @@ def _get_sign_orbit_single_sl_array(
             (3,2,32,4).
 
     Returns:
-        (SLArray, jnp.ndarray): First entry is the resulting orbit of x as an
+        (SLArray, Array): First entry is the resulting orbit of x as an
         SLArray. This will look something like [x, x, -x, -x, x, x, ...]
         (if i=2), but stacked along the specified axis. Second entry is the
         associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
@@ -113,12 +113,12 @@ def _get_sign_orbit_single_sl_array(
 
 def _get_sign_orbit_for_list(
     x: List[A],
-    get_one_orbit_fn: Callable[[A, int, int, int], Tuple[A, jnp.ndarray]],
+    get_one_orbit_fn: Callable[[A, int, int, int], Tuple[A, Array]],
     axis: int,
-) -> Tuple[List[A], jnp.ndarray]:
+) -> Tuple[List[A], Array]:
     """Generates the orbit of a list of inputs w.r.t the sign group on each input.
 
-    Inputs are assumed to be either jnp.ndarrays or SLArrays, so that in either case the
+    Inputs are assumed to be either Arrays or SLArrays, so that in either case the
     resulting symmetries can be stacked along a new axis of the underlying array values.
 
     For example, if the input is (s_1, s_2, s_3), the generated symmetries will be
@@ -130,7 +130,7 @@ def _get_sign_orbit_for_list(
     multiplying together the individual sign arrays for each input.
 
     Args:
-        x (List[jnp.ndarray or SLArray]): the original data, as a list of either arrays
+        x (List[Array or SLArray]): the original data, as a list of either arrays
             or SLArrays.
         get_one_orbit_fn (Callable): function for getting the orbit of a
             single input in the input list. Signature should be
@@ -139,7 +139,7 @@ def _get_sign_orbit_for_list(
             symmetries.
 
     Returns:
-        (List[jnp.ndarray or SLArray], jnp.ndarray): First entry is a new list of arrays
+        (List[Array or SLArray], Array): First entry is a new list of arrays
         or SLArrays that contains the orbit of the input values with respect to the sign
         group, applied separately to each input entry. Second entry is the associated
         signs of each symmetry in the orbit, as a single 1D array.
@@ -152,24 +152,22 @@ def _get_sign_orbit_for_list(
     return syms, combined_signs
 
 
-def _get_sign_orbit_array_list(
-    x: ArrayList, axis: int = 0
-) -> Tuple[ArrayList, jnp.ndarray]:
+def _get_sign_orbit_array_list(x: ArrayList, axis: int = 0) -> Tuple[ArrayList, Array]:
     """Get sign orbit for an ArrayList."""
     return _get_sign_orbit_for_list(x, _get_sign_orbit_single_array, axis)
 
 
 def _get_sign_orbit_sl_array_list(
     x: SLArrayList, axis: int = 0
-) -> Tuple[SLArrayList, jnp.ndarray]:
+) -> Tuple[SLArrayList, Array]:
     """Get sign orbit for an SLArrayList."""
     return _get_sign_orbit_for_list(x, _get_sign_orbit_single_sl_array, axis)
 
 
 def apply_sign_symmetry_to_fn(
     fn: Callable[[List[A]], A],
-    get_signs_and_syms: Callable[[List[A]], Tuple[List[A], jnp.ndarray]],
-    apply_output_signs: Callable[[A, jnp.ndarray], A],
+    get_signs_and_syms: Callable[[List[A]], Tuple[List[A], Array]],
+    apply_output_signs: Callable[[A, Array], A],
     add_up_results: Callable[[A], A],
 ) -> Callable[[List[A]], A]:
     """Make a function of a list of inputs covariant in the sign of each input.
@@ -182,7 +180,7 @@ def apply_sign_symmetry_to_fn(
     covariant signs. For example, for two spins this calculates
     g(U,D) = f(U,D) - f(-U,D) - f(U, -D) + f(-U, -D).
 
-    Inputs are assumed to be either jnp.ndarrays or SLArrays, so that in either case the
+    Inputs are assumed to be either Arrays or SLArrays, so that in either case the
     required symmetries can be stacked along a new axis of the underlying array values.
     The function `fn` is assumed to support the injection of a batch dimension, done in
     `get_signs_and_syms`, and pass it through to the output (e.g., a function which
@@ -198,10 +196,10 @@ def apply_sign_symmetry_to_fn(
             for the input array. Returns a tuple of the symmetries plus the associated
             signs as a 1D array.
         apply_output_signs (Callable): function for applying signs to the outputs of
-            the symmetrized function. For example, if the outputs are jnp.ndarrays, this
+            the symmetrized function. For example, if the outputs are Arrays, this
             would simply multiply the arrays by the signs along the appropriate axis.
         add_up_results (Callable): function for combining the signed outputs into a
-            single, sign-covariant output. For example, simple addition for jnp.ndarrays
+            single, sign-covariant output. For example, simple addition for Arrays
             or the slog_sum function for SLArrays.
 
     Returns:
@@ -250,8 +248,8 @@ def make_sl_array_list_fn_sign_covariant(
 
 
 def make_array_list_fn_sign_covariant(
-    fn: Callable[[ArrayList], jnp.ndarray], axis: int = -2
-) -> Callable[[ArrayList], jnp.ndarray]:
+    fn: Callable[[ArrayList], Array], axis: int = -2
+) -> Callable[[ArrayList], Array]:
     """Make a function of an ArrayList sign-covariant in the sign of each array.
 
     Shallow wrapper around the generic apply_sign_symmetry_to_fn.
@@ -276,8 +274,8 @@ def make_array_list_fn_sign_covariant(
 
 
 def make_array_list_fn_sign_invariant(
-    fn: Callable[[ArrayList], jnp.ndarray], axis: int = -2
-) -> Callable[[ArrayList], jnp.ndarray]:
+    fn: Callable[[ArrayList], Array], axis: int = -2
+) -> Callable[[ArrayList], Array]:
     """Make a function of an ArrayList sign-invariant (even) in the sign of each array.
 
     Shallow wrapper around the generic apply_sign_symmetry_to_fn.
@@ -326,7 +324,7 @@ class ProductsSignCovariance(flax.linen.Module):
     use_weights: bool = False
 
     @flax.linen.compact
-    def __call__(self, x: ArrayList) -> jnp.ndarray:
+    def __call__(self, x: ArrayList) -> Array:
         """Calculate weighted sum of products of up- and down-spin antiequivariances.
 
         Arguments:
@@ -334,7 +332,7 @@ class ProductsSignCovariance(flax.linen.Module):
                 [(..., nelec_up, d), (..., nelec_down, d)]
 
         Returns:
-            jnp.ndarray: array of length features of antisymmetric values calculated
+            Array: array of length features of antisymmetric values calculated
                 by taking a weighted sum of the pairwise dot-products of the up- and
                 down-spin antiequivariant inputs.
         """

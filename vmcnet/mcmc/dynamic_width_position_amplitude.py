@@ -11,7 +11,7 @@ from .position_amplitude_core import (
     PositionAmplitudeWalkerData,
 )
 from vmcnet.utils.distribute import mean_all_local_devices
-from vmcnet.utils.typing import P, ModelApply
+from vmcnet.utils.typing import Array, P, ModelApply
 
 
 class MoveMetadata(TypedDict):
@@ -45,8 +45,8 @@ DWPAData = DynamicWidthPositionAmplitudeData
 
 
 def make_dynamic_width_position_amplitude_data(
-    position: jnp.ndarray,
-    amplitude: jnp.ndarray,
+    position: Array,
+    amplitude: Array,
     std_move: jnp.float32,
     move_acceptance_sum: jnp.float32 = 0.0,
     moves_since_update: jnp.int32 = 0,
@@ -54,8 +54,8 @@ def make_dynamic_width_position_amplitude_data(
     """Create instance of DynamicWidthPositionAmplitudeData.
 
     Args:
-        position (jnp.ndarray): the particle positions
-        amplitude (jnp.ndarray): the wavefunction amplitudes
+        position (Array): the particle positions
+        amplitude (Array): the wavefunction amplitudes
         std_move (jnp.float32): std for gaussian moves
         move_acceptance_sum (jnp.float32): sum of the acceptance ratios of each step
             since the last update. Default of 0 should not be altered if using this
@@ -122,7 +122,7 @@ def make_threshold_adjust_std_move(
 def make_update_move_metadata_fn(
     nmoves_per_update: jnp.int32,
     adjust_std_move_fn: Callable[[jnp.float32, jnp.float32], jnp.float32],
-) -> Callable[[MoveMetadata, jnp.ndarray], MoveMetadata]:
+) -> Callable[[MoveMetadata, Array], MoveMetadata]:
     """Create a function that updates the move_metadata periodically.
 
     Periodicity is controlled by the nmoves_per_update parameter and the logic for
@@ -142,7 +142,7 @@ def make_update_move_metadata_fn(
     """
 
     def update_move_metadata(
-        move_metadata: MoveMetadata, current_move_mask: jnp.ndarray
+        move_metadata: MoveMetadata, current_move_mask: Array
     ) -> MoveMetadata:
         std_move = move_metadata["std_move"]
         move_acceptance_sum = move_metadata["move_acceptance_sum"]

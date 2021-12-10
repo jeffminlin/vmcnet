@@ -5,10 +5,10 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import P, ModelApply
+from vmcnet.utils.typing import Array, P, ModelApply
 
 
-def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:
+def make_hermite_polynomials(x: Array) -> Array:
     """Compute the first n Hermite polynomials evaluated at n points.
 
     Because the Hermite polynomials are orthogonal, they have a three-term recurrence
@@ -21,10 +21,10 @@ def make_hermite_polynomials(x: jnp.ndarray) -> jnp.ndarray:
     along the first axis and the polynomials along the second.
 
     Args:
-        x (jnp.ndarray): an array of shape (..., nparticles, 1)
+        x (Array): an array of shape (..., nparticles, 1)
 
     Returns:
-        jnp.ndarray: an array of shape (..., nparticles, nparticles), where the
+        Array: an array of shape (..., nparticles, nparticles), where the
         (..., i, j)th entry corresponds to H_j(x_i).
     """
     nparticles = x.shape[-2]
@@ -94,7 +94,7 @@ class HarmonicOscillatorOrbitals(flax.linen.Module):
     omega_init: jnp.float32
 
     @flax.linen.compact
-    def _single_leaf_call(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _single_leaf_call(self, x: Array) -> Array:
         # x and omega * x have shape (..., n, 1)
         sqrt_omega_x = models.core.Dense(
             1,
@@ -144,7 +144,7 @@ def make_harmonic_oscillator_spin_half_model(
     return models.core.ComposedModel([split_spin_fn, orbitals, logdet_fn])
 
 
-def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.float32:
+def harmonic_oscillator_potential(omega: jnp.float32, x: Array) -> jnp.float32:
     """Potential energy for independent harmonic oscillators with spring constant omega.
 
     This function computes sum_i 0.5 * (omega * x_i)^2. If x has more than one axis,
@@ -156,7 +156,7 @@ def harmonic_oscillator_potential(omega: jnp.float32, x: jnp.ndarray) -> jnp.flo
 
     Args:
         omega (jnp.float32): spring constant
-        x (jnp.ndarray): array of particle positions, where the first axis corresponds
+        x (Array): array of particle positions, where the first axis corresponds
             to particle index
 
     Returns:
@@ -182,7 +182,7 @@ def make_harmonic_oscillator_local_energy(
     """
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
 
-    def potential_fn(params: P, x: jnp.ndarray):
+    def potential_fn(params: P, x: Array):
         del params
         return harmonic_oscillator_potential(omega, x)
 

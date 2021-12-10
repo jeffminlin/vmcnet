@@ -10,15 +10,15 @@ import numpy as np
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import ArrayList, PyTree, SLArray, ParticleSplit
+from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
-Activation = Callable[[jnp.ndarray], jnp.ndarray]
+Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
 
 
 def _split_mean(
-    x: jnp.ndarray,
+    x: Array,
     splits: ParticleSplit,
     axis: int = -2,
     keepdims: bool = True,
@@ -39,10 +39,10 @@ def compute_ee_norm_with_safe_diag(r_ee):
     0 * norm(x - x + 1) along the diagonal.
 
     Args:
-        x (jnp.ndarray): electron-electron displacements wth shape (..., n, n, d)
+        x (Array): electron-electron displacements wth shape (..., n, n, d)
 
     Returns:
-        jnp.ndarray: electron-electrondists with shape (..., n, n, 1)
+        Array: electron-electrondists with shape (..., n, n, 1)
     """
     n = r_ee.shape[-2]
     eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
@@ -51,11 +51,11 @@ def compute_ee_norm_with_safe_diag(r_ee):
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:
-    """Returns True if x is a tuple of jnp.ndarray objects."""
+    """Returns True if x is a tuple of Array objects."""
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
 
 
-def get_alternating_signs(n: int) -> jnp.ndarray:
+def get_alternating_signs(n: int) -> Array:
     """Return alternating series of 1 and -1, of length n."""
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
@@ -86,14 +86,14 @@ def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ..
         )
 
 
-def get_spin_split(n_per_split: Union[Sequence[int], jnp.ndarray]) -> Tuple[int, ...]:
+def get_spin_split(n_per_split: Union[Sequence[int], Array]) -> Tuple[int, ...]:
     """Calculate spin split from n_per_split, making sure to output a Tuple of ints."""
     cumsum = np.cumsum(n_per_split[:-1])
     # Convert to tuple of python ints.
     return tuple([int(i) for i in cumsum])
 
 
-def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
+def _valid_skip(x: Array, y: Array):
     return x.shape[-1] == y.shape[-1]
 
 
@@ -162,14 +162,14 @@ class Dense(flax.linen.Module):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, inputs: Array) -> Array:
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
-            inputs (jnp.ndarray): The nd-array to be transformed.
+            inputs (Array): The nd-array to be transformed.
 
         Returns:
-            jnp.ndarray: The transformed input.
+            Array: The transformed input.
         """
         kernel = self.param(
             "kernel", self.kernel_init, (inputs.shape[-1], self.features)
@@ -255,7 +255,7 @@ class SimpleResNet(flax.linen.Module):
             Defaults to random normal initialization.
         activation_fn (Activation): activation function between intermediate layers (is
             not applied after the final dense layer). Has the signature
-            jnp.ndarray -> jnp.ndarray (shape is preserved)
+            Array -> Array (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
         register_kfac (bool, optional): whether to register the dense layers with KFAC.
@@ -295,21 +295,21 @@ class SimpleResNet(flax.linen.Module):
             register_kfac=self.register_kfac,
         )
 
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, x: Array) -> Array:
         """Repeated application of (dense layer -> activation -> optional skip) block.
 
         Args:
-            x (jnp.ndarray): an input array of shape (..., d)
+            x (Array): an input array of shape (..., d)
 
         Returns:
-            jnp.ndarray: array of shape (..., self.ndense_final)
+            Array: array of shape (..., self.ndense_final)
         """
         for dense_layer in self.inner_dense:
             prev_x = x
             x = dense_layer(prev_x)
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
-                x = cast(jnp.ndarray, x + prev_x)
+                x = cast(Array, x + prev_x)
 
         return self.final_dense(x)
 
