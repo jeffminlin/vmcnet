@@ -214,7 +214,7 @@ def get_default_model_config() -> Dict:
         # "antiequivariance" model type
         "orbital_cofactor_net": antieq_config,
         "per_particle_dets_net": antieq_config,
-        "brute_force_antisym": {
+        "explicit_antisym": {
             "input_streams": input_streams,
             "backflow": ferminet_backflow,
             "antisym_type": "generic",  # factorized or generic

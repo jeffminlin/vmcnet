@@ -508,13 +508,13 @@ def test_per_particle_dets_net_can_be_evaluated():
 
 
 def test_factorized_antisymmetry_can_be_constructed():
-    """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
+    """Check construction of FactorizedAntisymmetry does not fail."""
     _make_factorized_antisymmetries()
 
 
 @pytest.mark.slow
 def test_factorized_antisymmetry_can_be_evaluated():
-    """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
+    """Check evaluation of FactorizedAntisymmetry does not fail."""
     key, init_pos, slog_psis = _make_factorized_antisymmetries()
     [
         _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
@@ -523,13 +523,13 @@ def test_factorized_antisymmetry_can_be_evaluated():
 
 
 def test_generic_antisymmetry_can_be_constructed():
-    """Check construction of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+    """Check construction of GenericAntisymmetry does not fail."""
     _make_generic_antisymmetry()
 
 
 @pytest.mark.slow
 def test_generic_antisymmetry_can_be_evaluated():
-    """Check evaluation of ComposedBruteForceAntisymmetryWithDecay does not fail."""
+    """Check evaluation of GenericAntisymmetry does not fail."""
     key, init_pos, slog_psi = _make_generic_antisymmetry()
     _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
 
@@ -544,23 +544,23 @@ def test_get_model_from_default_config():
         model_type,
         use_det_resnet=True,
         determinant_fn_mode=None,
-        brute_force_subtype=None,
+        explicit_antisym_subtype=None,
         use_products_covariance=False,
     ):
         model_config = get_default_config_with_chosen_model(
             model_type,
             use_det_resnet=use_det_resnet,
             determinant_fn_mode=determinant_fn_mode,
-            brute_force_subtype=brute_force_subtype,
+            explicit_antisym_subtype=explicit_antisym_subtype,
             use_products_covariance=use_products_covariance,
         ).model
         models.construct.get_model_from_config(
             model_config, nelec, ion_pos, ion_charges
         )
 
-    for model_type in ["brute_force_antisym"]:
+    for model_type in ["explicit_antisym"]:
         for subtype in ["factorized", "generic"]:
-            _construct_model(model_type, brute_force_subtype=subtype)
+            _construct_model(model_type, explicit_antisym_subtype=subtype)
     for model_type in [
         "ferminet",
         "embedded_particle_ferminet",

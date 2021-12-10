@@ -314,7 +314,7 @@ def get_model_from_config(
             multiply_by_eq_features=model_config.multiply_by_eq_features,
         )
 
-    elif model_config.type == "brute_force_antisym":
+    elif model_config.type == "explicit_antisym":
         jastrow_config = model_config.jastrow
 
         def _get_two_body_decay_jastrow():
@@ -398,7 +398,7 @@ def get_model_from_config(
             )
         else:
             raise ValueError(
-                "Unsupported brute-force antisymmetry type; {} was requested".format(
+                "Unsupported explicit antisymmetry type; {} was requested".format(
                     model_config.antisym_type
                 )
             )
@@ -1271,7 +1271,7 @@ class AntiequivarianceNet(flax.linen.Module):
 
 
 class FactorizedAntisymmetry(flax.linen.Module):
-    """A sum of products of brute-force antisymmetrized ResNets, composed with backflow.
+    """A sum of products of explicitly antisymmetrized ResNets, composed with backflow.
 
     This connects the computational graph between a backflow, a factorized
     antisymmetrized ResNet, and a jastrow.
@@ -1310,7 +1310,7 @@ class FactorizedAntisymmetry(flax.linen.Module):
                 r_ee of shape (batch_dims, n, n, d),
             )
                 -> log jastrow of shape (batch_dims,)
-        rank (int): The rank of the brute-force antisymmetry. In practical terms, the
+        rank (int): The rank of the explicit antisymmetry. In practical terms, the
             number of resnets to antisymmetrize for each spin. This is analogous to
             ndeterminants for regular FermiNet.
         ndense_resnet (int): number of dense nodes in each layer of each antisymmetrized

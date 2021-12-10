@@ -187,7 +187,7 @@ class GenericAntisymmetrize(flax.linen.Module):
     layer.
 
     For each leaf of a pytree, a given function of all the leaves is antisymmetrized
-    over the second-to-last axis of each leaf. These brute-force antisymmetrization
+    over the second-to-last axis of each leaf. These explicit antisymmetrization
     operations are composed with each other (they commute, so the order does not
     matter), giving an output which is antisymmetric with respect to particle exchange
     within each leaf but not with respect to particle exchange between leaves.

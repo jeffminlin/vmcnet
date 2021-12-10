@@ -87,8 +87,8 @@ def _diagonal_product(flattened_square_matrix, n):
 
 
 @pytest.mark.slow
-def test_split_brute_force_antisymmetrize_vandermonde_product():
-    """Test split brute-force antisym can be a product of vandermonde dets."""
+def test_factorized_antisymmetrize_vandermonde_product():
+    """Test factorized antisym can be a product of vandermonde dets."""
     xs = [jnp.array([[3], [-2], [4]]), jnp.array([[1], [2], [3], [4]])]
     vandermonde_dets = [
         ((-2) - 3) * (4 - 3) * (4 - (-2)),
@@ -116,8 +116,8 @@ def test_split_brute_force_antisymmetrize_vandermonde_product():
 
 
 @pytest.mark.slow
-def test_composed_brute_force_antisymmetrize_product():
-    """Check composed brute-force antisym can make a product of determinants."""
+def test_generic_antisymmetrize_product():
+    """Check generic antisymmetrize can make a product of determinants."""
     x_matrices = [
         jnp.array(
             [
