@@ -11,12 +11,12 @@ import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.typing import (
-    Array,
     D,
     GetPositionFromData,
     ModelApply,
     OptimizerState,
     P,
+    PRNGKeyArray,
 )
 
 from .params import (
@@ -60,9 +60,9 @@ def get_update_fn_and_init_optimizer(
     data: D,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: Array,
+    key: PRNGKeyArray,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, Array]:
+) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKeyArray]:
     """Get an update function and initialize optimizer state from the vmc configuration.
 
     Args:
@@ -78,7 +78,7 @@ def get_update_fn_and_init_optimizer(
                 -> ((expected_energy, auxiliary_energy_data), grad_energy),
             where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        key (Array): PRNGKey with which to initialize optimizer state
+        key (PRNGKeyArray): PRNGKey with which to initialize optimizer state
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -87,7 +87,7 @@ def get_update_fn_and_init_optimizer(
         SGD, and SR (with either Adam or SGD) is supported.
 
     Returns:
-        (UpdateParamFn, OptimizerState, Array):
+        (UpdateParamFn, OptimizerState, PRNGKeyArray):
         update param function with signature
             (params, data, optimizer_state, key)
             -> (new params, new state, metrics, new key),
@@ -159,12 +159,12 @@ def get_kfac_update_fn_and_state(
     data: D,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: Array,
+    key: PRNGKeyArray,
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, Array]:
+) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKeyArray]:
     """Get an update param function, initial state, and key for KFAC.
 
     Args:
@@ -177,7 +177,7 @@ def get_kfac_update_fn_and_state(
                 -> ((expected_energy, auxiliary_energy_data), grad_energy),
             where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        key (Array): PRNGKey with which to initialize optimizer state
+        key (PRNGKeyArray): PRNGKey with which to initialize optimizer state
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for KFAC
@@ -187,7 +187,7 @@ def get_kfac_update_fn_and_state(
             True.
 
     Returns:
-        (UpdateParamFn, kfac_opt.State, Array):
+        (UpdateParamFn, kfac_opt.State, PRNGKeyArray):
         update param function with signature
             (params, data, optimizer_state, key)
             -> (new params, new state, metrics, new key),

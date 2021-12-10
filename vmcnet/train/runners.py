@@ -24,6 +24,7 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import (
     Array,
     P,
+    PRNGKeyArray,
     D,
     S,
     GetPositionFromData,
@@ -81,10 +82,10 @@ def _get_and_init_model(
     ion_charges: Array,
     nelec: Array,
     init_pos: Array,
-    key: Array,
+    key: PRNGKeyArray,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[flax.linen.Module, flax.core.FrozenDict, Array]:
+) -> Tuple[flax.linen.Module, flax.core.FrozenDict, PRNGKeyArray]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -269,7 +270,7 @@ def _setup_vmc(
     ion_pos: Array,
     ion_charges: Array,
     nelec: Array,
-    key: Array,
+    key: PRNGKeyArray,
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[
@@ -282,7 +283,7 @@ def _setup_vmc(
     flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
-    Array,
+    PRNGKeyArray,
 ]:
     nelec_total = jnp.sum(nelec)
     key, init_pos = physics.core.initialize_molecular_pos(
@@ -381,9 +382,9 @@ def _make_new_data_for_eval(
     ion_pos: Array,
     ion_charges: Array,
     nelec: Array,
-    key: Array,
+    key: PRNGKeyArray,
     dtype=jnp.float32,
-) -> Tuple[Array, dwpa.DWPAData]:
+) -> Tuple[PRNGKeyArray, dwpa.DWPAData]:
     nelec_total = jnp.sum(nelec)
     # grab the first key if distributed
     key = utils.distribute.get_first_if_distributed(key)
@@ -415,9 +416,9 @@ def _burn_and_run_vmc(
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
     get_amplitude_fn: GetAmplitudeFromData[D],
-    key: Array,
+    key: PRNGKeyArray,
     should_checkpoint: bool = True,
-) -> Tuple[P, S, D, Array]:
+) -> Tuple[P, S, D, PRNGKeyArray]:
     if should_checkpoint:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every

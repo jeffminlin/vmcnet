@@ -5,7 +5,7 @@ from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, D, GetAmplitudeFromData, P, S
+from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKeyArray, S
 
 
 def vmc_loop(
@@ -16,7 +16,7 @@ def vmc_loop(
     nepochs: int,
     walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
-    key: Array,
+    key: PRNGKeyArray,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,
     best_checkpoint_every: Optional[int] = 100,
@@ -27,7 +27,7 @@ def vmc_loop(
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
-) -> Tuple[P, S, D, Array]:
+) -> Tuple[P, S, D, PRNGKeyArray]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -52,7 +52,7 @@ def vmc_loop(
                 -> (new_params, optimizer_state, dict: metrics, key).
             If metrics is not None, it is required to have the entries "energy" and
             "variance" at a minimum. If metrics is None, no checkpointing is done.
-        key (Array): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
         logdir (str, optional): name of parent log directory. If None, no checkpointing

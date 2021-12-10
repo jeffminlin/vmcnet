@@ -6,15 +6,15 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, D, P
+from vmcnet.utils.typing import Array, D, P, PRNGKeyArray
 
-MetropolisStep = Callable[[P, D, Array], Tuple[jnp.float32, D, Array]]
+MetropolisStep = Callable[[P, D, PRNGKeyArray], Tuple[jnp.float32, D, PRNGKeyArray]]
 WalkerFn = MetropolisStep[P, D]
-BurningStep = Callable[[P, D, Array], Tuple[D, Array]]
+BurningStep = Callable[[P, D, PRNGKeyArray], Tuple[D, PRNGKeyArray]]
 
 
 def make_metropolis_step(
-    proposal_fn: Callable[[P, D, Array], Tuple[D, Array]],
+    proposal_fn: Callable[[P, D, PRNGKeyArray], Tuple[D, PRNGKeyArray]],
     acceptance_fn: Callable[[P, D, D], Array],
     update_data_fn: Callable[[D, D, Array], D],
 ) -> MetropolisStep[P, D]:
@@ -48,7 +48,9 @@ def make_metropolis_step(
         one)
     """
 
-    def metrop_step_fn(params: P, data: D, key: Array) -> Tuple[jnp.float32, D, Array]:
+    def metrop_step_fn(
+        params: P, data: D, key: PRNGKeyArray
+    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
         """Take a single metropolis step."""
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
@@ -68,9 +70,9 @@ def walk_data(
     nsteps: int,
     params: P,
     data: D,
-    key: Array,
+    key: PRNGKeyArray,
     metrop_step_fn: MetropolisStep[P, D],
-) -> Tuple[jnp.float32, D, Array]:
+) -> Tuple[jnp.float32, D, PRNGKeyArray]:
     """Take multiple Metropolis-Hastings steps.
 
     This function is roughly equivalent to:
@@ -90,14 +92,14 @@ def walk_data(
         data (pytree-like): data to walk (update) with each step
         params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
             model params
-        key (Array): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
 
     Returns:
-        (jnp.float32, pytree-like, Array): acceptance probability, new data,
+        (jnp.float32, pytree-like, PRNGKeyArray): acceptance probability, new data,
             new jax PRNG key split (possibly multiple times) from previous one
     """
 
@@ -137,7 +139,7 @@ def make_jitted_burning_step(
         with jax.pmap optionally applied if apply_pmap is True.
     """
 
-    def burning_step(params: P, data: D, key: Array) -> Tuple[D, Array]:
+    def burning_step(params: P, data: D, key: PRNGKeyArray) -> Tuple[D, PRNGKeyArray]:
         _, data, key = metrop_step_fn(params, data, key)
         return data, key
 
@@ -175,7 +177,9 @@ def make_jitted_walker_fn(
         apply_pmap is False.
     """
 
-    def walker_fn(params: P, data: D, key: Array) -> Tuple[jnp.float32, D, Array]:
+    def walker_fn(
+        params: P, data: D, key: PRNGKeyArray
+    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
         accept_ratio, data, key = walk_data(nsteps, params, data, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -186,8 +190,8 @@ def make_jitted_walker_fn(
     pmapped_walker_fn = utils.distribute.pmap(walker_fn)
 
     def pmapped_walker_fn_with_single_accept_ratio(
-        params: P, data: D, key: Array
-    ) -> Tuple[jnp.float32, D, Array]:
+        params: P, data: D, key: PRNGKeyArray
+    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
         accept_ratio, data, key = pmapped_walker_fn(params, data, key)
         accept_ratio = utils.distribute.get_first(accept_ratio)
         return accept_ratio, data, key
@@ -200,8 +204,8 @@ def burn_data(
     nsteps_to_burn: int,
     params: P,
     data: D,
-    key: Array,
-) -> Tuple[D, Array]:
+    key: PRNGKeyArray,
+) -> Tuple[D, PRNGKeyArray]:
     """Repeatedly apply a burning step.
 
     Args:
@@ -210,12 +214,12 @@ def burn_data(
         nsteps_to_burn (int): number of times to call burning_step
         data (pytree-like): initial data
         params (pytree-like): parameters passed to the burning step
-        key (Array): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
 
     Returns:
-        (pytree-like, Array): new data, new key
+        (pytree-like, PRNGKeyArray): new data, new key
     """
     logging.info("Burning data for %d steps", nsteps_to_burn)
     for _ in range(nsteps_to_burn):
@@ -224,14 +228,14 @@ def burn_data(
 
 
 def gaussian_proposal(
-    positions: Array, std_move: jnp.float32, key: Array
-) -> Tuple[Array, Array]:
+    positions: Array, std_move: jnp.float32, key: PRNGKeyArray
+) -> Tuple[Array, PRNGKeyArray]:
     """Simple symmetric gaussian proposal in all positions at once.
 
     Args:
         positions (Array): original positions
         std_move (jnp.float32): standard deviation of the moves
-        key (Array): an array with shape (2,) representing a jax PRNG key
+        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key
 
     Returns:
         (Array, Array): (new positions, new key split from previous)

@@ -7,7 +7,7 @@ import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
-from vmcnet.utils.typing import Array, D, P, PyTree, S, T
+from vmcnet.utils.typing import Array, D, P, PRNGKeyArray, PyTree, S, T
 
 
 # axis name to pmap over
@@ -42,7 +42,7 @@ def replicate_all_local_devices(obj: T) -> T:
     return broadcast_all_local_devices(obj_stacked)
 
 
-def make_different_rng_key_on_all_devices(rng: Array) -> Array:
+def make_different_rng_key_on_all_devices(rng: PRNGKeyArray) -> PRNGKeyArray:
     """Split a PRNG key to all local devices."""
     rng = jax.random.fold_in(rng, jax.process_index())
     rng = jax.random.split(rng, jax.local_device_count())
@@ -98,7 +98,7 @@ def get_mean_over_first_axis_fn(
 p_split = pmap(lambda key: tuple(jax.random.split(key)))
 
 
-def split_or_psplit_key(key: Array, multi_device: bool = True) -> Tuple[Array, Array]:
+def split_or_psplit_key(key: PRNGKeyArray, multi_device: bool = True) -> PRNGKeyArray:
     """Split PRNG key, potentially on multiple devices."""
     return p_split(key) if multi_device else jax.random.split(key)
 
@@ -128,9 +128,9 @@ def distribute_vmc_state(
     data: D,
     params: P,
     optimizer_state: S,
-    key: Array,
+    key: PRNGKeyArray,
     distribute_data_fn: Callable[[D], D] = default_distribute_data,
-) -> Tuple[D, P, S, Array]:
+) -> Tuple[D, P, S, PRNGKeyArray]:
     """Split data, replicate params and opt state, and split PRNG key to all devices.
 
     Args:
@@ -143,7 +143,7 @@ def distribute_vmc_state(
             the devices. Default works if there is no data that requires replication.
 
     Returns:
-        Tuple[D, P, O, Array]: tuple of data, params, optimizer_state, and key,
+        Tuple[D, P, O, PRNGKeyArray]: tuple of data, params, optimizer_state, and key,
         each of which has been either distributed or replicated across all devices,
         as appopriate.
     """
@@ -159,8 +159,8 @@ def distribute_vmc_state_from_checkpoint(
     data: D,
     params: P,
     optimizer_state: S,
-    key: Array,
-) -> Tuple[D, P, S, Array]:
+    key: PRNGKeyArray,
+) -> Tuple[D, P, S, PRNGKeyArray]:
     """Distribute vmc state that was reloaded from a saved checkpoint.
 
     Data and key are saved independently for each device, so on reload
