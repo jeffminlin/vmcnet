@@ -7,12 +7,15 @@ otherwise they are intended for documentation and clarity.
 from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 import flax.core.frozen_dict as frozen_dict
+import jax.numpy as jnp
 import kfac_ferminet_alpha.optimizer as kfac_opt
 import optax
 
-# Array does not play well with mypy; hence use Array aliased as Any as suggested
-# in https://stackoverflow.com/a/68885299.
-Array = Any
+# Using jnp.ndarray as our array type causes some type errors since JAX and mypy do
+# not play well together. See for example https://stackoverflow.com/a/68885299. We
+# work around these issues by using type: ignore when they come up rather than
+# abandoning the type wholesale as suggested in that thread.
+Array = jnp.ndarray
 
 # Currently using PyTree = Any just to improve readability in the code.
 # A pytree is a "tree-like structure built out of container-like Python objects": see

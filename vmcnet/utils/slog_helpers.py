@@ -63,7 +63,7 @@ def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     """
     (sx, lx) = x
     (sy, ly) = y
-    return (sx * sy, lx + ly)
+    return (sx * sy, lx + ly)  # type: ignore
 
 
 def slog_sum_over_axis(x: SLArray, axis: int = 0) -> SLArray:

@@ -89,7 +89,7 @@ def get_fisher_inverse_fn(
 
             log_psi_grads = batch_raveled_log_psi_grad(params, positions)
             mean_log_psi_grads = mean_grad_fn(log_psi_grads)
-            centered_log_psi_grads = (
+            centered_log_psi_grads: Array = (
                 log_psi_grads - mean_log_psi_grads
             )  # shape (nchains, nparams)
 

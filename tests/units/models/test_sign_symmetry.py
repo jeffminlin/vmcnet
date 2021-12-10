@@ -116,8 +116,8 @@ def _test_sign_covariance_or_invariance(is_invariance: bool, atol: float):
 
     result = sym_fn(inputs)
     chex.assert_shape(result, (nbatch, dout))
-    sign_change_result = sym_fn(sign_change_inputs)
-    double_sign_change_result = sym_fn(double_sign_change_inputs)
+    sign_change_result = sym_fn(sign_change_inputs)  # type: ignore
+    double_sign_change_result = sym_fn(double_sign_change_inputs)  # type: ignore
 
     assert_pytree_allclose(double_sign_change_result, result, atol=atol)
     if is_invariance:

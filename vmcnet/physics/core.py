@@ -203,7 +203,7 @@ def get_default_energy_bwd(
     ) -> jnp.float32:
         log_psi = log_psi_apply(params, positions)
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
-        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)
+        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)  # type: ignore
 
     _get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
 
