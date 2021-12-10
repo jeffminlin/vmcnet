@@ -74,7 +74,7 @@ def test_log_molecular_decay_jastrow_close_to_linear():
     elec_pos = elec_pos[:, :-2, :]  # remove two electrons
     r_ei, r_ee = _get_ei_and_ee(elec_pos, ion_pos)
     np.testing.assert_allclose(
-        jastrow.apply({}, None, None, None, r_ei, r_ee), 3 * -2e10
+        jastrow.apply({}, None, None, None, r_ei, r_ee), 3 * -2e10, rtol=1e-6
     )
 
 
