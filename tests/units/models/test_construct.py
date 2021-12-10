@@ -378,7 +378,7 @@ def _make_factorized_antisymmetries():
     )
 
     slog_psis = [
-        models.construct.FactoredAntisymmetry(
+        models.construct.FactorizedAntisymmetry(
             spin_split,
             compute_input_streams,
             backflow,

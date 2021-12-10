@@ -111,7 +111,7 @@ class ParallelPermutations(flax.linen.Module):
         return jnp.take(x, self.permutation_list, axis=-2), self.signs
 
 
-class FactoredAntisymmetrize(flax.linen.Module):
+class FactorizedAntisymmetrize(flax.linen.Module):
     """Separately antisymmetrize fns over leaves of a pytree and return the product.
 
     See https://arxiv.org/abs/2112.03491 for a description of the factorized antisymmetric

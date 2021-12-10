@@ -21,7 +21,7 @@ from vmcnet.utils.typing import (
 )
 from .antisymmetry import (
     GenericAntisymmetrize,
-    FactoredAntisymmetrize,
+    FactorizedAntisymmetrize,
     slogdet_product,
 )
 from .core import (
@@ -358,7 +358,7 @@ def get_model_from_config(
                 )
             )
         if model_config.antisym_type == "factorized":
-            return FactoredAntisymmetry(
+            return FactorizedAntisymmetry(
                 spin_split,
                 compute_input_streams,
                 backflow,
@@ -1270,7 +1270,7 @@ class AntiequivarianceNet(flax.linen.Module):
         return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
-class FactoredAntisymmetry(flax.linen.Module):
+class FactorizedAntisymmetry(flax.linen.Module):
     """A sum of products of brute-force antisymmetrized ResNets, composed with backflow.
 
     This connects the computational graph between a backflow, a factorized antisymmetrized
@@ -1384,7 +1384,7 @@ class FactoredAntisymmetry(flax.linen.Module):
             ]
             return jnp.concatenate(resnet_outputs, axis=-1)
 
-        slog_antisyms = FactoredAntisymmetrize(
+        slog_antisyms = FactorizedAntisymmetrize(
             [fn_to_antisymmetrize for _ in split_spins]
         )(split_spins)
         sign_psi, log_antisyms = slog_sum_over_axis(slog_antisyms, axis=-1)
