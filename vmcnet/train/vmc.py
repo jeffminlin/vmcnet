@@ -5,7 +5,7 @@ from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
-from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKeyArray, S
+from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKey, S
 
 
 def vmc_loop(
@@ -16,7 +16,7 @@ def vmc_loop(
     nepochs: int,
     walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
-    key: PRNGKeyArray,
+    key: PRNGKey,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,
     best_checkpoint_every: Optional[int] = 100,
@@ -27,7 +27,7 @@ def vmc_loop(
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
-) -> Tuple[P, S, D, PRNGKeyArray]:
+) -> Tuple[P, S, D, PRNGKey]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a

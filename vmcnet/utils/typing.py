@@ -14,7 +14,7 @@ import optax
 
 Array = jnp.ndarray
 
-PRNGKeyArray = KeyArray
+PRNGKey = KeyArray
 
 # Currently using PyTree = Any just to improve readability in the code.
 # A pytree is a "tree-like structure built out of container-like Python objects": see
@@ -51,7 +51,7 @@ ModelParams = frozen_dict.FrozenDict
 #  3. The model parameters
 #  4. The optimizer state
 #  5. The RNG key
-CheckpointData = Tuple[int, D, P, S, PRNGKeyArray]
+CheckpointData = Tuple[int, D, P, S, PRNGKey]
 
 ArrayList = List[Array]
 

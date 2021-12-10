@@ -20,12 +20,12 @@ from vmcnet.utils.typing import (
     ModelApply,
     OptimizerState,
     P,
-    PRNGKeyArray,
+    PRNGKey,
     PyTree,
     S,
 )
 
-UpdateParamFn = Callable[[P, D, S, PRNGKeyArray], Tuple[P, S, Dict, PRNGKeyArray]]
+UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, S, Dict, PRNGKey]]
 
 
 def _update_metrics_with_noclip(

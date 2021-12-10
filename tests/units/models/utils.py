@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.models as models
-from vmcnet.utils.typing import Array, PRNGKeyArray
+from vmcnet.utils.typing import Array, PRNGKey
 
 
 def get_elec_hyperparams() -> Tuple[
@@ -31,7 +31,7 @@ def get_elec_hyperparams() -> Tuple[
 
 def get_elec_and_ion_pos_from_hyperparams(
     nchains: int, nelec_total: int, nion: int, d: int, permutation: Tuple[int, ...]
-) -> Tuple[PRNGKeyArray, Array, Array, Optional[Array]]:
+) -> Tuple[PRNGKey, Array, Array, Optional[Array]]:
     """Get electron, permuted electron, and ion positions from hyperparameters."""
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
@@ -54,7 +54,7 @@ def get_input_streams_from_hyperparams(
     Array,
     Optional[Array],
     Optional[Array],
-    PRNGKeyArray,
+    PRNGKey,
 ]:
     """Get electron and permuted electron input streams given hyperparameters."""
     key, elec_pos, permuted_elec_pos, ion_pos = get_elec_and_ion_pos_from_hyperparams(

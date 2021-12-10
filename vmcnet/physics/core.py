@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, P, PRNGKeyArray, ModelApply
+from vmcnet.utils.typing import Array, P, PRNGKey, ModelApply
 
 EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
@@ -14,14 +14,14 @@ ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
-    key: PRNGKeyArray,
+    key: PRNGKey,
     nchains: int,
     ion_pos: Array,
     ion_charges: Array,
     nelec_total: int,
     init_width: float = 1.0,
     dtype=jnp.float32,
-) -> Tuple[PRNGKeyArray, Array]:
+) -> Tuple[PRNGKey, Array]:
     """Initialize a set of plausible initial electron positions.
 
     For each chain, each electron is assigned to a random ion and then its position is

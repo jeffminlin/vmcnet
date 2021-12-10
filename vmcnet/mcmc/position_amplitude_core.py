@@ -9,7 +9,7 @@ from vmcnet.utils.distribute import (
     replicate_all_local_devices,
     default_distribute_data,
 )
-from vmcnet.utils.typing import Array, P, PRNGKeyArray, M, ModelApply
+from vmcnet.utils.typing import Array, P, PRNGKey, M, ModelApply
 
 
 class PositionAmplitudeWalkerData(TypedDict):
@@ -122,7 +122,7 @@ def make_position_amplitude_gaussian_proposal(
     model_apply: ModelApply[P],
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
 ) -> Callable[
-    [P, PositionAmplitudeData, PRNGKeyArray], Tuple[PositionAmplitudeData, PRNGKeyArray]
+    [P, PositionAmplitudeData, PRNGKey], Tuple[PositionAmplitudeData, PRNGKey]
 ]:
     """Create a gaussian proposal fn on PositionAmplitudeData.
 
@@ -141,7 +141,7 @@ def make_position_amplitude_gaussian_proposal(
         signature (params, PositionAmplitudeData, key) -> (PositionAmplitudeData, key).
     """
 
-    def proposal_fn(params: P, data: PositionAmplitudeData, key: PRNGKeyArray):
+    def proposal_fn(params: P, data: PositionAmplitudeData, key: PRNGKey):
         std_move = get_std_move(data)
         proposed_position, key = metropolis.gaussian_proposal(
             data["walker_data"]["position"], std_move, key

@@ -6,15 +6,15 @@ import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, D, P, PRNGKeyArray
+from vmcnet.utils.typing import Array, D, P, PRNGKey
 
-MetropolisStep = Callable[[P, D, PRNGKeyArray], Tuple[jnp.float32, D, PRNGKeyArray]]
+MetropolisStep = Callable[[P, D, PRNGKey], Tuple[jnp.float32, D, PRNGKey]]
 WalkerFn = MetropolisStep[P, D]
-BurningStep = Callable[[P, D, PRNGKeyArray], Tuple[D, PRNGKeyArray]]
+BurningStep = Callable[[P, D, PRNGKey], Tuple[D, PRNGKey]]
 
 
 def make_metropolis_step(
-    proposal_fn: Callable[[P, D, PRNGKeyArray], Tuple[D, PRNGKeyArray]],
+    proposal_fn: Callable[[P, D, PRNGKey], Tuple[D, PRNGKey]],
     acceptance_fn: Callable[[P, D, D], Array],
     update_data_fn: Callable[[D, D, Array], D],
 ) -> MetropolisStep[P, D]:
@@ -49,8 +49,8 @@ def make_metropolis_step(
     """
 
     def metrop_step_fn(
-        params: P, data: D, key: PRNGKeyArray
-    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
+        params: P, data: D, key: PRNGKey
+    ) -> Tuple[jnp.float32, D, PRNGKey]:
         """Take a single metropolis step."""
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
@@ -70,9 +70,9 @@ def walk_data(
     nsteps: int,
     params: P,
     data: D,
-    key: PRNGKeyArray,
+    key: PRNGKey,
     metrop_step_fn: MetropolisStep[P, D],
-) -> Tuple[jnp.float32, D, PRNGKeyArray]:
+) -> Tuple[jnp.float32, D, PRNGKey]:
     """Take multiple Metropolis-Hastings steps.
 
     This function is roughly equivalent to:
@@ -139,7 +139,7 @@ def make_jitted_burning_step(
         with jax.pmap optionally applied if apply_pmap is True.
     """
 
-    def burning_step(params: P, data: D, key: PRNGKeyArray) -> Tuple[D, PRNGKeyArray]:
+    def burning_step(params: P, data: D, key: PRNGKey) -> Tuple[D, PRNGKey]:
         _, data, key = metrop_step_fn(params, data, key)
         return data, key
 
@@ -178,8 +178,8 @@ def make_jitted_walker_fn(
     """
 
     def walker_fn(
-        params: P, data: D, key: PRNGKeyArray
-    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
+        params: P, data: D, key: PRNGKey
+    ) -> Tuple[jnp.float32, D, PRNGKey]:
         accept_ratio, data, key = walk_data(nsteps, params, data, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -190,8 +190,8 @@ def make_jitted_walker_fn(
     pmapped_walker_fn = utils.distribute.pmap(walker_fn)
 
     def pmapped_walker_fn_with_single_accept_ratio(
-        params: P, data: D, key: PRNGKeyArray
-    ) -> Tuple[jnp.float32, D, PRNGKeyArray]:
+        params: P, data: D, key: PRNGKey
+    ) -> Tuple[jnp.float32, D, PRNGKey]:
         accept_ratio, data, key = pmapped_walker_fn(params, data, key)
         accept_ratio = utils.distribute.get_first(accept_ratio)
         return accept_ratio, data, key
@@ -204,8 +204,8 @@ def burn_data(
     nsteps_to_burn: int,
     params: P,
     data: D,
-    key: PRNGKeyArray,
-) -> Tuple[D, PRNGKeyArray]:
+    key: PRNGKey,
+) -> Tuple[D, PRNGKey]:
     """Repeatedly apply a burning step.
 
     Args:
@@ -228,8 +228,8 @@ def burn_data(
 
 
 def gaussian_proposal(
-    positions: Array, std_move: jnp.float32, key: PRNGKeyArray
-) -> Tuple[Array, PRNGKeyArray]:
+    positions: Array, std_move: jnp.float32, key: PRNGKey
+) -> Tuple[Array, PRNGKey]:
     """Simple symmetric gaussian proposal in all positions at once.
 
     Args:

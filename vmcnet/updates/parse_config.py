@@ -16,7 +16,7 @@ from vmcnet.utils.typing import (
     ModelApply,
     OptimizerState,
     P,
-    PRNGKeyArray,
+    PRNGKey,
 )
 
 from .params import (
@@ -60,9 +60,9 @@ def get_update_fn_and_init_optimizer(
     data: D,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: PRNGKeyArray,
+    key: PRNGKey,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKeyArray]:
+) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
     """Get an update function and initialize optimizer state from the vmc configuration.
 
     Args:
@@ -159,12 +159,12 @@ def get_kfac_update_fn_and_state(
     data: D,
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    key: PRNGKeyArray,
+    key: PRNGKey,
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKeyArray]:
+) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKey]:
     """Get an update param function, initial state, and key for KFAC.
 
     Args:
