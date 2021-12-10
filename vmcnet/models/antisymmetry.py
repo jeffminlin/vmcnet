@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, SLArray, PyTree
-from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
+from vmcnet.utils.array_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from .core import get_alternating_signs, is_tuple_of_arrays
 
 

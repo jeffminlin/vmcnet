@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from ml_collections import ConfigDict
 
 from vmcnet.models import antiequivariance
-from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
+from vmcnet.utils.array_helpers import array_to_slog, slog_sum_over_axis
 from vmcnet.utils.typing import (
     Array,
     ArrayList,

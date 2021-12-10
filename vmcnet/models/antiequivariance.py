@@ -5,7 +5,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
+from vmcnet.utils.array_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList, ParticleSplit
 from .core import get_alternating_signs, get_nelec_per_split, is_tuple_of_arrays

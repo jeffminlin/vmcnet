@@ -13,8 +13,8 @@ import optax
 
 # Using jnp.ndarray as our array type causes some type errors since JAX and mypy do
 # not play well together. See for example https://stackoverflow.com/a/68885299. We
-# work around these issues by using type: ignore when they come up rather than
-# abandoning the type wholesale as suggested in that thread.
+# work around these issues by using helper functions in vmcnet.utils.array_helpers
+# rather than abandoning the type wholesale as suggested in that thread.
 Array = jnp.ndarray
 
 # Currently using PyTree = Any just to improve readability in the code.

@@ -7,6 +7,7 @@ from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ModelApply
+from vmcnet.utils.array_helpers import multiply_arrays
 
 EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
@@ -203,7 +204,7 @@ def get_default_energy_bwd(
     ) -> jnp.float32:
         log_psi = log_psi_apply(params, positions)
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
-        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)  # type: ignore
+        return 2.0 * mean_grad_fn(multiply_arrays(centered_local_energies, log_psi))
 
     _get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
 

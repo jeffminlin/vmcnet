@@ -9,7 +9,7 @@ import pytest
 
 import vmcnet.models as models
 import vmcnet.models.antiequivariance as antieq
-from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from vmcnet.utils.array_helpers import slog_sum_over_axis
 from vmcnet.utils.typing import Array, ParticleSplit
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams

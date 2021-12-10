@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import pytest
 
 import vmcnet.models as models
-from vmcnet.utils.slog_helpers import array_to_slog
+from vmcnet.utils.array_helpers import array_to_slog
 from vmcnet.utils.typing import Array, SLArray
 
 from tests.test_utils import (

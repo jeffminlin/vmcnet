@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import vmcnet.models as models
-from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
+from vmcnet.utils.array_helpers import array_to_slog, slog_sum_over_axis
 
 
 def test_slogdet_product():

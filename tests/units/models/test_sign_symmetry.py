@@ -8,10 +8,11 @@ from typing import Callable
 
 import vmcnet.models.sign_symmetry as sign_sym
 import vmcnet.models.weights as weights
-from vmcnet.utils.slog_helpers import (
+from vmcnet.utils.array_helpers import (
     array_from_slog,
     array_to_slog,
     array_list_to_slog,
+    negate_array,
 )
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
 
@@ -99,8 +100,12 @@ def _test_sign_covariance_or_invariance(is_invariance: bool, atol: float):
     key, subkey = jax.random.split(key)
     inputs = [jax.random.normal(key, (nbatch, n * d)) for n in nelec_per_spin]
 
-    sign_change_inputs = [inputs[0], -inputs[1], inputs[2]]
-    double_sign_change_inputs = [inputs[0], -inputs[1], -inputs[2]]
+    sign_change_inputs = [inputs[0], negate_array(inputs[1]), inputs[2]]
+    double_sign_change_inputs = [
+        inputs[0],
+        negate_array(inputs[1]),
+        negate_array(inputs[2]),
+    ]
 
     dout = 3
     nn_layers = _make_simple_nn_layers(nelec_total * d, dout, subkey)
@@ -116,8 +121,8 @@ def _test_sign_covariance_or_invariance(is_invariance: bool, atol: float):
 
     result = sym_fn(inputs)
     chex.assert_shape(result, (nbatch, dout))
-    sign_change_result = sym_fn(sign_change_inputs)  # type: ignore
-    double_sign_change_result = sym_fn(double_sign_change_inputs)  # type: ignore
+    sign_change_result = sym_fn(sign_change_inputs)
+    double_sign_change_result = sym_fn(double_sign_change_inputs)
 
     assert_pytree_allclose(double_sign_change_result, result, atol=atol)
     if is_invariance:

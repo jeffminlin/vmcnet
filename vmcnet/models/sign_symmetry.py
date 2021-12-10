@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 from vmcnet.models.core import Dense
 from vmcnet.models.weights import WeightInitializer
-from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
+from vmcnet.utils.array_helpers import slog_multiply, slog_sum_over_axis
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
 
 # TypeVar used for representing either an Array or a SLArray

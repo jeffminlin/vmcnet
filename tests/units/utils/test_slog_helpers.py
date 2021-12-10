@@ -3,7 +3,7 @@ from typing import Tuple
 
 import jax.numpy as jnp
 
-import vmcnet.utils.slog_helpers as helpers
+import vmcnet.utils.array_helpers as helpers
 from tests.test_utils import assert_pytree_allclose
 from vmcnet.utils.typing import Array, SLArray
 

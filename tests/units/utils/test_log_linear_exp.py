@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from vmcnet.utils.log_linear_exp import log_linear_exp
-import vmcnet.utils.slog_helpers as slog_helpers
+import vmcnet.utils.array_helpers as slog_helpers
 
 
 def test_log_linear_exp_shape():

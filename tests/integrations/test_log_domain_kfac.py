@@ -7,7 +7,7 @@ from kfac_ferminet_alpha import utils as kfac_utils
 
 import vmcnet.models as models
 import vmcnet.utils as utils
-from vmcnet.utils.slog_helpers import array_to_slog, array_from_slog
+from vmcnet.utils.array_helpers import array_to_slog, array_from_slog
 
 from tests.test_utils import (
     assert_pytree_allclose,

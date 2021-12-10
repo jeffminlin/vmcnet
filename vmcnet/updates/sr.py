@@ -10,6 +10,7 @@ import jax.scipy as jscp
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
 from vmcnet.utils.typing import Array, ModelApply, P
+from vmcnet.utils.array_helpers import subtract_arrays
 
 
 class SRMode(Enum):
@@ -89,8 +90,8 @@ def get_fisher_inverse_fn(
 
             log_psi_grads = batch_raveled_log_psi_grad(params, positions)
             mean_log_psi_grads = mean_grad_fn(log_psi_grads)
-            centered_log_psi_grads: Array = (
-                log_psi_grads - mean_log_psi_grads
+            centered_log_psi_grads = subtract_arrays(
+                log_psi_grads, mean_log_psi_grads
             )  # shape (nchains, nparams)
 
             def fisher_apply(x: Array) -> Array:

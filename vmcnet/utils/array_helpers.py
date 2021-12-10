@@ -6,6 +6,42 @@ from .log_linear_exp import log_linear_exp
 from .typing import Array, SLArray, ArrayList, SLArrayList
 
 
+def negate_array(x: Array) -> Array:
+    """Multiplies an array by -1 in a type-safe way.
+
+    Mypy does not otherwise think the negation of an array results in an array,
+    which can mess up type-checking.
+    """
+    return -x  # type: ignore
+
+
+def add_arrays(x: Array, y: Array) -> Array:
+    """Adds two arrays in a type-safe way.
+
+    Mypy does not otherwise think the sum of two arrays results in an array,
+    which can mess up type-checking.
+    """
+    return x + y  # type: ignore
+
+
+def subtract_arrays(x: Array, y: Array) -> Array:
+    """Subtracts two arrays in a typeful way.
+
+    Mypy otherwise assigns no type to the subtraction of two arrays,
+    which can mess up type-checking.
+    """
+    return x - y
+
+
+def multiply_arrays(x: Array, y: Array) -> Array:
+    """Multiplies two arrays in a type-safe way.
+
+    Mypy does not otherwise think the product of two arrays results in an array,
+    which can mess up type-checking.
+    """
+    return x * y  # type: ignore
+
+
 def array_to_slog(x: Array) -> SLArray:
     """Converts a regular array into (sign, logabs) form.
 
@@ -63,7 +99,7 @@ def slog_multiply(x: SLArray, y: SLArray) -> SLArray:
     """
     (sx, lx) = x
     (sy, ly) = y
-    return (sx * sy, lx + ly)  # type: ignore
+    return (multiply_arrays(sx, sy), add_arrays(lx, ly))
 
 
 def slog_sum_over_axis(x: SLArray, axis: int = 0) -> SLArray:
