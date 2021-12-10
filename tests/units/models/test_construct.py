@@ -361,7 +361,7 @@ def _make_per_particle_dets_nets():
     return key, init_pos, [slog_psi_eq, slog_psi_sign_cov]
 
 
-def _make_factored_antisymmetries():
+def _make_factorized_antisymmetries():
     (
         key,
         ion_pos,
@@ -507,15 +507,15 @@ def test_per_particle_dets_net_can_be_evaluated():
     ]
 
 
-def test_factored_antisymmetry_can_be_constructed():
+def test_factorized_antisymmetry_can_be_constructed():
     """Check construction of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    _make_factored_antisymmetries()
+    _make_factorized_antisymmetries()
 
 
 @pytest.mark.slow
-def test_factored_antisymmetry_can_be_evaluated():
+def test_factorized_antisymmetry_can_be_evaluated():
     """Check evaluation of SplitBruteForceAntisymmetryWithDecay does not fail."""
-    key, init_pos, slog_psis = _make_factored_antisymmetries()
+    key, init_pos, slog_psis = _make_factorized_antisymmetries()
     [
         _jit_eval_model_and_verify_output_shape(key, init_pos, slog_psi)
         for slog_psi in slog_psis
@@ -559,7 +559,7 @@ def test_get_model_from_default_config():
         )
 
     for model_type in ["brute_force_antisym"]:
-        for subtype in ["factored", "generic"]:
+        for subtype in ["factorized", "generic"]:
             _construct_model(model_type, brute_force_subtype=subtype)
     for model_type in [
         "ferminet",

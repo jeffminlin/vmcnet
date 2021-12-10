@@ -357,7 +357,7 @@ def get_model_from_config(
                     jastrow_config.type, ", ".join(VALID_JASTROW_TYPES)
                 )
             )
-        if model_config.antisym_type == "factored":
+        if model_config.antisym_type == "factorized":
             return FactoredAntisymmetry(
                 spin_split,
                 compute_input_streams,
@@ -1273,10 +1273,10 @@ class AntiequivarianceNet(flax.linen.Module):
 class FactoredAntisymmetry(flax.linen.Module):
     """A sum of products of brute-force antisymmetrized ResNets, composed with backflow.
 
-    This connects the computational graph between a backflow, a factored antisymmetrized
+    This connects the computational graph between a backflow, a factorized antisymmetrized
     ResNet, and a jastrow.
 
-    See https://arxiv.org/abs/2112.03491 for a description of the factored antisymmetric
+    See https://arxiv.org/abs/2112.03491 for a description of the factorized antisymmetric
     layer.
 
     Attributes:
