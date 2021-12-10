@@ -214,11 +214,11 @@ def get_default_model_config() -> Dict:
         # "antiequivariance" model type
         "orbital_cofactor_net": antieq_config,
         "per_particle_dets_net": antieq_config,
-        "brute_force_antisym": {
+        "explicit_antisym": {
             "input_streams": input_streams,
             "backflow": ferminet_backflow,
-            "antisym_type": "double",
-            "rank": 1,  # Only relevant for antisym_type=rank_k
+            "antisym_type": "generic",  # factorized or generic
+            "rank": 1,  # Only relevant for antisym_type=factorized
             "ndense_resnet": 64,
             "nlayers_resnet": 2,
             "kernel_init_resnet": {"type": "orthogonal", "scale": 2.0},

@@ -111,8 +111,11 @@ class ParallelPermutations(flax.linen.Module):
         return jnp.take(x, self.permutation_list, axis=-2), self.signs
 
 
-class SplitBruteForceAntisymmetrize(flax.linen.Module):
+class FactorizedAntisymmetrize(flax.linen.Module):
     """Separately antisymmetrize fns over leaves of a pytree and return the product.
+
+    See https://arxiv.org/abs/2112.03491 for a description of the factorized
+    antisymmetric layer.
 
     Attributes:
         fns_to_antisymmetrize (pytree): pytree of functions with the same tree structure
@@ -177,11 +180,14 @@ class SplitBruteForceAntisymmetrize(flax.linen.Module):
         return functools.reduce(slog_multiply, slog_antisyms)
 
 
-class ComposedBruteForceAntisymmetrize(flax.linen.Module):
+class GenericAntisymmetrize(flax.linen.Module):
     """Antisymmetrize a single function over the leaves of a pytree.
 
+    See https://arxiv.org/abs/2112.03491 for a description of the generic antisymmetric
+    layer.
+
     For each leaf of a pytree, a given function of all the leaves is antisymmetrized
-    over the second-to-last axis of each leaf. These brute-force antisymmetrization
+    over the second-to-last axis of each leaf. These explicit antisymmetrization
     operations are composed with each other (they commute, so the order does not
     matter), giving an output which is antisymmetric with respect to particle exchange
     within each leaf but not with respect to particle exchange between leaves.
