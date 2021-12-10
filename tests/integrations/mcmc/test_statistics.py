@@ -31,6 +31,7 @@ def test_independent_samples():
     np.testing.assert_allclose(autocorr_curve[1:100], 0, atol=1e-2)
 
     # Variance should be the variance of all samples
+    # TODO (ggoldsh/jeffminlin): investigate why such a high tolerance is needed
     np.testing.assert_allclose(variance, jnp.var(independent_samples), 1e-2)
 
     # Autocorrelation time should be 1 as each sample is independent.
