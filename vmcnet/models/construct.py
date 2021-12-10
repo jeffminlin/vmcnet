@@ -1273,11 +1273,11 @@ class AntiequivarianceNet(flax.linen.Module):
 class FactorizedAntisymmetry(flax.linen.Module):
     """A sum of products of brute-force antisymmetrized ResNets, composed with backflow.
 
-    This connects the computational graph between a backflow, a factorized antisymmetrized
-    ResNet, and a jastrow.
+    This connects the computational graph between a backflow, a factorized
+    antisymmetrized ResNet, and a jastrow.
 
-    See https://arxiv.org/abs/2112.03491 for a description of the factorized antisymmetric
-    layer.
+    See https://arxiv.org/abs/2112.03491 for a description of the factorized
+    antisymmetric layer.
 
     Attributes:
         spin_split (ParticleSplit): number of spins to split the input equally,
