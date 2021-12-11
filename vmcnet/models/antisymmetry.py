@@ -94,7 +94,7 @@ class ParallelPermutations(flax.linen.Module):
 
     def setup(self):
         """Store the list of permutations and signs for the symmetric group."""
-        self.permutation_list = list(itertools.permutations(range(self.n)))
+        self.permutation_list = jnp.array(list(itertools.permutations(range(self.n))))
         self.signs = _get_lexicographic_signs(self.n)
 
     def __call__(self, x: Array) -> Tuple[Array, Array]:
