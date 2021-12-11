@@ -9,7 +9,7 @@ import numpy as np
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
 import vmcnet.train.default_config as default_config
-from vmcnet.utils.typing import Array, PyTree
+from vmcnet.utils.typing import Array, PRNGKey, PyTree
 
 
 def get_default_config_with_chosen_model(
@@ -113,7 +113,7 @@ def _get_log_domain_params_for_dense_layer(params):
 
 
 def get_dense_and_log_domain_dense_same_params(
-    key: Array,
+    key: PRNGKey,
     batch: Array,
     dense_layer: models.core.Dense,
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
@@ -125,7 +125,7 @@ def get_dense_and_log_domain_dense_same_params(
 
 
 def get_resnet_and_log_domain_resnet_same_params(
-    key: Array,
+    key: PRNGKey,
     batch: Array,
     resnet: models.core.SimpleResNet,
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
