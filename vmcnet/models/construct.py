@@ -556,11 +556,11 @@ def get_residual_blocks_for_ferminet_backflow(
         one_electron_skip (bool, optional): whether to add a residual skip connection to
             the one-electron layer whenever the shapes of the input and output match.
             Defaults to True.
+        one_electron_skip_scale (float, optional): quantity to scale the one-electron
+            output by if a skip connection is added. Defaults to 1.0.
         two_electron_skip (bool, optional): whether to add a residual skip connection to
             the two-electron layer whenever the shapes of the input and output match.
             Defaults to True.
-        one_electron_skip_scale (float, optional): quantity to scale the one-electron
-            output by if a skip connection is added. Defaults to 1.0.
         two_electron_skip_scale (float, optional): quantity to scale the two-electron
             output by if a skip connection is added. Defaults to 1.0.
         cyclic_spins (bool, optional): whether the the concatenation in the one-electron
