@@ -1021,6 +1021,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         # https://github.com/python/mypy/issues/708
         super().setup()
         self._invariance_compute_input_streams = self.invariance_compute_input_streams
+        self._invariance_backflow = self.invariance_backflow
 
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
@@ -1028,7 +1029,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         return InvariantTensor(
             self.spin_split,
             output_shape_per_spin,
-            self.invariance_backflow,
+            self._invariance_backflow,
             self.invariance_kernel_initializer,
             self.invariance_bias_initializer,
             self.invariance_use_bias,
@@ -1488,6 +1489,7 @@ class GenericAntisymmetry(VMCNetModule):
         self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._jastrow = self.jastrow
+        self._activation_fn_resnet = self.activation_fn_resnet
 
     @flax.linen.compact
     def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
@@ -1514,7 +1516,7 @@ class GenericAntisymmetry(VMCNetModule):
                 self.ndense_resnet,
                 1,
                 self.nlayers_resnet,
-                self.activation_fn_resnet,
+                self._activation_fn_resnet,
                 self.kernel_initializer_resnet,
                 self.bias_initializer_resnet,
                 use_bias=self.resnet_use_bias,
