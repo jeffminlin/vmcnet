@@ -8,7 +8,12 @@ import jax.numpy as jnp
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList, ParticleSplit
-from .core import get_alternating_signs, get_nelec_per_split, is_tuple_of_arrays
+from .core import (
+    VMCNetModule,
+    get_alternating_signs,
+    get_nelec_per_split,
+    is_tuple_of_arrays,
+)
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
 
@@ -153,7 +158,7 @@ def multiply_slog_antieq_by_eq_features(
     )
 
 
-class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+class OrbitalCofactorAntiequivarianceLayer(VMCNetModule):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
@@ -237,7 +242,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), cofactors)
 
 
-class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+class SLogOrbitalCofactorAntiequivarianceLayer(VMCNetModule):
     """Apply a cofactor antieq. multiplicatively to equivariant inputs with slog out.
 
     Attributes:
@@ -321,7 +326,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), slog_cofactors)
 
 
-class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
+class PerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
@@ -404,7 +409,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), dets)
 
 
-class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
+class SLogPerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:

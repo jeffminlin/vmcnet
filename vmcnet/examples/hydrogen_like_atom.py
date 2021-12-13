@@ -4,12 +4,12 @@ from typing import Callable, Union
 import flax
 import jax.numpy as jnp
 
-import vmcnet.physics as physics
 import vmcnet.models as models
+import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, P, ModelApply
 
 
-class HydrogenLikeWavefunction(flax.linen.Module):
+class HydrogenLikeWavefunction(models.core.VMCNetModule):
     """Model which computes -decay_rate * r, with trainable decay_rate.
 
     This model returns log|psi(x)|, where psi is the 1-s orbital exp(-decay_rate * r).

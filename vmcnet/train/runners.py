@@ -85,7 +85,7 @@ def _get_and_init_model(
     key: PRNGKey,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[flax.linen.Module, flax.core.FrozenDict, PRNGKey]:
+) -> Tuple[models.core.VMCNetModule, flax.core.FrozenDict, PRNGKey]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -274,7 +274,7 @@ def _setup_vmc(
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[
-    flax.linen.Module,
+    models.core.VMCNetModule,
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],

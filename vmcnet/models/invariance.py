@@ -6,11 +6,11 @@ import flax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, ArrayList, Backflow, ParticleSplit
-from .core import Dense, _split_mean, get_nsplits
+from .core import Dense, VMCNetModule, _split_mean, get_nsplits
 from .weights import WeightInitializer
 
 
-class SplitMeanDense(flax.linen.Module):
+class SplitMeanDense(VMCNetModule):
     """Split mean of input on 2nd-to-last axis, apply unique Dense layers to each split.
 
     Attributes:
@@ -86,7 +86,7 @@ class SplitMeanDense(flax.linen.Module):
         ]
 
 
-class InvariantTensor(flax.linen.Module):
+class InvariantTensor(VMCNetModule):
     """Split invariance via averaged backflow, with desired shape via a dense layer.
 
     Attributes:

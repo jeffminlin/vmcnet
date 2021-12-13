@@ -29,6 +29,7 @@ from .core import (
     Activation,
     AddedModel,
     SimpleResNet,
+    VMCNetModule,
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
@@ -110,7 +111,7 @@ def get_model_from_config(
     ion_pos: Array,
     ion_charges: Array,
     dtype=jnp.float32,
-) -> flax.linen.Module:
+) -> VMCNetModule:
     """Get a model from a hyperparameter config."""
     spin_split = get_spin_split(nelec)
 
@@ -426,7 +427,7 @@ def get_backflow_from_config(
     backflow_config,
     spin_split,
     dtype=jnp.float32,
-) -> flax.linen.Module:
+) -> VMCNetModule:
     """Get a FermiNet backflow from a model configuration."""
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
@@ -675,7 +676,7 @@ def _reshape_raw_ferminet_orbitals(
     return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
 
 
-class FermiNet(flax.linen.Module):
+class FermiNet(VMCNetModule):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
@@ -1187,7 +1188,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
 
-class AntiequivarianceNet(flax.linen.Module):
+class AntiequivarianceNet(VMCNetModule):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
@@ -1271,7 +1272,7 @@ class AntiequivarianceNet(flax.linen.Module):
         return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
-class FactorizedAntisymmetry(flax.linen.Module):
+class FactorizedAntisymmetry(VMCNetModule):
     """A sum of products of explicitly antisymmetrized ResNets, composed with backflow.
 
     This connects the computational graph between a backflow, a factorized
@@ -1397,7 +1398,7 @@ class FactorizedAntisymmetry(flax.linen.Module):
         return sign_psi, log_antisyms + jastrow_part
 
 
-class GenericAntisymmetry(flax.linen.Module):
+class GenericAntisymmetry(VMCNetModule):
     """A single ResNet antisymmetrized over all input leaves, composed with backflow.
 
     The ResNet is antisymmetrized with respect to each spin split separately (i.e. the

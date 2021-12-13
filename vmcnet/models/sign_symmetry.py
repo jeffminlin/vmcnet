@@ -6,7 +6,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.models.core import Dense
+from vmcnet.models.core import Dense, VMCNetModule
 from vmcnet.models.weights import WeightInitializer
 from vmcnet.utils.slog_helpers import slog_multiply, slog_sum_over_axis
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
@@ -299,7 +299,7 @@ def make_array_list_fn_sign_invariant(
     )
 
 
-class ProductsSignCovariance(flax.linen.Module):
+class ProductsSignCovariance(VMCNetModule):
     """Sign covariance from a weighted sum of products of per-particle values.
 
     Only supports two spins at the moment. Given per-spin antiequivariant vectors

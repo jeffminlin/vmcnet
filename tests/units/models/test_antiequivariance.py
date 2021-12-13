@@ -2,7 +2,6 @@
 from typing import Callable, Tuple
 
 import chex
-import flax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -142,7 +141,7 @@ def _assert_permuted_slog_values_allclose(
 
 
 def _test_layer_antiequivariance(
-    build_layer: Callable[[ParticleSplit], flax.linen.Module],
+    build_layer: Callable[[ParticleSplit], models.core.VMCNetModule],
     logabs: bool = False,
     rtol: float = 1e-7,
     atol: float = 0.0,

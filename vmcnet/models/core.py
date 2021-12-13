@@ -101,16 +101,29 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
 
 
-class AddedModel(flax.linen.Module):
+class VMCNetModule(flax.linen.Module):
+    """Custom parent class for models to work around flax typing issues."""
+
+    def __init__(self, *args, **kwargs):
+        """Dummy init method with fully general args.
+
+        This avoids Mypy inferring an erroneous type from the type-hinting in
+        VMCNetModule and complaining when our module initialization calls do
+        not match that erroneous type.
+        """
+        super().__init__()
+
+
+class AddedModel(VMCNetModule):
     """A model made from added parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
-            functions or flax.linen.Modules which are called on the same args and can be
+        submodels (Sequence[Union[Callable, VMCNetModule]]): a sequence of
+            functions or VMCNetModules which are called on the same args and can be
             added
     """
 
-    submodels: Sequence[Union[Callable, flax.linen.Module]]
+    submodels: Sequence[Union[Callable, VMCNetModule]]
 
     @flax.linen.compact
     def __call__(self, *args):
@@ -118,15 +131,15 @@ class AddedModel(flax.linen.Module):
         return sum(submodel(*args) for submodel in self.submodels)
 
 
-class ComposedModel(flax.linen.Module):
+class ComposedModel(VMCNetModule):
     """A model made from composable parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
-            functions or flax.linen.Modules which can be composed sequentially
+        submodels (Sequence[Union[Callable, VMCNetModule]]): a sequence of
+            functions or VMCNetModules which can be composed sequentially
     """
 
-    submodels: Sequence[Union[Callable, flax.linen.Module]]
+    submodels: Sequence[Union[Callable, VMCNetModule]]
 
     @flax.linen.compact
     def __call__(self, x):
@@ -137,7 +150,7 @@ class ComposedModel(flax.linen.Module):
         return outputs
 
 
-class Dense(flax.linen.Module):
+class Dense(VMCNetModule):
     """A linear transformation applied over the last dimension of the input.
 
     This is a copy of the flax Dense layer, but with registration of the weights for use
@@ -186,7 +199,7 @@ class Dense(flax.linen.Module):
             return y
 
 
-class LogDomainDense(flax.linen.Module):
+class LogDomainDense(VMCNetModule):
     """A linear transformation applied on the last axis of the input, in the log domain.
 
     If the inputs are (sign(x), log(abs(x))), the outputs are
@@ -240,7 +253,7 @@ class LogDomainDense(flax.linen.Module):
         )
 
 
-class SimpleResNet(flax.linen.Module):
+class SimpleResNet(VMCNetModule):
     """Simplest fully-connected ResNet.
 
     Attributes:
@@ -314,7 +327,7 @@ class SimpleResNet(flax.linen.Module):
         return self.final_dense(x)
 
 
-class LogDomainResNet(flax.linen.Module):
+class LogDomainResNet(VMCNetModule):
     """Simplest fully-connected ResNet, implemented in the log domain.
 
     Attributes:
