@@ -85,7 +85,7 @@ def _get_and_init_model(
     key: PRNGKey,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[models.core.VMCNetModule, flax.core.FrozenDict, PRNGKey]:
+) -> Tuple[ModelApply[flax.core.FrozenDict], flax.core.FrozenDict, PRNGKey]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -210,7 +210,7 @@ def _assemble_mol_local_energy_fn(
         ion_pos, ion_charges
     )
 
-    local_energy_fn = physics.core.combine_local_energy_terms(
+    local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
         [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
     )
 
@@ -274,7 +274,7 @@ def _setup_vmc(
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[
-    models.core.VMCNetModule,
+    ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],

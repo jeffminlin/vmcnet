@@ -2,7 +2,7 @@
 # TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple, cast
 
 import flax
 import jax
@@ -126,11 +126,12 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    if model_config.type in [
+    fermiNetModelTypes = [
         "ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
-    ]:
+    ]
+    if model_config.type in fermiNetModelTypes:
         determinant_fn = None
         resnet_config = model_config.det_resnet
         if model_config.use_det_resnet:
@@ -182,7 +183,7 @@ def get_model_from_config(
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
             )
-            invariance_backflow = get_backflow_from_config(
+            invariance_backflow: Optional[VMCNetModule] = get_backflow_from_config(
                 invariance_config.backflow,
                 spin_split,
                 dtype=dtype,
@@ -265,9 +266,17 @@ def get_model_from_config(
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
             )
+        else:
+            raise ValueError(
+                "FermiNet model type {} requested, but the only supported "
+                "types are: {}".format(model_config.type, fermiNetModelTypes)
+            )
+
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
-            antieq_layer = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
+            antieq_layer: Callable[
+                [Array, Array], ArrayList
+            ] = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
                 spin_split,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
                     model_config.kernel_init_orbital_linear
@@ -339,7 +348,7 @@ def get_model_from_config(
             return BackflowJastrow(backflow=jastrow_backflow)
 
         if jastrow_config.type == "one_body_decay":
-            jastrow = OneBodyExpDecay(
+            jastrow: Jastrow = OneBodyExpDecay(
                 kernel_initializer=kernel_init_constructor(
                     jastrow_config.one_body_decay.kernel_init
                 )
@@ -1386,9 +1395,15 @@ class FactorizedAntisymmetry(VMCNetModule):
             ]
             return jnp.concatenate(resnet_outputs, axis=-1)
 
-        slog_antisyms = FactorizedAntisymmetrize(
-            [fn_to_antisymmetrize for _ in split_spins]
-        )(split_spins)
+        # TODO (ggoldsh/jeffminlin): better typing for the Array vs SLArray version of
+        # this model to avoid having to cast the return type.
+        slog_antisyms = cast(
+            SLArray,
+            FactorizedAntisymmetrize([fn_to_antisymmetrize for _ in split_spins])(
+                split_spins
+            ),
+        )
+
         sign_psi, log_antisyms = slog_sum_over_axis(slog_antisyms, axis=-1)
 
         jastrow_part = self._jastrow(

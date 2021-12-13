@@ -137,8 +137,8 @@ def get_resnet_and_log_domain_resnet_same_params(
         log_domain_layer_params = _get_log_domain_params_for_dense_layer(layer_params)
         log_domain_params[dense_layer_key] = log_domain_layer_params
 
-    log_domain_params = frozen_dict.freeze({"params": log_domain_params})
-    return resnet_params, log_domain_params
+    frozen_params = frozen_dict.freeze({"params": log_domain_params})
+    return resnet_params, frozen_params
 
 
 def assert_pytree_allclose(
