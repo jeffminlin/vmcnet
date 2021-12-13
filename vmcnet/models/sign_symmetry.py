@@ -324,7 +324,7 @@ class ProductsSignCovariance(VMCNetModule):
     use_weights: bool = False
 
     @flax.linen.compact
-    def __call__(self, x: ArrayList) -> Array:
+    def __call__(self, x: ArrayList) -> Array:  # type: ignore[override]
         """Calculate weighted sum of products of up- and down-spin antiequivariances.
 
         Arguments:

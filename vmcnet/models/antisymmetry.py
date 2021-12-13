@@ -97,7 +97,7 @@ class ParallelPermutations(VMCNetModule):
         self.permutation_list = jnp.array(list(itertools.permutations(range(self.n))))
         self.signs = _get_lexicographic_signs(self.n)
 
-    def __call__(self, x: Array) -> Tuple[Array, Array]:
+    def __call__(self, x: Array) -> Tuple[Array, Array]:  # type: ignore[override]
         """Collect all permutations of x and the signs of these permutations.
 
         Args:
@@ -150,7 +150,7 @@ class FactorizedAntisymmetrize(VMCNetModule):
         return jnp.sum(signed_perms_out, axis=-2)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:  # type: ignore[override]
         """Antisymmetrize the leaves of self.fns_to_antisymmetrize on the leaves of xs.
 
         Args:
@@ -218,7 +218,7 @@ class GenericAntisymmetrize(VMCNetModule):
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:  # type: ignore[override]
         """Antisymmetrize self.fn_to_antisymmetrize over the leaves of xs.
 
         Args:

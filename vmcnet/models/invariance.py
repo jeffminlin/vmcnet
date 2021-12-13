@@ -65,7 +65,7 @@ class SplitMeanDense(VMCNetModule):
             for i in range(nspins)
         ]
 
-    def __call__(self, x: Array) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:  # type: ignore[override]
         """Split the input and apply a dense layer to each split.
 
         Args:
@@ -151,7 +151,7 @@ class InvariantTensor(VMCNetModule):
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self, stream_1e: Array, stream_2e: Optional[Array] = None
     ) -> ArrayList:
         """Backflow -> split mean dense to get invariance -> reshape.

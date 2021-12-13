@@ -27,7 +27,7 @@ class HydrogenLikeWavefunction(models.core.VMCNetModule):
     init_decay_rate: jnp.float32
 
     @flax.linen.compact
-    def __call__(self, x: Array) -> Array:
+    def __call__(self, x: Array) -> Array:  # type: ignore[override]
         """Log of isotropic exponential decay. Computes -decay_rate * ||x||.
 
         Args:

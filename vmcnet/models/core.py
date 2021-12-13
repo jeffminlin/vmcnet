@@ -175,7 +175,7 @@ class Dense(VMCNetModule):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(self, inputs: Array) -> Array:
+    def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
@@ -223,7 +223,7 @@ class LogDomainDense(VMCNetModule):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(self, x: SLArray) -> SLArray:
+    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
@@ -308,7 +308,7 @@ class SimpleResNet(VMCNetModule):
             register_kfac=self.register_kfac,
         )
 
-    def __call__(self, x: Array) -> Array:
+    def __call__(self, x: Array) -> Array:  # type: ignore[override]
         """Repeated application of (dense layer -> activation -> optional skip) block.
 
         Args:
@@ -373,7 +373,7 @@ class LogDomainResNet(VMCNetModule):
             use_bias=False,
         )
 
-    def __call__(self, x: SLArray) -> SLArray:
+    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
         """Repeated application of (dense layer -> activation -> optional skip) block.
 
         Args:

@@ -202,7 +202,9 @@ class OrbitalCofactorAntiequivarianceLayer(VMCNetModule):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the the orbital matrix is M, and the cofactor matrix of
@@ -286,7 +288,9 @@ class SLogOrbitalCofactorAntiequivarianceLayer(VMCNetModule):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the orbital matrix is M, and the cofactor matrix of the
@@ -370,7 +374,9 @@ class PerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the orbital matrix for particle p is M_p, the output at
@@ -453,7 +459,9 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> SLArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the the orbital matrix for particle p is M_p, the output

@@ -108,7 +108,7 @@ class OneBodyExpDecay(VMCNetModule):
         self._kernel_initializer = self.kernel_initializer
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,
@@ -182,7 +182,7 @@ class TwoBodyExpDecay(VMCNetModule):
     trainable: bool = True
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,
@@ -320,7 +320,7 @@ class BackflowJastrow(VMCNetModule):
         self._backflow = self.backflow
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,

@@ -908,7 +908,7 @@ class FermiNet(VMCNetModule):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
@@ -1248,7 +1248,7 @@ class AntiequivarianceNet(VMCNetModule):
         self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose backflow -> antiequivariance -> sign covariant equivariance -> sum.
 
         Args:
@@ -1351,7 +1351,7 @@ class FactorizedAntisymmetry(VMCNetModule):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
 
         Args:
@@ -1475,7 +1475,7 @@ class GenericAntisymmetry(VMCNetModule):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
 
         Args:

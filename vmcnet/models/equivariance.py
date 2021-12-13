@@ -319,7 +319,9 @@ class FermiNetOneElectronLayer(VMCNetModule):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-    def __call__(self, in_1e: Array, in_2e: Array = None) -> Array:
+    def __call__(  # type: ignore[override]
+        self, in_1e: Array, in_2e: Array = None
+    ) -> Array:
         """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
 
         This implementation breaks the one-electron stream into three parts:
@@ -418,7 +420,7 @@ class FermiNetTwoElectronLayer(VMCNetModule):
             use_bias=self.use_bias,
         )
 
-    def __call__(self, x: Array) -> Array:
+    def __call__(self, x: Array) -> Array:  # type: ignore[override]
         """Apply a Dense layer in parallel to all electron pairs.
 
         The expected use-case of this is to batch apply a dense layer to an input x of
@@ -460,7 +462,7 @@ class FermiNetResidualBlock(VMCNetModule):
         self._one_electron_layer = self.one_electron_layer
         self._two_electron_layer = self.two_electron_layer
 
-    def __call__(
+    def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Array = None
     ) -> Tuple[Array, Optional[Array]]:
         """Apply the one-electron layer and optionally the two-electron layer.
@@ -511,7 +513,7 @@ class FermiNetBackflow(VMCNetModule):
         """Setup called residual blocks."""
         self._residual_block_list = [block for block in self.residual_blocks]
 
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         stream_1e: Array,
         stream_2e: Optional[Array] = None,
@@ -590,7 +592,7 @@ class SplitDense(VMCNetModule):
             for i in range(nsplits)
         ]
 
-    def __call__(self, x: Array) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:  # type: ignore[override]
         """Split the input and apply a dense layer to each split.
 
         Args:
@@ -721,7 +723,9 @@ class FermiNetOrbitalLayer(VMCNetModule):
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
     @flax.linen.compact
-    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, x: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
         Args:
@@ -866,7 +870,9 @@ class DoublyEquivariantOrbitalLayer(VMCNetModule):
         )(dense_inputs)
 
     @flax.linen.compact
-    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, x: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate an equivariant orbital matrix for each input particle.
 
         Args:
