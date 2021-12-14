@@ -126,12 +126,12 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    fermiNetModelTypes = [
+    ferminet_model_types = [
         "ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
     ]
-    if model_config.type in fermiNetModelTypes:
+    if model_config.type in ferminet_model_types:
         determinant_fn = None
         resnet_config = model_config.det_resnet
         if model_config.use_det_resnet:
@@ -269,7 +269,7 @@ def get_model_from_config(
         else:
             raise ValueError(
                 "FermiNet model type {} requested, but the only supported "
-                "types are: {}".format(model_config.type, fermiNetModelTypes)
+                "types are: {}".format(model_config.type, ferminet_model_types)
             )
 
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
