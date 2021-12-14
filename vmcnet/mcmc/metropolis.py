@@ -92,14 +92,14 @@ def walk_data(
         data (pytree-like): data to walk (update) with each step
         params (pytree-like): parameters passed to proposal_fn and acceptance_fn, e.g.
             model params
-        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKey): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
         metrop_step_fn (Callable): function which does a metropolis step. Has the
             signature (data, params, key) -> (mean accept prob, new data, new key)
 
     Returns:
-        (jnp.float32, pytree-like, PRNGKeyArray): acceptance probability, new data,
+        (jnp.float32, pytree-like, PRNGKey): acceptance probability, new data,
             new jax PRNG key split (possibly multiple times) from previous one
     """
 
@@ -177,9 +177,7 @@ def make_jitted_walker_fn(
         apply_pmap is False.
     """
 
-    def walker_fn(
-        params: P, data: D, key: PRNGKey
-    ) -> Tuple[jnp.float32, D, PRNGKey]:
+    def walker_fn(params: P, data: D, key: PRNGKey) -> Tuple[jnp.float32, D, PRNGKey]:
         accept_ratio, data, key = walk_data(nsteps, params, data, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -214,12 +212,12 @@ def burn_data(
         nsteps_to_burn (int): number of times to call burning_step
         data (pytree-like): initial data
         params (pytree-like): parameters passed to the burning step
-        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKey): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
 
     Returns:
-        (pytree-like, PRNGKeyArray): new data, new key
+        (pytree-like, PRNGKey): new data, new key
     """
     logging.info("Burning data for %d steps", nsteps_to_burn)
     for _ in range(nsteps_to_burn):
@@ -235,7 +233,7 @@ def gaussian_proposal(
     Args:
         positions (Array): original positions
         std_move (jnp.float32): standard deviation of the moves
-        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key
+        key (PRNGKey): an array with shape (2,) representing a jax PRNG key
 
     Returns:
         (Array, Array): (new positions, new key split from previous)

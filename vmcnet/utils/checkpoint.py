@@ -163,7 +163,7 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
                 data (pytree or Array): walker data to save
                 params (pytree): model parameters to save
                 optimizer_state (pytree): optimizer state to save
-                key (PRNGKeyArray): RNG key, used to reproduce exact behavior from
+                key (PRNGKey): RNG key, used to reproduce exact behavior from
                     checkpoint
         """
         io.save_vmc_state(directory, name, checkpoint_data)

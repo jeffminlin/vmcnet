@@ -78,7 +78,7 @@ def get_update_fn_and_init_optimizer(
                 -> ((expected_energy, auxiliary_energy_data), grad_energy),
             where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        key (PRNGKeyArray): PRNGKey with which to initialize optimizer state
+        key (PRNGKey): PRNGKey with which to initialize optimizer state
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -87,7 +87,7 @@ def get_update_fn_and_init_optimizer(
         SGD, and SR (with either Adam or SGD) is supported.
 
     Returns:
-        (UpdateParamFn, OptimizerState, PRNGKeyArray):
+        (UpdateParamFn, OptimizerState, PRNGKey):
         update param function with signature
             (params, data, optimizer_state, key)
             -> (new params, new state, metrics, new key),
@@ -177,7 +177,7 @@ def get_kfac_update_fn_and_state(
                 -> ((expected_energy, auxiliary_energy_data), grad_energy),
             where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        key (PRNGKeyArray): PRNGKey with which to initialize optimizer state
+        key (PRNGKey): PRNGKey with which to initialize optimizer state
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for KFAC
@@ -187,7 +187,7 @@ def get_kfac_update_fn_and_state(
             True.
 
     Returns:
-        (UpdateParamFn, kfac_opt.State, PRNGKeyArray):
+        (UpdateParamFn, kfac_opt.State, PRNGKey):
         update param function with signature
             (params, data, optimizer_state, key)
             -> (new params, new state, metrics, new key),

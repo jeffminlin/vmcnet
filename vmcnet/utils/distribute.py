@@ -143,7 +143,7 @@ def distribute_vmc_state(
             the devices. Default works if there is no data that requires replication.
 
     Returns:
-        Tuple[D, P, O, PRNGKeyArray]: tuple of data, params, optimizer_state, and key,
+        Tuple[D, P, O, PRNGKey]: tuple of data, params, optimizer_state, and key,
         each of which has been either distributed or replicated across all devices,
         as appopriate.
     """

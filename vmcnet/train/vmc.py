@@ -52,7 +52,7 @@ def vmc_loop(
                 -> (new_params, optimizer_state, dict: metrics, key).
             If metrics is not None, it is required to have the entries "energy" and
             "variance" at a minimum. If metrics is None, no checkpointing is done.
-        key (PRNGKeyArray): an array with shape (2,) representing a jax PRNG key passed
+        key (PRNGKey): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
         logdir (str, optional): name of parent log directory. If None, no checkpointing
