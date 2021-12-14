@@ -165,7 +165,7 @@ class FactorizedAntisymmetrize(Module):
             where psi_i is the output from antisymmetrizing the ith function on the ith
             input.
         """
-        # Flatten the trees for fns_to_antisymmetrize and xs, because VMCNetModule
+        # Flatten the trees for fns_to_antisymmetrize and xs, because Module
         # freezes all instances of lists to tuples, so this can cause treedef
         # compatibility problems
         antisyms = jax.tree_map(

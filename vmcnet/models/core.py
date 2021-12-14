@@ -121,7 +121,7 @@ class AddedModel(Module):
 
     Attributes:
         submodels (Sequence[Union[Callable, Module]]): a sequence of
-            functions or VMCNetModules which are called on the same args and can be
+            functions or Modules which are called on the same args and can be
             added
     """
 
@@ -138,7 +138,7 @@ class ComposedModel(Module):
 
     Attributes:
         submodels (Sequence[Union[Callable, Module]]): a sequence of
-            functions or VMCNetModules which can be composed sequentially
+            functions or Modules which can be composed sequentially
     """
 
     submodels: Sequence[Union[Callable, Module]]
