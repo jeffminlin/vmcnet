@@ -38,7 +38,7 @@ def make_hermite_polynomials(x: Array) -> Array:
     return jnp.concatenate(H, axis=-1)
 
 
-class HarmonicOscillatorOrbitals(models.core.VMCNetModule):
+class HarmonicOscillatorOrbitals(models.core.Module):
     """Create orbitals for a set of non-interacting quantum harmonic oscillators.
 
     The single-particle quantum harmonic oscillator for particle i has the Hamiltonian
@@ -119,7 +119,7 @@ class HarmonicOscillatorOrbitals(models.core.VMCNetModule):
 
 def make_harmonic_oscillator_spin_half_model(
     nspin_first: int, model_omega_init: jnp.float32
-) -> models.core.VMCNetModule:
+) -> models.core.Module:
     """Create a spin-1/2 quantum harmonic oscillator wavefunction (two spins).
 
     Args:
@@ -131,7 +131,7 @@ def make_harmonic_oscillator_spin_half_model(
             eigenstate
 
     Returns:
-        models.core.VMCNetModule: spin-1/2 wavefunction for the quantum harmonic
+        models.core.Module: spin-1/2 wavefunction for the quantum harmonic
         oscillator, with one trainable parameter (the model omega)
     """
 

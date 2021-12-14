@@ -141,7 +141,7 @@ def _assert_permuted_slog_values_allclose(
 
 
 def _test_layer_antiequivariance(
-    build_layer: Callable[[ParticleSplit], models.core.VMCNetModule],
+    build_layer: Callable[[ParticleSplit], models.core.Module],
     logabs: bool = False,
     rtol: float = 1e-7,
     atol: float = 0.0,

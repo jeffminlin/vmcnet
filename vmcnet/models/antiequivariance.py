@@ -9,7 +9,7 @@ from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_mu
 from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList, ParticleSplit
 from .core import (
-    VMCNetModule,
+    Module,
     get_alternating_signs,
     get_nelec_per_split,
     is_tuple_of_arrays,
@@ -158,7 +158,7 @@ def multiply_slog_antieq_by_eq_features(
     )
 
 
-class OrbitalCofactorAntiequivarianceLayer(VMCNetModule):
+class OrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
@@ -244,7 +244,7 @@ class OrbitalCofactorAntiequivarianceLayer(VMCNetModule):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), cofactors)
 
 
-class SLogOrbitalCofactorAntiequivarianceLayer(VMCNetModule):
+class SLogOrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antieq. multiplicatively to equivariant inputs with slog out.
 
     Attributes:
@@ -330,7 +330,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(VMCNetModule):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), slog_cofactors)
 
 
-class PerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
+class PerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
@@ -415,7 +415,7 @@ class PerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), dets)
 
 
-class SLogPerParticleDeterminantAntiequivarianceLayer(VMCNetModule):
+class SLogPerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:

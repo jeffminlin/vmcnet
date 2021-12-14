@@ -1,6 +1,6 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Sequence, Tuple, Union, cast
+from typing import Callable, Sequence, TYPE_CHECKING, Tuple, Union, cast
 
 import flax
 import jax
@@ -101,29 +101,31 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
 
 
-class VMCNetModule(flax.linen.Module):
+class Module(flax.linen.Module):
     """Custom parent class for models to work around flax typing issues."""
 
-    def __init__(self, *args, **kwargs):
-        """Dummy init method with fully general args.
+    if TYPE_CHECKING:
 
-        This avoids Mypy inferring an erroneous type from the type-hinting in
-        VMCNetModule and complaining when our module initialization calls do
-        not match that erroneous type.
-        """
-        super().__init__()
+        def __init__(self, *args, **kwargs):
+            """Dummy init method with fully general args.
+
+            This avoids Mypy inferring an erroneous type from the type-hinting in
+            flax.linen.Module and complaining when our module initialization calls do
+            not match that erroneous type.
+            """
+            super().__init__()
 
 
-class AddedModel(VMCNetModule):
+class AddedModel(Module):
     """A model made from added parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, VMCNetModule]]): a sequence of
+        submodels (Sequence[Union[Callable, Module]]): a sequence of
             functions or VMCNetModules which are called on the same args and can be
             added
     """
 
-    submodels: Sequence[Union[Callable, VMCNetModule]]
+    submodels: Sequence[Union[Callable, Module]]
 
     @flax.linen.compact
     def __call__(self, *args):
@@ -131,15 +133,15 @@ class AddedModel(VMCNetModule):
         return sum(submodel(*args) for submodel in self.submodels)
 
 
-class ComposedModel(VMCNetModule):
+class ComposedModel(Module):
     """A model made from composable parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, VMCNetModule]]): a sequence of
+        submodels (Sequence[Union[Callable, Module]]): a sequence of
             functions or VMCNetModules which can be composed sequentially
     """
 
-    submodels: Sequence[Union[Callable, VMCNetModule]]
+    submodels: Sequence[Union[Callable, Module]]
 
     @flax.linen.compact
     def __call__(self, x):
@@ -150,7 +152,7 @@ class ComposedModel(VMCNetModule):
         return outputs
 
 
-class Dense(VMCNetModule):
+class Dense(Module):
     """A linear transformation applied over the last dimension of the input.
 
     This is a copy of the flax Dense layer, but with registration of the weights for use
@@ -199,7 +201,7 @@ class Dense(VMCNetModule):
             return y
 
 
-class LogDomainDense(VMCNetModule):
+class LogDomainDense(Module):
     """A linear transformation applied on the last axis of the input, in the log domain.
 
     If the inputs are (sign(x), log(abs(x))), the outputs are
@@ -253,7 +255,7 @@ class LogDomainDense(VMCNetModule):
         )
 
 
-class SimpleResNet(VMCNetModule):
+class SimpleResNet(Module):
     """Simplest fully-connected ResNet.
 
     Attributes:
@@ -327,7 +329,7 @@ class SimpleResNet(VMCNetModule):
         return self.final_dense(x)
 
 
-class LogDomainResNet(VMCNetModule):
+class LogDomainResNet(Module):
     """Simplest fully-connected ResNet, implemented in the log domain.
 
     Attributes:

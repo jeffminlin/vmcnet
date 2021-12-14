@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, SLArray, PyTree
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
-from .core import VMCNetModule, get_alternating_signs, is_tuple_of_arrays
+from .core import Module, get_alternating_signs, is_tuple_of_arrays
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> Array:
@@ -74,7 +74,7 @@ def _get_lexicographic_signs(n: int) -> Array:
     return signs
 
 
-class ParallelPermutations(VMCNetModule):
+class ParallelPermutations(Module):
     """Get all perms along the 2nd-to-last axis, w/ perms stored as a constant.
 
     If inputs are shape (..., n, d), then the outputs are shape (..., n!, n, d).
@@ -111,7 +111,7 @@ class ParallelPermutations(VMCNetModule):
         return jnp.take(x, self.permutation_list, axis=-2), self.signs
 
 
-class FactorizedAntisymmetrize(VMCNetModule):
+class FactorizedAntisymmetrize(Module):
     """Separately antisymmetrize fns over leaves of a pytree and return the product.
 
     See https://arxiv.org/abs/2112.03491 for a description of the factorized
@@ -180,7 +180,7 @@ class FactorizedAntisymmetrize(VMCNetModule):
         return functools.reduce(slog_multiply, slog_antisyms)
 
 
-class GenericAntisymmetrize(VMCNetModule):
+class GenericAntisymmetrize(Module):
     """Antisymmetrize a single function over the leaves of a pytree.
 
     See https://arxiv.org/abs/2112.03491 for a description of the generic antisymmetric

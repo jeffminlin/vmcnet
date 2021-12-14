@@ -12,7 +12,7 @@ from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
-    VMCNetModule,
+    Module,
     _split_mean,
     _valid_skip,
     compute_ee_norm_with_safe_diag,
@@ -155,7 +155,7 @@ def compute_electron_electron(
     return input_2e, r_ee
 
 
-class FermiNetOneElectronLayer(VMCNetModule):
+class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
@@ -385,7 +385,7 @@ class FermiNetOneElectronLayer(VMCNetModule):
         return nonlinear_out
 
 
-class FermiNetTwoElectronLayer(VMCNetModule):
+class FermiNetTwoElectronLayer(Module):
     """A single layer in the two-electron stream of the FermiNet equivariance.
 
     Attributes:
@@ -437,7 +437,7 @@ class FermiNetTwoElectronLayer(VMCNetModule):
         return nonlinear_out
 
 
-class FermiNetResidualBlock(VMCNetModule):
+class FermiNetResidualBlock(Module):
     """A single residual block in the FermiNet equivariant part.
 
     Combines the one-electron and two-electron streams.
@@ -486,7 +486,7 @@ class FermiNetResidualBlock(VMCNetModule):
         return out_1e, out_2e
 
 
-class FermiNetBackflow(VMCNetModule):
+class FermiNetBackflow(Module):
     """The FermiNet equivariant part up until, but not including, the orbitals.
 
     Repeated composition of the residual blocks in the parallel one-electron and
@@ -536,7 +536,7 @@ class FermiNetBackflow(VMCNetModule):
         return stream_1e
 
 
-class SplitDense(VMCNetModule):
+class SplitDense(Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
@@ -670,7 +670,7 @@ def _compute_exponential_envelopes_all_splits(
     )
 
 
-class FermiNetOrbitalLayer(VMCNetModule):
+class FermiNetOrbitalLayer(Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
@@ -761,7 +761,7 @@ class FermiNetOrbitalLayer(VMCNetModule):
         return orbs
 
 
-class DoublyEquivariantOrbitalLayer(VMCNetModule):
+class DoublyEquivariantOrbitalLayer(Module):
     """Equivariantly generate an orbital matrix corresponding to each input stream.
 
     The calculation being done here is a bit subtle, so it's worth explaining here

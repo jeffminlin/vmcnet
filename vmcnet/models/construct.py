@@ -29,7 +29,7 @@ from .core import (
     Activation,
     AddedModel,
     SimpleResNet,
-    VMCNetModule,
+    Module,
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
@@ -111,7 +111,7 @@ def get_model_from_config(
     ion_pos: Array,
     ion_charges: Array,
     dtype=jnp.float32,
-) -> VMCNetModule:
+) -> Module:
     """Get a model from a hyperparameter config."""
     spin_split = get_spin_split(nelec)
 
@@ -183,7 +183,7 @@ def get_model_from_config(
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
             )
-            invariance_backflow: Optional[VMCNetModule] = get_backflow_from_config(
+            invariance_backflow: Optional[Module] = get_backflow_from_config(
                 invariance_config.backflow,
                 spin_split,
                 dtype=dtype,
@@ -436,7 +436,7 @@ def get_backflow_from_config(
     backflow_config,
     spin_split,
     dtype=jnp.float32,
-) -> VMCNetModule:
+) -> Module:
     """Get a FermiNet backflow from a model configuration."""
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
@@ -685,7 +685,7 @@ def _reshape_raw_ferminet_orbitals(
     return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
 
 
-class FermiNet(VMCNetModule):
+class FermiNet(Module):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
@@ -1198,7 +1198,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
 
-class AntiequivarianceNet(VMCNetModule):
+class AntiequivarianceNet(Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
@@ -1282,7 +1282,7 @@ class AntiequivarianceNet(VMCNetModule):
         return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
-class FactorizedAntisymmetry(VMCNetModule):
+class FactorizedAntisymmetry(Module):
     """A sum of products of explicitly antisymmetrized ResNets, composed with backflow.
 
     This connects the computational graph between a backflow, a factorized
@@ -1414,7 +1414,7 @@ class FactorizedAntisymmetry(VMCNetModule):
         return sign_psi, log_antisyms + jastrow_part
 
 
-class GenericAntisymmetry(VMCNetModule):
+class GenericAntisymmetry(Module):
     """A single ResNet antisymmetrized over all input leaves, composed with backflow.
 
     The ResNet is antisymmetrized with respect to each spin split separately (i.e. the

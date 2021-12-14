@@ -9,7 +9,7 @@ import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, P, ModelApply
 
 
-class HydrogenLikeWavefunction(models.core.VMCNetModule):
+class HydrogenLikeWavefunction(models.core.Module):
     """Model which computes -decay_rate * r, with trainable decay_rate.
 
     This model returns log|psi(x)|, where psi is the 1-s orbital exp(-decay_rate * r).
