@@ -188,6 +188,8 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         skip_connection (bool, optional): whether to add residual skip connections
             whenever the shapes of the input and output match. Defaults to True.
+        skip_connection_scale (float, optional): quantity to scale the final output by
+            if a skip connection is added. Defaults to 1.0.
         cyclic_spins (bool, optional): whether the the concatenation in the one-electron
             stream should satisfy a cyclic equivariance structure, i.e. if there are
             three spins (1, 2, 3), then in the mixed part of the stream, after averaging
@@ -207,6 +209,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
     activation_fn: Activation
     use_bias: bool = True
     skip_connection: bool = True
+    skip_connection_scale: float = 1.0
     cyclic_spins: bool = True
 
     def setup(self):
@@ -377,7 +380,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         nonlinear_out = self._activation_fn(dense_out_concat)
 
         if self.skip_connection and _valid_skip(in_1e, nonlinear_out):
-            nonlinear_out = nonlinear_out + in_1e
+            nonlinear_out = self.skip_connection_scale * (nonlinear_out + in_1e)
 
         return nonlinear_out
 
@@ -396,6 +399,8 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
         skip_connection (bool, optional): whether to add residual skip connections
             whenever the shapes of the input and output match. Defaults to True.
+        skip_connection_scale (float, optional): quantity to scale the final output by
+            if a skip connection is added. Defaults to 1.0.
     """
 
     ndense: int
@@ -404,6 +409,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
     activation_fn: Activation
     use_bias: bool = True
     skip_connection: bool = True
+    skip_connection_scale: float = 1.0
 
     def setup(self):
         """Setup Dense layer."""
@@ -429,7 +435,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         nonlinear_out = self._activation_fn(dense_out)
 
         if self.skip_connection and _valid_skip(x, nonlinear_out):
-            nonlinear_out = nonlinear_out + x
+            nonlinear_out = self.skip_connection_scale * (nonlinear_out + x)
 
         return nonlinear_out
 

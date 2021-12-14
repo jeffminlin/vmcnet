@@ -453,7 +453,10 @@ def get_backflow_from_config(
         ),
         activation_fn=_get_named_activation_fn(backflow_config.activation_fn),
         use_bias=backflow_config.use_bias,
-        skip_connection=backflow_config.skip_connection,
+        one_electron_skip=backflow_config.one_electron_skip,
+        one_electron_skip_scale=backflow_config.one_electron_skip_scale,
+        two_electron_skip=backflow_config.two_electron_skip,
+        two_electron_skip_scale=backflow_config.two_electron_skip_scale,
         cyclic_spins=backflow_config.cyclic_spins,
     )
 
@@ -502,7 +505,10 @@ def get_residual_blocks_for_ferminet_backflow(
     bias_initializer_2e_stream: WeightInitializer,
     activation_fn: Activation,
     use_bias: bool = True,
-    skip_connection: bool = True,
+    one_electron_skip: bool = True,
+    one_electron_skip_scale: float = 1.0,
+    two_electron_skip: bool = True,
+    two_electron_skip_scale: float = 1.0,
     cyclic_spins: bool = True,
 ) -> List[FermiNetResidualBlock]:
     """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
@@ -547,9 +553,16 @@ def get_residual_blocks_for_ferminet_backflow(
             the signature Array -> Array (shape is preserved)
         use_bias (bool, optional): whether to add a bias term in the electron streams.
             Defaults to True.
-        skip_connection (bool, optional): whether to add residual skip connections
-            whenever the shapes of the input and outputs of the streams match. Defaults
-            to True.
+        one_electron_skip (bool, optional): whether to add a residual skip connection to
+            the one-electron layer whenever the shapes of the input and output match.
+            Defaults to True.
+        one_electron_skip_scale (float, optional): quantity to scale the one-electron
+            output by if a skip connection is added. Defaults to 1.0.
+        two_electron_skip (bool, optional): whether to add a residual skip connection to
+            the two-electron layer whenever the shapes of the input and output match.
+            Defaults to True.
+        two_electron_skip_scale (float, optional): quantity to scale the two-electron
+            output by if a skip connection is added. Defaults to 1.0.
         cyclic_spins (bool, optional): whether the the concatenation in the one-electron
             stream should satisfy a cyclic equivariance structure, i.e. if there are
             three spins (1, 2, 3), then in the mixed part of the stream, after averaging
@@ -570,8 +583,9 @@ def get_residual_blocks_for_ferminet_backflow(
             bias_initializer_1e_stream,
             activation_fn,
             use_bias,
-            skip_connection,
-            cyclic_spins,
+            skip_connection=one_electron_skip,
+            skip_connection_scale=one_electron_skip_scale,
+            cyclic_spins=cyclic_spins,
         )
         two_electron_layer = None
         if len(ndense) > 1:
@@ -581,7 +595,8 @@ def get_residual_blocks_for_ferminet_backflow(
                 bias_initializer_2e_stream,
                 activation_fn,
                 use_bias,
-                skip_connection,
+                skip_connection=two_electron_skip,
+                skip_connection_scale=two_electron_skip_scale,
             )
         residual_blocks.append(
             FermiNetResidualBlock(one_electron_layer, two_electron_layer)

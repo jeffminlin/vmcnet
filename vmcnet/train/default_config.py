@@ -123,7 +123,10 @@ def get_default_model_config() -> Dict:
         "bias_init_2e_stream": normal_init,
         "activation_fn": "tanh",
         "use_bias": True,
-        "skip_connection": True,
+        "one_electron_skip": True,
+        "one_electron_skip_scale": 1.0,
+        "two_electron_skip": True,
+        "two_electron_skip_scale": 1.0,
         "cyclic_spins": cyclic_spins,
     }
 
@@ -242,7 +245,10 @@ def get_default_model_config() -> Dict:
                         "bias_init_2e_stream": normal_init,
                         "activation_fn": "gelu",
                         "use_bias": True,
-                        "skip_connection": True,
+                        "one_electron_skip": True,
+                        "one_electron_skip_scale": 1.0,
+                        "two_electron_skip": True,
+                        "two_electron_skip_scale": 1.0,
                         "cyclic_spins": cyclic_spins,
                     },
                 },
