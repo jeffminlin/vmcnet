@@ -52,7 +52,9 @@ jobs:
       run: tox -e mypy
 
     - name: Code linting
-      run: tox -e flake8
+      run: |
+        tox -e black
+        tox -e flake8
 
     - name: Docstring linting
       run: tox -e pydocstyle
