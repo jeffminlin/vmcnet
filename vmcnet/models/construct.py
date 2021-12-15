@@ -641,7 +641,7 @@ def get_resnet_determinant_fn_for_ferminet(
         activation (Activation): the activation function to use for the  resnet.
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
         bias_initializer (WeightInitializer): bias initializer for the resnet.
-        use_bias(bool): Whether to use a bias in the ResNet. Defaults to True.
+        use_bias (bool): Whether to use a bias in the ResNet. Defaults to True.
         register_kfac (bool): Whether to register the ResNet Dense layers with KFAC.
             Currently, params for this ResNet explode to huge values and cause nans
             if register_kfac is True, so this flag defaults to false and should only be

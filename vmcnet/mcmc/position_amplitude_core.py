@@ -56,7 +56,8 @@ def make_position_amplitude_data(position: Array, amplitude: Array, move_metadat
         move_metadata (Any): other required metadata for the metropolis algorithm
 
     Returns:
-        PositionAmplitudeData
+        PositionAmplitudeData: data containing positions, wavefn amplitudes, and move
+        metadata
     """
     return PositionAmplitudeData(
         walker_data=PositionAmplitudeWalkerData(position=position, amplitude=amplitude),
@@ -133,8 +134,8 @@ def make_position_amplitude_gaussian_proposal(
         model_apply (Callable): function which evaluates a model. Has signature
             (params, position) -> amplitude
         get_std_move (Callable): function which gets the standard deviation of the
-        gaussian move, which can optionally depend on the data. Has signature
-        (PositionAmplitudeData) -> std_move
+            gaussian move, which can optionally depend on the data. Has signature
+            (PositionAmplitudeData) -> std_move
 
     Returns:
         Callable: proposal function which can be passed to the main VMC routine. Has
@@ -207,7 +208,8 @@ def make_position_amplitude_update(
 
     Args:
         update_move_metadata_fn (Callable): function which calculates the new
-        move_metadata. Has signature (old_move_metadata, move_mask) -> new_move_metadata
+            move_metadata. Has signature
+            (old_move_metadata, move_mask) -> new_move_metadata
 
     Returns:
         Callable: function with signature

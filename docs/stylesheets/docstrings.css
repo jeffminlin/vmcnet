@@ -1,0 +1,6 @@
+div.doc-object:not(.doc-module) {
+    padding-left: 25px;
+    padding-right: 25px;
+    border: 4px solid rgba(200, 200, 200);
+    margin-bottom: 100px;
+}
