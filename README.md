@@ -3,15 +3,23 @@ Flexible, general-purpose VMC framework, built on [JAX](https://github.com/googl
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+## Installation
+
+Python 3.9 is required, and a virtual environment is recommended. After cloning, use `pip install -e .` to install the package in editable/develop mode, or `pip install -e .[testing]` if planning on running tests.
+
+If running on a GPU, CUDA needs to be set up properly to work with JAX, and you will need to install the correct `jaxlib` wheel. See, e.g., https://github.com/google/jax#installation.
+
 ## Philosophy and usage
 
 This repository is built to serve two purposes:
 1. Provide a general python API for variational Monte Carlo calculations compatible with JAX, with a number of built-in neural network architectures for ready-use. 
 2. Provide a command-line interface exposing a large number of options for more streamlined (but somewhat less custom) experimentation with architecture/optimization/sampling hyperparameters.
 
+This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository (and its own JAX branch) can be found [here](https://github.com/deepmind/ferminet).
+
 ### Python API
 
-The primary routine exposed by this repository which implements the VMC training loop is the [`train.vmc.vmc_loop`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/vmc.py#L13) function. A skeleton of a script which performs varational Monte Carlo would look something like:
+The primary routine exposed by this repository which implements the VMC training loop is the [`train.vmc.vmc_loop`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/vmc.py#L13) function. This function implements a very generic unsupervised training loop. A skeleton of a script which performs varational Monte Carlo would look something like:
 
 ```python
 import jax
@@ -90,17 +98,24 @@ You can also reload and evaluate or continue training from previous checkpoints 
 
 The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple script is designed to be compatible with the output of an evaluation run with `vmc-molecule`, but can accept any path to a file which contains local energies (a file with nchains x nepochs energies). It computes and saves a json file containing the average energy, the sample variance, the estimated integrated autocorrelation, and the estimated standard error. The options can be viewed simply via `vmc-statistics -h`.
 
-## Installation
-
-Python 3.9 is required, and a virtual environment is recommended. After cloning, use `pip install -e .` to install the package in editable/develop mode, or `pip install -e .[testing]` if planning on running tests.
-
-If running on a GPU, CUDA needs to be set up properly to work with JAX, and you will need to install the correct `jaxlib` wheel. See, e.g., https://github.com/google/jax#installation.
-
 ## Contributing
 
 See [how to contribute](CONTRIBUTING.md).
 
 ## Cite
+
+A preprint of the paper which originally introduced this repository can be found at https://arxiv.org/abs/2112.03491, which can be cited via:
+```
+@misc{lin2021explicitly,
+      title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation}, 
+      author={Jeffmin Lin and Gil Goldshlager and Lin Lin},
+      year={2021},
+      eprint={2112.03491},
+      archivePrefix={arXiv},
+      primaryClass={physics.comp-ph}
+}
+```
+If citing version `0.1.0` of this GitHub repository directly, you can use the following citation:
 
 ```
 @software{vmcnet2021github,

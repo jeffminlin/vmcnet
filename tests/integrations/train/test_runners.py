@@ -9,19 +9,18 @@ import vmcnet.train as train
 
 
 def _get_config(vmc_nchains, eval_nchains, distribute):
-    vmc_nepochs = 5
-    vmc_checkpoint_every = 2
-    vmc_best_checkpoint_every = 4
-
-    eval_nepochs = 3
-
     config = train.default_config.get_default_config()
     config.vmc.nchains = vmc_nchains
-    config.vmc.nepochs = vmc_nepochs
-    config.vmc.checkpoint_every = vmc_checkpoint_every
-    config.vmc.best_checkpoint_every = vmc_best_checkpoint_every
+    config.vmc.nepochs = 5
+    config.vmc.nburn = 2
+    config.vmc.checkpoint_every = 2
+    config.vmc.best_checkpoint_every = 4
+    config.vmc.nsteps_per_param_update = 3
+
     config.eval.nchains = eval_nchains
-    config.eval.nepochs = eval_nepochs
+    config.eval.nepochs = 3
+    config.eval.nburn = 5
+    config.eval.nsteps_per_param_update = 4
 
     config.distribute = distribute
     return config
@@ -115,8 +114,8 @@ def test_run_molecule_pmapped(mocker, tmp_path):
     to the runner with default configs, and that there is some potentially reasonable
     logging occurring. It will not generally catch more subtle bugs.
     """
-    vmc_nchains = 10 * jax.local_device_count()
-    eval_nchains = 20 * jax.local_device_count()
+    vmc_nchains = 3 * jax.local_device_count()
+    eval_nchains = 2 * jax.local_device_count()
     mocker.patch("os.curdir", tmp_path)
     config = _get_config(vmc_nchains, eval_nchains, True)
 
@@ -126,8 +125,8 @@ def test_run_molecule_pmapped(mocker, tmp_path):
 @pytest.mark.very_slow
 def test_run_molecule_jitted(mocker, tmp_path):
     """End-to-end test of the molecular runner, but only jitted."""
-    vmc_nchains = 7  # use a prime number here to catch if pmapping is trying to happen
-    eval_nchains = 5
+    vmc_nchains = 5  # use a prime number here to catch if pmapping is trying to happen
+    eval_nchains = 3
     mocker.patch("os.curdir", tmp_path)
     config = _get_config(vmc_nchains, eval_nchains, False)
 

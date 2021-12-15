@@ -703,6 +703,12 @@ def _reshape_raw_ferminet_orbitals(
 class FermiNet(Module):
     """FermiNet/generalized Slater determinant model.
 
+    This model was first introduced in the following papers:
+        https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429
+        https://arxiv.org/abs/2011.07125
+    Their repository can be found at https://github.com/deepmind/ferminet, which
+    includes a JAX branch.
+
     Attributes:
         spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
