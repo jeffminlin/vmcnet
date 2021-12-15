@@ -6,11 +6,11 @@ import flax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, ArrayList, Backflow, ParticleSplit
-from .core import Dense, _split_mean, get_nsplits
+from .core import Dense, Module, _split_mean, get_nsplits
 from .weights import WeightInitializer
 
 
-class SplitMeanDense(flax.linen.Module):
+class SplitMeanDense(Module):
     """Split mean of input on 2nd-to-last axis, apply unique Dense layers to each split.
 
     Attributes:
@@ -65,7 +65,7 @@ class SplitMeanDense(flax.linen.Module):
             for i in range(nspins)
         ]
 
-    def __call__(self, x: Array) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:  # type: ignore[override]
         """Split the input and apply a dense layer to each split.
 
         Args:
@@ -86,7 +86,7 @@ class SplitMeanDense(flax.linen.Module):
         ]
 
 
-class InvariantTensor(flax.linen.Module):
+class InvariantTensor(Module):
     """Split invariance via averaged backflow, with desired shape via a dense layer.
 
     Attributes:
@@ -151,7 +151,7 @@ class InvariantTensor(flax.linen.Module):
         return jnp.reshape(dense_out, output_shape)
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self, stream_1e: Array, stream_2e: Optional[Array] = None
     ) -> ArrayList:
         """Backflow -> split mean dense to get invariance -> reshape.

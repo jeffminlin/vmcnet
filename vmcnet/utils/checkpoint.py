@@ -18,7 +18,14 @@ import jax.numpy as jnp
 
 import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
-from vmcnet.utils.typing import Array, CheckpointData, D, GetAmplitudeFromData, P, S
+from vmcnet.utils.typing import (
+    CheckpointData,
+    D,
+    GetAmplitudeFromData,
+    P,
+    PRNGKey,
+    S,
+)
 
 T = TypeVar("T")
 
@@ -156,7 +163,7 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
                 data (pytree or Array): walker data to save
                 params (pytree): model parameters to save
                 optimizer_state (pytree): optimizer state to save
-                key (Array): RNG key, used to reproduce exact behavior from
+                key (PRNGKey): RNG key, used to reproduce exact behavior from
                     checkpoint
         """
         io.save_vmc_state(directory, name, checkpoint_data)
@@ -317,7 +324,7 @@ def save_metrics_and_handle_checkpoints(
     optimizer_state: S,
     old_data: D,
     new_data: D,
-    key: Array,
+    key: PRNGKey,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -474,7 +481,7 @@ def track_and_save_best_checkpoint(
     old_params: P,
     optimizer_state: S,
     data: D,
-    key: Array,
+    key: PRNGKey,
     metrics: Dict,
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
@@ -567,7 +574,7 @@ def save_metrics_and_regular_checkpoint(
     new_params: P,
     optimizer_state: S,
     data: D,
-    key: Array,
+    key: PRNGKey,
     metrics: Dict,
     logdir: str,
     checkpoint_writer: CheckpointWriter,

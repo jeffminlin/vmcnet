@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, SLArray, PyTree
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
-from .core import get_alternating_signs, is_tuple_of_arrays
+from .core import Module, get_alternating_signs, is_tuple_of_arrays
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> Array:
@@ -74,7 +74,7 @@ def _get_lexicographic_signs(n: int) -> Array:
     return signs
 
 
-class ParallelPermutations(flax.linen.Module):
+class ParallelPermutations(Module):
     """Get all perms along the 2nd-to-last axis, w/ perms stored as a constant.
 
     If inputs are shape (..., n, d), then the outputs are shape (..., n!, n, d).
@@ -94,10 +94,10 @@ class ParallelPermutations(flax.linen.Module):
 
     def setup(self):
         """Store the list of permutations and signs for the symmetric group."""
-        self.permutation_list = list(itertools.permutations(range(self.n)))
+        self.permutation_list = jnp.array(list(itertools.permutations(range(self.n))))
         self.signs = _get_lexicographic_signs(self.n)
 
-    def __call__(self, x: Array) -> Tuple[Array, Array]:
+    def __call__(self, x: Array) -> Tuple[Array, Array]:  # type: ignore[override]
         """Collect all permutations of x and the signs of these permutations.
 
         Args:
@@ -111,7 +111,7 @@ class ParallelPermutations(flax.linen.Module):
         return jnp.take(x, self.permutation_list, axis=-2), self.signs
 
 
-class FactorizedAntisymmetrize(flax.linen.Module):
+class FactorizedAntisymmetrize(Module):
     """Separately antisymmetrize fns over leaves of a pytree and return the product.
 
     See https://arxiv.org/abs/2112.03491 for a description of the factorized
@@ -150,7 +150,7 @@ class FactorizedAntisymmetrize(flax.linen.Module):
         return jnp.sum(signed_perms_out, axis=-2)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:  # type: ignore[override]
         """Antisymmetrize the leaves of self.fns_to_antisymmetrize on the leaves of xs.
 
         Args:
@@ -165,7 +165,7 @@ class FactorizedAntisymmetrize(flax.linen.Module):
             where psi_i is the output from antisymmetrizing the ith function on the ith
             input.
         """
-        # Flatten the trees for fns_to_antisymmetrize and xs, because flax.linen.Module
+        # Flatten the trees for fns_to_antisymmetrize and xs, because Module
         # freezes all instances of lists to tuples, so this can cause treedef
         # compatibility problems
         antisyms = jax.tree_map(
@@ -180,7 +180,7 @@ class FactorizedAntisymmetrize(flax.linen.Module):
         return functools.reduce(slog_multiply, slog_antisyms)
 
 
-class GenericAntisymmetrize(flax.linen.Module):
+class GenericAntisymmetrize(Module):
     """Antisymmetrize a single function over the leaves of a pytree.
 
     See https://arxiv.org/abs/2112.03491 for a description of the generic antisymmetric
@@ -218,7 +218,7 @@ class GenericAntisymmetrize(flax.linen.Module):
         return ParallelPermutations(n)(x)
 
     @flax.linen.compact
-    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:
+    def __call__(self, xs: PyTree) -> Union[Array, SLArray]:  # type: ignore[override]
         """Antisymmetrize self.fn_to_antisymmetrize over the leaves of xs.
 
         Args:

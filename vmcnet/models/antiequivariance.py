@@ -8,7 +8,12 @@ import jax.numpy as jnp
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
 from vmcnet.utils.pytree_helpers import tree_prod
 from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList, ParticleSplit
-from .core import get_alternating_signs, get_nelec_per_split, is_tuple_of_arrays
+from .core import (
+    Module,
+    get_alternating_signs,
+    get_nelec_per_split,
+    is_tuple_of_arrays,
+)
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
 
@@ -153,7 +158,7 @@ def multiply_slog_antieq_by_eq_features(
     )
 
 
-class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+class OrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
@@ -197,7 +202,9 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the the orbital matrix is M, and the cofactor matrix of
@@ -237,7 +244,7 @@ class OrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), cofactors)
 
 
-class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
+class SLogOrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antieq. multiplicatively to equivariant inputs with slog out.
 
     Attributes:
@@ -281,7 +288,9 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
         For a single spin, if the orbital matrix is M, and the cofactor matrix of the
@@ -321,7 +330,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), slog_cofactors)
 
 
-class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
+class PerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
@@ -365,7 +374,9 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the orbital matrix for particle p is M_p, the output at
@@ -404,7 +415,7 @@ class PerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
         return jax.tree_map(lambda x: jnp.expand_dims(x, -1), dets)
 
 
-class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
+class SLogPerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
@@ -448,7 +459,9 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(flax.linen.Module):
     isotropic_decay: bool = False
 
     @flax.linen.compact
-    def __call__(self, eq_inputs: Array, r_ei: Array = None) -> SLArrayList:
+    def __call__(  # type: ignore[override]
+        self, eq_inputs: Array, r_ei: Array = None
+    ) -> SLArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
         For a single spin, if the the orbital matrix for particle p is M_p, the output

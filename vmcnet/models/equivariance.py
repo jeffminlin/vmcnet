@@ -12,6 +12,7 @@ from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
+    Module,
     _split_mean,
     _valid_skip,
     compute_ee_norm_with_safe_diag,
@@ -154,7 +155,7 @@ def compute_electron_electron(
     return input_2e, r_ee
 
 
-class FermiNetOneElectronLayer(flax.linen.Module):
+class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
     Attributes:
@@ -321,7 +322,9 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-    def __call__(self, in_1e: Array, in_2e: Array = None) -> Array:
+    def __call__(  # type: ignore[override]
+        self, in_1e: Array, in_2e: Array = None
+    ) -> Array:
         """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
 
         This implementation breaks the one-electron stream into three parts:
@@ -385,7 +388,7 @@ class FermiNetOneElectronLayer(flax.linen.Module):
         return nonlinear_out
 
 
-class FermiNetTwoElectronLayer(flax.linen.Module):
+class FermiNetTwoElectronLayer(Module):
     """A single layer in the two-electron stream of the FermiNet equivariance.
 
     Attributes:
@@ -423,7 +426,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
             use_bias=self.use_bias,
         )
 
-    def __call__(self, x: Array) -> Array:
+    def __call__(self, x: Array) -> Array:  # type: ignore[override]
         """Apply a Dense layer in parallel to all electron pairs.
 
         The expected use-case of this is to batch apply a dense layer to an input x of
@@ -440,7 +443,7 @@ class FermiNetTwoElectronLayer(flax.linen.Module):
         return nonlinear_out
 
 
-class FermiNetResidualBlock(flax.linen.Module):
+class FermiNetResidualBlock(Module):
     """A single residual block in the FermiNet equivariant part.
 
     Combines the one-electron and two-electron streams.
@@ -465,7 +468,7 @@ class FermiNetResidualBlock(flax.linen.Module):
         self._one_electron_layer = self.one_electron_layer
         self._two_electron_layer = self.two_electron_layer
 
-    def __call__(
+    def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Array = None
     ) -> Tuple[Array, Optional[Array]]:
         """Apply the one-electron layer and optionally the two-electron layer.
@@ -489,7 +492,7 @@ class FermiNetResidualBlock(flax.linen.Module):
         return out_1e, out_2e
 
 
-class FermiNetBackflow(flax.linen.Module):
+class FermiNetBackflow(Module):
     """The FermiNet equivariant part up until, but not including, the orbitals.
 
     Repeated composition of the residual blocks in the parallel one-electron and
@@ -516,7 +519,7 @@ class FermiNetBackflow(flax.linen.Module):
         """Setup called residual blocks."""
         self._residual_block_list = [block for block in self.residual_blocks]
 
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         stream_1e: Array,
         stream_2e: Optional[Array] = None,
@@ -539,7 +542,7 @@ class FermiNetBackflow(flax.linen.Module):
         return stream_1e
 
 
-class SplitDense(flax.linen.Module):
+class SplitDense(Module):
     """Split input on the 2nd-to-last axis and apply unique Dense layers to each split.
 
     Attributes:
@@ -595,7 +598,7 @@ class SplitDense(flax.linen.Module):
             for i in range(nsplits)
         ]
 
-    def __call__(self, x: Array) -> ArrayList:
+    def __call__(self, x: Array) -> ArrayList:  # type: ignore[override]
         """Split the input and apply a dense layer to each split.
 
         Args:
@@ -673,7 +676,7 @@ def _compute_exponential_envelopes_all_splits(
     )
 
 
-class FermiNetOrbitalLayer(flax.linen.Module):
+class FermiNetOrbitalLayer(Module):
     """Make the FermiNet orbitals (parallel linear layers with exp decay envelopes).
 
     Attributes:
@@ -726,7 +729,9 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
 
     @flax.linen.compact
-    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, x: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
         Args:
@@ -762,7 +767,7 @@ class FermiNetOrbitalLayer(flax.linen.Module):
         return orbs
 
 
-class DoublyEquivariantOrbitalLayer(flax.linen.Module):
+class DoublyEquivariantOrbitalLayer(Module):
     """Equivariantly generate an orbital matrix corresponding to each input stream.
 
     The calculation being done here is a bit subtle, so it's worth explaining here
@@ -871,7 +876,9 @@ class DoublyEquivariantOrbitalLayer(flax.linen.Module):
         )(dense_inputs)
 
     @flax.linen.compact
-    def __call__(self, x: Array, r_ei: Array = None) -> ArrayList:
+    def __call__(  # type: ignore[override]
+        self, x: Array, r_ei: Array = None
+    ) -> ArrayList:
         """Calculate an equivariant orbital matrix for each input particle.
 
         Args:

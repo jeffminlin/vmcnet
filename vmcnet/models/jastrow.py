@@ -8,7 +8,7 @@ import vmcnet.models as models
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, Backflow, Jastrow
 
-from .core import Dense, compute_ee_norm_with_safe_diag
+from .core import Dense, Module, compute_ee_norm_with_safe_diag
 from .weights import WeightInitializer, get_constant_init, zeros
 
 
@@ -77,7 +77,7 @@ def _anisotropy_on_leaf(
     return out
 
 
-class OneBodyExpDecay(flax.linen.Module):
+class OneBodyExpDecay(Module):
     """Creates an isotropic exponential decay one-body Jastrow model.
 
     The decay is centered at the coordinates of the nuclei, and the electron-nuclei
@@ -108,7 +108,7 @@ class OneBodyExpDecay(flax.linen.Module):
         self._kernel_initializer = self.kernel_initializer
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,
@@ -147,7 +147,7 @@ class OneBodyExpDecay(flax.linen.Module):
         return jnp.exp(-abs_lin_comb_distances)
 
 
-class TwoBodyExpDecay(flax.linen.Module):
+class TwoBodyExpDecay(Module):
     """Isotropic exponential decay two-body Jastrow model.
 
     The decay is isotropic in the sense that each electron-nuclei and electron-electron
@@ -182,7 +182,7 @@ class TwoBodyExpDecay(flax.linen.Module):
     trainable: bool = True
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,
@@ -295,7 +295,7 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
     return jastrow
 
 
-class BackflowJastrow(flax.linen.Module):
+class BackflowJastrow(Module):
     """Backflow-based general permutation invariant Jastrow.
 
     Attributes:
@@ -320,7 +320,7 @@ class BackflowJastrow(flax.linen.Module):
         self._backflow = self.backflow
 
     @flax.linen.compact
-    def __call__(
+    def __call__(  # type: ignore[override]
         self,
         input_stream_1e: Array,
         input_stream_2e: Array,

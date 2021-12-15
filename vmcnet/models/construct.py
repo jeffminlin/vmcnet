@@ -2,7 +2,7 @@
 # TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple, cast
 
 import flax
 import jax
@@ -29,6 +29,7 @@ from .core import (
     Activation,
     AddedModel,
     SimpleResNet,
+    Module,
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
@@ -110,7 +111,7 @@ def get_model_from_config(
     ion_pos: Array,
     ion_charges: Array,
     dtype=jnp.float32,
-) -> flax.linen.Module:
+) -> Module:
     """Get a model from a hyperparameter config."""
     spin_split = get_spin_split(nelec)
 
@@ -125,11 +126,12 @@ def get_model_from_config(
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
-    if model_config.type in [
+    ferminet_model_types = [
         "ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
-    ]:
+    ]
+    if model_config.type in ferminet_model_types:
         determinant_fn = None
         resnet_config = model_config.det_resnet
         if model_config.use_det_resnet:
@@ -181,7 +183,7 @@ def get_model_from_config(
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
             )
-            invariance_backflow = get_backflow_from_config(
+            invariance_backflow: Optional[Module] = get_backflow_from_config(
                 invariance_config.backflow,
                 spin_split,
                 dtype=dtype,
@@ -264,9 +266,17 @@ def get_model_from_config(
                 invariance_use_bias=invariance_config.use_bias,
                 invariance_register_kfac=invariance_config.register_kfac,
             )
+        else:
+            raise ValueError(
+                "FermiNet model type {} requested, but the only supported "
+                "types are: {}".format(model_config.type, ferminet_model_types)
+            )
+
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
-            antieq_layer = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
+            antieq_layer: Callable[
+                [Array, Array], ArrayList
+            ] = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
                 spin_split,
                 kernel_initializer_orbital_linear=kernel_init_constructor(
                     model_config.kernel_init_orbital_linear
@@ -338,7 +348,7 @@ def get_model_from_config(
             return BackflowJastrow(backflow=jastrow_backflow)
 
         if jastrow_config.type == "one_body_decay":
-            jastrow = OneBodyExpDecay(
+            jastrow: Jastrow = OneBodyExpDecay(
                 kernel_initializer=kernel_init_constructor(
                     jastrow_config.one_body_decay.kernel_init
                 )
@@ -426,7 +436,7 @@ def get_backflow_from_config(
     backflow_config,
     spin_split,
     dtype=jnp.float32,
-) -> flax.linen.Module:
+) -> Module:
     """Get a FermiNet backflow from a model configuration."""
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
@@ -690,7 +700,7 @@ def _reshape_raw_ferminet_orbitals(
     return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
 
 
-class FermiNet(flax.linen.Module):
+class FermiNet(Module):
     """FermiNet/generalized Slater determinant model.
 
     Attributes:
@@ -922,7 +932,7 @@ class FermiNet(flax.linen.Module):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
@@ -1026,6 +1036,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         # https://github.com/python/mypy/issues/708
         super().setup()
         self._invariance_compute_input_streams = self.invariance_compute_input_streams
+        self._invariance_backflow = self.invariance_backflow
 
     def _get_invariant_tensor(
         self, output_shape_per_spin: Sequence[Tuple[int, int]]
@@ -1033,7 +1044,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         return InvariantTensor(
             self.spin_split,
             output_shape_per_spin,
-            self.invariance_backflow,
+            self._invariance_backflow,
             self.invariance_kernel_initializer,
             self.invariance_bias_initializer,
             self.invariance_use_bias,
@@ -1202,7 +1213,7 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
         ]
 
 
-class AntiequivarianceNet(flax.linen.Module):
+class AntiequivarianceNet(Module):
     """Antisymmetry from anti-equivariance, backflow -> antieq -> odd invariance.
 
     Attributes:
@@ -1262,7 +1273,7 @@ class AntiequivarianceNet(flax.linen.Module):
         self._array_list_sign_covariance = self.array_list_sign_covariance
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose backflow -> antiequivariance -> sign covariant equivariance -> sum.
 
         Args:
@@ -1286,7 +1297,7 @@ class AntiequivarianceNet(flax.linen.Module):
         return array_to_slog(jnp.sum(antisym_vector, axis=-1))
 
 
-class FactorizedAntisymmetry(flax.linen.Module):
+class FactorizedAntisymmetry(Module):
     """A sum of products of explicitly antisymmetrized ResNets, composed with backflow.
 
     This connects the computational graph between a backflow, a factorized
@@ -1365,7 +1376,7 @@ class FactorizedAntisymmetry(flax.linen.Module):
         self._jastrow = self.jastrow
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> antisymmetrized ResNets -> logabs product.
 
         Args:
@@ -1400,9 +1411,15 @@ class FactorizedAntisymmetry(flax.linen.Module):
             ]
             return jnp.concatenate(resnet_outputs, axis=-1)
 
-        slog_antisyms = FactorizedAntisymmetrize(
-            [fn_to_antisymmetrize for _ in split_spins]
-        )(split_spins)
+        # TODO (ggoldsh/jeffminlin): better typing for the Array vs SLArray version of
+        # this model to avoid having to cast the return type.
+        slog_antisyms = cast(
+            SLArray,
+            FactorizedAntisymmetrize([fn_to_antisymmetrize for _ in split_spins])(
+                split_spins
+            ),
+        )
+
         sign_psi, log_antisyms = slog_sum_over_axis(slog_antisyms, axis=-1)
 
         jastrow_part = self._jastrow(
@@ -1412,7 +1429,7 @@ class FactorizedAntisymmetry(flax.linen.Module):
         return sign_psi, log_antisyms + jastrow_part
 
 
-class GenericAntisymmetry(flax.linen.Module):
+class GenericAntisymmetry(Module):
     """A single ResNet antisymmetrized over all input leaves, composed with backflow.
 
     The ResNet is antisymmetrized with respect to each spin split separately (i.e. the
@@ -1487,9 +1504,10 @@ class GenericAntisymmetry(flax.linen.Module):
         self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
         self._jastrow = self.jastrow
+        self._activation_fn_resnet = self.activation_fn_resnet
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array) -> SLArray:
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> antisymmetrized ResNet -> logabs.
 
         Args:
@@ -1513,7 +1531,7 @@ class GenericAntisymmetry(flax.linen.Module):
                 self.ndense_resnet,
                 1,
                 self.nlayers_resnet,
-                self.activation_fn_resnet,
+                self._activation_fn_resnet,
                 self.kernel_initializer_resnet,
                 self.bias_initializer_resnet,
                 use_bias=self.resnet_use_bias,

@@ -13,7 +13,7 @@ from vmcnet.utils.slog_helpers import (
     array_to_slog,
     array_list_to_slog,
 )
-from vmcnet.utils.typing import Array, ArrayList, SLArray, SLArrayList
+from vmcnet.utils.typing import Array, ArrayList, PRNGKey, SLArray, SLArrayList
 
 from tests.test_utils import assert_pytree_allclose
 
@@ -69,7 +69,7 @@ def test_get_sign_orbit_slog_array_list():
 
 
 def _make_simple_nn_layers(
-    dinput: int, dout: int, key: Array
+    dinput: int, dout: int, key: PRNGKey
 ) -> Callable[[Array], Array]:
     dhidden = 4
     key, subkey = jax.random.split(key)
