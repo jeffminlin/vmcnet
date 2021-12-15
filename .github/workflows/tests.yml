@@ -52,9 +52,7 @@ jobs:
       run: tox -e mypy
 
     - name: Code linting
-      run: |
-        black --check --diff --color vmcnet tests
-        tox -e flake8
+      run: tox -e flake8
 
     - name: Docstring linting
       run: tox -e pydocstyle
