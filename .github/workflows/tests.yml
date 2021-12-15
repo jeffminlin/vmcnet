@@ -13,13 +13,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.9']
 
     steps:
     - uses: actions/checkout@v2
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
@@ -29,14 +29,22 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install tox tox-gh-actions
       
-    - name: Small and medium tests
+    - name: Tests
       run: tox -e py39
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
 
     - name: Type checking
       run: tox -e mypy
 
     - name: Code linting
-      run: tox -e flake8
+      run: |
+        black --check --diff --color vmcnet tests
+        tox -e flake8
 
     - name: Docstring linting
       run: tox -e pydocstyle
