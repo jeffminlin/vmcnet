@@ -9,7 +9,7 @@ on:
       - master
 
 jobs:
-  test:
+  ubuntu-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,7 +28,7 @@ jobs:
     - name: Tests
       run: tox -e py39
 
-  test:
+  macos-test:
     runs-on: macos-latest
 
     steps:
