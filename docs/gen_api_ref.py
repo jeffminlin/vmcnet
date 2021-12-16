@@ -9,7 +9,7 @@ FILTER_OUT_MODULE = """    handler: python
     selection:
         filters:
         - "!^_[^_]"
-        - "!Module"
+        - "!^Module$"
 """
 
 if __name__ == "<run_path>":
