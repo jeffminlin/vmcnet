@@ -84,7 +84,7 @@ def get_update_fn_and_init_optimizer(
 
     Raises:
         ValueError: A non-supported optimizer type is requested. Currently, KFAC, Adam,
-        SGD, and SR (with either Adam or SGD) is supported.
+            SGD, and SR (with either Adam or SGD) is supported.
 
     Returns:
         (UpdateParamFn, OptimizerState, PRNGKey):
@@ -418,7 +418,7 @@ def get_sr_update_fn_and_state(
 
     Raises:
         ValueError: A non-supported descent type is requested. Currently only Adam and
-        SGD are supported.
+            SGD are supported.
 
     Returns:
         (UpdateParamFn, optax.OptState):

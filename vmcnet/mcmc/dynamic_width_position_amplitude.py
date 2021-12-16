@@ -91,11 +91,11 @@ def make_threshold_adjust_std_move(
     Args:
         target_acceptance_prob (jnp.float32): target value for the average acceptance
             ratio. Defaults to 0.5.
-        accept_ratio_threshold_delta (jnp.float32): how far away from the target the
-            acceptance ratio must be to trigger a compensating update. Defaults to 0.1.
-        adjust_std_delta (jnp.float32): how big of an adjustment to make to the step
-            width. Adjustments will multiply by either (1.0 + adjust_std_delta) or
-            (1.0 - adjust_std_delta). Defaults to 0.1.
+        threshold_delta (jnp.float32): how far away from the target the acceptance ratio
+            must be to trigger a compensating update. Defaults to 0.1.
+        adjustment_delta (jnp.float32): how big of an adjustment to make to the step
+            width. Adjustments will multiply by either (1.0 + adjustment_delta) or
+            (1.0 - adjustment_delta). Defaults to 0.1.
     """
 
     def adjust_std_move(

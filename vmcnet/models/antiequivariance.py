@@ -162,7 +162,7 @@ class OrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antiequivariance multiplicatively to equivariant inputs.
 
     Attributes:
-         spin_split (ParticleSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -248,7 +248,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(Module):
     """Apply a cofactor antieq. multiplicatively to equivariant inputs with slog out.
 
     Attributes:
-         spin_split (ParticleSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -334,7 +334,7 @@ class PerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
-         spin_split (ParticleSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into
@@ -419,7 +419,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(Module):
     """Antieq. layer based on determinants of per-particle orbital matrices, slog out.
 
     Attributes:
-         spin_split (ParticleSplit): number of spins to split the input equally,
+        spin_split (ParticleSplit): number of spins to split the input equally,
             or specified sequence of locations to split along the 2nd-to-last axis.
             E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
             If nelec = 10, and `spin_split` = (2, 4), then the input is split into

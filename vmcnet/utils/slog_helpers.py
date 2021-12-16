@@ -23,7 +23,7 @@ def array_from_slog(x: SLArray) -> Array:
 
     Args:
         x (SLArray): input data in slog form. This data looks like
-        (sign(z), log(abs(z))) for some z which represents the underlying data.
+            (sign(z), log(abs(z))) for some z which represents the underlying data.
 
     Returns:
         (Array): the data as a single, regular array. In other words, the z

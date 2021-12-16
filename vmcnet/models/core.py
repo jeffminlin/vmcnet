@@ -39,7 +39,7 @@ def compute_ee_norm_with_safe_diag(r_ee):
     0 * norm(x - x + 1) along the diagonal.
 
     Args:
-        x (Array): electron-electron displacements wth shape (..., n, n, d)
+        r_ee (Array): electron-electron displacements wth shape (..., n, n, d)
 
     Returns:
         Array: electron-electrondists with shape (..., n, n, 1)
@@ -343,7 +343,6 @@ class LogDomainResNet(Module):
             SLArray -> SLArray (shape is preserved).
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrices of each layer. Defaults to orthogonal initialization.
-
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
     """
