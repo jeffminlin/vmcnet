@@ -137,3 +137,9 @@ dmypy.json
 
 # VS Code settings
 .vscode/
+
+# other
+modded_files
+moddedfiles
+modded*
+.idea*

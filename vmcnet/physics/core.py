@@ -6,22 +6,24 @@ import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, P, PRNGKey, ModelApply
+from vmcnet.utils.typing import P, ModelApply
 
-EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
+EnergyAuxData = Tuple[
+    jnp.float32, jnp.ndarray, Optional[jnp.float32], Optional[jnp.float32]
+]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
-ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
+ValueGradEnergyFn = Callable[[P, jnp.ndarray], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
-    key: PRNGKey,
+    key: jnp.ndarray,
     nchains: int,
-    ion_pos: Array,
-    ion_charges: Array,
+    ion_pos: jnp.ndarray,
+    ion_charges: jnp.ndarray,
     nelec_total: int,
     init_width: float = 1.0,
     dtype=jnp.float32,
-) -> Tuple[PRNGKey, Array]:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """Initialize a set of plausible initial electron positions.
 
     For each chain, each electron is assigned to a random ion and then its position is
@@ -72,10 +74,10 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params: P, x: Array) -> Array:
+    def local_energy_fn(params: P, x: jnp.ndarray) -> jnp.ndarray:
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
-            local_energy_sum = cast(Array, local_energy_sum + term(params, x))
+            local_energy_sum = cast(jnp.ndarray, local_energy_sum + term(params, x))
         return local_energy_sum
 
     return local_energy_fn
@@ -84,7 +86,7 @@ def combine_local_energy_terms(
 def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
-    x: Array,
+    x: jnp.ndarray,
 ) -> jnp.float32:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -116,7 +118,7 @@ def laplacian_psi_over_psi(
             signature (params, x) -> (nabla psi)(x) / psi(x), so the derivative should
             be over the second arg, x, and the output shape should be the same as x
         params (pytree): model parameters, passed as the first arg of grad_log_psi
-        x (Array): second input to grad_log_psi
+        x (jnp.ndarray): second input to grad_log_psi
 
     Returns:
         jnp.float32: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
@@ -143,13 +145,37 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
+
+def adjacent_psi(
+    psi_apply: ModelApply,
+    params: P,
+    x: jnp.ndarray,
+) -> jnp.float32:
+
+    side_length=params['side_length']
+
+    # Why do we need x.val rather than x when laplacian_psi_over_psi doesn't do this?
+    n=len(x.val)
+    identity_mat = jnp.eye(n)
+    stacked_x=jnp.repeat(jnp.expand_dims(x.val,1),n,axis=1).T
+    x_=(stacked_x+identity_mat)%side_length
+    _x=(stacked_x-identity_mat)%side_length
+
+    psi=lambda x:psi_apply(params,x)
+    vmap_psi=jax.vmap(psi)
+
+    return jnp.sum(vmap_psi(_x))+jnp.sum(vmap_psi(x_))
+
+
+
+
 def get_statistics_from_local_energy(
-    local_energies: Array, nchains: int, nan_safe: bool = True
+    local_energies: jnp.ndarray, nchains: int, nan_safe: bool = True
 ) -> Tuple[jnp.float32, jnp.float32]:
     """Collectively reduce local energies to an average energy and variance.
 
     Args:
-        local_energies (Array): local energies of shape (nchains,), possibly
+        local_energies (jnp.ndarray): local energies of shape (nchains,), possibly
             distributed across multiple devices via utils.distribute.pmap.
         nchains (int): total number of chains across all devices, used to compute a
             sample variance estimate of the local energy
@@ -176,7 +202,7 @@ def get_statistics_from_local_energy(
 
 def get_default_energy_bwd(
     log_psi_apply: ModelApply[P],
-    mean_grad_fn: Callable[[Array], Array],
+    mean_grad_fn: Callable[[jnp.ndarray], jnp.ndarray],
 ):
     """Use a standard variance reduction formula to get the bwd pass of the energy.
 
@@ -199,7 +225,7 @@ def get_default_energy_bwd(
     """
 
     def scaled_by_local_e(
-        params: P, positions: Array, centered_local_energies: Array
+        params: P, positions: jnp.ndarray, centered_local_energies: jnp.ndarray
     ) -> jnp.float32:
         log_psi = log_psi_apply(params, positions)
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
@@ -220,7 +246,7 @@ def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     nchains: int,
-    clipping_fn: Optional[Callable[[Array], Array]] = None,
+    clipping_fn: Optional[Callable[[jnp.ndarray], jnp.ndarray]] = None,
     nan_safe: bool = True,
     get_energy_bwd: Callable = get_default_energy_bwd,
 ) -> ValueGradEnergyFn[P]:
@@ -266,7 +292,7 @@ def create_value_and_grad_energy_fn(
     """
 
     @jax.custom_vjp
-    def compute_energy_data(params: P, positions: Array) -> EnergyData:
+    def compute_energy_data(params: P, positions: jnp.ndarray) -> EnergyData:
         local_energies_noclip = local_energy_fn(params, positions)
         if clipping_fn is not None:
             local_energies = clipping_fn(local_energies_noclip)
@@ -297,7 +323,7 @@ def create_value_and_grad_energy_fn(
             aux_data = (variance, local_energies, energy_noclip, variance_noclip)
         return energy, aux_data
 
-    def energy_fwd(params: P, positions: Array):
+    def energy_fwd(params: P, positions: jnp.ndarray):
         output = compute_energy_data(params, positions)
         energy = output[0]
         local_energies = output[1][1]
