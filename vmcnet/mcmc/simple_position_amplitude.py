@@ -10,7 +10,7 @@ from .position_amplitude_core import (
     make_position_amplitude_gaussian_metropolis_step,
     PositionAmplitudeWalkerData,
 )
-from vmcnet.utils.typing import Array, P, ModelApply
+from vmcnet.utils.typing import P, ModelApply
 
 
 class SimplePositionAmplitudeData(TypedDict):
@@ -23,12 +23,14 @@ class SimplePositionAmplitudeData(TypedDict):
 SPAData = SimplePositionAmplitudeData
 
 
-def make_simple_position_amplitude_data(position: Array, amplitude: Array) -> SPAData:
+def make_simple_position_amplitude_data(
+    position: jnp.ndarray, amplitude: jnp.ndarray
+) -> SPAData:
     """Create SimplePositionAmplitudeData from position and amplitude.
 
     Args:
-        position (Array): the particle positions
-        amplitude (Array): the wavefunction amplitudes
+        position (jnp.ndarray): the particle positions
+        amplitude (jnp.ndarray): the wavefunction amplitudes
 
     Returns:
         SPAData
@@ -40,6 +42,8 @@ def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
     std_move: jnp.float32,
     logabs: bool = True,
+    discrete: bool = False,
+    cyclic: int = 0,
 ) -> MetropolisStep[P, SPAData]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
@@ -56,5 +60,6 @@ def make_simple_pos_amp_gaussian_step(
             -> (mean acceptance probability, PositionAmplitudeData, new_key)
     """
     return make_position_amplitude_gaussian_metropolis_step(
-        model_apply, lambda _: std_move, None, logabs
+        model_apply, lambda _: std_move, None, logabs, discrete=discrete, cyclic=cyclic
     )
+

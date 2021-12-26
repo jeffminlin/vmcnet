@@ -9,14 +9,14 @@ import numpy as np
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
 import vmcnet.train.default_config as default_config
-from vmcnet.utils.typing import Array, PRNGKey, PyTree
+from vmcnet.utils.typing import PyTree
 
 
 def get_default_config_with_chosen_model(
     model_type,
     use_det_resnet=None,
     determinant_fn_mode=None,
-    explicit_antisym_subtype=None,
+    brute_force_subtype=None,
     use_products_covariance=None,
 ):
     """Get default ConfigDict for a particular model type."""
@@ -30,8 +30,8 @@ def get_default_config_with_chosen_model(
         config.model.embedded_particle_ferminet.determinant_fn_mode = (
             determinant_fn_mode
         )
-    if explicit_antisym_subtype is not None:
-        config.model.explicit_antisym.antisym_type = explicit_antisym_subtype
+    if brute_force_subtype is not None:
+        config.model.brute_force_antisym.antisym_type = brute_force_subtype
     if use_products_covariance is not None:
         config.model.orbital_cofactor_net.use_products_covariance = (
             use_products_covariance
@@ -55,6 +55,13 @@ def make_dummy_log_f():
         return jnp.log(jnp.abs(f(params, x)))
 
     return f, log_f
+
+
+#def make_dummy_antisymmetric():
+#    f,_ = make_dummy_log_f()
+#    return f
+#   not finished
+
 
 
 def make_dummy_x():
@@ -113,8 +120,8 @@ def _get_log_domain_params_for_dense_layer(params):
 
 
 def get_dense_and_log_domain_dense_same_params(
-    key: PRNGKey,
-    batch: Array,
+    key: jnp.ndarray,
+    batch: jnp.ndarray,
     dense_layer: models.core.Dense,
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
     """Get matching params for Dense and LogDomainDense layers."""
@@ -125,8 +132,8 @@ def get_dense_and_log_domain_dense_same_params(
 
 
 def get_resnet_and_log_domain_resnet_same_params(
-    key: PRNGKey,
-    batch: Array,
+    key: jnp.ndarray,
+    batch: jnp.ndarray,
     resnet: models.core.SimpleResNet,
 ) -> Tuple[frozen_dict.FrozenDict, frozen_dict.FrozenDict]:
     """Get matching params for SimpleResNet and LogDomainResnet models."""
@@ -137,8 +144,8 @@ def get_resnet_and_log_domain_resnet_same_params(
         log_domain_layer_params = _get_log_domain_params_for_dense_layer(layer_params)
         log_domain_params[dense_layer_key] = log_domain_layer_params
 
-    frozen_params = frozen_dict.freeze({"params": log_domain_params})
-    return resnet_params, frozen_params
+    log_domain_params = frozen_dict.freeze({"params": log_domain_params})
+    return resnet_params, log_domain_params
 
 
 def assert_pytree_allclose(

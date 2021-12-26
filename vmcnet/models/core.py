@@ -1,6 +1,6 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Sequence, TYPE_CHECKING, Tuple, Union, cast
+from typing import Callable, Sequence, Tuple, Union, cast
 
 import flax
 import jax
@@ -10,15 +10,15 @@ import numpy as np
 from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
+from vmcnet.utils.typing import ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
-Activation = Callable[[Array], Array]
+Activation = Callable[[jnp.ndarray], jnp.ndarray]
 SLActivation = Callable[[SLArray], SLArray]
 
 
 def _split_mean(
-    x: Array,
+    x: jnp.ndarray,
     splits: ParticleSplit,
     axis: int = -2,
     keepdims: bool = True,
@@ -39,10 +39,10 @@ def compute_ee_norm_with_safe_diag(r_ee):
     0 * norm(x - x + 1) along the diagonal.
 
     Args:
-        r_ee (Array): electron-electron displacements wth shape (..., n, n, d)
+        x (jnp.ndarray): electron-electron displacements wth shape (..., n, n, d)
 
     Returns:
-        Array: electron-electrondists with shape (..., n, n, 1)
+        jnp.ndarray: electron-electrondists with shape (..., n, n, 1)
     """
     n = r_ee.shape[-2]
     eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
@@ -51,11 +51,11 @@ def compute_ee_norm_with_safe_diag(r_ee):
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:
-    """Returns True if x is a tuple of Array objects."""
+    """Returns True if x is a tuple of jnp.ndarray objects."""
     return isinstance(x, tuple) and all(isinstance(x_i, jnp.ndarray) for x_i in x)
 
 
-def get_alternating_signs(n: int) -> Array:
+def get_alternating_signs(n: int) -> jnp.ndarray:
     """Return alternating series of 1 and -1, of length n."""
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
 
@@ -86,14 +86,14 @@ def get_nelec_per_split(split: ParticleSplit, nelec_total: int) -> Tuple[int, ..
         )
 
 
-def get_spin_split(n_per_split: Union[Sequence[int], Array]) -> Tuple[int, ...]:
+def get_spin_split(n_per_split: Union[Sequence[int], jnp.ndarray]) -> Tuple[int, ...]:
     """Calculate spin split from n_per_split, making sure to output a Tuple of ints."""
     cumsum = np.cumsum(n_per_split[:-1])
     # Convert to tuple of python ints.
     return tuple([int(i) for i in cumsum])
 
 
-def _valid_skip(x: Array, y: Array):
+def _valid_skip(x: jnp.ndarray, y: jnp.ndarray):
     return x.shape[-1] == y.shape[-1]
 
 
@@ -101,31 +101,16 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
 
 
-class Module(flax.linen.Module):
-    """Custom parent class for models to work around flax typing issues."""
-
-    if TYPE_CHECKING:
-
-        def __init__(self, *args, **kwargs):
-            """Dummy init method with fully general args.
-
-            This avoids Mypy inferring an erroneous type from the type-hinting in
-            flax.linen.Module and complaining when our module initialization calls do
-            not match that erroneous type.
-            """
-            super().__init__()
-
-
-class AddedModel(Module):
+class AddedModel(flax.linen.Module):
     """A model made from added parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, Module]]): a sequence of
-            functions or Modules which are called on the same args and can be
+        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
+            functions or flax.linen.Modules which are called on the same args and can be
             added
     """
 
-    submodels: Sequence[Union[Callable, Module]]
+    submodels: Sequence[Union[Callable, flax.linen.Module]]
 
     @flax.linen.compact
     def __call__(self, *args):
@@ -133,15 +118,15 @@ class AddedModel(Module):
         return sum(submodel(*args) for submodel in self.submodels)
 
 
-class ComposedModel(Module):
+class ComposedModel(flax.linen.Module):
     """A model made from composable parts.
 
     Attributes:
-        submodels (Sequence[Union[Callable, Module]]): a sequence of
-            functions or Modules which can be composed sequentially
+        submodels (Sequence[Union[Callable, flax.linen.Module]]): a sequence of
+            functions or flax.linen.Modules which can be composed sequentially
     """
 
-    submodels: Sequence[Union[Callable, Module]]
+    submodels: Sequence[Union[Callable, flax.linen.Module]]
 
     @flax.linen.compact
     def __call__(self, x):
@@ -152,7 +137,7 @@ class ComposedModel(Module):
         return outputs
 
 
-class Dense(Module):
+class Dense(flax.linen.Module):
     """A linear transformation applied over the last dimension of the input.
 
     This is a copy of the flax Dense layer, but with registration of the weights for use
@@ -177,14 +162,14 @@ class Dense(Module):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
-            inputs (Array): The nd-array to be transformed.
+            inputs (jnp.ndarray): The nd-array to be transformed.
 
         Returns:
-            Array: The transformed input.
+            jnp.ndarray: The transformed input.
         """
         kernel = self.param(
             "kernel", self.kernel_init, (inputs.shape[-1], self.features)
@@ -201,7 +186,7 @@ class Dense(Module):
             return y
 
 
-class LogDomainDense(Module):
+class LogDomainDense(flax.linen.Module):
     """A linear transformation applied on the last axis of the input, in the log domain.
 
     If the inputs are (sign(x), log(abs(x))), the outputs are
@@ -225,7 +210,7 @@ class LogDomainDense(Module):
     register_kfac: bool = True
 
     @flax.linen.compact
-    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
+    def __call__(self, x: SLArray) -> SLArray:
         """Applies a linear transformation with optional bias along the last dimension.
 
         Args:
@@ -255,7 +240,7 @@ class LogDomainDense(Module):
         )
 
 
-class SimpleResNet(Module):
+class SimpleResNet(flax.linen.Module):
     """Simplest fully-connected ResNet.
 
     Attributes:
@@ -270,7 +255,7 @@ class SimpleResNet(Module):
             Defaults to random normal initialization.
         activation_fn (Activation): activation function between intermediate layers (is
             not applied after the final dense layer). Has the signature
-            Array -> Array (shape is preserved)
+            jnp.ndarray -> jnp.ndarray (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
         register_kfac (bool, optional): whether to register the dense layers with KFAC.
@@ -310,26 +295,55 @@ class SimpleResNet(Module):
             register_kfac=self.register_kfac,
         )
 
-    def __call__(self, x: Array) -> Array:  # type: ignore[override]
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """Repeated application of (dense layer -> activation -> optional skip) block.
 
         Args:
-            x (Array): an input array of shape (..., d)
+            x (jnp.ndarray): an input array of shape (..., d)
 
         Returns:
-            Array: array of shape (..., self.ndense_final)
+            jnp.ndarray: array of shape (..., self.ndense_final)
         """
         for dense_layer in self.inner_dense:
             prev_x = x
             x = dense_layer(prev_x)
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
-                x = cast(Array, x + prev_x)
+                x = cast(jnp.ndarray, x + prev_x)
 
         return self.final_dense(x)
 
 
-class LogDomainResNet(Module):
+class SimpleSlater(flax.linen.Module):
+
+    N:int
+    N_up:int
+    ndense_inner: int
+    side_length:int #TODO: make periodic
+    nlayers: int = 3
+    activation_fn: Activation = (lambda x : x*.55+abs(x)*.45)
+
+    def setup(self):
+        
+
+
+        phi_list_up=SimpleResNet(self.ndense_inner,self.N,self.nlayers,self.activation_fn)
+        phi_list_down=SimpleResNet(self.ndense_inner,self.N,self.nlayers,self.activation_fn)
+        self.compute_up_matrix=jax.vmap(phi_list_up,out_axes=1)
+        self.compute_down_matrix=jax.vmap(phi_list_down,out_axes=1)
+        print('test1')
+        print(phi_list_up)
+
+
+    def __call__(self, x: jnp.ndarray) -> jnp.float32:
+        M_up=self.compute_up_matrix(x[0:self.N_up])
+        M_down=self.compute_down_matrix(x[self.N_up:])
+        M=jnp.concatenate(M_up,M_down)
+        return jnp.linalg.det(M)
+
+
+
+class LogDomainResNet(flax.linen.Module):
     """Simplest fully-connected ResNet, implemented in the log domain.
 
     Attributes:
@@ -343,6 +357,7 @@ class LogDomainResNet(Module):
             SLArray -> SLArray (shape is preserved).
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrices of each layer. Defaults to orthogonal initialization.
+
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
     """
@@ -374,7 +389,7 @@ class LogDomainResNet(Module):
             use_bias=False,
         )
 
-    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
+    def __call__(self, x: SLArray) -> SLArray:
         """Repeated application of (dense layer -> activation -> optional skip) block.
 
         Args:
