@@ -19,7 +19,7 @@ def test_kinetic_energy_shape():
 def test_hubbard_kinetic_energy_shape():
 
     f,_ = make_dummy_log_f() #not in log domain
-    x = jnp.array([0,1,3])
+    x = jnp.array([[0,1,3]])
     side_length=4
 
     kinetic_energy_fn = physics.kinetic.create_hubbard_kinetic_energy(f,side_length)

@@ -39,6 +39,6 @@ def create_hubbard_kinetic_energy(
     ) -> ModelApply[P]:
 
     def kinetic_energy_fn(params: P, x: jnp.ndarray) -> jnp.float32:
-        return physics.core.adjacent_psi(psi_apply,{'side_length':side_length},x)/psi_apply(params,x)
+        return physics.core.adjacent_psi(psi_apply,params,side_length,x)/psi_apply(params,x)
 
     return jax.vmap(kinetic_energy_fn, in_axes=(None, 0), out_axes=0)

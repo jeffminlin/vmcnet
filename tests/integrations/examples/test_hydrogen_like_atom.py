@@ -18,9 +18,9 @@ def _setup_hla_hyperparams_and_model():
     ndim = 3
 
     # Training hyperparameters
-    nchains = 100 * jax.local_device_count()
-    nburn = 100
-    nepochs = 100
+    nchains = 101 * jax.local_device_count()
+    nburn = 102
+    nepochs = 103
     nsteps_per_param_update = 5
     std_move = 0.4
     learning_rate = 1.0
@@ -95,7 +95,6 @@ def test_hydrogen_like_sgd_vmc(caplog):
     np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
 
 
-@pytest.mark.slow
 def test_hydrogen_like_kfac_vmc(caplog):
     """Test exp(-a * r) converges (in 3-D) to a = nuclear charge with KFAC."""
     (

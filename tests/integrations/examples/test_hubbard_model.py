@@ -5,7 +5,7 @@ import pytest
 import vmcnet.examples.hubbard_model as hubbard
 from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude_data
 
-from .discrete_nolog_train import kfac_vmc_loop_with_logging
+from .discrete_nolog_train import discrete_vmc_loop_with_logging
 
 
 def _setup_hubbard_model():
@@ -55,7 +55,7 @@ def _setup_hubbard_model():
     )
 
 
-def test_hubbard_model_kfac_vmc(caplog):
+def test_hubbard_model_vmc(caplog):
     (
         params,
         nchains,
@@ -71,7 +71,7 @@ def test_hubbard_model_kfac_vmc(caplog):
         side_length,
     ) = _setup_hubbard_model()
 
-    _, params, _, _ = kfac_vmc_loop_with_logging(
+    _, params, _, _ = discrete_vmc_loop_with_logging(
         caplog,
         data,
         params,
@@ -87,8 +87,6 @@ def test_hubbard_model_kfac_vmc(caplog):
         side_length,
     )
 
-    # Make sure the decay rate converged to the nuclear charge, since we're in 3-d
-    #np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
-    np.testing.assert_allclose(0,0, rtol=1e-5)
+    np.testing.assert_allclose(0,0, rtol=1e-5) #not correct numbers yet
 
 

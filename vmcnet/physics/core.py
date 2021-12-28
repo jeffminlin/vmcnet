@@ -149,22 +149,20 @@ def laplacian_psi_over_psi(
 def adjacent_psi(
     psi_apply: ModelApply,
     params: P,
+    side_length: int,
     x: jnp.ndarray,
 ) -> jnp.float32:
 
-    side_length=params['side_length']
-
-    # Why do we need x.val rather than x when laplacian_psi_over_psi doesn't do this?
-    n=len(x.val)
+    print(x)
+    n=len(x)
     identity_mat = jnp.eye(n)
-    stacked_x=jnp.repeat(jnp.expand_dims(x.val,1),n,axis=1).T
+    stacked_x=jnp.repeat(jnp.expand_dims(x,-1),n,axis=-1)
     x_=(stacked_x+identity_mat)%side_length
     _x=(stacked_x-identity_mat)%side_length
 
-    psi=lambda x:psi_apply(params,x)
-    vmap_psi=jax.vmap(psi)
-
-    return jnp.sum(vmap_psi(_x))+jnp.sum(vmap_psi(x_))
+    vmap_psi=jax.vmap(psi_apply,in_axes=(None,-1),out_axes=-1)
+    energies=vmap_psi(params,_x)+vmap_psi(params,x_)
+    return jnp.sum(energies)
 
 
 
