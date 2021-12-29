@@ -140,6 +140,8 @@ def make_position_amplitude_gaussian_proposal(
         get_std_move (Callable): function which gets the standard deviation of the
         gaussian move, which can optionally depend on the data. Has signature
         (PositionAmplitudeData) -> std_move
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: proposal function which can be passed to the main VMC routine. Has
@@ -270,6 +272,8 @@ def make_position_amplitude_gaussian_metropolis_step(
             (old_move_metadata, move_mask) -> new_move_metadata.
         logabs (bool, optional): whether the provided amplitudes represent psi
             (logabs = False) or log|psi| (logabs = True). Defaults to True.
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: function which does a metropolis step. Has the signature

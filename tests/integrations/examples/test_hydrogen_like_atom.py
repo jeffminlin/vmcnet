@@ -95,6 +95,7 @@ def test_hydrogen_like_sgd_vmc(caplog):
     np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
 
 
+@pytest.mark.slow
 def test_hydrogen_like_kfac_vmc(caplog):
     """Test exp(-a * r) converges (in 3-D) to a = nuclear charge with KFAC."""
     (

@@ -152,8 +152,22 @@ def adjacent_psi(
     side_length: int,
     x: jnp.ndarray,
 ) -> jnp.float32:
+    """
+    Sum adajcent psi values for use in the Hubbard model kinetic energy
+    Args:
+        psi_apply (Callable): Has the signature (params, x) -> psi(x),
 
-    print(x)
+        params (pytree): model parameters, passed as the first arg of psi_apply
+
+        side_length: side length of the finite lattice with periodic boundary condition
+
+        x (jnp.ndarray): second input to psi_apply. x is a single configuration
+        given as a tuple where the i'th entry is the 1-dimensional position of the i'th particle.
+
+    Returns:
+        jnp.float32: sum_{y~x}psi(y), the sum of neighboring psi values
+    """
+
     n=len(x)
     identity_mat = jnp.eye(n)
     stacked_x=jnp.repeat(jnp.expand_dims(x,-1),n,axis=-1)
@@ -168,7 +182,7 @@ def adjacent_psi(
 
 
 def get_statistics_from_local_energy(
-    local_energies: jnp.ndarray, nchains: int, nan_safe: bool = True
+local_energies: jnp.ndarray, nchains: int, nan_safe: bool = True
 ) -> Tuple[jnp.float32, jnp.float32]:
     """Collectively reduce local energies to an average energy and variance.
 

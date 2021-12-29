@@ -1,4 +1,4 @@
-"""KFAC integration test runner for examples."""
+"""test runner for Hubbard example."""
 import logging
 
 import jax
@@ -37,7 +37,7 @@ def discrete_vmc_loop_with_logging(
         checkpoint_every=None,
         checkpoint_dir=None,
 ):
-    """Run a VMC test with the KFAC optimizer and given model."""
+    """Run a VMC test."""
     # Setup metropolis step
     metrop_step_fn = make_simple_pos_amp_gaussian_step(
         psi_model.apply, std_move, logabs=False, discrete=True, cyclic=side_length

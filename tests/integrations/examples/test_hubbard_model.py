@@ -87,6 +87,6 @@ def test_hubbard_model_vmc(caplog):
         side_length,
     )
 
-    np.testing.assert_allclose(0,0, rtol=1e-5) #not correct numbers yet
+    #np.testing.assert_allclose(?,?, rtol=1e-5)
 
 

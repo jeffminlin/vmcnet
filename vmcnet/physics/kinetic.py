@@ -37,6 +37,18 @@ def create_hubbard_kinetic_energy(
     psi_apply: Callable[[P, jnp.ndarray], jnp.float32],
     side_length:int,
     ) -> ModelApply[P]:
+    """Create the local kinetic energy fn (params, x) -> sum_{y~x}psi(y).
+    Here y differs from x in one particle which has hopped to an adjacent site.
+
+    Args:
+        psi_apply (Callable): Has the signature (params, x) -> psi(x),
+        side_length: side length of the finite lattice with periodic boundary condition
+
+    Returns:
+        Callable: function which computes the local kinetic energy.
+        Evaluates on batches due to the jax.vmap call, so it has signature
+        (params, x) -> kinetic energy array with shape (x.shape[0],)
+    """
 
     def kinetic_energy_fn(params: P, x: jnp.ndarray) -> jnp.float32:
         return physics.core.adjacent_psi(psi_apply,params,side_length,x)/psi_apply(params,x)

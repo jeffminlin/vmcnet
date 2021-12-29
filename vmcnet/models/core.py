@@ -330,6 +330,41 @@ class SimpleResNet(Module):
 
 
 class SimpleSlater(flax.linen.Module):
+    """Slater determinant based on SimpleResNet.
+    Spinful basis functions psi_i can be viewed as
+
+                / phi_up_i(x), s=up
+    psi_i(x,s)={
+               \ phi_down_i(x), s=down
+
+    We define two SimpleResNets phi_list_up/down where
+    phi_list_up(x)=(phi_up_1(x),...,phi_up_{N_up}(x))
+    phi_list_down(x)=(phi_down_{N_up+1}(x),...,phi_down_{N}(x))
+
+    Then we represent the Slater determinant as
+
+    |psi_1(x_1,up)....psi_1(x_{N_up},up),psi_1(x_{N_up+1},down)....psi_1(x_N,down)|
+    |                                                                             |
+    |                                                                             |
+    |                                                                             |
+    |psi_N(x_1,up)....psi_N(x_{N_up},up),psi_N(x_{N_up+1},down)....psi_N(x_N,down)|
+
+    =
+
+    |phi_list_up(x_1)....phi_list_up(x_{N_up}),phi_list_down(x_{N_up+1})....phi_list_down(x_N)|
+
+
+    Attributes:
+        N (int): number of electrons
+        N_up (int): number of spin-up electrons
+        ndense_inner (int): number of dense nodes in layers before the final layer. (SimpleResNet attribute)
+        side_length (int): side length of finite lattice with periodic boundary conditions
+        nlayers (int): number of dense layers applied to the input, including the final
+            layer. If this is 0, the final dense layer will still be applied. (SimpleResNet attribute)
+        activation_fn (Activation): activation function between intermediate layers (is
+            not applied after the final dense layer). Has the signature
+            Array -> Array (shape is preserved) (SimpleResNet attribute)
+    """
 
     N:int
     N_up:int
@@ -343,17 +378,28 @@ class SimpleSlater(flax.linen.Module):
         self.phi_list_up=SimpleResNet(self.ndense_inner,self.N,self.nlayers,self.activation_fn)
         self.phi_list_down=SimpleResNet(self.ndense_inner,self.N,self.nlayers,self.activation_fn)
 
-        # key = jax.random.PRNGKey(0)
-        # key1, key2 = jax.random.split(key)
-        # up_params=self.phi_list_up.init(key1,jnp.array([0]))
-        # down_params=self.phi_list_down.init(key2,jnp.array([0]))
-        # up_output=self.phi_list_up.apply(up_params,jnp.array([0]))
-        # down_output=self.phi_list_down.apply(down_params,jnp.array([0]))
-
         self.compute_flat_up_matrix=jax.vmap(self.phi_list_up,in_axes=0,out_axes=0)
         self.compute_flat_down_matrix=jax.vmap(self.phi_list_down,in_axes=0,out_axes=0)
 
-    def __call__(self, x: jnp.ndarray) -> jnp.float32:
+    def __call__(self, x: Array) -> Array:
+
+        """
+        Args:
+            x (Array): an input array of length (...,N)
+
+        Returns:
+            for each (...,x) with x a tuple of length N:
+
+            |psi_1(x_1,up)....psi_1(x_{N_up},up),psi_1(x_{N_up+1},down)....psi_1(x_N,down)|
+            |                                                                             |
+            |                                                                             |
+            |                                                                             |
+            |psi_N(x_1,up)....psi_N(x_{N_up},up),psi_N(x_{N_up+1},down)....psi_N(x_N,down)|
+
+            =
+
+            |phi_list_up(x_1)....phi_list_up(x_{N_up}),phi_list_down(x_{N_up+1})....phi_list_down(x_N)|
+        """
 
         x_up=jnp.take(x,indices=jnp.arange(0, self.N_up), axis=-1)
         x_down=jnp.take(x,indices=jnp.arange(self.N_up, self.N), axis=-1)
@@ -370,7 +416,6 @@ class SimpleSlater(flax.linen.Module):
 
         matrices=jnp.concatenate((up_matrices,down_matrices),axis=-2)
         dets=jnp.linalg.det(matrices)
-        #dets=jax.vmap(jnp.linalg.det)(matrices)
         return dets
 
 

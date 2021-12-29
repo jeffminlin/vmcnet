@@ -154,8 +154,22 @@ def create_ion_ion_coulomb_potential(
 
 
 def create_hubbard_potential(
-    N_up:int,strength: jnp.float32 = 1.0
+    N_up:int,
+    strength: jnp.float32 = 1.0
 ) -> ModelApply[ModelParams]:
+    """Computes the total Hubbard repulsion between pairs of electrons.
+
+    Args:
+        N_up (int): number of spin-up electrons
+        strength (jnp.float32, optional): amount to multiply the overall interaction by.
+            Defaults to 1.0.
+
+    Returns:
+        Callable: function which computes the potential energy due to the repulsion
+        between pairs of electrons. Has the signature
+        (params, electron_positions of shape (..., n_elec))
+        -> array of potential energies of shape electron_positions.shape[:-1]
+    """
 
     is_zero=lambda x:jnp.heaviside(x,1)
 

@@ -53,6 +53,8 @@ def make_simple_pos_amp_gaussian_step(
         std_move: the standard deviation of the gaussian step
         logabs (bool, optional): whether the provided amplitudes represent psi
             (logabs = False) or log|psi| (logabs = True). Defaults to True.
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: function which does a metropolis step. Has the signature

@@ -236,6 +236,8 @@ def gaussian_proposal(
         positions (jnp.ndarray): original positions
         std_move (jnp.float32): standard deviation of the moves
         key (jnp.ndarray): an array with shape (2,) representing a jax PRNG key
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         (jnp.ndarray, jnp.ndarray): (new positions, new key split from previous)
