@@ -18,9 +18,9 @@ def _setup_hla_hyperparams_and_model():
     ndim = 3
 
     # Training hyperparameters
-    nchains = 101 * jax.local_device_count()
-    nburn = 102
-    nepochs = 103
+    nchains = 100 * jax.local_device_count()
+    nburn = 100
+    nepochs = 100
     nsteps_per_param_update = 5
     std_move = 0.4
     learning_rate = 1.0

@@ -2,7 +2,7 @@
 import vmcnet.physics as physics
 import jax.numpy as jnp
 
-from tests.test_utils import make_dummy_log_f, make_dummy_x #, make_dummy_antisymmetric
+from tests.test_utils import make_dummy_log_f, make_dummy_x
 
 
 def test_kinetic_energy_shape():
