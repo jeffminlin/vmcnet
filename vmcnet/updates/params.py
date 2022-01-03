@@ -212,9 +212,12 @@ def create_kfac_update_param_fn(
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": stats_to_save[4]})
         if spin_square_expectation_fn is not None:
-            metrics.update(
-                {"spin_square": traced_compute_spin_square(params, positions)}
-            )
+            spin_squared_expectation = traced_compute_spin_square(params, positions)
+            if optimizer.multi_device:
+                spin_squared_expectation = utils.distribute.get_first(
+                    spin_squared_expectation
+                )
+            metrics.update({"spin_square": spin_squared_expectation})
 
         return params, optimizer_state, metrics, key
 
