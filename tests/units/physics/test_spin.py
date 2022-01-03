@@ -22,6 +22,19 @@ def _two_particle_antisymmetric_spatial_wavefn(unused_params, x):
     return array_to_slog(wavefn_amp)
 
 
+def _four_particle_antisymmetric_spatial_wavefn(unused_params, x):
+    del unused_params
+    wavefn_amp = (
+        (x[..., 0, 0] - x[..., 1, 0])
+        * (x[..., 0, 0] - x[..., 2, 0])
+        * (x[..., 0, 0] - x[..., 3, 0])
+        * (x[..., 1, 0] - x[..., 2, 0])
+        * (x[..., 1, 0] - x[..., 3, 0])
+        * (x[..., 2, 0] - x[..., 3, 0])
+    )
+    return array_to_slog(wavefn_amp)
+
+
 def _get_random_samples(seed, nelec_total):
     key = jax.random.PRNGKey(seed)
     nsamples = 10
@@ -72,14 +85,7 @@ def test_sz_zero_triplet_spin_overlap():
 
 
 def test_sz_one_triplet_spin_overlap():
-    """Compute overlap corresponding to exchange of a spin-up and spin-down electron.
-
-    This test computes
-
-        -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
-
-    for a two-particle <S_z> = 1 spin triplet state, which should give 0.
-    """
+    """Checks for zero spin hop overlap when only one spin species is present."""
     local_spin_hop = physics.spin.create_local_spin_hop(
         slog_psi_apply=_two_particle_antisymmetric_spatial_wavefn,
         nelec=jnp.array([2, 0]),
@@ -88,7 +94,7 @@ def test_sz_one_triplet_spin_overlap():
     nsamples, random_x = _get_random_samples(seed=41, nelec_total=2)
     local_spin_hop_out = local_spin_hop(None, random_x)
 
-    np.testing.assert_allclose(local_spin_hop_out, -jnp.zeros((nsamples,)))
+    np.testing.assert_allclose(local_spin_hop_out, jnp.zeros((nsamples,)))
 
 
 def test_sz_zero_total_spin_six():
@@ -98,19 +104,6 @@ def test_sz_zero_total_spin_six():
     n_down = 2, then <S^2> = 6 occurs when the spin component is completely symmetric,
     which implies that the spatial component is completely antisymmetric.
     """
-
-    def _four_particle_antisymmetric_spatial_wavefn(unused_params, x):
-        del unused_params
-        wavefn_amp = (
-            (x[..., 0, 0] - x[..., 1, 0])
-            * (x[..., 0, 0] - x[..., 2, 0])
-            * (x[..., 0, 0] - x[..., 3, 0])
-            * (x[..., 1, 0] - x[..., 2, 0])
-            * (x[..., 1, 0] - x[..., 3, 0])
-            * (x[..., 2, 0] - x[..., 3, 0])
-        )
-        return array_to_slog(wavefn_amp)
-
     nelec = jnp.array([2, 2])
     local_spin_hop = physics.spin.create_local_spin_hop(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
@@ -132,19 +125,6 @@ def test_sz_one_total_spin_six():
     n_down = 1, then <S^2> = 6 occurs when the spin component is completely symmetric,
     which implies that the spatial component is completely antisymmetric.
     """
-
-    def _four_particle_antisymmetric_spatial_wavefn(unused_params, x):
-        del unused_params
-        wavefn_amp = (
-            (x[..., 0, 0] - x[..., 1, 0])
-            * (x[..., 0, 0] - x[..., 2, 0])
-            * (x[..., 0, 0] - x[..., 3, 0])
-            * (x[..., 1, 0] - x[..., 2, 0])
-            * (x[..., 1, 0] - x[..., 3, 0])
-            * (x[..., 2, 0] - x[..., 3, 0])
-        )
-        return array_to_slog(wavefn_amp)
-
     nelec = jnp.array([3, 1])
     local_spin_hop = physics.spin.create_local_spin_hop(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
@@ -166,20 +146,7 @@ def test_sz_two_total_spin_six():
     n_down = 0, then the state must be an <S^2> = 6 eigenstate (given a properly
     antisymmetrized spatial part).
     """
-
-    def _four_particle_antisymmetric_spatial_wavefn(unused_params, x):
-        del unused_params
-        wavefn_amp = (
-            (x[..., 0, 0] - x[..., 1, 0])
-            * (x[..., 0, 0] - x[..., 2, 0])
-            * (x[..., 0, 0] - x[..., 3, 0])
-            * (x[..., 1, 0] - x[..., 2, 0])
-            * (x[..., 1, 0] - x[..., 3, 0])
-            * (x[..., 2, 0] - x[..., 3, 0])
-        )
-        return array_to_slog(wavefn_amp)
-
-    nelec = jnp.array([3, 1])
+    nelec = jnp.array([4, 0])
     local_spin_hop = physics.spin.create_local_spin_hop(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
     )
