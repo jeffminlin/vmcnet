@@ -21,7 +21,6 @@ from vmcnet.utils.typing import (
     OptimizerState,
     P,
     PRNGKey,
-    PyTree,
     S,
 )
 
@@ -71,6 +70,7 @@ def create_grad_energy_update_param_fn(
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
 ) -> UpdateParamFn[P, D, S]:
     """Create the `update_param_fn` based on the gradient of the total energy.
 
@@ -87,8 +87,12 @@ def create_grad_energy_update_param_fn(
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
         get_position_fn (GetPositionFromData): gets the walker positions from the MCMC
             data.
-        apply_pmap (bool, optional): whether to apply jax.pmap to the walker function.
+        apply_pmap (bool, optional): whether to apply jax.pmap to the update function.
             If False, applies jax.jit. Defaults to True.
+        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+            parameters in the metrics. Defaults to False.
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
 
     Returns:
         Callable: function which updates the parameters given the current data, params,
@@ -114,6 +118,10 @@ def create_grad_energy_update_param_fn(
         )
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": tree_reduce_l1(params)})
+        if spin_square_expectation_fn is not None:
+            metrics.update(
+                {"spin_square": spin_square_expectation_fn(params, position)}
+            )
         return params, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
@@ -121,13 +129,14 @@ def create_grad_energy_update_param_fn(
     return traced_fn
 
 
-def _get_traced_compute_param_norm(
+def _get_fn_traced_over_all_args(
+    fn_to_trace: Callable,
     apply_pmap: bool = True,
-) -> Callable[[PyTree], Array]:
+) -> Callable:
     if not apply_pmap:
-        return jax.jit(tree_reduce_l1)
+        return jax.jit(fn_to_trace)
 
-    return utils.distribute.pmap(tree_reduce_l1)
+    return utils.distribute.pmap(fn_to_trace)
 
 
 def create_kfac_update_param_fn(
@@ -135,6 +144,7 @@ def create_kfac_update_param_fn(
     damping: jnp.float32,
     get_position_fn: GetPositionFromData[D],
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
 ) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
 
@@ -144,6 +154,10 @@ def create_kfac_update_param_fn(
         damping (jnp.float32): damping coefficient
         get_position_fn (GetPositionFromData): function which gets the walker positions
             from the data. Has signature data -> Array
+        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+            parameters in the metrics. Defaults to False.
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
 
     Returns:
         Callable: function which updates the parameters given the current data, params,
@@ -157,15 +171,22 @@ def create_kfac_update_param_fn(
         momentum = utils.distribute.replicate_all_local_devices(momentum)
         damping = utils.distribute.replicate_all_local_devices(damping)
 
-    traced_compute_param_norm = _get_traced_compute_param_norm(optimizer.multi_device)
+    traced_compute_param_norm = _get_fn_traced_over_all_args(
+        tree_reduce_l1, optimizer.multi_device
+    )
+    if spin_square_expectation_fn is not None:
+        traced_compute_spin_square = _get_fn_traced_over_all_args(
+            spin_square_expectation_fn, optimizer.multi_device
+        )
 
     def update_param_fn(params, data, optimizer_state, key):
         key, subkey = utils.distribute.split_or_psplit_key(key, optimizer.multi_device)
+        positions = get_position_fn(data)
         params, optimizer_state, stats = optimizer.step(
             params=params,
             state=optimizer_state,
             rng=subkey,
-            data_iterator=iter([get_position_fn(data)]),
+            data_iterator=iter([positions]),
             momentum=momentum,
             damping=damping,
         )
@@ -190,6 +211,10 @@ def create_kfac_update_param_fn(
 
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": stats_to_save[4]})
+        if spin_square_expectation_fn is not None:
+            metrics.update(
+                {"spin_square": traced_compute_spin_square(params, positions)}
+            )
 
         return params, optimizer_state, metrics, key
 
@@ -202,6 +227,7 @@ def create_eval_update_param_fn(
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_local_energies: bool = True,
+    local_spin_hop_fn: Optional[ModelApply[P]] = None,
     nan_safe: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
@@ -215,11 +241,21 @@ def create_eval_update_param_fn(
             sample variance estimate of the local energy
         get_position_fn (GetPositionFromData): gets the walker positions from the MCMC
             data.
-        nan_safe (bool): whether or not to mask local energy nans in the evaluation
-            process. This option should not be used under normal circumstances, as the
-            energy estimates are of unclear validity if nans are masked. However,
-            it can be used to get a coarse estimate of the energy of a wavefunction even
-            if a few walkers are returning nans for their local energies.
+        apply_pmap (bool, optional): whether to apply jax.pmap to the eval function.
+            If False, applies jax.jit. Defaults to True.
+        record_local_energies (bool, optional): whether to save the local energies at
+            each walker position at each evaluation step. Allows for evaluation of the
+            statistics of the local energies. Defaults to True.
+        local_spin_hop_fn (Callable, optional): a function that can be used to compute
+            the local spin hop terms (see vmcnet.physics.spin), which can be used to
+            compute the total spin squared expectation. Allows for evaluation of the
+            statistics of the local spin squared observable. Defaults to None.
+        nan_safe (bool, optional): whether or not to mask local energy nans in the
+            evaluation process. This option should not be used under normal
+            circumstances, as the energy estimates are of unclear validity if nans are
+            masked. However, it can be used to get a coarse estimate of the energy of a
+            wavefunction even if a few walkers are returning nans for their local
+            energies.
 
     Returns:
         Callable: function which evaluates the local energies and averages them, without
@@ -227,13 +263,16 @@ def create_eval_update_param_fn(
     """
 
     def eval_update_param_fn(params, data, optimizer_state, key):
-        local_energies = local_energy_fn(params, get_position_fn(data))
+        positions = get_position_fn(data)
+        local_energies = local_energy_fn(params, positions)
         energy, variance = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
         if record_local_energies:
             metrics.update({"local_energies": local_energies})
+        if local_spin_hop_fn is not None:
+            metrics.update({"local_spin_hops": local_spin_hop_fn(params, positions)})
         return params, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(

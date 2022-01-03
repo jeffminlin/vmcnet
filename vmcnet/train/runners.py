@@ -32,6 +32,7 @@ from vmcnet.utils.typing import (
     GetAmplitudeFromData,
     ModelApply,
     OptimizerState,
+    SLArray,
 )
 
 FLAGS = flags.FLAGS
@@ -86,7 +87,12 @@ def _get_and_init_model(
     key: PRNGKey,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[ModelApply[flax.core.FrozenDict], flax.core.FrozenDict, PRNGKey]:
+) -> Tuple[
+    ModelApply[flax.core.FrozenDict],
+    Callable[[flax.core.FrozenDict, Array], SLArray],
+    flax.core.FrozenDict,
+    PRNGKey,
+]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -95,7 +101,7 @@ def _get_and_init_model(
     if apply_pmap:
         params = utils.distribute.replicate_all_local_devices(params)
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
-    return log_psi_apply, params, key
+    return log_psi_apply, slog_psi.apply, params, key
 
 
 # TODO: figure out how to merge this and other distributing logic with the current
@@ -288,6 +294,7 @@ def _setup_vmc(
     apply_pmap: bool = True,
 ) -> Tuple[
     ModelApply[flax.core.FrozenDict],
+    Callable[[flax.core.FrozenDict, Array], SLArray],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
@@ -304,7 +311,7 @@ def _setup_vmc(
     )
 
     # Make the model
-    log_psi_apply, params, key = _get_and_init_model(
+    log_psi_apply, slog_psi_apply, params, key = _get_and_init_model(
         config.model,
         ion_pos,
         ion_charges,
@@ -333,6 +340,12 @@ def _setup_vmc(
     # Setup parameter updates
     if apply_pmap:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
+    spin_squared_expectation_fn = None
+    if config.vmc.record_spin_squared:
+        local_spin_hop_fn = physics.spin.create_local_spin_hop(slog_psi_apply, nelec)
+        spin_squared_expectation_fn = physics.spin.create_spin_square_expectation(
+            local_spin_hop_fn, nelec, config.vmc.nan_safe
+        )
     (
         update_param_fn,
         optimizer_state,
@@ -345,11 +358,13 @@ def _setup_vmc(
         pacore.get_position_from_data,
         energy_data_val_and_grad,
         key,
+        spin_square_expectation_fn=spin_squared_expectation_fn,
         apply_pmap=apply_pmap,
     )
 
     return (
         log_psi_apply,
+        slog_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -368,6 +383,7 @@ def _setup_eval(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     get_position_fn: GetPositionFromData[dwpa.DWPAData],
+    local_spin_hop_fn: Optional[ModelApply[P]],
     apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
@@ -379,6 +395,7 @@ def _setup_eval(
         config.eval.nchains,
         get_position_fn,
         record_local_energies=config.eval.record_local_energies,
+        local_spin_hop_fn=local_spin_hop_fn,
         nan_safe=config.eval.nan_safe,
         apply_pmap=apply_pmap,
     )
@@ -476,12 +493,16 @@ def _burn_and_run_vmc(
     return params, optimizer_state, data, key
 
 
-def _compute_and_save_energy_statistics(
-    local_energies_file_path: str, output_dir: str, output_filename: str
+def _compute_and_save_statistics(
+    local_observables_file_path: str,
+    output_dir: str,
+    output_filename: str,
+    offset: float = 0,
 ) -> None:
-    local_energies = np.loadtxt(local_energies_file_path)
-    eval_statistics = mcmc.statistics.get_stats_summary(local_energies)
+    local_observables = np.loadtxt(local_observables_file_path)
+    eval_statistics = mcmc.statistics.get_stats_summary(local_observables)
     eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
+    eval_statistics["average"] = eval_statistics["average"] + offset
     utils.io.save_dict_to_json(
         eval_statistics,
         output_dir,
@@ -507,6 +528,7 @@ def run_molecule() -> None:
 
     (
         log_psi_apply,
+        slog_psi_apply,
         burning_step,
         walker_fn,
         local_energy_fn,
@@ -569,11 +591,16 @@ def run_molecule() -> None:
     # evaluation
     eval_logdir = os.path.join(logdir, "eval")
 
+    local_spin_hop_fn = None
+    if config.eval.record_local_spin_hops:
+        local_spin_hop_fn = physics.spin.create_local_spin_hop(slog_psi_apply, nelec)
+
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
         config,
         log_psi_apply,
         local_energy_fn,
         pacore.get_position_from_data,
+        local_spin_hop_fn=local_spin_hop_fn,
         apply_pmap=config.distribute,
     )
     optimizer_state = None
@@ -607,13 +634,24 @@ def run_molecule() -> None:
 
     # need to check for local_energy.txt because when config.eval.nepochs=0 the file is
     # not created regardless of config.eval.record_local_energies
-    local_es_were_recorded = os.path.exists(
-        os.path.join(eval_logdir, "local_energies.txt")
-    )
+    local_energies_filepath = os.path.join(eval_logdir, "local_energies.txt")
+    local_es_were_recorded = os.path.exists(local_energies_filepath)
     if config.eval.record_local_energies and local_es_were_recorded:
-        local_energies_filepath = os.path.join(eval_logdir, "local_energies.txt")
-        _compute_and_save_energy_statistics(
-            local_energies_filepath, eval_logdir, "statistics"
+        _compute_and_save_statistics(
+            local_energies_filepath, eval_logdir, "energy_statistics"
+        )
+
+    local_spin_hops_filepath = os.path.join(eval_logdir, "local_spin_hops.txt")
+    local_spin_hops_were_recorded = os.path.exists(local_spin_hops_filepath)
+    if config.eval.record_local_spin_hops and local_spin_hops_were_recorded:
+        spin_squared_offset = 0.25 * (nelec[0] - nelec[1]) ** 2 + 0.5 * (
+            nelec[0] + nelec[1]
+        )
+        _compute_and_save_statistics(
+            local_spin_hops_filepath,
+            eval_logdir,
+            "spin_squared_statistics",
+            offset=spin_squared_offset,
         )
 
 
@@ -637,6 +675,6 @@ def vmc_statistics() -> None:
     args = parser.parse_args()
 
     output_dir, output_filename = os.path.split(os.path.abspath(args.output_file_path))
-    _compute_and_save_energy_statistics(
+    _compute_and_save_statistics(
         args.local_energies_file_path, output_dir, output_filename
     )
