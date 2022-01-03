@@ -287,6 +287,7 @@ def get_default_vmc_config() -> Dict:
         "record_amplitudes": False,
         "record_param_l1_norm": False,
         "clip_threshold": 5.0,
+        "clip_center": "mean",  # mean or median
         "nan_safe": True,
         "optimizer_type": "kfac",
         "optimizer": {
