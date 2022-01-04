@@ -497,12 +497,14 @@ def _compute_and_save_statistics(
     local_observables_file_path: str,
     output_dir: str,
     output_filename: str,
+    scale: float = 1.0,
     offset: float = 0,
 ) -> None:
     local_observables = np.loadtxt(local_observables_file_path)
-    eval_statistics = mcmc.statistics.get_stats_summary(local_observables)
+    eval_statistics = mcmc.statistics.get_stats_summary(
+        scale * local_observables + offset
+    )
     eval_statistics = jax.tree_map(lambda x: float(x), eval_statistics)
-    eval_statistics["average"] = eval_statistics["average"] + offset
     utils.io.save_dict_to_json(
         eval_statistics,
         output_dir,
@@ -651,6 +653,7 @@ def run_molecule() -> None:
             local_spin_hops_filepath,
             eval_logdir,
             "spin_squared_statistics",
+            scale=-nelec[0] * nelec[1],
             offset=spin_squared_offset,
         )
 
