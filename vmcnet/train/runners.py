@@ -4,7 +4,7 @@ import datetime
 import functools
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import flax
 import jax
