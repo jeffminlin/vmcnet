@@ -53,14 +53,14 @@ def test_sz_zero_singlet_spin_overlap():
     """
     # if spatial wavefunction is totally symmetric, then spin component is
     # antisymmetrized, so must be a singlet
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_symmetric_spatial_wavefn, nelec=jnp.array([1, 1])
     )
 
     nsamples, random_x = _get_random_samples(seed=2, nelec_total=2)
-    local_spin_hop_out = local_spin_hop(None, random_x)
+    local_spin_exchange_out = local_spin_exchange(None, random_x)
 
-    np.testing.assert_allclose(local_spin_hop_out, jnp.ones((nsamples,)))
+    np.testing.assert_allclose(local_spin_exchange_out, jnp.ones((nsamples,)))
 
 
 def test_sz_zero_triplet_spin_overlap():
@@ -73,28 +73,28 @@ def test_sz_zero_triplet_spin_overlap():
     for a two-particle <S_z> = 0 spin triplet state, which should give -1.
     """
     # if spatial wavefunction is antisymmetric, then spin component must be triplet
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_two_particle_antisymmetric_spatial_wavefn,
         nelec=jnp.array([1, 1]),
     )
 
     nsamples, random_x = _get_random_samples(seed=53, nelec_total=2)
-    local_spin_hop_out = local_spin_hop(None, random_x)
+    local_spin_exchange_out = local_spin_exchange(None, random_x)
 
-    np.testing.assert_allclose(local_spin_hop_out, -jnp.ones((nsamples,)))
+    np.testing.assert_allclose(local_spin_exchange_out, -jnp.ones((nsamples,)))
 
 
 def test_sz_one_triplet_spin_overlap():
-    """Checks for zero spin hop overlap when only one spin species is present."""
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    """Checks for zero spin exchange overlap when only one spin species is present."""
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_two_particle_antisymmetric_spatial_wavefn,
         nelec=jnp.array([2, 0]),
     )
 
     nsamples, random_x = _get_random_samples(seed=41, nelec_total=2)
-    local_spin_hop_out = local_spin_hop(None, random_x)
+    local_spin_exchange_out = local_spin_exchange(None, random_x)
 
-    np.testing.assert_allclose(local_spin_hop_out, jnp.zeros((nsamples,)))
+    np.testing.assert_allclose(local_spin_exchange_out, jnp.zeros((nsamples,)))
 
 
 def test_sz_zero_total_spin_six():
@@ -105,11 +105,11 @@ def test_sz_zero_total_spin_six():
     which implies that the spatial component is completely antisymmetric.
     """
     nelec = jnp.array([2, 2])
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
     )
     spin_square_expectation = physics.spin.create_spin_square_expectation(
-        local_spin_hop, nelec
+        local_spin_exchange, nelec
     )
 
     _, random_x = _get_random_samples(seed=3, nelec_total=4)
@@ -126,11 +126,11 @@ def test_sz_one_total_spin_six():
     which implies that the spatial component is completely antisymmetric.
     """
     nelec = jnp.array([3, 1])
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
     )
     spin_square_expectation = physics.spin.create_spin_square_expectation(
-        local_spin_hop, nelec
+        local_spin_exchange, nelec
     )
 
     _, random_x = _get_random_samples(seed=3, nelec_total=4)
@@ -147,11 +147,11 @@ def test_sz_two_total_spin_six():
     antisymmetrized spatial part).
     """
     nelec = jnp.array([4, 0])
-    local_spin_hop = physics.spin.create_local_spin_hop(
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_four_particle_antisymmetric_spatial_wavefn, nelec=nelec
     )
     spin_square_expectation = physics.spin.create_spin_square_expectation(
-        local_spin_hop, nelec
+        local_spin_exchange, nelec
     )
 
     _, random_x = _get_random_samples(seed=5, nelec_total=4)
