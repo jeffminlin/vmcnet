@@ -11,9 +11,19 @@ import vmcnet.physics as physics
 from vmcnet.utils.slog_helpers import array_to_slog
 
 
-def _symmetric_spatial_wavefn(unused_params, x):
+def _constant_spatial_wavefn(unused_params, x):
     del unused_params
+    # two particle wavefunction of opposite spins
     return jnp.ones_like(x[..., 0, 0]), jnp.zeros_like(x[..., 0, 0])
+
+
+def _gaussian_two_particle_wavefn(unused_params, x):
+    del unused_params
+    # two particle wavefunction of opposite spins
+    norms = jnp.linalg.norm(x, axis=-1)
+    log_abs_wavefn = -(jnp.square(norms[..., 0]) + 3 * jnp.square(norms[..., 1]))
+    sign_wavefn = jnp.ones_like(x[..., 0, 0])
+    return log_abs_wavefn, sign_wavefn
 
 
 def _two_particle_antisymmetric_spatial_wavefn(unused_params, x):
@@ -45,7 +55,7 @@ def _get_random_samples(seed, nelec_total):
 def test_sz_zero_singlet_spin_overlap():
     """Compute overlap corresponding to exchange of a spin-up and spin-down electron.
 
-    This test computes
+    Because this is a spin eigenstate, this test computes
 
         -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
 
@@ -54,7 +64,7 @@ def test_sz_zero_singlet_spin_overlap():
     # if spatial wavefunction is totally symmetric, then spin component is
     # antisymmetrized, so must be a singlet
     local_spin_exchange = physics.spin.create_local_spin_exchange(
-        slog_psi_apply=_symmetric_spatial_wavefn, nelec=jnp.array([1, 1])
+        slog_psi_apply=_constant_spatial_wavefn, nelec=jnp.array([1, 1])
     )
 
     nsamples, random_x = _get_random_samples(seed=2, nelec_total=2)
@@ -66,7 +76,7 @@ def test_sz_zero_singlet_spin_overlap():
 def test_sz_zero_triplet_spin_overlap():
     """Compute overlap corresponding to exchange of a spin-up and spin-down electron.
 
-    This test computes
+    Because this is a spin eigenstate, this test computes
 
         -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
 
@@ -95,6 +105,34 @@ def test_sz_one_triplet_spin_overlap():
     local_spin_exchange_out = local_spin_exchange(None, random_x)
 
     np.testing.assert_allclose(local_spin_exchange_out, jnp.zeros((nsamples,)))
+
+
+def test_sz_zero_gaussian_spin_overlap():
+    """Compute overlap corresponding to exchange of a spin-up and spin-down electron.
+
+    The wavefunction is (proportional to) the gaussian exp(-(r_0^2 + 3 * r_1^2)), where
+    r_0 and r_1 are the norms of the electron positions. Because this is not a spin
+    eigenstate, the local spin exchange computation simply computes
+
+        F(R_{1 <-> 1 + nelec[0]}) / F(R),
+
+    which amounts to computing the function
+
+        exp(-(3 * r_0^2 + r_1^2) + (r_0^2 + 3 * r_1^2)) = exp(2 * (r_1^2 - r_0^2)).
+    """
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
+        slog_psi_apply=_gaussian_two_particle_wavefn,
+        nelec=jnp.array([1, 1]),
+    )
+
+    _, random_x = _get_random_samples(seed=6, nelec_total=2)
+    local_spin_exchange_out = local_spin_exchange(None, random_x)
+
+    norms = jnp.linalg.norm(random_x, axis=-1)
+    np.testing.assert_allclose(
+        local_spin_exchange_out,
+        jnp.exp(2 * jnp.square(norms[..., 1]) - jnp.square(norms[..., 0])),
+    )
 
 
 def test_sz_zero_total_spin_six():
@@ -142,7 +180,7 @@ def test_sz_one_total_spin_six():
 def test_sz_two_total_spin_six():
     """Compute <psi| S^2 | psi> = 6 with four up and zero down elec.
 
-    Direct computation shows that for a state with four electrons with n_up = 4 and
+    Direct computation shows that if a state has four electrons with n_up = 4 and
     n_down = 0, then the state must be an <S^2> = 6 eigenstate (given a properly
     antisymmetrized spatial part).
     """
