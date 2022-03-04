@@ -23,7 +23,7 @@ def _gaussian_two_particle_wavefn(unused_params, x):
     norms = jnp.linalg.norm(x, axis=-1)
     log_abs_wavefn = -(jnp.square(norms[..., 0]) + 3 * jnp.square(norms[..., 1]))
     sign_wavefn = jnp.ones_like(x[..., 0, 0])
-    return log_abs_wavefn, sign_wavefn
+    return sign_wavefn, log_abs_wavefn
 
 
 def _two_particle_antisymmetric_spatial_wavefn(unused_params, x):
@@ -131,7 +131,8 @@ def test_sz_zero_gaussian_spin_overlap():
     norms = jnp.linalg.norm(random_x, axis=-1)
     np.testing.assert_allclose(
         local_spin_exchange_out,
-        jnp.exp(2 * jnp.square(norms[..., 1]) - jnp.square(norms[..., 0])),
+        jnp.exp(2 * (jnp.square(norms[..., 1]) - jnp.square(norms[..., 0]))),
+        rtol=1e-5,
     )
 
 
