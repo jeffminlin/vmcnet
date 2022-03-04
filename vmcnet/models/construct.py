@@ -842,7 +842,7 @@ class FermiNet(Module):
             elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
                 # TODO (ggoldsh): build support for PAIRWISE_EVEN for nspins != 2
                 self._symmetrized_det_fn = make_array_list_fn_sign_invariant(
-                    functools.partial(self.determinant_fn, self.ndeterminants ** 2)
+                    functools.partial(self.determinant_fn, self.ndeterminants**2)
                 )
             else:
                 raise self._get_bad_determinant_fn_mode_error()

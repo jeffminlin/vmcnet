@@ -22,7 +22,7 @@ def _get_sign_array_1d(i: int, nsyms: int) -> Array:
     # The exponent below is simply a clever way to get the value of the i_spin-th bit
     # of each integer in the sym_int array, to give us signs which alternate every
     # 2**i_spin values.
-    sym_signs_1d = (-1) ** jnp.sign((2 ** i) & sym_ints)
+    sym_signs_1d = (-1) ** jnp.sign((2**i) & sym_ints)
 
     return sym_signs_1d
 
@@ -67,7 +67,7 @@ def _get_sign_orbit_single_array(
         associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
         returned so that downstream functions don't have to recompute it.
     """
-    nsyms = 2 ** n_total
+    nsyms = 2**n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
     sym_signs_shaped = _reshape_sign_array_for_orbit(sym_signs_1d, x.shape, axis, nsyms)
     return sym_signs_shaped * jnp.expand_dims(x, axis), sym_signs_1d
@@ -100,7 +100,7 @@ def _get_sign_orbit_single_sl_array(
         associated signs as a single array, i.e. [1, 1, -1, -1, 1, 1, ...]. This is
         returned so that downstream functions don't have to recompute it.
     """
-    nsyms = 2 ** n_total
+    nsyms = 2**n_total
     sym_signs_1d = _get_sign_array_1d(i, nsyms)
     sym_signs_shaped = _reshape_sign_array_for_orbit(
         sym_signs_1d, x[0].shape, axis, nsyms
