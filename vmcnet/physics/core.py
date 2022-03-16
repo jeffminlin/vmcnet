@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, P, PRNGKey, ModelApply
+from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
 
 EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
@@ -220,7 +220,7 @@ def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     nchains: int,
-    clipping_fn: Optional[Callable[[Array], Array]] = None,
+    clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
     get_energy_bwd: Callable = get_default_energy_bwd,
 ) -> ValueGradEnergyFn[P]:
@@ -269,16 +269,16 @@ def create_value_and_grad_energy_fn(
     def compute_energy_data(params: P, positions: Array) -> EnergyData:
         local_energies_noclip = local_energy_fn(params, positions)
         if clipping_fn is not None:
-            local_energies = clipping_fn(local_energies_noclip)
-            energy, variance = get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=nan_safe
-            )
-
             # For the unclipped metrics, which are not used in the gradient, don't
             # do these in a nan-safe way. This makes nans more visible and makes sure
             # the command-line checkpoint_if_nans flag will work properly.
             energy_noclip, variance_noclip = get_statistics_from_local_energy(
                 local_energies_noclip, nchains, nan_safe=False
+            )
+
+            local_energies = clipping_fn(local_energies_noclip, energy_noclip)
+            energy, variance = get_statistics_from_local_energy(
+                local_energies, nchains, nan_safe=nan_safe
             )
 
             aux_data = (variance, local_energies, energy_noclip, variance_noclip)

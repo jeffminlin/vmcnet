@@ -4,7 +4,7 @@ import datetime
 import functools
 import logging
 import os
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import flax
 import jax
@@ -24,6 +24,7 @@ import vmcnet.utils as utils
 from vmcnet.utils.typing import (
     Array,
     P,
+    ClippingFn,
     PRNGKey,
     D,
     S,
@@ -219,14 +220,24 @@ def _assemble_mol_local_energy_fn(
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
 # a training trick rather than a physics thing, so maybe this stays here
-def total_variation_clipping_fn(local_energies, threshold=5.0):
-    """Clip local energy to within a multiple of the total variation from the median."""
-    median_local_e = jnp.nanmedian(local_energies)
-    total_variation = jnp.nanmean(jnp.abs(local_energies - median_local_e))
+def total_variation_clipping_fn(
+    local_energies: Array, energy_noclip: jnp.float32, threshold=5.0, clip_center="mean"
+) -> Array:
+    """Clip local es to within a multiple of the total variation from a center."""
+    if clip_center == "mean":
+        center = energy_noclip
+    elif clip_center == "median":
+        center = jnp.nanmedian(local_energies)
+    else:
+        raise ValueError(
+            "Only mean and median are supported clipping centers, but {} was "
+            "requested".format(clip_center)
+        )
+    total_variation = jnp.nanmean(jnp.abs(local_energies - center))
     clipped_local_e = jnp.clip(
         local_energies,
-        median_local_e - threshold * total_variation,
-        median_local_e + threshold * total_variation,
+        center - threshold * total_variation,
+        center + threshold * total_variation,
     )
     return clipped_local_e
 
@@ -235,11 +246,13 @@ def total_variation_clipping_fn(local_energies, threshold=5.0):
 # instead of total variation
 def _get_clipping_fn(
     vmc_config: ConfigDict,
-) -> Optional[Callable[[Array], Array]]:
+) -> Optional[ClippingFn]:
     clipping_fn = None
     if vmc_config.clip_threshold > 0.0:
         clipping_fn = functools.partial(
-            total_variation_clipping_fn, threshold=vmc_config.clip_threshold
+            total_variation_clipping_fn,
+            threshold=vmc_config.clip_threshold,
+            clip_center=vmc_config.clip_center,
         )
     return clipping_fn
 
