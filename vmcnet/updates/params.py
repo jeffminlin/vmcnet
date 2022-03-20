@@ -249,10 +249,10 @@ def create_eval_update_param_fn(
         record_local_energies (bool, optional): whether to save the local energies at
             each walker position at each evaluation step. Allows for evaluation of the
             statistics of the local energies. Defaults to True.
-        local_spin_exchange_fn (Callable, optional): a function that can be used to compute
-            the local spin hop terms (see vmcnet.physics.spin), which can be used to
-            compute the total spin squared expectation. Allows for evaluation of the
-            statistics of the local spin squared observable. Defaults to None.
+        local_spin_exchange_fn (Callable, optional): a function that can be used to 
+            compute the local spin hop terms (see vmcnet.physics.spin), which can be
+            used to compute the total spin squared expectation. Allows for evaluation of
+            the statistics of the local spin squared observable. Defaults to None.
         nan_safe (bool, optional): whether or not to mask local energy nans in the
             evaluation process. This option should not be used under normal
             circumstances, as the energy estimates are of unclear validity if nans are
