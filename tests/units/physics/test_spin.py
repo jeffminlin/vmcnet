@@ -57,9 +57,9 @@ def test_sz_zero_singlet_spin_overlap():
 
     Because this is a spin eigenstate, this test computes
 
-        -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
+        <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
 
-    for a two-particle <S_z> = 0 spin singlet state, which should give 1.
+    for a two-particle <S_z> = 0 spin singlet state, which should give -1.
     """
     # if spatial wavefunction is totally symmetric, then spin component is
     # antisymmetrized, so must be a singlet
@@ -70,7 +70,7 @@ def test_sz_zero_singlet_spin_overlap():
     nsamples, random_x = _get_random_samples(seed=2, nelec_total=2)
     local_spin_exchange_out = local_spin_exchange(None, random_x)
 
-    np.testing.assert_allclose(local_spin_exchange_out, jnp.ones((nsamples,)))
+    np.testing.assert_allclose(local_spin_exchange_out, -jnp.ones((nsamples,)))
 
 
 def test_sz_zero_triplet_spin_overlap():
@@ -78,9 +78,9 @@ def test_sz_zero_triplet_spin_overlap():
 
     Because this is a spin eigenstate, this test computes
 
-        -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
+        <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>
 
-    for a two-particle <S_z> = 0 spin triplet state, which should give -1.
+    for a two-particle <S_z> = 0 spin triplet state, which should give 1.
     """
     # if spatial wavefunction is antisymmetric, then spin component must be triplet
     local_spin_exchange = physics.spin.create_local_spin_exchange(
@@ -91,7 +91,7 @@ def test_sz_zero_triplet_spin_overlap():
     nsamples, random_x = _get_random_samples(seed=53, nelec_total=2)
     local_spin_exchange_out = local_spin_exchange(None, random_x)
 
-    np.testing.assert_allclose(local_spin_exchange_out, -jnp.ones((nsamples,)))
+    np.testing.assert_allclose(local_spin_exchange_out, jnp.ones((nsamples,)))
 
 
 def test_sz_one_triplet_spin_overlap():
@@ -114,11 +114,11 @@ def test_sz_zero_gaussian_spin_overlap():
     r_0 and r_1 are the norms of the electron positions. Because this is not a spin
     eigenstate, the local spin exchange computation simply computes
 
-        F(R_{1 <-> 1 + nelec[0]}) / F(R),
+        - nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R),
 
     which amounts to computing the function
 
-        exp(-(3 * r_0^2 + r_1^2) + (r_0^2 + 3 * r_1^2)) = exp(2 * (r_1^2 - r_0^2)).
+        - exp(-(3 * r_0^2 + r_1^2) + (r_0^2 + 3 * r_1^2)) = - exp(2 * (r_1^2 - r_0^2)).
     """
     local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_gaussian_two_particle_wavefn,
@@ -131,7 +131,7 @@ def test_sz_zero_gaussian_spin_overlap():
     norms = jnp.linalg.norm(random_x, axis=-1)
     np.testing.assert_allclose(
         local_spin_exchange_out,
-        jnp.exp(2 * (jnp.square(norms[..., 1]) - jnp.square(norms[..., 0]))),
+        -jnp.exp(2 * (jnp.square(norms[..., 1]) - jnp.square(norms[..., 0]))),
         rtol=1e-5,
     )
 

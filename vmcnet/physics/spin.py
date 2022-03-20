@@ -61,7 +61,7 @@ def create_spin_square_expectation(
         spin_square = (
             0.25 * (nelec[0] - nelec[1]) ** 2
             + 0.5 * (nelec[0] + nelec[1])
-            - nelec[0] * nelec[1] * mean_fn(local_spin_exchange_out)
+            + mean_fn(local_spin_exchange_out)
         )
         return spin_square
 
@@ -84,13 +84,13 @@ def create_local_spin_exchange(
 
     This factory creates a function which computes
 
-        F(R_{1 <-> 1 + nelec[0]}) / F(R),
+        -1 * nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R),
 
     where R_{1 <-> 1 + nelec[0]} denotes the exchange of the first spin-up and spin-down
     electron. When integrated over the distribution p(R) = |F(R)|^2 / int_R |F(R)|^2,
     this quantity gives the overlap integral
 
-        -(1/(N_up N_down)) <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>,
+        <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>,
 
     where S_i+ and S_j- are the total spin raising and lowering operators, respectively,
     i.e. S_{i+} = S_{i,x} + iS_{i,y} and S_{j-} = S_{j,x} - iS_{j,y}.
@@ -105,7 +105,7 @@ def create_local_spin_exchange(
 
     Returns:
         Callable: function which computes a local spin exchange term, i.e. the function
-        F(R_{1 <-> 1 + nelec[0]}) / F(R). Has signature
+        nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R). Has signature
         (params, x) -> local exchange term array with shape (x.shape[0],)
     """
     if nelec[0] == 0 or nelec[1] == 0:
@@ -125,6 +125,6 @@ def create_local_spin_exchange(
 
             sign_out = sign_psi * sign_exchanged_psi
             log_out = log_exchanged_psi - log_psi
-            return sign_out * jnp.exp(log_out)
+            return -nelec[0] * nelec[1] * sign_out * jnp.exp(log_out)
 
     return local_spin_exchange
