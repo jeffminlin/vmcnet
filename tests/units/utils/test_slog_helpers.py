@@ -63,7 +63,7 @@ def test_sl_array_list_sum():
 
     sum = helpers.slog_array_list_sum(slogs)
     expected_sum = helpers.array_to_slog(jnp.array([0.0, 16.0, -1.7]))
-    assert_pytree_allclose(sum, expected_sum)
+    assert_pytree_allclose(sum, expected_sum, rtol=1e-6)
 
 
 def test_slog_sum():
