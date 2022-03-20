@@ -351,7 +351,7 @@ def get_default_eval_config() -> Dict:
         # used as the initial positions instead
         "use_data_from_training": False,
         "record_local_energies": True,  # save local energies and compute statistics
-        "record_local_spin_hops": False,
+        "record_local_spin_exchanges": False,
         "nan_safe": False,
     }
     return eval_config

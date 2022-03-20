@@ -230,7 +230,7 @@ def create_eval_update_param_fn(
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_local_energies: bool = True,
-    local_spin_hop_fn: Optional[ModelApply[P]] = None,
+    local_spin_exchange_fn: Optional[ModelApply[P]] = None,
     nan_safe: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
@@ -249,7 +249,7 @@ def create_eval_update_param_fn(
         record_local_energies (bool, optional): whether to save the local energies at
             each walker position at each evaluation step. Allows for evaluation of the
             statistics of the local energies. Defaults to True.
-        local_spin_hop_fn (Callable, optional): a function that can be used to compute
+        local_spin_exchange_fn (Callable, optional): a function that can be used to compute
             the local spin hop terms (see vmcnet.physics.spin), which can be used to
             compute the total spin squared expectation. Allows for evaluation of the
             statistics of the local spin squared observable. Defaults to None.
@@ -274,8 +274,10 @@ def create_eval_update_param_fn(
         metrics = {"energy": energy, "variance": variance}
         if record_local_energies:
             metrics.update({"local_energies": local_energies})
-        if local_spin_hop_fn is not None:
-            metrics.update({"local_spin_hops": local_spin_hop_fn(params, positions)})
+        if local_spin_exchange_fn is not None:
+            metrics.update(
+                {"local_spin_exchanges": local_spin_exchange_fn(params, positions)}
+            )
         return params, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(
@@ -293,7 +295,7 @@ def constrain_norm(
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
     sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
-    sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
+    sq_norm_scaled_grads = sq_norm_grads * learning_rate ** 2
 
     # Sync the norms here, see:
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585

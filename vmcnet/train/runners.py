@@ -342,9 +342,11 @@ def _setup_vmc(
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
     spin_squared_expectation_fn = None
     if config.vmc.record_spin_squared:
-        local_spin_hop_fn = physics.spin.create_local_spin_hop(slog_psi_apply, nelec)
+        local_spin_exchange_fn = physics.spin.create_local_spin_exchange(
+            slog_psi_apply, nelec
+        )
         spin_squared_expectation_fn = physics.spin.create_spin_square_expectation(
-            local_spin_hop_fn, nelec, config.vmc.nan_safe
+            local_spin_exchange_fn, nelec, config.vmc.nan_safe
         )
     (
         update_param_fn,
@@ -383,7 +385,7 @@ def _setup_eval(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
     get_position_fn: GetPositionFromData[dwpa.DWPAData],
-    local_spin_hop_fn: Optional[ModelApply[P]],
+    local_spin_exchange_fn: Optional[ModelApply[P]],
     apply_pmap: bool = True,
 ) -> Tuple[
     updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
@@ -395,7 +397,7 @@ def _setup_eval(
         config.eval.nchains,
         get_position_fn,
         record_local_energies=config.eval.record_local_energies,
-        local_spin_hop_fn=local_spin_hop_fn,
+        local_spin_exchange_fn=local_spin_exchange_fn,
         nan_safe=config.eval.nan_safe,
         apply_pmap=apply_pmap,
     )
@@ -593,16 +595,18 @@ def run_molecule() -> None:
     # evaluation
     eval_logdir = os.path.join(logdir, "eval")
 
-    local_spin_hop_fn = None
-    if config.eval.record_local_spin_hops:
-        local_spin_hop_fn = physics.spin.create_local_spin_hop(slog_psi_apply, nelec)
+    local_spin_exchange_fn = None
+    if config.eval.record_local_spin_exchanges:
+        local_spin_exchange_fn = physics.spin.create_local_spin_exchange(
+            slog_psi_apply, nelec
+        )
 
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
         config,
         log_psi_apply,
         local_energy_fn,
         pacore.get_position_from_data,
-        local_spin_hop_fn=local_spin_hop_fn,
+        local_spin_exchange_fn=local_spin_exchange_fn,
         apply_pmap=config.distribute,
     )
     optimizer_state = None
@@ -643,14 +647,16 @@ def run_molecule() -> None:
             local_energies_filepath, eval_logdir, "energy_statistics"
         )
 
-    local_spin_hops_filepath = os.path.join(eval_logdir, "local_spin_hops.txt")
-    local_spin_hops_were_recorded = os.path.exists(local_spin_hops_filepath)
-    if config.eval.record_local_spin_hops and local_spin_hops_were_recorded:
+    local_spin_exchanges_filepath = os.path.join(
+        eval_logdir, "local_spin_exchanges.txt"
+    )
+    local_spin_exchanges_were_recorded = os.path.exists(local_spin_exchanges_filepath)
+    if config.eval.record_local_spin_exchanges and local_spin_exchanges_were_recorded:
         spin_squared_offset = 0.25 * (nelec[0] - nelec[1]) ** 2 + 0.5 * (
             nelec[0] + nelec[1]
         )
         _compute_and_save_statistics(
-            local_spin_hops_filepath,
+            local_spin_exchanges_filepath,
             eval_logdir,
             "spin_squared_statistics",
             scale=-nelec[0] * nelec[1],
