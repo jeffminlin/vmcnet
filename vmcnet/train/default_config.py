@@ -287,6 +287,7 @@ def get_default_vmc_config() -> Dict:
         "record_amplitudes": False,
         "record_param_l1_norm": False,
         "record_spin_squared": False,
+        "spin_sum_all_exchanges": True,
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
@@ -352,6 +353,7 @@ def get_default_eval_config() -> Dict:
         "use_data_from_training": False,
         "record_local_energies": True,  # save local energies and compute statistics
         "record_local_spin_exchanges": False,
+        "spin_sum_all_exchanges": True,
         "nan_safe": False,
     }
     return eval_config

@@ -4,6 +4,7 @@ from typing import Callable
 import jax.numpy as jnp
 
 from vmcnet.utils.distribute import get_mean_over_first_axis_fn
+from vmcnet.utils.slog_helpers import slog_sum_over_axis
 from vmcnet.utils.typing import Array, P, ModelApply, SLArray
 
 
@@ -69,7 +70,9 @@ def create_spin_square_expectation(
 
 
 def create_local_spin_exchange(
-    slog_psi_apply: Callable[[P, Array], SLArray], nelec: Array
+    slog_psi_apply: Callable[[P, Array], SLArray],
+    nelec: Array,
+    sum_all_exchanges: bool = True,
 ) -> ModelApply[P]:
     """Create the local observable from exchange of a spin-up and spin-down electron.
 
@@ -86,8 +89,16 @@ def create_local_spin_exchange(
 
         -1 * nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R),
 
-    where R_{1 <-> 1 + nelec[0]} denotes the exchange of the first spin-up and spin-down
-    electron. When integrated over the distribution p(R) = |F(R)|^2 / int_R |F(R)|^2,
+    or
+
+        - sum_{i=1}^{nelec[0]} sum_{j=1}^{nelec[1]} F(R_{i <-> j + nelec[0]}) / F(R)
+
+    where R_{i <-> j + nelec[0]} denotes the exchange of the ith spin-up and jth
+    spin-down electron (using the former if sum_all_exchanges is false and the latter
+    if sum_all_exchanges is True). When integrated over the distribution
+
+        p(R) = |F(R)|^2 / int_R |F(R)|^2,
+
     this quantity gives the overlap integral
 
         <psi | sum_{i != j} S_{i+} * S_{j-} | psi> / <psi | psi>,
@@ -102,10 +113,13 @@ def create_local_spin_exchange(
             (params, single_x_in) -> log|psi(single_x_in)|
         nelec (Array): an array of size (2,) with nelec[0] being the number of spin-up
             electrons and nelec[1] being the number of spin-down electrons.
+        sum_all_exchanges (bool, optional): whether to sum over all exchanges of spin-up
+            and spin-down electrons (True) or to only compute the exchange of the first
+            spin-up and first spin-down electron (False). Summing over all exchanges
+            is more expensive but satisfies a zero-variance principle. Defaults to True.
 
     Returns:
-        Callable: function which computes a local spin exchange term, i.e. the function
-        nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R). Has signature
+        Callable: function which computes a local spin exchange term. Has signature
         (params, x) -> local exchange term array with shape (x.shape[0],)
     """
     if nelec[0] == 0 or nelec[1] == 0:
@@ -113,18 +127,39 @@ def create_local_spin_exchange(
         def local_spin_exchange(params: P, x: Array) -> Array:
             return jnp.zeros_like(x[..., 0, 0])
 
+        return local_spin_exchange
+
+    if sum_all_exchanges:
+        swapped_indices = [
+            list(range(nelec[0] + nelec[1])) for _ in range(nelec[0] * nelec[1])
+        ]
+
+        for i in range(nelec[0]):
+            for j in range(nelec[1]):
+                swapped_indices[i * nelec[1] + j][i] = nelec[0] + j
+                swapped_indices[i * nelec[1] + j][nelec[0] + j] = i
+
+        def compute_exchanged_psi(params: P, x: Array) -> SLArray:
+            x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
+            x_exchanged = jnp.swapaxes(x_exchanged, -3, 0)
+            return slog_sum_over_axis(slog_psi_apply(params, x_exchanged), axis=0)
+
     else:
+        swapped_indices = list(range(nelec[0] + nelec[1]))
+        swapped_indices[0], swapped_indices[nelec[0]] = nelec[0], 0
 
-        def local_spin_exchange(params: P, x: Array) -> Array:
-            sign_psi, log_psi = slog_psi_apply(params, x)
-
-            swapped_indices = list(range(x.shape[-2]))
-            swapped_indices[0], swapped_indices[nelec[0]] = nelec[0], 0
+        def compute_exchanged_psi(params: P, x: Array) -> SLArray:
             x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
             sign_exchanged_psi, log_exchanged_psi = slog_psi_apply(params, x_exchanged)
+            log_out = log_exchanged_psi + jnp.log(nelec[0]) + jnp.log(nelec[1])
+            return sign_exchanged_psi, log_out
 
-            sign_out = sign_psi * sign_exchanged_psi
-            log_out = log_exchanged_psi - log_psi
-            return -nelec[0] * nelec[1] * sign_out * jnp.exp(log_out)
+    def local_spin_exchange(params: P, x: Array) -> Array:
+        sign_psi, log_psi = slog_psi_apply(params, x)
+        sign_exchanged_psi, log_exchanged_psi = compute_exchanged_psi(params, x)
+
+        sign_out = sign_psi * sign_exchanged_psi
+        log_out = log_exchanged_psi - log_psi
+        return -sign_out * jnp.exp(log_out)
 
     return local_spin_exchange

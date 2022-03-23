@@ -343,7 +343,7 @@ def _setup_vmc(
     spin_squared_expectation_fn = None
     if config.vmc.record_spin_squared:
         local_spin_exchange_fn = physics.spin.create_local_spin_exchange(
-            slog_psi_apply, nelec
+            slog_psi_apply, nelec, config.vmc.spin_sum_all_exchanges
         )
         spin_squared_expectation_fn = physics.spin.create_spin_square_expectation(
             local_spin_exchange_fn, nelec, config.vmc.nan_safe
@@ -598,7 +598,7 @@ def run_molecule() -> None:
     local_spin_exchange_fn = None
     if config.eval.record_local_spin_exchanges:
         local_spin_exchange_fn = physics.spin.create_local_spin_exchange(
-            slog_psi_apply, nelec
+            slog_psi_apply, nelec, config.eval.spin_sum_all_exchanges
         )
 
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(

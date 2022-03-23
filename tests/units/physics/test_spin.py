@@ -45,6 +45,12 @@ def _four_particle_antisymmetric_spatial_wavefn(unused_params, x):
     return array_to_slog(wavefn_amp)
 
 
+def _four_particle_rhf_spatial_wavefn(unused_params, x):
+    del unused_params
+    wavefn_amp = (x[..., 0, 0] - x[..., 1, 0]) * (x[..., 2, 0] - x[..., 3, 0])
+    return array_to_slog(wavefn_amp)
+
+
 def _get_random_samples(seed, nelec_total):
     key = jax.random.PRNGKey(seed)
     nsamples = 10
@@ -107,12 +113,13 @@ def test_sz_one_triplet_spin_overlap():
     np.testing.assert_allclose(local_spin_exchange_out, jnp.zeros((nsamples,)))
 
 
-def test_sz_zero_gaussian_spin_overlap():
+def test_sz_zero_gaussian_spin_only_first_exchange_overlap():
     """Compute overlap corresponding to exchange of a spin-up and spin-down electron.
 
     The wavefunction is (proportional to) the gaussian exp(-(r_0^2 + 3 * r_1^2)), where
     r_0 and r_1 are the norms of the electron positions. Because this is not a spin
-    eigenstate, the local spin exchange computation simply computes
+    eigenstate, the local spin exchange computation with exchange of only the first
+    spin-up and first spin-down electron simply computes
 
         - nelec[0] * nelec[1] * F(R_{1 <-> 1 + nelec[0]}) / F(R),
 
@@ -123,6 +130,7 @@ def test_sz_zero_gaussian_spin_overlap():
     local_spin_exchange = physics.spin.create_local_spin_exchange(
         slog_psi_apply=_gaussian_two_particle_wavefn,
         nelec=jnp.array([1, 1]),
+        sum_all_exchanges=False,
     )
 
     _, random_x = _get_random_samples(seed=6, nelec_total=2)
@@ -155,6 +163,25 @@ def test_sz_zero_total_spin_six():
     S2_expect = spin_square_expectation(None, random_x)
 
     np.testing.assert_allclose(S2_expect, 6)
+
+
+def test_sz_zero_total_spin_zero():
+    """Compute <psi| S^2 | psi> = 0 with two up and two down elec.
+
+    A restricted Hartree-Fock ansatz must be an S^2 eigenstate with <S^2> = 0.
+    """
+    nelec = jnp.array([2, 2])
+    local_spin_exchange = physics.spin.create_local_spin_exchange(
+        slog_psi_apply=_four_particle_rhf_spatial_wavefn, nelec=nelec
+    )
+    spin_square_expectation = physics.spin.create_spin_square_expectation(
+        local_spin_exchange, nelec
+    )
+
+    _, random_x = _get_random_samples(seed=5, nelec_total=4)
+    S2_expect = spin_square_expectation(None, random_x)
+
+    np.testing.assert_allclose(S2_expect, 0, atol=1e-6)
 
 
 def test_sz_one_total_spin_six():
