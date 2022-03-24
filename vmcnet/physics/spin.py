@@ -125,41 +125,43 @@ def create_local_spin_exchange(
     if nelec[0] == 0 or nelec[1] == 0:
         # if only one spin species, then no exchange term
         def local_spin_exchange(params: P, x: Array) -> Array:
+            del params
             return jnp.zeros_like(x[..., 0, 0])
 
-        return local_spin_exchange
-
-    if sum_all_exchanges:
-        swapped_indices = [
-            list(range(nelec[0] + nelec[1])) for _ in range(nelec[0] * nelec[1])
-        ]
-
-        for i in range(nelec[0]):
-            for j in range(nelec[1]):
-                swapped_indices[i * nelec[1] + j][i] = nelec[0] + j
-                swapped_indices[i * nelec[1] + j][nelec[0] + j] = i
-
-        def compute_exchanged_psi(params: P, x: Array) -> SLArray:
-            x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
-            x_exchanged = jnp.swapaxes(x_exchanged, -3, 0)
-            return slog_sum_over_axis(slog_psi_apply(params, x_exchanged), axis=0)
-
     else:
-        swapped_indices = list(range(nelec[0] + nelec[1]))
-        swapped_indices[0], swapped_indices[nelec[0]] = nelec[0], 0
+        if sum_all_exchanges:
+            all_swapped_indices = [
+                list(range(nelec[0] + nelec[1])) for _ in range(nelec[0] * nelec[1])
+            ]
 
-        def compute_exchanged_psi(params: P, x: Array) -> SLArray:
-            x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
-            sign_exchanged_psi, log_exchanged_psi = slog_psi_apply(params, x_exchanged)
-            log_out = log_exchanged_psi + jnp.log(nelec[0]) + jnp.log(nelec[1])
-            return sign_exchanged_psi, log_out
+            for i in range(nelec[0]):
+                for j in range(nelec[1]):
+                    all_swapped_indices[i * nelec[1] + j][i] = nelec[0] + j
+                    all_swapped_indices[i * nelec[1] + j][nelec[0] + j] = i
 
-    def local_spin_exchange(params: P, x: Array) -> Array:
-        sign_psi, log_psi = slog_psi_apply(params, x)
-        sign_exchanged_psi, log_exchanged_psi = compute_exchanged_psi(params, x)
+            def compute_exchanged_psi(params: P, x: Array) -> SLArray:
+                x_exchanged = jnp.take(x, jnp.array(all_swapped_indices), axis=-2)
+                x_exchanged = jnp.swapaxes(x_exchanged, -3, 0)
+                return slog_sum_over_axis(slog_psi_apply(params, x_exchanged), axis=0)
 
-        sign_out = sign_psi * sign_exchanged_psi
-        log_out = log_exchanged_psi - log_psi
-        return -sign_out * jnp.exp(log_out)
+        else:
+            swapped_indices = list(range(nelec[0] + nelec[1]))
+            swapped_indices[0], swapped_indices[nelec[0]] = nelec[0], 0
+
+            def compute_exchanged_psi(params: P, x: Array) -> SLArray:
+                x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
+                sign_exchanged_psi, log_exchanged_psi = slog_psi_apply(
+                    params, x_exchanged
+                )
+                log_out = log_exchanged_psi + jnp.log(nelec[0]) + jnp.log(nelec[1])
+                return sign_exchanged_psi, log_out
+
+        def local_spin_exchange(params: P, x: Array) -> Array:
+            sign_psi, log_psi = slog_psi_apply(params, x)
+            sign_exchanged_psi, log_exchanged_psi = compute_exchanged_psi(params, x)
+
+            sign_out = sign_psi * sign_exchanged_psi
+            log_out = log_exchanged_psi - log_psi
+            return -sign_out * jnp.exp(log_out)
 
     return local_spin_exchange
