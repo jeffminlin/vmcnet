@@ -681,13 +681,15 @@ def vmc_statistics() -> None:
         "will be appended to the supplied path.",
     )
     parser.add_argument(
-        "scale",
+        "--scale",
         type=float,
+        default=1.0,
         help="Amount to scale the local observables by before computing the statistics",
     )
     parser.add_argument(
-        "offset",
+        "--offset",
         type=float,
+        default=0.0,
         help="Amount to shift the local observables by before computing the statistics",
     )
 
@@ -695,7 +697,7 @@ def vmc_statistics() -> None:
 
     output_dir, output_filename = os.path.split(os.path.abspath(args.output_file_path))
     _compute_and_save_statistics(
-        args.local_energies_file_path,
+        args.local_observables_file_path,
         output_dir,
         output_filename,
         scale=args.scale,
