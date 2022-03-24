@@ -659,7 +659,6 @@ def run_molecule() -> None:
             local_spin_exchanges_filepath,
             eval_logdir,
             "spin_squared_statistics",
-            scale=-nelec[0] * nelec[1],
             offset=spin_squared_offset,
         )
 
@@ -671,9 +670,9 @@ def vmc_statistics() -> None:
         "to disc."
     )
     parser.add_argument(
-        "local_energies_file_path",
+        "local_observables_file_path",
         type=str,
-        help="File path to load local energies from",
+        help="File path to load local observables from",
     )
     parser.add_argument(
         "output_file_path",
@@ -681,9 +680,24 @@ def vmc_statistics() -> None:
         help="File path to which to write the output statistics. The '.json' suffix "
         "will be appended to the supplied path.",
     )
+    parser.add_argument(
+        "scale",
+        type=float,
+        help="Amount to scale the local observables by before computing the statistics",
+    )
+    parser.add_argument(
+        "offset",
+        type=float,
+        help="Amount to shift the local observables by before computing the statistics",
+    )
+
     args = parser.parse_args()
 
     output_dir, output_filename = os.path.split(os.path.abspath(args.output_file_path))
     _compute_and_save_statistics(
-        args.local_energies_file_path, output_dir, output_filename
+        args.local_energies_file_path,
+        output_dir,
+        output_filename,
+        scale=args.scale,
+        offset=args.offset,
     )
