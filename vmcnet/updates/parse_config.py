@@ -1,5 +1,5 @@
 """Get update functions from ConfigDicts."""
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import jax.numpy as jnp
 import kfac_ferminet_alpha
@@ -12,6 +12,7 @@ import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.typing import (
     D,
+    Array,
     GetPositionFromData,
     ModelApply,
     OptimizerState,
@@ -61,6 +62,7 @@ def get_update_fn_and_init_optimizer(
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
     """Get an update function and initialize optimizer state from the vmc configuration.
@@ -79,6 +81,8 @@ def get_update_fn_and_init_optimizer(
             where auxiliary_energy_data is the tuple
             (expected_variance, local_energies, unclipped_energy, unclipped_variance)
         key (PRNGKey): PRNGKey with which to initialize optimizer state
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -108,6 +112,7 @@ def get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.kfac,
             vmc_config.record_param_l1_norm,
+            spin_square_expectation_fn=spin_square_expectation_fn,
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
@@ -118,6 +123,7 @@ def get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.sgd,
             vmc_config.record_param_l1_norm,
+            spin_square_expectation_fn=spin_square_expectation_fn,
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
@@ -129,6 +135,7 @@ def get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.adam,
             vmc_config.record_param_l1_norm,
+            spin_square_expectation_fn=spin_square_expectation_fn,
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
@@ -142,6 +149,7 @@ def get_update_fn_and_init_optimizer(
             vmc_config.optimizer.sr,
             vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
             vmc_config.record_param_l1_norm,
+            spin_square_expectation_fn=spin_square_expectation_fn,
             apply_pmap=apply_pmap,
             nan_safe=vmc_config.nan_safe,
         )
@@ -163,6 +171,7 @@ def get_kfac_update_fn_and_state(
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKey]:
     """Get an update param function, initial state, and key for KFAC.
@@ -183,6 +192,8 @@ def get_kfac_update_fn_and_state(
         optimizer_config (ConfigDict): configuration for KFAC
         record_param_l1_norm (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -218,6 +229,7 @@ def get_kfac_update_fn_and_state(
         optimizer_config.damping,
         pacore.get_position_from_data,
         record_param_l1_norm=record_param_l1_norm,
+        spin_square_expectation_fn=spin_square_expectation_fn,
     )
 
     return update_param_fn, optimizer_state, key
@@ -263,6 +275,7 @@ def _get_optax_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     def optimizer_apply(grad, params, optimizer_state, data):
@@ -276,6 +289,7 @@ def _get_optax_update_fn_and_state(
         optimizer_apply,
         get_position_fn=get_position_fn,
         record_param_l1_norm=record_param_l1_norm,
+        spin_square_expectation_fn=spin_square_expectation_fn,
         apply_pmap=apply_pmap,
     )
 
@@ -291,6 +305,7 @@ def get_adam_update_fn_and_state(
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for Adam.
@@ -309,6 +324,8 @@ def get_adam_update_fn_and_state(
         optimizer_config (ConfigDict): configuration for Adam
         record_param_l1_norm (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -327,6 +344,7 @@ def get_adam_update_fn_and_state(
         get_position_fn,
         energy_data_val_and_grad,
         record_param_l1_norm,
+        spin_square_expectation_fn,
         apply_pmap,
     )
 
@@ -338,6 +356,7 @@ def get_sgd_update_fn_and_state(
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for SGD.
@@ -356,6 +375,8 @@ def get_sgd_update_fn_and_state(
         optimizer_config (ConfigDict): configuration for SGD
         record_param_l1_norm (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
+        spin_square_expectation_fn (Callable, optional): a function which computes the
+            spin squared expectation for a set of walker positions. Defaults to None.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
@@ -374,6 +395,7 @@ def get_sgd_update_fn_and_state(
         get_position_fn,
         energy_data_val_and_grad,
         record_param_l1_norm,
+        spin_square_expectation_fn,
         apply_pmap,
     )
 
@@ -387,6 +409,7 @@ def get_sr_update_fn_and_state(
     optimizer_config: ConfigDict,
     descent_config: ConfigDict,
     record_param_l1_norm: bool = False,
+    spin_square_expectation_fn: Optional[Callable[[P, Array], jnp.float32]] = None,
     apply_pmap: bool = True,
     nan_safe: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
@@ -475,6 +498,7 @@ def get_sr_update_fn_and_state(
         optimizer_apply,
         get_position_fn=get_position_fn,
         record_param_l1_norm=record_param_l1_norm,
+        spin_square_expectation_fn=spin_square_expectation_fn,
         apply_pmap=apply_pmap,
     )
     optimizer_state = _init_optax_optimizer(

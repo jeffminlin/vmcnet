@@ -91,7 +91,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
 
     # Check that evaluation is being done and metrics are being saved
     assert (inner_logdir / "eval").exists()
-    assert (inner_logdir / "eval" / "statistics.json").exists()
+    assert (inner_logdir / "eval" / "energy_statistics.json").exists()
     eval_metric_files = [
         "accept_ratio.txt",
         "energy.txt",
