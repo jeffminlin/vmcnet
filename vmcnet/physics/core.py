@@ -143,6 +143,42 @@ def laplacian_psi_over_psi(
     return out[1]
 
 
+
+def adjacent_psi(
+    psi_apply: ModelApply,
+    params: P,
+    side_length: int,
+    x: Array,
+) -> jnp.float32:
+    """
+    Sum adajcent psi values for use in the Hubbard model kinetic energy
+    Args:
+        psi_apply (Callable): Has the signature (params, x) -> psi(x),
+
+        params (pytree): model parameters, passed as the first arg of psi_apply
+
+        side_length: side length of the finite lattice with periodic boundary condition
+
+        x (jnp.ndarray): second input to psi_apply. x is a single configuration
+        given as a tuple where the i'th entry is the 1-dimensional position of the i'th particle.
+
+    Returns:
+        jnp.float32: sum_{y~x}psi(y), the sum of neighboring psi values
+    """
+
+    n=len(x)
+    identity_mat = jnp.eye(n)
+    stacked_x=jnp.repeat(jnp.expand_dims(x,-1),n,axis=-1)
+    x_=(stacked_x+identity_mat)%side_length
+    _x=(stacked_x-identity_mat)%side_length
+
+    vmap_psi=jax.vmap(psi_apply,in_axes=(None,-1),out_axes=-1)
+    energies=vmap_psi(params,_x)+vmap_psi(params,x_)
+    return jnp.sum(energies)
+
+
+
+
 def get_statistics_from_local_energy(
     local_energies: Array, nchains: int, nan_safe: bool = True
 ) -> Tuple[jnp.float32, jnp.float32]:

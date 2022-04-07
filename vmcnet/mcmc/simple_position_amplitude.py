@@ -40,6 +40,8 @@ def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
     std_move: jnp.float32,
     logabs: bool = True,
+    discrete: bool = False,
+    cyclic: int = 0,
 ) -> MetropolisStep[P, SPAData]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.
 
@@ -49,6 +51,8 @@ def make_simple_pos_amp_gaussian_step(
         std_move: the standard deviation of the gaussian step
         logabs (bool, optional): whether the provided amplitudes represent psi
             (logabs = False) or log|psi| (logabs = True). Defaults to True.
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: function which does a metropolis step. Has the signature
@@ -56,5 +60,6 @@ def make_simple_pos_amp_gaussian_step(
             -> (mean acceptance probability, PositionAmplitudeData, new_key)
     """
     return make_position_amplitude_gaussian_metropolis_step(
-        model_apply, lambda _: std_move, None, logabs
+        model_apply, lambda _: std_move, None, logabs, discrete=discrete, cyclic=cyclic
     )
+

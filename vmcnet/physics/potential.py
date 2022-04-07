@@ -1,6 +1,7 @@
 """Potential energy terms."""
 from typing import Tuple
 import jax.numpy as jnp
+import jax
 
 from vmcnet.utils.typing import Array, ModelApply, ModelParams
 
@@ -16,6 +17,7 @@ def _compute_displacements(x: Array, y: Array) -> Array:
         Array: pairwise displacements (x_i - y_j), with shape (..., n_x, n_y, d)
     """
     return jnp.expand_dims(x, axis=-2) - jnp.expand_dims(y, axis=-3)
+
 
 
 def _compute_soft_norm(
@@ -144,5 +146,42 @@ def create_ion_ion_coulomb_potential(
     def potential_fn(params: ModelParams, x: Array) -> Array:
         del params, x
         return constant_potential
+
+    return potential_fn
+
+
+
+def create_hubbard_potential(
+    N_up:int,
+    strength: jnp.float32 = 1.0
+) -> ModelApply[ModelParams]:
+    """Computes the total Hubbard repulsion between pairs of electrons.
+
+    Args:
+        N_up (int): number of spin-up electrons
+        strength (jnp.float32, optional): amount to multiply the overall interaction by.
+            Defaults to 1.0.
+
+    Returns:
+        Callable: function which computes the potential energy due to the repulsion
+        between pairs of electrons. Has the signature
+        (params, electron_positions of shape (..., n_elec))
+        -> array of potential energies of shape electron_positions.shape[:-1]
+    """
+
+    is_zero=lambda x:jnp.heaviside(x,1)
+
+    def _compute_1d_displacements(x: Array, y: Array) -> Array:
+        return jnp.expand_dims(x, axis=-1) - jnp.expand_dims(y, axis=-2)
+
+    def potential_fn(params: ModelParams, x: Array) -> Array:
+        del params
+        N = x.shape[-1]
+        up_confs=jnp.take(x,indices=jnp.arange(0,N_up),axis=-1)
+        down_confs=jnp.take(x,indices=jnp.arange(N_up,N),axis=-1)
+        electron_electron_displacements = _compute_1d_displacements( up_confs, down_confs )
+        energy_contributions=is_zero(electron_electron_displacements)
+
+        return strength*jnp.sum( energy_contributions, axis=(-1, -2) )
 
     return potential_fn

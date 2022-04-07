@@ -85,3 +85,17 @@ def test_ion_ion_coulomb_potential():
     actual_out = potential_energy_fn(None, None)
 
     np.testing.assert_allclose(actual_out, desired_out)
+
+
+
+def test_hubbard_potential():
+    """potential energies of a list of electron configurations."""
+    N_up=2
+    elec_pos = jnp.array( [ [0,1,2], [0,1,1], ])
+    desired_out = jnp.array([0, 1])
+
+    potential_energy_fn = physics.potential.create_hubbard_potential(N_up)
+    actual_out = potential_energy_fn(None, elec_pos)
+
+    np.testing.assert_allclose(actual_out, desired_out)
+

@@ -617,6 +617,12 @@ def run_molecule() -> None:
         )
 
 
+
+def run_hubbard() -> None:
+    print('run hubbard')
+
+
+
 def vmc_statistics() -> None:
     """Calculate statistics from a VMC evaluation run and write them to disc."""
     parser = argparse.ArgumentParser(
