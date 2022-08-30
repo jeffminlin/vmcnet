@@ -12,10 +12,28 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
+from flax.linen import SelfAttention
 
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
 
+
+def _transformer_mix(
+    x: Array,
+    self_attention_layer: Callable[[Array], Array],
+    splits: ParticleSplit,
+    axis: int = -2,
+) -> ArrayList:
+    """Split x on an axis and apply the self attention layer over that axis in each of the splits."""
+    # in_1e has shape (..., n, d_1e)
+    # split_x has shape [i: (..., n[i], d_1e)]
+    
+    split_x = jnp.split(x, splits, axis=axis)
+    split_x_mix = jax.tree_map(
+        self_attention_layer, split_x
+    )
+    
+    return split_x_mix
 
 def _split_mean(
     x: Array,
