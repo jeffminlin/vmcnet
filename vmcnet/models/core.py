@@ -27,13 +27,12 @@ def _transformer_mix(
     """Split x on an axis and apply the self attention layer over that axis in each of the splits."""
     # in_1e has shape (..., n, d_1e)
     # split_x has shape [i: (..., n[i], d_1e)]
-    
+
     split_x = jnp.split(x, splits, axis=axis)
-    split_x_mix = jax.tree_map(
-        self_attention_layer, split_x
-    )
-    
+    split_x_mix = jax.tree_map(self_attention_layer, split_x)
+
     return split_x_mix
+
 
 def _split_mean(
     x: Array,

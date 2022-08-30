@@ -18,7 +18,7 @@ from .core import (
     compute_ee_norm_with_safe_diag,
     get_nsplits,
     _transformer_mix,
-    SelfAttention
+    SelfAttention,
 )
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer, get_bias_initializer
@@ -171,7 +171,7 @@ class FermiNetOneElectronLayer(Module):
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
         ndense (int): number of dense nodes
-        num_heads (int): number of heads. If num_heads == 1, then the multi-head 
+        num_heads (int): number of heads. If num_heads == 1, then the multi-head
             attention layers are reduced to self-attention layers.
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
@@ -179,7 +179,7 @@ class FermiNetOneElectronLayer(Module):
             signature (key, shape, dtype) -> Array
         kernel_initializer_transformer (WeightInitializer): kernel initializer for the
             mixed part of the transformer stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous transformer 
+            dense kernel which multiplies the average of the previous transformer
             stream output. Has signature (key, shape, dtype) -> Array
         kernel_initializer_mixed (WeightInitializer): kernel initializer for the
             mixed part of the one-electron stream. This initializes the part of the
@@ -190,7 +190,7 @@ class FermiNetOneElectronLayer(Module):
             the dense kernel which multiplies the average of the previous two-electron
             stream which is mixed into the one-electron stream. Has signature
             (key, shape, dtype) -> Array
-        bias_initializer (WeightInitializer): bias initializer for the transformer 
+        bias_initializer (WeightInitializer): bias initializer for the transformer
             steam. Has signature (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
             (key, shape, dtype) -> Array
@@ -246,11 +246,14 @@ class FermiNetOneElectronLayer(Module):
         self._dense_2e = Dense(
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
-        
+
         self._attention_1e = SelfAttention(
-            num_heads=self.num_heads, qkv_features=self.ndense, out_features=self.ndense,
+            num_heads=self.num_heads,
+            qkv_features=self.ndense,
+            out_features=self.ndense,
             kernel_init=self.kernel_initializer_transformer,
-            bias_init=self.bias_initializer_transformer)
+            bias_init=self.bias_initializer_transformer,
+        )
 
     def _compute_transformed_1e_means(self, split_means: ArrayList) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 1e stream.
@@ -342,18 +345,20 @@ class FermiNetOneElectronLayer(Module):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-    def _compute_mixed_split(self, in_1e: Array, use_transformer: bool = False) -> ArrayList:
+    def _compute_mixed_split(
+        self, in_1e: Array, use_transformer: bool = False
+    ) -> ArrayList:
         """Compute the 1e mixed for the given input.
-        
+
         If use_transformer is True, then the mixed is computed using the transformer layer.
-        Else, the mixed is computed using the dense layer with the reduce-mean layer. 
+        Else, the mixed is computed using the dense layer with the reduce-mean layer.
         """
-        if use_transformer: 
-            return  _transformer_mix(in_1e, self._attention_1e, self.spin_split, axis=-2)
-        else: 
+        if use_transformer:
+            return _transformer_mix(in_1e, self._attention_1e, self.spin_split, axis=-2)
+        else:
             split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
             return self._compute_transformed_1e_means(split_1e_means)
-        
+
     def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Array = None
     ) -> Array:
@@ -399,7 +404,9 @@ class FermiNetOneElectronLayer(Module):
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
 
-        dense_mixed_split = self._compute_mixed_split(in_1e, use_transformer=self.use_transformer)
+        dense_mixed_split = self._compute_mixed_split(
+            in_1e, use_transformer=self.use_transformer
+        )
 
         # adds the unmixed [i: (..., n[i], d')] to the mixed [i: (..., 1, d')] to get
         # an equivariant function. Without the two-electron mixing, this is a spinful
