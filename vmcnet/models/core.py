@@ -12,7 +12,7 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
-from flax.linen import SelfAttention
+from flax.linen import SelfAttention # noqa
 
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
@@ -24,7 +24,7 @@ def _transformer_mix(
     splits: ParticleSplit,
     axis: int = -2,
 ) -> ArrayList:
-    """Split x on an axis and apply the self attention layer over that axis in each of the splits."""
+    """Split x on an axis and apply the self attention layer to each of the splits."""
     # in_1e has shape (..., n, d_1e)
     # split_x has shape [i: (..., n[i], d_1e)]
 

@@ -350,7 +350,7 @@ class FermiNetOneElectronLayer(Module):
     ) -> ArrayList:
         """Compute the 1e mixed for the given input.
 
-        If use_transformer is True, then the mixed is computed using the transformer layer.
+        If use_transformer is True, then the mixed is computed using transformer layer.
         Else, the mixed is computed using the dense layer with the reduce-mean layer.
         """
         if use_transformer:
