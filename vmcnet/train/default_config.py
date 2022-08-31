@@ -113,14 +113,20 @@ def get_default_model_config() -> Dict:
         "include_ei_norm": True,
         "include_ee_norm": True,
     }
+    
+    # use the self attention layer (instead of the multi-head attention layer)
+    num_heads = 1
+    use_transformer = True
 
     base_backflow_config = {
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
+        "kernel_init_transformer": orthogonal_init,
         "kernel_init_2e_1e_stream": orthogonal_init,
         "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
         "bias_init_1e_stream": normal_init,
         "bias_init_2e_stream": normal_init,
+        "bias_init_transformer": normal_init,
         "activation_fn": "tanh",
         "use_bias": True,
         "one_electron_skip": True,
@@ -128,6 +134,8 @@ def get_default_model_config() -> Dict:
         "two_electron_skip": True,
         "two_electron_skip_scale": 1.0,
         "cyclic_spins": cyclic_spins,
+        "num_heads": num_heads,
+        "use_transformer": use_transformer,
     }
 
     ferminet_backflow = {

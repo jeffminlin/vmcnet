@@ -345,15 +345,13 @@ class FermiNetOneElectronLayer(Module):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-    def _compute_mixed_split(
-        self, in_1e: Array, use_transformer: bool = False
-    ) -> ArrayList:
+    def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
         """Compute the 1e mixed for the given input.
 
         If use_transformer is True, then the mixed is computed using transformer layer.
         Else, the mixed is computed using the dense layer with the reduce-mean layer.
         """
-        if use_transformer:
+        if self.use_transformer:
             return _transformer_mix(in_1e, self._attention_1e, self.spin_split, axis=-2)
         else:
             split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
@@ -404,9 +402,7 @@ class FermiNetOneElectronLayer(Module):
         dense_unmixed = self._unmixed_dense(in_1e)
         dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
 
-        dense_mixed_split = self._compute_mixed_split(
-            in_1e, use_transformer=self.use_transformer
-        )
+        dense_mixed_split = self._compute_mixed_split(in_1e)
 
         # adds the unmixed [i: (..., n[i], d')] to the mixed [i: (..., 1, d')] to get
         # an equivariant function. Without the two-electron mixing, this is a spinful

@@ -12,7 +12,7 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
-from flax.linen import SelfAttention # noqa
+from flax.linen import SelfAttention  # noqa
 
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
