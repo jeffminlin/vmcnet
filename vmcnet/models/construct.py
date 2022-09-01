@@ -443,6 +443,10 @@ def get_backflow_from_config(
     residual_blocks = get_residual_blocks_for_ferminet_backflow(
         spin_split,
         backflow_config.ndense_list,
+        backflow_config.num_heads,
+        kernel_initializer_transformer=kernel_init_constructor(
+            backflow_config.kernel_init_transformer
+        ),
         kernel_initializer_unmixed=kernel_init_constructor(
             backflow_config.kernel_init_unmixed
         ),
@@ -454,6 +458,9 @@ def get_backflow_from_config(
         ),
         kernel_initializer_2e_2e_stream=kernel_init_constructor(
             backflow_config.kernel_init_2e_2e_stream
+        ),
+        bias_initializer_transformer=bias_init_constructor(
+            backflow_config.bias_init_transformer
         ),
         bias_initializer_1e_stream=bias_init_constructor(
             backflow_config.bias_init_1e_stream
@@ -468,6 +475,7 @@ def get_backflow_from_config(
         two_electron_skip=backflow_config.two_electron_skip,
         two_electron_skip_scale=backflow_config.two_electron_skip_scale,
         cyclic_spins=backflow_config.cyclic_spins,
+        use_transformer=backflow_config.use_transformer,
     )
 
     return FermiNetBackflow(residual_blocks)
@@ -507,10 +515,13 @@ def get_sign_covariance_from_config(
 def get_residual_blocks_for_ferminet_backflow(
     spin_split: ParticleSplit,
     ndense_list: List[Tuple[int, ...]],
+    num_heads: int,
+    kernel_initializer_transformer: WeightInitializer,
     kernel_initializer_unmixed: WeightInitializer,
     kernel_initializer_mixed: WeightInitializer,
     kernel_initializer_2e_1e_stream: WeightInitializer,
     kernel_initializer_2e_2e_stream: WeightInitializer,
+    bias_initializer_transformer: WeightInitializer,
     bias_initializer_1e_stream: WeightInitializer,
     bias_initializer_2e_stream: WeightInitializer,
     activation_fn: Activation,
@@ -520,6 +531,7 @@ def get_residual_blocks_for_ferminet_backflow(
     two_electron_skip: bool = True,
     two_electron_skip_scale: float = 1.0,
     cyclic_spins: bool = True,
+    use_transformer: bool = False,
 ) -> List[FermiNetResidualBlock]:
     """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
 
@@ -540,6 +552,16 @@ def get_residual_blocks_for_ferminet_backflow(
             to the two-electron stream with an optional skip connection, otherwise
             the two-electron stream is mixed into the one-electron stream but no
             transformation is done.
+        num_heads (int): number of heads for the transformer. The future todo is to
+            augment this from a single integer number to a sequence of integers. The 
+            length of this list determines the number of residual blocks which are
+            composed. 
+        kernel_initializer_transformer (WeightInitializer): kernel initializer for the
+            transformer kernel. This initializes the transformer kernel in the equivalent
+            mixing of the one-electron stream. Currently, we only support the use of 
+            the transformer mixing in the single electron stream, but in the future this
+            can also be generalized to the two-electron stream. Has signature 
+            (key, shape, dtype) -> Array.
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the previous one-electron stream output. Has
@@ -555,6 +577,8 @@ def get_residual_blocks_for_ferminet_backflow(
             (key, shape, dtype) -> Array
         kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
             two-electron stream. Has signature (key, shape, dtype) -> Array
+        bias_initializer_transformer (WeightInitializer): bias initializer for the 
+            transformer stream. Has signature (key, shape, dtype) -> Array
         bias_initializer_1e_stream (WeightInitializer): bias initializer for the
             one-electron stream. Has signature (key, shape, dtype) -> Array
         bias_initializer_2e_stream (WeightInitializer): bias initializer for the
@@ -581,21 +605,27 @@ def get_residual_blocks_for_ferminet_backflow(
             [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
+        use_transformer (bool, optional): whether the transformer layer is used in the 
+            one-electron stream. 
     """
     residual_blocks = []
     for ndense in ndense_list:
         one_electron_layer = FermiNetOneElectronLayer(
             spin_split,
             ndense[0],
+            num_heads,
+            kernel_initializer_transformer,
             kernel_initializer_unmixed,
             kernel_initializer_mixed,
             kernel_initializer_2e_1e_stream,
             bias_initializer_1e_stream,
+            bias_initializer_transformer,
             activation_fn,
             use_bias,
             skip_connection=one_electron_skip,
             skip_connection_scale=one_electron_skip_scale,
             cyclic_spins=cyclic_spins,
+            use_transformer=use_transformer
         )
         two_electron_layer = None
         if len(ndense) > 1:
