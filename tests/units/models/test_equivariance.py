@@ -11,6 +11,7 @@ import vmcnet.physics as physics
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
 from itertools import product
 
+
 def test_electron_electron_add_norm():
     """Test that adding the norm normally gives the same output."""
     elec_pos = jnp.array(
@@ -61,8 +62,10 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
     num_heads_options = [1, 3]
     cyclic_spins_options = [False, True]
     use_transformer_options = [False, True]
-    
-    for num_heads, cyclic_spin, use_transformer in product(num_heads_options, cyclic_spins_options, use_transformer_options):
+
+    for num_heads, cyclic_spin, use_transformer in product(
+        num_heads_options, cyclic_spins_options, use_transformer_options
+    ):
         one_elec_layer = models.equivariance.FermiNetOneElectronLayer(
             spin_split,
             ndense,
@@ -75,7 +78,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
             bias_initializer_transformer,
             activation_fn,
             cyclic_spins=cyclic_spin,
-            use_transformer=use_transformer
+            use_transformer=use_transformer,
         )
 
         key, subkey = jax.random.split(key)

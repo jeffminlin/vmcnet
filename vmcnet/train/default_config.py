@@ -113,7 +113,7 @@ def get_default_model_config() -> Dict:
         "include_ei_norm": True,
         "include_ee_norm": True,
     }
-    
+
     # use the self attention layer (instead of the multi-head attention layer)
     num_heads = 1
     use_transformer = True

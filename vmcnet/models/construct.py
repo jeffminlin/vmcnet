@@ -553,14 +553,14 @@ def get_residual_blocks_for_ferminet_backflow(
             the two-electron stream is mixed into the one-electron stream but no
             transformation is done.
         num_heads (int): number of heads for the transformer. The future todo is to
-            augment this from a single integer number to a sequence of integers. The 
+            augment this from a single integer number to a sequence of integers. The
             length of this list determines the number of residual blocks which are
-            composed. 
+            composed.
         kernel_initializer_transformer (WeightInitializer): kernel initializer for the
-            transformer kernel. This initializes the transformer kernel in the equivalent
-            mixing of the one-electron stream. Currently, we only support the use of 
+            transformer kernel. This initializes transformer kernel in the equivalent
+            mixing of the one-electron stream. Currently, we only support the use of
             the transformer mixing in the single electron stream, but in the future this
-            can also be generalized to the two-electron stream. Has signature 
+            can also be generalized to the two-electron stream. Has signature
             (key, shape, dtype) -> Array.
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
@@ -577,7 +577,7 @@ def get_residual_blocks_for_ferminet_backflow(
             (key, shape, dtype) -> Array
         kernel_initializer_2e_2e_stream (WeightInitializer): kernel initializer for the
             two-electron stream. Has signature (key, shape, dtype) -> Array
-        bias_initializer_transformer (WeightInitializer): bias initializer for the 
+        bias_initializer_transformer (WeightInitializer): bias initializer for the
             transformer stream. Has signature (key, shape, dtype) -> Array
         bias_initializer_1e_stream (WeightInitializer): bias initializer for the
             one-electron stream. Has signature (key, shape, dtype) -> Array
@@ -605,8 +605,8 @@ def get_residual_blocks_for_ferminet_backflow(
             [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
-        use_transformer (bool, optional): whether the transformer layer is used in the 
-            one-electron stream. 
+        use_transformer (bool, optional): whether the transformer layer is used in the
+            one-electron stream.
     """
     residual_blocks = []
     for ndense in ndense_list:
@@ -625,7 +625,7 @@ def get_residual_blocks_for_ferminet_backflow(
             skip_connection=one_electron_skip,
             skip_connection_scale=one_electron_skip_scale,
             cyclic_spins=cyclic_spins,
-            use_transformer=use_transformer
+            use_transformer=use_transformer,
         )
         two_electron_layer = None
         if len(ndense) > 1:
