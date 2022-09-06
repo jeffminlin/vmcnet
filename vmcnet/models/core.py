@@ -18,22 +18,6 @@ Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
 
 
-def _transformer_mix(
-    x: Array,
-    self_attention_layer: Callable[[Array], Array],
-    splits: ParticleSplit,
-    axis: int = -2,
-) -> ArrayList:
-    """Split x on an axis and apply the self attention layer to each of the splits."""
-    # in_1e has shape (..., n, d_1e)
-    # split_x has shape [i: (..., n[i], d_1e)]
-
-    split_x = jnp.split(x, splits, axis=axis)
-    split_x_mix = jax.tree_map(self_attention_layer, split_x)
-
-    return split_x_mix
-
-
 def _split_mean(
     x: Array,
     splits: ParticleSplit,

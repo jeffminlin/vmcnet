@@ -17,7 +17,6 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
-    _transformer_mix,
     SelfAttention,
 )
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
@@ -157,6 +156,20 @@ def compute_electron_electron(
     return input_2e, r_ee
 
 
+def _transformer_mix(
+    x: Array,
+    self_attention_layer: Callable[[Array], Array],
+    splits: ParticleSplit,
+    axis: int = -2,
+) -> ArrayList:
+    """Split x on an axis and apply the self attention layer to each of the splits."""
+    # in_1e has shape (..., n, d_1e)
+    # split_x has shape [i: (..., n[i], d_1e)]
+
+    split_x = jnp.split(x, splits, axis=axis)
+    split_x_mix = jax.tree_map(self_attention_layer, split_x)
+
+    return split_x_mix
 class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
