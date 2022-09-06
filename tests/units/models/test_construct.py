@@ -337,7 +337,9 @@ def _make_antiequivariance_net_with_products_sign_covariance(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
+    backflow = _get_backflow(
+        spin_split, ndense_list, 1, cyclic_spins=cyclic_spins, use_transformer=False
+    )
 
     array_list_sign_covariance = sign_sym.ProductsSignCovariance(
         1, models.weights.get_kernel_initializer("orthogonal")
