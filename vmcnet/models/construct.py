@@ -557,7 +557,7 @@ def get_residual_blocks_for_ferminet_backflow(
             length of this list determines the number of residual blocks which are
             composed.
         kernel_initializer_transformer (WeightInitializer): kernel initializer for the
-            transformer kernel. This initializes transformer kernel in the equivalent
+            transformer kernel. This initializes transformer kernel in the equivariant
             mixing of the one-electron stream. Currently, we only support the use of
             the transformer mixing in the single electron stream, but in the future this
             can also be generalized to the two-electron stream. Has signature
