@@ -249,7 +249,7 @@ class FermiNetOneElectronLayer(Module):
 
         self._attention_1e = SelfAttention(
             num_heads=self.num_heads,
-            qkv_features=self.ndense,
+            qkv_features=self.ndense * self.num_heads,
             out_features=self.ndense,
             kernel_init=self.kernel_initializer_transformer,
             bias_init=self.bias_initializer_transformer,
