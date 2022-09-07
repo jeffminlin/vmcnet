@@ -443,7 +443,6 @@ def get_backflow_from_config(
     residual_blocks = get_residual_blocks_for_ferminet_backflow(
         spin_split,
         backflow_config.ndense_list,
-        backflow_config.num_heads,
         kernel_initializer_transformer=kernel_init_constructor(
             backflow_config.kernel_init_transformer
         ),
@@ -476,6 +475,7 @@ def get_backflow_from_config(
         two_electron_skip_scale=backflow_config.two_electron_skip_scale,
         cyclic_spins=backflow_config.cyclic_spins,
         use_transformer=backflow_config.use_transformer,
+        num_heads=backflow_config.num_heads,
     )
 
     return FermiNetBackflow(residual_blocks)

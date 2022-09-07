@@ -62,11 +62,10 @@ def _get_compute_input_streams(ion_pos):
     return functools.partial(models.equivariance.compute_input_streams, ion_pos=ion_pos)
 
 
-def _get_backflow(spin_split, ndense_list, num_heads, cyclic_spins, use_transformer):
+def _get_backflow(spin_split, ndense_list, cyclic_spins, use_transformer, num_heads):
     residual_blocks = models.construct.get_residual_blocks_for_ferminet_backflow(
         spin_split,
         ndense_list,
-        num_heads,
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("xavier_normal"),
@@ -78,6 +77,7 @@ def _get_backflow(spin_split, ndense_list, num_heads, cyclic_spins, use_transfor
         jnp.tanh,
         cyclic_spins=cyclic_spins,
         use_transformer=use_transformer,
+        num_heads=num_heads,
     )
     return models.construct.FermiNetBackflow(residual_blocks)
 
