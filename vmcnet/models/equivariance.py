@@ -170,6 +170,8 @@ def _transformer_mix(
     split_x_mix = jax.tree_map(self_attention_layer, split_x)
 
     return split_x_mix
+
+
 class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
@@ -221,8 +223,8 @@ class FermiNetOneElectronLayer(Module):
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
         use_transformer (bool, optional): whether to use the transformer stream.
-        num_heads (int, optional): number of heads. If num_heads == 1, then the multi-head
-            attention layers are reduced to self-attention layers. if use_transformer is 
+        num_heads (int, optional): number of heads. If num_heads == 1, then multi-head
+            attention layers are reduced to self-attention layers. if use_transformer is
             False, then the num_heads argument is ignored. Defaults to 1.
     """
 
@@ -266,7 +268,7 @@ class FermiNetOneElectronLayer(Module):
                 kernel_init=self.kernel_initializer_transformer,
                 bias_init=self.bias_initializer_transformer,
             )
-        else: 
+        else:
             self._mixed_dense = Dense(
                 self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
             )

@@ -531,7 +531,7 @@ def get_residual_blocks_for_ferminet_backflow(
     two_electron_skip_scale: float = 1.0,
     cyclic_spins: bool = True,
     use_transformer: bool = False,
-    num_heads: int = 1
+    num_heads: int = 1,
 ) -> List[FermiNetResidualBlock]:
     """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
 

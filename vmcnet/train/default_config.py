@@ -114,7 +114,6 @@ def get_default_model_config() -> Dict:
         "include_ee_norm": True,
     }
 
-
     base_backflow_config = {
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
@@ -257,8 +256,8 @@ def get_default_model_config() -> Dict:
                         "two_electron_skip": True,
                         "two_electron_skip_scale": 1.0,
                         "cyclic_spins": cyclic_spins,
-                        "num_heads": num_heads,
-                        "use_transformer": use_transformer,
+                        "use_transformer": False,
+                        "num_heads": 1,
                     },
                 },
             },

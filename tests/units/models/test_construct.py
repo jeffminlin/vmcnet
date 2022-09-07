@@ -311,7 +311,11 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
     def backflow_based_equivariance(x: ArrayList) -> Array:
         concat_x = jnp.concatenate(x, axis=-2)
         return _get_backflow(
-            spin_split, ((9,), (2,), (1,)), cyclic_spins=True, use_transformer=False, num_heads=1, 
+            spin_split,
+            ((9,), (2,), (1,)),
+            cyclic_spins=True,
+            use_transformer=False,
+            num_heads=1,
         )(concat_x)
 
     odd_equivariance = sign_sym.make_array_list_fn_sign_covariant(
@@ -338,7 +342,11 @@ def _make_antiequivariance_net_with_products_sign_covariance(
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(
-        spin_split, ndense_list, cyclic_spins=cyclic_spins, use_transformer=False, num_heads=1, 
+        spin_split,
+        ndense_list,
+        cyclic_spins=cyclic_spins,
+        use_transformer=False,
+        num_heads=1,
     )
 
     array_list_sign_covariance = sign_sym.ProductsSignCovariance(
@@ -436,7 +444,11 @@ def _make_factorized_antisymmetries():
 
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(
-        spin_split, ndense_list, cyclic_spins=False, use_transformer=False, num_heads=1,
+        spin_split,
+        ndense_list,
+        cyclic_spins=False,
+        use_transformer=False,
+        num_heads=1,
     )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
@@ -472,7 +484,11 @@ def _make_generic_antisymmetry():
     ) = _get_initial_pos_and_hyperparams()
     compute_input_streams = _get_compute_input_streams(ion_pos)
     backflow = _get_backflow(
-        spin_split, ndense_list, cyclic_spins=True, use_transformer=False, num_heads=1,
+        spin_split,
+        ndense_list,
+        cyclic_spins=True,
+        use_transformer=False,
+        num_heads=1,
     )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
