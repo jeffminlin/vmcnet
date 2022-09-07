@@ -515,7 +515,6 @@ def get_sign_covariance_from_config(
 def get_residual_blocks_for_ferminet_backflow(
     spin_split: ParticleSplit,
     ndense_list: List[Tuple[int, ...]],
-    num_heads: int,
     kernel_initializer_transformer: WeightInitializer,
     kernel_initializer_unmixed: WeightInitializer,
     kernel_initializer_mixed: WeightInitializer,
@@ -532,6 +531,7 @@ def get_residual_blocks_for_ferminet_backflow(
     two_electron_skip_scale: float = 1.0,
     cyclic_spins: bool = True,
     use_transformer: bool = False,
+    num_heads: int = 1
 ) -> List[FermiNetResidualBlock]:
     """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
 
@@ -552,10 +552,6 @@ def get_residual_blocks_for_ferminet_backflow(
             to the two-electron stream with an optional skip connection, otherwise
             the two-electron stream is mixed into the one-electron stream but no
             transformation is done.
-        num_heads (int): number of heads for the transformer. TODO(Jim): to
-            augment this from a single integer number to a sequence of integers. The
-            length of this list determines the number of residual blocks which are
-            composed.
         kernel_initializer_transformer (WeightInitializer): kernel initializer for the
             transformer kernel. This initializes transformer kernel in the equivariant
             mixing of the one-electron stream. Currently, we only support the use of
@@ -607,13 +603,17 @@ def get_residual_blocks_for_ferminet_backflow(
             true spin equivariance. Defaults to False (original FermiNet).
         use_transformer (bool, optional): whether the transformer layer is used in the
             one-electron stream.
+        num_heads (int, optional): number of heads for the transformer. TODO(Jim): to
+            augment this from a single integer number to a sequence of integers. The
+            length of this list determines the number of residual blocks which are
+            composed. If use_transformer is False, then num_heads is ignored.
+            Defaults to 1.
     """
     residual_blocks = []
     for ndense in ndense_list:
         one_electron_layer = FermiNetOneElectronLayer(
             spin_split,
             ndense[0],
-            num_heads,
             kernel_initializer_transformer,
             kernel_initializer_unmixed,
             kernel_initializer_mixed,
@@ -626,6 +626,7 @@ def get_residual_blocks_for_ferminet_backflow(
             skip_connection_scale=one_electron_skip_scale,
             cyclic_spins=cyclic_spins,
             use_transformer=use_transformer,
+            num_heads=num_heads,
         )
         two_electron_layer = None
         if len(ndense) > 1:
