@@ -552,7 +552,7 @@ def get_residual_blocks_for_ferminet_backflow(
             to the two-electron stream with an optional skip connection, otherwise
             the two-electron stream is mixed into the one-electron stream but no
             transformation is done.
-        num_heads (int): number of heads for the transformer. The future todo is to
+        num_heads (int): number of heads for the transformer. TODO(Jim): to
             augment this from a single integer number to a sequence of integers. The
             length of this list determines the number of residual blocks which are
             composed.
