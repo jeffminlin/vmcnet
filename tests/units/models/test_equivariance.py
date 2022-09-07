@@ -69,7 +69,6 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
         one_elec_layer = models.equivariance.FermiNetOneElectronLayer(
             spin_split,
             ndense,
-            num_heads,
             kernel_initializer_transformer,
             kernel_initializer_unmixed,
             kernel_initializer_mixed,
@@ -79,6 +78,7 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
             activation_fn,
             cyclic_spins=cyclic_spin,
             use_transformer=use_transformer,
+            num_heads=num_heads,
         )
 
         key, subkey = jax.random.split(key)
