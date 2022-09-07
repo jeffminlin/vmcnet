@@ -184,8 +184,6 @@ class FermiNetOneElectronLayer(Module):
             systems) or should be a Sequence with length 1 whose element is less than
             the total number of electrons.
         ndense (int): number of dense nodes
-        num_heads (int): number of heads. If num_heads == 1, then the multi-head
-            attention layers are reduced to self-attention layers.
         kernel_initializer_unmixed (WeightInitializer): kernel initializer for the
             unmixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the previous one-electron stream output. Has
@@ -223,11 +221,13 @@ class FermiNetOneElectronLayer(Module):
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
         use_transformer (bool, optional): whether to use the transformer stream.
+        num_heads (int, optional): number of heads. If num_heads == 1, then the multi-head
+            attention layers are reduced to self-attention layers. if use_transformer is 
+            False, then the num_heads argument is ignored. Defaults to 1.
     """
 
     spin_split: ParticleSplit
     ndense: int
-    num_heads: int
     kernel_initializer_transformer: WeightInitializer
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
@@ -240,6 +240,7 @@ class FermiNetOneElectronLayer(Module):
     skip_connection_scale: float = 1.0
     cyclic_spins: bool = True
     use_transformer: bool = False
+    num_heads: int = 1
 
     def setup(self):
         """Setup Dense layers."""
