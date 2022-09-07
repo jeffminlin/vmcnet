@@ -17,8 +17,8 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
-    SelfAttention,
 )
+from flax.linen import SelfAttention  # noqa
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer, get_bias_initializer
 
