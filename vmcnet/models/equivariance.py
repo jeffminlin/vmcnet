@@ -254,20 +254,22 @@ class FermiNetOneElectronLayer(Module):
             bias_init=self.bias_initializer,
             use_bias=self.use_bias,
         )
-        self._mixed_dense = Dense(
-            self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
-        )
         self._dense_2e = Dense(
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
-        self._attention_1e = SelfAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.ndense * self.num_heads,
-            out_features=self.ndense,
-            kernel_init=self.kernel_initializer_transformer,
-            bias_init=self.bias_initializer_transformer,
-        )
+        if self.use_transformer:
+            self._attention_1e = SelfAttention(
+                num_heads=self.num_heads,
+                qkv_features=self.ndense * self.num_heads,
+                out_features=self.ndense,
+                kernel_init=self.kernel_initializer_transformer,
+                bias_init=self.bias_initializer_transformer,
+            )
+        else: 
+            self._mixed_dense = Dense(
+                self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
+            )
 
     def _compute_transformed_1e_means(self, split_means: ArrayList) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 1e stream.
