@@ -71,7 +71,7 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins, use_transformer, num_he
         models.weights.get_kernel_initializer("xavier_normal"),
         models.weights.get_kernel_initializer("glorot_uniform"),
         models.weights.get_kernel_initializer("kaiming_uniform"),
-        models.weights.get_bias_initializer("zeros"),
+        models.weights.get_bias_initializer("uniform"),  # zeros: doesn't work
         models.weights.get_bias_initializer("zeros"),
         models.weights.get_bias_initializer("normal"),
         jnp.tanh,
@@ -146,6 +146,22 @@ def _make_ferminets():
             False,
         ),
         (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN, False, 1, False),
+        (
+            False,
+            False,
+            models.construct.DeterminantFnMode.SIGN_COVARIANCE,
+            False,
+            1,
+            True,
+        ),
+        (
+            False,
+            False,
+            models.construct.DeterminantFnMode.SIGN_COVARIANCE,
+            False,
+            3,
+            True,
+        ),
     ]:
         compute_input_streams = _get_compute_input_streams(ion_pos)
         backflow = _get_backflow(
