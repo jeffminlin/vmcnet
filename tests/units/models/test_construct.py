@@ -62,18 +62,22 @@ def _get_compute_input_streams(ion_pos):
     return functools.partial(models.equivariance.compute_input_streams, ion_pos=ion_pos)
 
 
-def _get_backflow(spin_split, ndense_list, cyclic_spins):
+def _get_backflow(spin_split, ndense_list, cyclic_spins, use_transformer, num_heads):
     residual_blocks = models.construct.get_residual_blocks_for_ferminet_backflow(
         spin_split,
         ndense_list,
+        models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("xavier_normal"),
         models.weights.get_kernel_initializer("glorot_uniform"),
         models.weights.get_kernel_initializer("kaiming_uniform"),
         models.weights.get_bias_initializer("zeros"),
+        models.weights.get_bias_initializer("zeros"),
         models.weights.get_bias_initializer("normal"),
         jnp.tanh,
         cyclic_spins=cyclic_spins,
+        use_transformer=use_transformer,
+        num_heads=num_heads,
     )
     return models.construct.FermiNetBackflow(residual_blocks)
 
@@ -101,15 +105,52 @@ def _make_ferminets():
     slog_psis = []
     # No need for combinatorial testing over these flags; just make sure Ferminet is
     # tested with and without cyclic spins, and with each different determinant_fn_mode.
-    for cyclic_spins, use_det_resnet, determinant_fn_mode, full_det in [
-        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE, False),
-        (False, False, models.construct.DeterminantFnMode.SIGN_COVARIANCE, True),
-        (True, True, models.construct.DeterminantFnMode.SIGN_COVARIANCE, False),
-        (False, True, models.construct.DeterminantFnMode.PARALLEL_EVEN, False),
-        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN, False),
+    for (
+        cyclic_spins,
+        use_det_resnet,
+        determinant_fn_mode,
+        full_det,
+        num_heads,
+        use_transformer,
+    ) in [
+        (
+            False,
+            False,
+            models.construct.DeterminantFnMode.SIGN_COVARIANCE,
+            False,
+            1,
+            False,
+        ),
+        (
+            False,
+            False,
+            models.construct.DeterminantFnMode.SIGN_COVARIANCE,
+            True,
+            1,
+            False,
+        ),
+        (
+            True,
+            True,
+            models.construct.DeterminantFnMode.SIGN_COVARIANCE,
+            False,
+            1,
+            False,
+        ),
+        (
+            False,
+            True,
+            models.construct.DeterminantFnMode.PARALLEL_EVEN,
+            False,
+            1,
+            False,
+        ),
+        (True, True, models.construct.DeterminantFnMode.PAIRWISE_EVEN, False, 1, False),
     ]:
         compute_input_streams = _get_compute_input_streams(ion_pos)
-        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+        backflow = _get_backflow(
+            spin_split, ndense_list, cyclic_spins, use_transformer, num_heads
+        )
         resnet_det_fn = _get_det_resnet_fn() if use_det_resnet else None
 
         slog_psi = models.construct.FermiNet(
@@ -144,13 +185,19 @@ def _make_embedded_particle_ferminets():
 
     log_psis = []
     cyclic_spins = False
+    num_heads = 1
+    use_transformer = False
     compute_input_streams = _get_compute_input_streams(ion_pos)
     invariance_compute_input_streams = _get_compute_input_streams(ion_pos)
-    invariance_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+    invariance_backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins, use_transformer, num_heads
+    )
 
     for nhidden_fermions_per_spin, full_det in [((2, 3), False), ((4, 0), True)]:
         total_spin_split = (spin_split[0] + nhidden_fermions_per_spin[0],)
-        backflow = _get_backflow(total_spin_split, ndense_list, cyclic_spins)
+        backflow = _get_backflow(
+            total_spin_split, ndense_list, cyclic_spins, use_transformer, num_heads
+        )
         slog_psi = models.construct.EmbeddedParticleFermiNet(
             spin_split,
             compute_input_streams,
@@ -190,8 +237,14 @@ def _make_extended_orbital_matrix_ferminets():
 
     slog_psis = []
     cyclic_spins = False
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
-    extra_backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+    num_heads = 1
+    use_transformer = False
+    backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins, use_transformer, num_heads
+    )
+    extra_backflow = _get_backflow(
+        spin_split, ndense_list, cyclic_spins, use_transformer, num_heads
+    )
 
     for nhidden_fermions_per_spin, use_separate_invariance_backflow, full_det in [
         ((2, 3), True, False),
@@ -245,13 +298,25 @@ def _make_antiequivariance_net_with_resnet_sign_covariance(
     multiply_by_eq_features=False,
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
+    num_heads = 1
+    use_transformer = False
+    backflow = _get_backflow(
+        spin_split,
+        ndense_list,
+        cyclic_spins=cyclic_spins,
+        use_transformer=use_transformer,
+        num_heads=num_heads,
+    )
 
     def backflow_based_equivariance(x: ArrayList) -> Array:
         concat_x = jnp.concatenate(x, axis=-2)
-        return _get_backflow(spin_split, ((9,), (2,), (1,)), cyclic_spins=True)(
-            concat_x
-        )
+        return _get_backflow(
+            spin_split,
+            ((9,), (2,), (1,)),
+            cyclic_spins=True,
+            use_transformer=False,
+            num_heads=1,
+        )(concat_x)
 
     odd_equivariance = sign_sym.make_array_list_fn_sign_covariant(
         backflow_based_equivariance, axis=-3
@@ -276,7 +341,13 @@ def _make_antiequivariance_net_with_products_sign_covariance(
     spin_split, ndense_list, antiequivariance, cyclic_spins, ion_pos
 ):
     compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=cyclic_spins)
+    backflow = _get_backflow(
+        spin_split,
+        ndense_list,
+        cyclic_spins=cyclic_spins,
+        use_transformer=False,
+        num_heads=1,
+    )
 
     array_list_sign_covariance = sign_sym.ProductsSignCovariance(
         1, models.weights.get_kernel_initializer("orthogonal")
@@ -372,7 +443,13 @@ def _make_factorized_antisymmetries():
     ) = _get_initial_pos_and_hyperparams()
 
     compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=False)
+    backflow = _get_backflow(
+        spin_split,
+        ndense_list,
+        cyclic_spins=False,
+        use_transformer=False,
+        num_heads=1,
+    )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
@@ -406,7 +483,13 @@ def _make_generic_antisymmetry():
         ndense_list,
     ) = _get_initial_pos_and_hyperparams()
     compute_input_streams = _get_compute_input_streams(ion_pos)
-    backflow = _get_backflow(spin_split, ndense_list, cyclic_spins=True)
+    backflow = _get_backflow(
+        spin_split,
+        ndense_list,
+        cyclic_spins=True,
+        use_transformer=False,
+        num_heads=1,
+    )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
     )
