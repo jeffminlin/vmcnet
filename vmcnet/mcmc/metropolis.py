@@ -226,7 +226,7 @@ def burn_data(
 
 
 def gaussian_proposal(
-    positions: Array, std_move: jnp.float32, key: PRNGKey
+    positions: Array, std_move: jnp.float32, key: PRNGKey, discrete: bool=False, cyclic: int=0
 ) -> Tuple[Array, PRNGKey]:
     """Simple symmetric gaussian proposal in all positions at once.
 
@@ -234,12 +234,20 @@ def gaussian_proposal(
         positions (Array): original positions
         std_move (jnp.float32): standard deviation of the moves
         key (PRNGKey): an array with shape (2,) representing a jax PRNG key
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         (Array, Array): (new positions, new key split from previous)
     """
     key, subkey = jax.random.split(key)
-    return positions + std_move * jax.random.normal(subkey, shape=positions.shape), key
+    new_positions=positions + std_move * jax.random.normal(subkey, shape=positions.shape)
+
+    if discrete:
+        new_positions=jnp.round(new_positions)
+    if cyclic != 0:
+        new_positions=new_positions%cyclic
+    return new_positions, key
 
 
 def metropolis_symmetric_acceptance(

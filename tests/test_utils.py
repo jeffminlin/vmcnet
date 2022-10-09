@@ -57,6 +57,8 @@ def make_dummy_log_f():
     return f, log_f
 
 
+
+
 def make_dummy_x():
     """Make a simple array of inputs."""
     return jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])

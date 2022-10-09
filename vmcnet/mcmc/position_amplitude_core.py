@@ -122,6 +122,8 @@ def distribute_position_amplitude_data(
 def make_position_amplitude_gaussian_proposal(
     model_apply: ModelApply[P],
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
+    discrete: bool=False,
+    cyclic: int=0,
 ) -> Callable[
     [P, PositionAmplitudeData, PRNGKey], Tuple[PositionAmplitudeData, PRNGKey]
 ]:
@@ -134,8 +136,10 @@ def make_position_amplitude_gaussian_proposal(
         model_apply (Callable): function which evaluates a model. Has signature
             (params, position) -> amplitude
         get_std_move (Callable): function which gets the standard deviation of the
-            gaussian move, which can optionally depend on the data. Has signature
-            (PositionAmplitudeData) -> std_move
+        gaussian move, which can optionally depend on the data. Has signature
+        (PositionAmplitudeData) -> std_move
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: proposal function which can be passed to the main VMC routine. Has
@@ -145,7 +149,7 @@ def make_position_amplitude_gaussian_proposal(
     def proposal_fn(params: P, data: PositionAmplitudeData, key: PRNGKey):
         std_move = get_std_move(data)
         proposed_position, key = metropolis.gaussian_proposal(
-            data["walker_data"]["position"], std_move, key
+            data["walker_data"]["position"], std_move, key, discrete=discrete, cyclic=cyclic
         )
         proposed_amplitude = model_apply(params, proposed_position)
         return (
@@ -251,6 +255,8 @@ def make_position_amplitude_gaussian_metropolis_step(
     get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
     update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None,
     logabs: bool = True,
+    discrete: bool = False,
+    cyclic: int = 0,
 ) -> metropolis.MetropolisStep[P, PositionAmplitudeData]:
     """Make a gaussian proposal with Metropolis acceptance for PositionAmplitudeData.
 
@@ -265,13 +271,15 @@ def make_position_amplitude_gaussian_metropolis_step(
             (old_move_metadata, move_mask) -> new_move_metadata.
         logabs (bool, optional): whether the provided amplitudes represent psi
             (logabs = False) or log|psi| (logabs = True). Defaults to True.
+        discrete (bool): lattice vs continuous space
+        cyclic (int): 0 if in infinite space. Indicates side length/periodicity otherwise
 
     Returns:
         Callable: function which does a metropolis step. Has the signature
             (params, PositionAmplitudeData, key)
             -> (mean acceptance probability, PositionAmplitudeData, new_key)
     """
-    proposal_fn = make_position_amplitude_gaussian_proposal(model_apply, get_std_move)
+    proposal_fn = make_position_amplitude_gaussian_proposal(model_apply, get_std_move,discrete=discrete,cyclic=cyclic)
     accept_fn = make_position_amplitude_metropolis_symmetric_acceptance(logabs=logabs)
     metrop_step_fn = metropolis.make_metropolis_step(
         proposal_fn,
@@ -279,3 +287,9 @@ def make_position_amplitude_gaussian_metropolis_step(
         make_position_amplitude_update(update_move_metadata_fn),
     )
     return metrop_step_fn
+
+
+
+
+
+
