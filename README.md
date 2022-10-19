@@ -1,7 +1,6 @@
 ## branch info
 
-this branch is to experiment with the ansatz (Gil wrote on the background). The main catch there is to use the reduce mean for the row and reduce mean for the column in the two electron stream. The effect is similar to that in the second ansatz. The changes mainly happen in the `core.py` and `equivariance.py`. 
-
+this branch is to experiment with the ansatz (Lin wrote on the note). The main catch is that Lin's ansatz is to make the two electron stream more expressive and put the transformer layer in the two electron stream. In some sense, the two electron stream there is inexplicitly added. 
 # vmcnet
 Flexible, general-purpose VMC framework, built on [JAX](https://github.com/google/jax).
 
