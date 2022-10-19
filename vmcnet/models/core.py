@@ -12,7 +12,7 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
-
+from icecream import ic
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
 
@@ -99,6 +99,111 @@ def _valid_skip(x: Array, y: Array):
 
 def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
+
+
+
+def constant():
+    """Builds an initializer that returns arrays with a constant ``value``.
+    Args:
+      value: the constant value with which to fill the initializer.
+      dtype: optional; the initializer's default dtype.
+    >>> import jax, jax.numpy as jnp
+    >>> initializer(jax.random.PRNGKey(42), vec / mat)
+    """
+
+    def init(key, value):
+        return value
+
+    return init
+
+
+class AttentionLayer(flax.linen.Module):
+    features: int = None
+    query_init: Callable = flax.linen.initializers.lecun_normal()
+    key_init: Callable = flax.linen.initializers.lecun_normal()
+    value_init: Callable = flax.linen.initializers.lecun_normal()
+    # value_mat: jnp.ndarray = jnp.zeros((10, 10))
+
+    @flax.linen.compact
+    def __call__(self, inputs):
+
+        w_key = self.param(
+            "key",
+            self.key_init,  # Initialization function
+            (inputs.shape[-1], inputs.shape[-1]),
+        )  # shape info.
+        w_query = self.param(
+            "query",
+            self.key_init,  # Initialization function
+            (inputs.shape[-1], inputs.shape[-1]),
+        )  # shape info.
+        w_value = self.param(
+            "value",
+            self.key_init,  # Initialization function
+            (inputs.shape[-1], inputs.shape[-1]),
+        )  # shape info.
+
+        # fix the weight
+        # w_query = jnp.zeros((inputs.shape[-1], inputs.shape[-1]))
+        # w_value = jnp.eye(inputs.shape[-1])
+
+        # these are trainable
+        # w_query = self.param(
+        #     "query", self.query_init, jnp.zeros((inputs.shape[-1], inputs.shape[-1]))
+        # )
+        # w_value = self.param("value", self.value_init, jnp.eye(inputs.shape[-1]))
+
+        q = inputs @ w_query
+        k = inputs @ w_key
+        v = inputs @ w_value
+        return self.attention(q, k, v) + inputs
+        # return self.attention(q, k, v) 
+
+
+    def attention(self, q, k, v):
+        dim = q.shape[-1]
+        scale = 1 / jnp.sqrt(dim)
+
+        q = q * scale
+        sim = jnp.einsum("... i d, ... j d -> ... i j", q, k)
+
+        attn = flax.linen.softmax(sim, axis=-1)
+        return attn @ v
+
+
+# class AttentionLayer(flax.linen.Module):
+#     """Custom Attetion Layer for the neural network"""
+#     # features: int = None
+#     query_init: Callable = flax.linen.initializers.lecun_normal()
+#     key_init: Callable = flax.linen.initializers.lecun_normal()
+#     value_init: Callable = flax.linen.initializers.lecun_normal()
+
+#     @flax.linen.compact
+#     def __call__(self, inputs):
+#         # if self.features == None: 
+#         features = inputs.shape[-1]
+#         w_key = self.param(
+#             "key",
+#             self.key_init,  # Initialization function
+#             (inputs.shape[-1], features),
+#         )  # shape info.
+#         w_query = jnp.zeros((inputs.shape[-1], features))
+#         w_value = jnp.eye(features)
+
+#         q = inputs @ w_query
+#         k = inputs @ w_key
+#         v = inputs @ w_value
+#         return self.attention(q, k, v)
+
+#     def attention(self, q, k, v):
+#         dim = q.shape[-1]
+#         scale = 1 / jnp.sqrt(dim)
+
+#         q = q * scale
+#         sim = jnp.einsum("... i d, ... j d -> ... i j", q, k)
+
+#         attn = flax.linen.softmax(sim, axis=-1)
+#         return attn @ v
 
 
 class Module(flax.linen.Module):

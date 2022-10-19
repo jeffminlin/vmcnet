@@ -35,7 +35,7 @@ from vmcnet.utils.typing import (
 )
 
 FLAGS = flags.FLAGS
-
+import wandb
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
     logging.info("Reload configuration: \n%s", reload_config)
@@ -498,6 +498,17 @@ def run_molecule() -> None:
     logdir = _get_logdir_and_save_config(reload_config, config)
 
     dtype_to_use = _get_dtype(config)
+
+    wandb.init(
+                reinit=True,
+                config=config,
+                project='vmc',
+                settings=wandb.Settings(
+                    start_method="thread",
+                    _disable_stats=True,
+                ),
+            )
+
 
     ion_pos, ion_charges, nelec = _get_electron_ion_config_as_arrays(
         config, dtype=dtype_to_use
