@@ -117,6 +117,64 @@ def constant():
     return init
 
 
+
+class GeneralAttentionLayer(flax.linen.Module):
+    """The difference between the general and self attention one is that 
+    the general one can attend to other information, not necessarily itself.
+    """
+    features: int = None
+    query_init: Callable = flax.linen.initializers.lecun_normal()
+    key_init: Callable = flax.linen.initializers.lecun_normal()
+    value_init: Callable = flax.linen.initializers.lecun_normal()
+    # value_mat: jnp.ndarray = jnp.zeros((10, 10))
+
+    @flax.linen.compact
+    def __call__(self, query_inputs, value_inputs):
+
+        w_key = self.param(
+            "key",
+            self.key_init,  # Initialization function
+            (query_inputs.shape[-1], query_inputs.shape[-1]),
+        )  # shape info.
+        w_query = self.param(
+            "query",
+            self.key_init,  # Initialization function
+            (query_inputs.shape[-1], query_inputs.shape[-1]),
+        )  # shape info.
+        w_value = self.param(
+            "value",
+            self.key_init,  # Initialization function
+            (query_inputs.shape[-1], query_inputs.shape[-1]),
+        )  # shape info.
+
+        # fix the weight
+        # w_query = jnp.zeros((inputs.shape[-1], inputs.shape[-1]))
+        # w_value = jnp.eye(inputs.shape[-1])
+
+        # these are trainable
+        # w_query = self.param(
+        #     "query", self.query_init, jnp.zeros((inputs.shape[-1], inputs.shape[-1]))
+        # )
+        # w_value = self.param("value", self.value_init, jnp.eye(inputs.shape[-1]))
+
+        q = query_inputs @ w_query
+        k = value_inputs @ w_key
+        v = value_inputs @ w_value
+        return self.attention(q, k, v) + query_inputs
+        # return self.attention(q, k, v) 
+
+
+    def attention(self, q, k, v):
+        dim = q.shape[-1]
+        scale = 1 / jnp.sqrt(dim)
+
+        q = q * scale
+        sim = jnp.einsum("... i d, ... j d -> ... i j", q, k)
+
+        attn = flax.linen.softmax(sim, axis=-1)
+        return attn @ v
+
+
 class AttentionLayer(flax.linen.Module):
     features: int = None
     query_init: Callable = flax.linen.initializers.lecun_normal()
