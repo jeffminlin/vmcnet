@@ -4,6 +4,7 @@ import datetime
 import functools
 import logging
 import os
+import subprocess
 from typing import Optional, Tuple
 
 import flax
@@ -52,6 +53,19 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
     else:
         logdir = None
     return logdir
+
+
+def _save_git_hash(logdir):
+    if logdir is None:
+        return
+
+    git_hash = (
+        subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+    )
+    git_file = os.path.join(logdir, "git_hash.txt")
+    writer = open(git_file, "wt")
+    writer.write(git_hash)
+    writer.close()
 
 
 def _get_dtype(config: ConfigDict) -> jnp.dtype:
@@ -496,6 +510,7 @@ def run_molecule() -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
     logdir = _get_logdir_and_save_config(reload_config, config)
+    _save_git_hash(logdir)
 
     dtype_to_use = _get_dtype(config)
 
