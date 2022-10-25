@@ -130,8 +130,6 @@ def test_save_best_checkpoint(mocker):
 
 def _test_nans_checkpointing(
     mocker,
-    checkpoint_if_nans: bool,
-    only_checkpoint_first_nans: bool,
     metric_nans: List[bool],
     new_param_nans: List[bool],
     expected_calls: List,
@@ -161,8 +159,6 @@ def _test_nans_checkpointing(
             metrics_writer,
             checkpoint_dir_name,
             "",
-            checkpoint_if_nans=checkpoint_if_nans,
-            only_checkpoint_first_nans=only_checkpoint_first_nans,
             saved_nans_checkpoint=saved_nans_checkpoint,
         )
 
@@ -185,7 +181,7 @@ def _test_nans_checkpointing(
             saved_nans_checkpoint = False
 
             for epoch in range(len(metrics_list)):
-                _, saved_nans_checkpoint = save_regular_checkpoints(
+                _, exist_nans, saved_nans_checkpoint = save_regular_checkpoints(
                     epoch,
                     checkpoint_writer,
                     metrics_writer,
@@ -200,36 +196,15 @@ def _test_nans_checkpointing(
 
 
 @pytest.mark.slow
-def test_nans_checkpointing_when_off(mocker):
-    """Test no checkpoints are written if nans checkpointing is off."""
-    metric_nans = [False, False, True, False, False, True]
-    new_param_nans = [True, False, False, False, False, True]
-    expected_calls = []
-    checkpoint_if_nans = False
-    only_checkpoint_first_nans = True
-    _test_nans_checkpointing(
-        mocker,
-        checkpoint_if_nans,
-        only_checkpoint_first_nans,
-        metric_nans,
-        new_param_nans,
-        expected_calls,
-    )
-
-
-@pytest.mark.slow
 def test_checkpoint_first_nans_for_metric_nans(mocker):
     """Test checkpointing first nans only, when first nans come from metrics."""
     _, _, checkpoint_dir = _get_fake_filepaths()
     metric_nans = [False, False, True, False, False, True]
     new_param_nans = [False, False, False, False, True, False]
     expected_calls = [(checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2))]
-    checkpoint_if_nans = True
-    only_checkpoint_first_nans = True
+
     _test_nans_checkpointing(
         mocker,
-        checkpoint_if_nans,
-        only_checkpoint_first_nans,
         metric_nans,
         new_param_nans,
         expected_calls,
@@ -243,36 +218,9 @@ def test_checkpoint_first_nans_for_param_nans(mocker):
     metric_nans = [False, False, False, True, False, True]
     new_param_nans = [False, True, True, False, True, False]
     expected_calls = [(checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1))]
-    checkpoint_if_nans = True
-    only_checkpoint_first_nans = True
+
     _test_nans_checkpointing(
         mocker,
-        checkpoint_if_nans,
-        only_checkpoint_first_nans,
-        metric_nans,
-        new_param_nans,
-        expected_calls,
-    )
-
-
-@pytest.mark.slow
-def test_nans_checkpointing_when_checkpointing_all_nans(mocker):
-    """Test all relevant checkpoints are written if checkpointing all nans."""
-    _, _, checkpoint_dir = _get_fake_filepaths()
-    metric_nans = [False, False, True, False, False, True]
-    new_param_nans = [False, True, True, False, True, False]
-    expected_calls = [
-        (checkpoint_dir, "nans_2.npz", _get_fake_checkpoint_data(1)),
-        (checkpoint_dir, "nans_3.npz", _get_fake_checkpoint_data(2)),
-        (checkpoint_dir, "nans_5.npz", _get_fake_checkpoint_data(4)),
-        (checkpoint_dir, "nans_6.npz", _get_fake_checkpoint_data(5)),
-    ]
-    checkpoint_if_nans = True
-    only_checkpoint_first_nans = False
-    _test_nans_checkpointing(
-        mocker,
-        checkpoint_if_nans,
-        only_checkpoint_first_nans,
         metric_nans,
         new_param_nans,
         expected_calls,
