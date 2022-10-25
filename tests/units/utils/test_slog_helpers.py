@@ -9,7 +9,7 @@ from vmcnet.utils.typing import Array, SLArray
 
 
 def _get_array_and_slog_vals() -> Tuple[Array, SLArray]:
-    vals = jnp.array([jnp.e, -jnp.e**0.5, 0, 1])
+    vals = jnp.array([jnp.e, -jnp.e ** 0.5, 0, 1])
     signs = jnp.array([1, -1, 0, 1])
     logs = jnp.array([1, 0.5, -jnp.inf, 0])
     return (vals, (signs, logs))

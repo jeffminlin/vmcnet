@@ -432,22 +432,20 @@ def _burn_and_run_vmc(
     key: PRNGKey,
     should_checkpoint: bool = True,
 ) -> Tuple[P, S, D, PRNGKey]:
+    continue_through_nans = run_config.continue_through_nans
+
     if should_checkpoint:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every
         checkpoint_dir = run_config.checkpoint_dir
         checkpoint_variance_scale = run_config.checkpoint_variance_scale
         nhistory_max = run_config.nhistory_max
-        checkpoint_if_nans = run_config.checkpoint_if_nans
-        only_checkpoint_first_nans = run_config.only_checkpoint_first_nans
     else:
         checkpoint_every = None
         best_checkpoint_every = None
         checkpoint_dir = ""
         checkpoint_variance_scale = 0
         nhistory_max = 0
-        checkpoint_if_nans = False
-        only_checkpoint_first_nans = True
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, run_config.nburn, params, data, key
@@ -466,8 +464,7 @@ def _burn_and_run_vmc(
         best_checkpoint_every=best_checkpoint_every,
         checkpoint_dir=checkpoint_dir,
         checkpoint_variance_scale=checkpoint_variance_scale,
-        checkpoint_if_nans=checkpoint_if_nans,
-        only_checkpoint_first_nans=only_checkpoint_first_nans,
+        continue_through_nans=continue_through_nans,
         record_amplitudes=run_config.record_amplitudes,
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,

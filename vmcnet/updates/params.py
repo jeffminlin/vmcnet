@@ -251,7 +251,7 @@ def constrain_norm(
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
     sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
-    sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
+    sq_norm_scaled_grads = sq_norm_grads * learning_rate ** 2
 
     # Sync the norms here, see:
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585

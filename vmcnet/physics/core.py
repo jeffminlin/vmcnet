@@ -271,7 +271,7 @@ def create_value_and_grad_energy_fn(
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
             # do these in a nan-safe way. This makes nans more visible and makes sure
-            # the command-line checkpoint_if_nans flag will work properly.
+            # nans checkpointing will work properly.
             energy_noclip, variance_noclip = get_statistics_from_local_energy(
                 local_energies_noclip, nchains, nan_safe=False
             )

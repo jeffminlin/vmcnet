@@ -45,7 +45,7 @@ def test_resnet_in_regular_and_log_domain_match():
 
     # Define activation function with simple analog in log domain
     def activation_fn(x: Array) -> Array:
-        return jnp.sign(x) * (x**2) / 10
+        return jnp.sign(x) * (x ** 2) / 10
 
     # Define log domain version of the same activation function
     def log_domain_activation_fn(x: SLArray) -> SLArray:

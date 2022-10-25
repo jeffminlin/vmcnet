@@ -22,8 +22,7 @@ def vmc_loop(
     best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
-    checkpoint_if_nans: bool = False,
-    only_checkpoint_first_nans: bool = True,
+    continue_through_nans: bool = False,
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
@@ -75,13 +74,8 @@ def vmc_loop(
             error-adjusted running avg of the energy. Higher means the variance is more
             important, and lower means the energy is more important. See
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
-        checkpoint_if_nans (bool, optional): whether to save checkpoints when
-            nan energy values are recorded. Defaults to False.
-        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
-            first time nans are encountered, or every time. Useful to capture a nan
-            checkpoint without risking writing too many checkpoints if the optimization
-            starts to hit nans most or every epoch after some point. Only relevant if
-            checkpoint_if_nans is True. Defaults to True.
+        continue_through_nans (bool, optional): whether to continue the vmc loop even
+            after nans are encountered. Defaults to False.
         nhistory_max (int, optional): How much history to keep in the running histories
             of the energy and variance. Defaults to 200.
 
@@ -126,6 +120,7 @@ def vmc_loop(
                 checkpoint_metric,
                 checkpoint_str,
                 best_checkpoint_data,
+                exist_nans,
                 saved_nans_checkpoint,
             ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
                 epoch,
@@ -147,16 +142,14 @@ def vmc_loop(
                 best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
-                checkpoint_if_nans=checkpoint_if_nans,
-                only_checkpoint_first_nans=only_checkpoint_first_nans,
                 saved_nans_checkpoint=saved_nans_checkpoint,
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
-            # TODO: add flag which gives a way to break out of the VMC loop when the
-            # first nan has been hit, to keep jobs from running past useful output in
-            # some cases
+
+            if exist_nans and not continue_through_nans:
+                break
 
         utils.checkpoint.finish_checkpointing(
             checkpoint_writer, best_checkpoint_data, logdir

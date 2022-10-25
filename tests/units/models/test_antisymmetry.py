@@ -78,7 +78,7 @@ def _vandermonde_product(x):
 
 def _diagonal_product(flattened_square_matrix, n):
     """Get product of diagonal entries of a flattened square matrix."""
-    assert flattened_square_matrix.shape[-1] == n**2
+    assert flattened_square_matrix.shape[-1] == n ** 2
     square_matrix = jnp.reshape(
         flattened_square_matrix, flattened_square_matrix.shape[:-1] + (n, n)
     )
