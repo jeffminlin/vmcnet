@@ -430,22 +430,22 @@ def _burn_and_run_vmc(
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
-    should_checkpoint: bool = True,
+    is_eval: bool,
 ) -> Tuple[P, S, D, PRNGKey]:
-    continue_through_nans = run_config.continue_through_nans
-
-    if should_checkpoint:
+    if not is_eval:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every
         checkpoint_dir = run_config.checkpoint_dir
         checkpoint_variance_scale = run_config.checkpoint_variance_scale
         nhistory_max = run_config.nhistory_max
+        continue_through_nans = run_config.continue_through_nans
     else:
         checkpoint_every = None
         best_checkpoint_every = None
         checkpoint_dir = ""
         checkpoint_variance_scale = 0
         nhistory_max = 0
+        continue_through_nans = False
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, run_config.nburn, params, data, key
@@ -459,6 +459,7 @@ def _burn_and_run_vmc(
         walker_fn,
         update_param_fn,
         key,
+        is_eval=is_eval,
         logdir=logdir,
         checkpoint_every=checkpoint_every,
         best_checkpoint_every=best_checkpoint_every,
@@ -556,7 +557,7 @@ def run_molecule() -> None:
         update_param_fn,
         get_amplitude_fn,
         key,
-        should_checkpoint=True,
+        is_eval=False,
     )
 
     logging.info("Completed VMC! Evaluating")
@@ -599,7 +600,7 @@ def run_molecule() -> None:
         eval_update_param_fn,
         get_amplitude_fn,
         key,
-        should_checkpoint=False,
+        is_eval=True,
     )
 
     # need to check for local_energy.txt because when config.eval.nepochs=0 the file is

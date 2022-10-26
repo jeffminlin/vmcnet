@@ -17,6 +17,7 @@ def vmc_loop(
     walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
     key: PRNGKey,
+    is_eval: bool = False,
     logdir: str = None,
     checkpoint_every: Optional[int] = 1000,
     best_checkpoint_every: Optional[int] = 100,
@@ -54,6 +55,8 @@ def vmc_loop(
         key (PRNGKey): an array with shape (2,) representing a jax PRNG key passed
             to proposal_fn and used to randomly accept proposals with probabilities
             output by acceptance_fn
+        is_eval (bool): whether or not this is an evaluation run (rather than an
+            optimization run).
         logdir (str, optional): name of parent log directory. If None, no checkpointing
             is done. Defaults to None.
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
@@ -111,7 +114,8 @@ def vmc_loop(
                 params, data, optimizer_state, key
             )
 
-            if metrics is None:  # don't checkpoint if no metrics to checkpoint
+            # Don't checkpoint if no metrics to checkpoint, or if in evaluation mode.
+            if metrics is None or is_eval:
                 continue
 
             metrics["accept_ratio"] = accept_ratio
