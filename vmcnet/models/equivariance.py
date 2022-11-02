@@ -17,7 +17,8 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
-    AttentionLayer
+    AttentionLayer,
+    GeneralAttentionLayer
 )
 from flax.linen import SelfAttention  # noqa
 from flax import linen as nn
@@ -25,6 +26,8 @@ from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer, get_bias_initializer
 import logging
 from icecream import ic
+from jax.experimental.host_callback import call, id_tap, id_print
+
 
 def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> Array:
     """Concatenate a list of arrays starting from the nth and wrapping back around.
@@ -269,6 +272,12 @@ class FermiNetOneElectronLayer(Module):
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
+        self._dense_2e_new = Dense(
+            self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
+        )
+
+        self._layernorm = flax.linen.LayerNorm()
+
         if self.use_transformer:
             logging.info(f'self attention layers: {self.num_heads}, {self.ndense}')
             self._attention_mix_up = AttentionLayer()
@@ -279,6 +288,39 @@ class FermiNetOneElectronLayer(Module):
             self._attention_mix_up_down = AttentionLayer()
             self._attention_mix_down_down = AttentionLayer()
 
+
+
+            # replace the general attention here with built-in multi-head attention
+            # self._general_attn_up = GeneralAttentionLayer()
+            # self._general_attn_down = GeneralAttentionLayer()
+
+            self._general_attn_up = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                qkv_features=self.ndense * self.num_heads,
+                out_features=self.ndense * self.num_heads,
+                use_bias=False,
+                broadcast_dropout=False,
+                deterministic=True,
+                kernel_init=nn.initializers.xavier_uniform(),
+                bias_init=nn.initializers.normal(stddev=1e-6),
+                dtype=jnp.float64,
+            )
+
+            self._ln1 = flax.linen.LayerNorm()
+
+            self._general_attn_down = nn.MultiHeadDotProductAttention(
+                num_heads=self.num_heads,
+                qkv_features=self.ndense * self.num_heads,
+                out_features=self.ndense * self.num_heads,
+                use_bias=False,
+                broadcast_dropout=False,
+                deterministic=True,
+                kernel_init=nn.initializers.xavier_uniform(),
+                bias_init=nn.initializers.normal(stddev=1e-6),
+                dtype=jnp.float64,
+            )
+
+            self._ln2 = flax.linen.LayerNorm()
 
             # self._attention_1e_up = SelfAttention(
             #     num_heads=self.num_heads,
@@ -393,6 +435,8 @@ class FermiNetOneElectronLayer(Module):
 
             # ic([i.shape for i in new_split_2e])
 
+
+            # note here: there is no attention mixing happening!
             split_arrays = _split_mean(
                 split_2e[spin], self.spin_split, axis=-2, keepdims=False
             )  # [j: (..., n[i], d)]
@@ -417,9 +461,68 @@ class FermiNetOneElectronLayer(Module):
         # reconcatenate along the split axis to batch apply the same dense layer for all
         # i, then split over the spins again before returning
         all_spins = jnp.concatenate(concat_2e, axis=-2)
+        ic(all_spins.shape)
+        # jax.debug.print(jnp.max(all_spins))
+        # call(lambda a: print(f"{a}"), jnp.max(all_spins))
+        # id_print(jnp.max(all_spins))
         dense_2e = self._dense_2e(all_spins)
-        # import ipdb; ipdb.set_trace()
         return jnp.split(dense_2e, self.spin_split, axis=-2)
+
+
+    def _compute_transformed_2e_means_new(self, in_1e: Array) -> ArrayList:
+        """Apply a dense layer to the concatenated averages of the 2e stream.
+
+        The mixing of the two-electron part of the one-electron stream takes the form
+
+        (..., n_total, n_total, d)
+            -> split along a particle axis to get [i: (..., n[i], n_total, d)]
+            -> for each i, do a split and average over the other particle axis (but
+                don't keep the averaged axis) to get [i: [j: (..., n[i], d)]]
+            -> for each i, concatenate the splits to get [i: (..., n[i], d * nspins)]
+            -> apply the same linear transformation for all i to get
+                [i: (..., n[i], d')]
+
+        As in the mixing of the one-electron part, the concatenation step comes with a
+        choice of what order in which to concatenate the averages. Here if
+        self.cyclic_spins is True, the ith spin is concatenated so that the j=i average
+        is first in the concatenation and the other spins follow cyclically, which is
+        invariant under cyclic permutations of the spin. If self.cyclic_spins is False,
+        all spins are concatenated in the same order, the spin order induced from the
+        particle ordering and the specified spin split.
+        """
+        # split to get [i: (..., n[i], n_total, d)]
+    
+
+        # hardcode the split
+        splits = (3, )
+        axis = -2 
+        keepdims = True
+
+
+        in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
+
+        in_2e_up = self._ln1(self._general_attn_up(in_1e_up, in_1e) + in_1e_up)
+        in_2e_down = self._ln2(self._general_attn_down(in_1e_down, in_1e) + in_1e_down)
+
+        # ic(max(in_2e_up), max(in_2e_down))
+
+        # in_2e_up = self._general_attn_up(in_1e_up, in_1e_up)
+        # in_2e_down = self._general_attn_down(in_1e_down, in_1e_down)
+
+        # ic(in_1e_up.shape, in_1e_down.shape)
+        # ic(in_2e_up.shape, in_2e_down.shape)
+        concat_2e = [in_2e_up, in_2e_down]
+        all_spins = jnp.concatenate(concat_2e, axis=-2)
+        # jax.debug.print(jnp.max(all_spins))
+        # call(lambda a: print(f"{a}"), jnp.max(all_spins))
+        # id_print(jnp.max(all_spins))
+
+        dense_2e = self._dense_2e_new(all_spins)
+        dense_2e = self._layernorm(dense_2e) + dense_2e
+        return jnp.split(dense_2e, self.spin_split, axis=-2)
+
+
+
 
     def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
         """Compute the 1e mixed for the given input.
@@ -468,7 +571,7 @@ class FermiNetOneElectronLayer(Module):
             return self._compute_transformed_1e_means(split_1e_means)
 
     def __call__(  # type: ignore[override]
-        self, in_1e: Array, in_2e: Array = None
+        self, in_1e: Array, in_2e: Array = None, index: int = 0
     ) -> Array:
         """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
 
@@ -519,15 +622,22 @@ class FermiNetOneElectronLayer(Module):
         # version of DeepSet's Lemma 3: https://arxiv.org/pdf/1703.06114.pdf
         dense_out = tree_sum(dense_unmixed_split, dense_mixed_split)
 
-        # import ipdb; ipdb.set_trace()
 
         if in_2e is not None:
-            dense_2e_split = self._compute_transformed_2e_means(in_2e)
-            dense_out = tree_sum(dense_out, dense_2e_split)
+            ic(index)
+            if index == 0: 
+                dense_2e_split = self._compute_transformed_2e_means(in_2e)
+                dense_out = tree_sum(dense_out, dense_2e_split)
+            else: 
+                dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
+                dense_out = tree_sum(dense_out, dense_2e_split_new)
+
+
 
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
 
+        # import ipdb; ipdb.set_trace()
         if self.skip_connection and _valid_skip(in_1e, nonlinear_out):
             nonlinear_out = self.skip_connection_scale * (nonlinear_out + in_1e)
 
@@ -643,8 +753,12 @@ class FermiNetResidualBlock(Module):
         self._one_electron_layer = self.one_electron_layer
         self._two_electron_layer = self.two_electron_layer
 
+        self._general_attn_up = GeneralAttentionLayer()
+        self._general_attn_down = GeneralAttentionLayer()
+
+
     def __call__(  # type: ignore[override]
-        self, in_1e: Array, in_2e: Array = None
+        self, in_1e: Array, in_2e: Array = None, index: int = 0
     ) -> Tuple[Array, Optional[Array]]:
         """Apply the one-electron layer and optionally the two-electron layer.
 
@@ -658,12 +772,33 @@ class FermiNetResidualBlock(Module):
             is the output from the one-electron layer and out_2e is the output of the
             two-electron stream
         """
-        out_1e = self._one_electron_layer(in_1e, in_2e)
+        out_1e = self._one_electron_layer(in_1e, in_2e, index)
 
         out_2e = in_2e
         if self.two_electron_layer is not None and in_2e is not None:
             out_2e = self._two_electron_layer(in_2e)
 
+        # ic(len(out_1e), len(out_2e))
+        # ic(out_1e.shape, out_2e.shape)
+
+        # NOTE: there is nothing happening here
+        # hardcode the split
+        # splits = (3, )
+        # axis = -2 
+        # keepdims = True
+
+
+        # out_1e_up, out_1e_down = jnp.split(out_1e, splits, axis=axis)
+        # out_2e_up = self._ln1(self._general_attn_up(out_1e, out_1e_up) + out_1e)
+        # out_2e_down = self._ln2(self._general_attn_down(out_1e, out_1e_down) + out_1e)
+
+        # ic(out_1e_up.shape, out_1e_down.shape)
+        # ic(out_2e_up.shape, out_2e_down.shape)
+        # ic(out_2e.shape)
+
+        # split_x_mean = jax.tree_map(
+        #     functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
+        # )
         return out_1e, out_2e
 
 
@@ -693,6 +828,8 @@ class FermiNetBackflow(Module):
     def setup(self):
         """Setup called residual blocks."""
         self._residual_block_list = [block for block in self.residual_blocks]
+        # ic(self._residual_block_list, len(self._residual_block_list))
+        # exit()
 
     def __call__(  # type: ignore[override]
         self,
@@ -711,8 +848,8 @@ class FermiNetBackflow(Module):
             (Array): the output of the one-electron stream after applying
             self.residual_blocks to the initial input streams.
         """
-        for block in self._residual_block_list:
-            stream_1e, stream_2e = block(stream_1e, stream_2e)
+        for i, block in enumerate(self._residual_block_list):
+            stream_1e, stream_2e = block(stream_1e, stream_2e, i)
 
         return stream_1e
 

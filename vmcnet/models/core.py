@@ -160,7 +160,10 @@ class GeneralAttentionLayer(flax.linen.Module):
         q = query_inputs @ w_query
         k = value_inputs @ w_key
         v = value_inputs @ w_value
-        return self.attention(q, k, v) + query_inputs
+        out = self.attention(q, k, v) + query_inputs
+
+        out = flax.linen.LayerNorm()(out)
+        return out
         # return self.attention(q, k, v) 
 
 
