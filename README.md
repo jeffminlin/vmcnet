@@ -1,6 +1,3 @@
-## branch info
-
-this branch is to experiment with the ansatz (Lin wrote on the note). The main catch is that Lin's ansatz is to make the two electron stream more expressive and put the transformer layer in the two electron stream. In some sense, the two electron stream there is inexplicitly added. 
 # vmcnet
 Flexible, general-purpose VMC framework, built on [JAX](https://github.com/google/jax).
 
