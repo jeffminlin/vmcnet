@@ -17,16 +17,11 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
-    AttentionLayer,
-    GeneralAttentionLayer
 )
-from flax.linen import SelfAttention  # noqa
+from flax.linen import MultiHeadDotProductAttention  # noqa
 from flax import linen as nn
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
 from .weights import WeightInitializer, get_bias_initializer
-import logging
-from icecream import ic
-from jax.experimental.host_callback import call, id_tap, id_print
 
 
 def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> Array:
@@ -276,25 +271,13 @@ class FermiNetOneElectronLayer(Module):
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
-        self._layernorm = flax.linen.LayerNorm()
+        # adding the layernorm
+        self._layernorm = nn.LayerNorm()
 
         if self.use_transformer:
-            logging.info(f'self attention layers: {self.num_heads}, {self.ndense}')
-            self._attention_mix_up = AttentionLayer()
-            self._attention_mix_down = AttentionLayer()
-
-            self._attention_mix_up_up = AttentionLayer()
-            self._attention_mix_down_up = AttentionLayer()
-            self._attention_mix_up_down = AttentionLayer()
-            self._attention_mix_down_down = AttentionLayer()
-
-
-
-            # replace the general attention here with built-in multi-head attention
-            # self._general_attn_up = GeneralAttentionLayer()
-            # self._general_attn_down = GeneralAttentionLayer()
-
-            self._general_attn_up = nn.MultiHeadDotProductAttention(
+            
+            # build two multi-head attention layers
+            self._general_attn_up = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
                 out_features=self.ndense * self.num_heads,
@@ -306,9 +289,7 @@ class FermiNetOneElectronLayer(Module):
                 dtype=jnp.float64,
             )
 
-            self._ln1 = flax.linen.LayerNorm()
-
-            self._general_attn_down = nn.MultiHeadDotProductAttention(
+            self._general_attn_down = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
                 out_features=self.ndense * self.num_heads,
@@ -320,28 +301,10 @@ class FermiNetOneElectronLayer(Module):
                 dtype=jnp.float64,
             )
 
-            self._ln2 = flax.linen.LayerNorm()
+            # the layer norm for the transformer stream
+            self._layernorm1 = nn.LayerNorm()
+            self._layernorm2 = nn.LayerNorm()
 
-            # self._attention_1e_up = SelfAttention(
-            #     num_heads=self.num_heads,
-            #     qkv_features=self.ndense * self.num_heads,
-            #     out_features=self.ndense,
-            #     use_bias=False,
-            #     broadcast_dropout=False,
-            #     deterministic=True,
-            #     kernel_init=nn.initializers.xavier_uniform(),
-            #     bias_init=nn.initializers.normal(stddev=1e-6),
-            # )
-            # self._attention_1e_down = SelfAttention(
-            #     num_heads=self.num_heads,
-            #     qkv_features=self.ndense * self.num_heads,
-            #     out_features=self.ndense,
-            #     use_bias=False,
-            #     broadcast_dropout=False,
-            #     deterministic=True,
-            #     kernel_init=nn.initializers.xavier_uniform(),
-            #     bias_init=nn.initializers.normal(stddev=1e-6),
-            # )
             self._mixed_dense = Dense(
                 self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
             )
