@@ -411,8 +411,15 @@ class FermiNetOneElectronLayer(Module):
 
         in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
 
-        in_2e_up = self._layernorm1(self._general_attn_up(in_1e_up, in_1e) + in_1e_up)
-        in_2e_down = self._layernorm2(self._general_attn_down(in_1e_down, in_1e) + in_1e_down)
+        if self.use_transformer:
+            in_2e_up = self._layernorm1(
+                self._general_attn_up(in_1e_up, in_1e) + in_1e_up
+            )
+            in_2e_down = self._layernorm2(
+                self._general_attn_down(in_1e_down, in_1e) + in_1e_down
+            )
+        else:
+            in_2e_up, in_2e_down = in_1e_up, in_1e_down
         concat_2e = [in_2e_up, in_2e_down]
         all_spins = jnp.concatenate(concat_2e, axis=-2)
 
