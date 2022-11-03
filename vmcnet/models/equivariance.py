@@ -408,9 +408,9 @@ class FermiNetOneElectronLayer(Module):
         # split to get [i: (..., n[i], n_total, d)]
 
         # hardcode the split
+        # TODO (jim): make this more general
         splits = (3, )
         axis = -2 
-        keepdims = True
 
         in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
 
@@ -551,8 +551,6 @@ class FermiNetTwoElectronLayer(Module):
         (..., n_total, n_total, d'), and optionally adding a skip connection. The
         function itself is just a standard residual network layer.
         """
- 
-
         x_mean1 = self._attention_mix_1(x)
         x_mean2 = jnp.swapaxes(x, -3, -2)
         x_mean2 = self._attention_mix_2(x_mean2)
@@ -592,10 +590,6 @@ class FermiNetResidualBlock(Module):
         self._one_electron_layer = self.one_electron_layer
         self._two_electron_layer = self.two_electron_layer
 
-        self._general_attn_up = GeneralAttentionLayer()
-        self._general_attn_down = GeneralAttentionLayer()
-
-
     def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Array = None, index: int = 0
     ) -> Tuple[Array, Optional[Array]]:
@@ -617,27 +611,6 @@ class FermiNetResidualBlock(Module):
         if self.two_electron_layer is not None and in_2e is not None:
             out_2e = self._two_electron_layer(in_2e)
 
-        # ic(len(out_1e), len(out_2e))
-        # ic(out_1e.shape, out_2e.shape)
-
-        # NOTE: there is nothing happening here
-        # hardcode the split
-        # splits = (3, )
-        # axis = -2 
-        # keepdims = True
-
-
-        # out_1e_up, out_1e_down = jnp.split(out_1e, splits, axis=axis)
-        # out_2e_up = self._ln1(self._general_attn_up(out_1e, out_1e_up) + out_1e)
-        # out_2e_down = self._ln2(self._general_attn_down(out_1e, out_1e_down) + out_1e)
-
-        # ic(out_1e_up.shape, out_1e_down.shape)
-        # ic(out_2e_up.shape, out_2e_down.shape)
-        # ic(out_2e.shape)
-
-        # split_x_mean = jax.tree_map(
-        #     functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
-        # )
         return out_1e, out_2e
 
 
@@ -667,8 +640,6 @@ class FermiNetBackflow(Module):
     def setup(self):
         """Setup called residual blocks."""
         self._residual_block_list = [block for block in self.residual_blocks]
-        # ic(self._residual_block_list, len(self._residual_block_list))
-        # exit()
 
     def __call__(  # type: ignore[override]
         self,
