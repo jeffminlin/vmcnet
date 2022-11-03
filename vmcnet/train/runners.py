@@ -499,9 +499,9 @@ def run_molecule() -> None:
     logdir = _get_logdir_and_save_config(reload_config, config)
 
     dtype_to_use = _get_dtype(config)
-    
+
     # intialize the wandb logger
-    wandb_init('vmc', config)
+    wandb_init("vmc", config)
 
     ion_pos, ion_charges, nelec = _get_electron_ion_config_as_arrays(
         config, dtype=dtype_to_use

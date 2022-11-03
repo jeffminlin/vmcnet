@@ -254,7 +254,6 @@ class FermiNetOneElectronLayer(Module):
         self._layernorm = nn.LayerNorm()
 
         if self.use_transformer:
-            
             # build two multi-head attention layers
             self._general_attn_up = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
@@ -383,7 +382,6 @@ class FermiNetOneElectronLayer(Module):
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
-
     def _compute_transformed_2e_means_new(self, in_1e: Array) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 2e stream.
 
@@ -409,8 +407,8 @@ class FermiNetOneElectronLayer(Module):
 
         # hardcode the split
         # TODO (jim): make this more general
-        splits = (3, )
-        axis = -2 
+        splits = (3,)
+        axis = -2
 
         in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
 
@@ -484,13 +482,12 @@ class FermiNetOneElectronLayer(Module):
         # version of DeepSet's Lemma 3: https://arxiv.org/pdf/1703.06114.pdf
         dense_out = tree_sum(dense_unmixed_split, dense_mixed_split)
 
-
         if in_2e is not None:
             # the first mix still uses the ferminet architecture
-            if index == 0: 
+            if index == 0:
                 dense_2e_split = self._compute_transformed_2e_means(in_2e)
                 dense_out = tree_sum(dense_out, dense_2e_split)
-            else: 
+            else:
                 dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
                 dense_out = tree_sum(dense_out, dense_2e_split_new)
 

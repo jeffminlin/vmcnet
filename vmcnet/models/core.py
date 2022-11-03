@@ -102,6 +102,8 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
 
 
 class AttentionLayer(flax.linen.Module):
+    """Customed attention layer."""
+
     features: int = None
     query_init: Callable = flax.linen.initializers.lecun_normal()
     key_init: Callable = flax.linen.initializers.lecun_normal()
@@ -109,7 +111,7 @@ class AttentionLayer(flax.linen.Module):
 
     @flax.linen.compact
     def __call__(self, inputs):
-
+        """Apply attention layer."""
         w_key = self.param(
             "key",
             self.key_init,  # Initialization function
@@ -132,6 +134,7 @@ class AttentionLayer(flax.linen.Module):
         return self.attention(q, k, v) + inputs
 
     def attention(self, q, k, v):
+        """Apply attention."""
         dim = q.shape[-1]
         scale = 1 / jnp.sqrt(dim)
 
@@ -140,7 +143,8 @@ class AttentionLayer(flax.linen.Module):
 
         attn = flax.linen.softmax(sim, axis=-1)
         return attn @ v
-    
+
+
 class Module(flax.linen.Module):
     """Custom parent class for models to work around flax typing issues."""
 
