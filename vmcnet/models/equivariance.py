@@ -365,7 +365,6 @@ class FermiNetOneElectronLayer(Module):
             split_arrays = _split_mean(
                 split_2e[spin], self.spin_split, axis=-2, keepdims=False
             )  # [j: (..., n[i], d)]
-
             if self.cyclic_spins:
                 # for the ith spin, concatenate as [i, ..., n, 1, ..., i-1] along the
                 # last axis
