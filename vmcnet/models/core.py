@@ -104,7 +104,6 @@ def _sl_valid_skip(x: SLArray, y: SLArray):
 class AttentionLayer(flax.linen.Module):
     """Customed attention layer."""
 
-    features: int = None
     query_init: Callable = flax.linen.initializers.lecun_normal()
     key_init: Callable = flax.linen.initializers.lecun_normal()
     value_init: Callable = flax.linen.initializers.lecun_normal()
