@@ -12,6 +12,7 @@ from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
+
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
 
@@ -98,7 +99,6 @@ def _valid_skip(x: Array, y: Array):
 
 def _sl_valid_skip(x: SLArray, y: SLArray):
     return x[0].shape[-1] == y[0].shape[-1]
-
 
 
 class Module(flax.linen.Module):
