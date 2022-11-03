@@ -157,28 +157,6 @@ def compute_electron_electron(
     return input_2e, r_ee
 
 
-def _transformer_mix(
-    x: Array,
-    self_attention_layer_up: Callable[[Array], Array],
-    self_attention_layer_down: Callable[[Array], Array],
-    splits: ParticleSplit,
-    axis: int = -2,
-) -> ArrayList:
-    """Split x on an axis and apply the self attention layer to each of the splits."""
-    # in_1e has shape (..., n, d_1e)
-    # split_x has shape [i: (..., n[i], d_1e)]
-
-    split_x = jnp.split(x, splits, axis=axis)
-    split_x_mix = [self_attention_layer_up(split_x[0]), self_attention_layer_down(split_x[1])]
-    # split_x_mix = jax.tree_map(self_attention_layer, split_x)
-
-    split_x_mean = jax.tree_map(
-        functools.partial(jnp.mean, axis=axis, keepdims=True), split_x_mix
-    )
-
-    return split_x_mean
-
-
 class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
@@ -493,45 +471,8 @@ class FermiNetOneElectronLayer(Module):
         If use_transformer is True, then the mixed is computed using transformer layer.
         Else, the mixed is computed using the dense layer with the reduce-mean layer.
         """
-        if self.use_transformer:
-            
-            split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            # ic(split_1e_means[0].shape)
-            # split_1e_means = _transformer_mix(in_1e, self._attention_mix_up, self._attention_mix_down, self.spin_split, axis=-2)
-            # ic(split_1e_means[0].shape)
-
-            return self._compute_transformed_1e_means(split_1e_means)
-
-            # ic(in_1e.shape)
-            # split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            # split_2e = self._compute_transformed_1e_means(split_1e_means)
-            # split_2 = _transformer_mix(in_1e, self._attention_1e_up, self._attention_1e_down, self.spin_split, axis=-2)
-            # import ipdb; ipdb.set_trace()
-
-            # mean = jax.tree_map(functools.partial(jnp.mean, axis=-2, keepdims=True), split_2 )
-            # ic(len(mean), mean[0].shape)
-
-            # split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            # ic(split_1e_means[0].shape)
-            # return self._compute_transformed_1e_means(mean)
-            
-            # print(split_2[0].shape)
-            # import ipdb; ipdb.set_trace()
-
-            # (mean[0] + mean[1]) / 2
-
-            # split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            # ic(self._compute_transformed_1e_means(split_1e_means)[0].shape)
-            # ic(mean[0].shape)
-
-            # return [(mean[0] + mean[1]) / 2, (mean[0] + mean[1]) / 2]
-
-            # return self._compute_transformed_1e_means(split_1e_means)
-
-            # return self._compute_transformed_1e_means(_transformer_mix(in_1e, self._attention_1e_up, self._attention_1e_down, self.spin_split, axis=-2))
-        else:
-            split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            return self._compute_transformed_1e_means(split_1e_means)
+        split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
+        return self._compute_transformed_1e_means(split_1e_means)
 
     def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Array = None, index: int = 0
