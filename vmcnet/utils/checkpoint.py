@@ -26,7 +26,6 @@ from vmcnet.utils.typing import (
     PRNGKey,
     S,
 )
-import wandb
 
 T = TypeVar("T")
 
@@ -686,5 +685,4 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
 
     logged_metrics = {"epoch": epoch + 1}
     logged_metrics.update(metrics)
-    wandb.log(logged_metrics)
     logging.info(info_out, logged_metrics)
