@@ -17,6 +17,7 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
+    AttentionLayer,
 )
 from flax.linen import MultiHeadDotProductAttention  # noqa
 from flax import linen as nn
@@ -405,38 +406,22 @@ class FermiNetOneElectronLayer(Module):
         particle ordering and the specified spin split.
         """
         # split to get [i: (..., n[i], n_total, d)]
-    
 
         # hardcode the split
         splits = (3, )
         axis = -2 
         keepdims = True
 
-
         in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
 
         in_2e_up = self._ln1(self._general_attn_up(in_1e_up, in_1e) + in_1e_up)
         in_2e_down = self._ln2(self._general_attn_down(in_1e_down, in_1e) + in_1e_down)
-
-        # ic(max(in_2e_up), max(in_2e_down))
-
-        # in_2e_up = self._general_attn_up(in_1e_up, in_1e_up)
-        # in_2e_down = self._general_attn_down(in_1e_down, in_1e_down)
-
-        # ic(in_1e_up.shape, in_1e_down.shape)
-        # ic(in_2e_up.shape, in_2e_down.shape)
         concat_2e = [in_2e_up, in_2e_down]
         all_spins = jnp.concatenate(concat_2e, axis=-2)
-        # jax.debug.print(jnp.max(all_spins))
-        # call(lambda a: print(f"{a}"), jnp.max(all_spins))
-        # id_print(jnp.max(all_spins))
 
         dense_2e = self._dense_2e_new(all_spins)
         dense_2e = self._layernorm(dense_2e) + dense_2e
         return jnp.split(dense_2e, self.spin_split, axis=-2)
-
-
-
 
     def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
         """Compute the 1e mixed for the given input.
@@ -501,7 +486,7 @@ class FermiNetOneElectronLayer(Module):
 
 
         if in_2e is not None:
-            ic(index)
+            # the first mix still uses the ferminet architecture
             if index == 0: 
                 dense_2e_split = self._compute_transformed_2e_means(in_2e)
                 dense_out = tree_sum(dense_out, dense_2e_split)
@@ -509,12 +494,9 @@ class FermiNetOneElectronLayer(Module):
                 dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
                 dense_out = tree_sum(dense_out, dense_2e_split_new)
 
-
-
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
 
-        # import ipdb; ipdb.set_trace()
         if self.skip_connection and _valid_skip(in_1e, nonlinear_out):
             nonlinear_out = self.skip_connection_scale * (nonlinear_out + in_1e)
 
@@ -577,31 +559,11 @@ class FermiNetTwoElectronLayer(Module):
         x_mean2 = jnp.swapaxes(x_mean2, -3, -2)
         x_new = jnp.concatenate([x, x_mean1, x_mean2], axis=-1)
 
-        ic(x_new.shape)
-        # if len(x.shape) == 4: 
-        #     _, shape_x, shape_y, _ = x.shape
-        #     x_mean1 = jnp.mean(x, axis=1, keepdims=True)
-        #     x_mean1 = jnp.tile(x_mean1, (1, shape_x, 1, 1))
-        #     x_mean2 = jnp.mean(x, axis=2, keepdims=True)
-        #     x_mean2 = jnp.tile(x_mean2, (1, 1, shape_y, 1))
-        #     x_new = jnp.concatenate([x, x_mean1, x_mean2], axis=-1)
-        # elif len(x.shape) == 3: 
-        #     shape_x, shape_y, _ = x.shape
-        #     x_mean1 = jnp.mean(x, axis=0, keepdims=True)
-        #     x_mean1 = jnp.tile(x_mean1, (shape_x, 1, 1))
-        #     x_mean2 = jnp.mean(x, axis=1, keepdims=True)
-        #     x_mean2 = jnp.tile(x_mean2, (1, shape_y, 1))
-        #     x_new = jnp.concatenate([x, x_mean1, x_mean2], axis=-1)
-        # else: 
-        #     assert False
-
-        # dense_out = self._dense(x)
         dense_out = self._dense(x_new)
         nonlinear_out = self._activation_fn(dense_out)
 
         if self.skip_connection and _valid_skip(x, nonlinear_out):
             nonlinear_out = self.skip_connection_scale * (nonlinear_out + x)
-        ic( self.skip_connection, _valid_skip(x, nonlinear_out), dense_out.shape, nonlinear_out.shape, x.shape, x_new.shape)
         return nonlinear_out
 
 
