@@ -330,11 +330,8 @@ class FermiNetOneElectronLayer(Module):
             # split the results of the batch applied dense layer back into the spins
             dense_mixed_split = jnp.split(dense_mixed, len(split_concat), axis=-2)
         else:
-            # ic(len(split_means), split_means[0].shape, split_means[1].shape)
             split_concat = jnp.concatenate(split_means, axis=-1)
-            # ic(split_concat.shape, nspins)
             dense_mixed = self._mixed_dense(split_concat)
-            # ic(dense_mixed.shape)
             dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
@@ -365,29 +362,9 @@ class FermiNetOneElectronLayer(Module):
         # for each i, do a split and average along axis=-2, then concatenate
         concat_2e = []
         for spin in range(len(split_2e)):
-            split_split_2e = jnp.split(split_2e[spin], self.spin_split, axis=-2)
-            if spin == 0:
-                # this is the spin up 
-                new_split_2e = [self._attention_mix_up_up(split_split_2e[0]), self._attention_mix_up_down(split_split_2e[1]) ]
-                # ic([i.shape for i in new_split_2e], [i.shape for i in split_split_2e])
-            else: 
-                # this is the spin down 
-                new_split_2e = [self._attention_mix_down_up(split_split_2e[0]), self._attention_mix_down_down(split_split_2e[1]) ]
-
-            # ic([i.shape for i in new_split_2e])
-
-
-            # note here: there is no attention mixing happening!
             split_arrays = _split_mean(
                 split_2e[spin], self.spin_split, axis=-2, keepdims=False
             )  # [j: (..., n[i], d)]
-
-            # # this is the change
-            # split_arrays = jax.tree_map(
-            #     functools.partial(jnp.mean, axis=-2, keepdims=False), new_split_2e
-            # )
-            # ic([i.shape for i in split_arrays]) 
-            # ic([i.shape for i in new_split_arrays]) 
 
             if self.cyclic_spins:
                 # for the ith spin, concatenate as [i, ..., n, 1, ..., i-1] along the
@@ -402,10 +379,6 @@ class FermiNetOneElectronLayer(Module):
         # reconcatenate along the split axis to batch apply the same dense layer for all
         # i, then split over the spins again before returning
         all_spins = jnp.concatenate(concat_2e, axis=-2)
-        ic(all_spins.shape)
-        # jax.debug.print(jnp.max(all_spins))
-        # call(lambda a: print(f"{a}"), jnp.max(all_spins))
-        # id_print(jnp.max(all_spins))
         dense_2e = self._dense_2e(all_spins)
         return jnp.split(dense_2e, self.spin_split, axis=-2)
 
