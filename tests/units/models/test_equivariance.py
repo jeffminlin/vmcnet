@@ -123,7 +123,7 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
 
     assert output.shape == (nchains, nelec_total, nelec_total, ndense)
     np.testing.assert_allclose(
-        output[:, permutation][..., permutation, :], perm_output, atol=1e-6
+        output[:, permutation][..., permutation, :], perm_output, atol=1e-5
     )
 
 
