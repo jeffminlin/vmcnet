@@ -258,7 +258,6 @@ class FermiNetOneElectronLayer(Module):
             self._general_attn_up = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
-                out_features=self.ndense,
                 use_bias=False,
                 broadcast_dropout=False,
                 deterministic=True,
@@ -270,7 +269,6 @@ class FermiNetOneElectronLayer(Module):
             self._general_attn_down = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
-                out_features=self.ndense,
                 use_bias=False,
                 broadcast_dropout=False,
                 deterministic=True,
