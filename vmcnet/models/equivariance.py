@@ -258,7 +258,7 @@ class FermiNetOneElectronLayer(Module):
             self._general_attn_up = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
-                out_features=self.ndense * self.num_heads,
+                out_features=self.ndense,
                 use_bias=False,
                 broadcast_dropout=False,
                 deterministic=True,
@@ -270,7 +270,7 @@ class FermiNetOneElectronLayer(Module):
             self._general_attn_down = MultiHeadDotProductAttention(
                 num_heads=self.num_heads,
                 qkv_features=self.ndense * self.num_heads,
-                out_features=self.ndense * self.num_heads,
+                out_features=self.ndense,
                 use_bias=False,
                 broadcast_dropout=False,
                 deterministic=True,
@@ -406,10 +406,8 @@ class FermiNetOneElectronLayer(Module):
 
         # hardcode the split
         # TODO (jim): make this more general
-        splits = (3,)
-        axis = -2
-
-        in_1e_up, in_1e_down = jnp.split(in_1e, splits, axis=axis)
+        # change this to more general
+        in_1e_up, in_1e_down = jnp.split(in_1e, self.spin_split, axis=-2)
 
         if self.use_transformer:
             in_2e_up = self._layernorm1(
