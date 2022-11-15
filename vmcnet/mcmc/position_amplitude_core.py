@@ -9,7 +9,7 @@ from vmcnet.utils.distribute import (
     replicate_all_local_devices,
     default_distribute_data,
 )
-from vmcnet.utils.typing import Array, P, PRNGKey, M, ModelApply
+from vmcnet.utils.typing import Array, P, PRNGKey, M, ModelApply, UpdateDataFn
 
 
 class PositionAmplitudeWalkerData(TypedDict):
@@ -99,6 +99,22 @@ def to_pam_tuple(data: PositionAmplitudeData) -> Tuple[Array, Array, Any]:
         data["walker_data"]["amplitude"],
         data["move_metadata"],
     )
+
+
+def get_update_data_fn(
+    model_apply: ModelApply[P],
+) -> UpdateDataFn[PositionAmplitudeData, P]:
+    """Updates data based on new params, by recalculating amplitudes.
+
+    This needs to be done in the VMC loop each time the params are updated.
+    """
+
+    def update_data_fn(data: PositionAmplitudeData, params: P) -> PositionAmplitudeData:
+        position = data["walker_data"]["position"]
+        amplitude = model_apply(params, position)
+        return make_position_amplitude_data(position, amplitude, data["move_metadata"])
+
+    return update_data_fn
 
 
 def distribute_position_amplitude_data(

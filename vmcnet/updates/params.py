@@ -23,9 +23,10 @@ from vmcnet.utils.typing import (
     PRNGKey,
     PyTree,
     S,
+    UpdateDataFn,
 )
 
-UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, S, Dict, PRNGKey]]
+UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, D, S, Dict, PRNGKey]]
 
 
 def _update_metrics_with_noclip(
@@ -134,6 +135,7 @@ def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
@@ -169,6 +171,8 @@ def create_kfac_update_param_fn(
             momentum=momentum,
             damping=damping,
         )
+        data = update_data_fn(data, params)
+
         energy = stats["loss"]
         variance = stats["aux"][0]
         energy_noclip = stats["aux"][2]
@@ -191,7 +195,7 @@ def create_kfac_update_param_fn(
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": stats_to_save[4]})
 
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     return update_param_fn
 

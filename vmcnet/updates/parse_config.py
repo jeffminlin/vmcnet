@@ -17,6 +17,7 @@ from vmcnet.utils.typing import (
     OptimizerState,
     P,
     PRNGKey,
+    UpdateDataFn,
 )
 
 from .params import (
@@ -59,6 +60,7 @@ def get_update_fn_and_init_optimizer(
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
     apply_pmap: bool = True,
@@ -103,6 +105,7 @@ def get_update_fn_and_init_optimizer(
             params,
             data,
             get_position_fn,
+            update_data_fn,
             energy_data_val_and_grad,
             key,
             learning_rate_schedule,
@@ -158,6 +161,7 @@ def get_kfac_update_fn_and_state(
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
     learning_rate_schedule: Callable[[int], jnp.float32],
@@ -217,6 +221,7 @@ def get_kfac_update_fn_and_state(
         optimizer,
         optimizer_config.damping,
         pacore.get_position_from_data,
+        update_data_fn,
         record_param_l1_norm=record_param_l1_norm,
     )
 
