@@ -79,7 +79,7 @@ def sgd_vmc_loop_with_logging(
             walker_fn,
             update_param_fn,
             key,
-            logdir,
+            logdir=logdir,
             checkpoint_every=checkpoint_every,
             checkpoint_dir=checkpoint_dir,
         )

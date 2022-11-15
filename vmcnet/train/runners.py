@@ -438,14 +438,14 @@ def _burn_and_run_vmc(
         checkpoint_dir = run_config.checkpoint_dir
         checkpoint_variance_scale = run_config.checkpoint_variance_scale
         nhistory_max = run_config.nhistory_max
-        continue_through_nans = run_config.continue_through_nans
+        check_for_nans = run_config.check_for_nans
     else:
         checkpoint_every = None
         best_checkpoint_every = None
         checkpoint_dir = ""
         checkpoint_variance_scale = 0
         nhistory_max = 0
-        continue_through_nans = False
+        check_for_nans = False
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, run_config.nburn, params, data, key
@@ -459,13 +459,12 @@ def _burn_and_run_vmc(
         walker_fn,
         update_param_fn,
         key,
-        is_eval=is_eval,
         logdir=logdir,
         checkpoint_every=checkpoint_every,
         best_checkpoint_every=best_checkpoint_every,
         checkpoint_dir=checkpoint_dir,
         checkpoint_variance_scale=checkpoint_variance_scale,
-        continue_through_nans=continue_through_nans,
+        check_for_nans=check_for_nans,
         record_amplitudes=run_config.record_amplitudes,
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,

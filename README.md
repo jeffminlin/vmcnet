@@ -70,6 +70,7 @@ params, optimizer_state, data, key = train.vmc.vmc_loop(
     walker_fn,
     update_param_fn,
     key,
+    False,
     logdir,
     False,
     checkpoint_every=checkpoint_every,
