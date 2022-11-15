@@ -112,7 +112,7 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
     activation_fn = jnp.tanh
 
     use_transformer_options = [False, True]
-    
+
     for use_transformer in use_transformer_options:
         two_elec_layer = models.equivariance.FermiNetTwoElectronLayer(
             ndense, kernel_initializer, bias_initializer, activation_fn, use_transformer

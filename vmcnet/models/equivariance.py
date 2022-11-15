@@ -494,13 +494,13 @@ class FermiNetOneElectronLayer(Module):
                 dense_2e_split = self._compute_transformed_2e_means(in_2e)
                 dense_out = tree_sum(dense_out, dense_2e_split)
             else:
-                if self.use_transformer: 
+                if self.use_transformer:
                     dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
                     dense_out = tree_sum(dense_out, dense_2e_split_new)
                 else:
                     dense_2e_split = self._compute_transformed_2e_means(in_2e)
                     dense_out = tree_sum(dense_out, dense_2e_split)
-                    
+
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
 
@@ -526,7 +526,7 @@ class FermiNetTwoElectronLayer(Module):
             whenever the shapes of the input and output match. Defaults to True.
         skip_connection_scale (float, optional): quantity to scale the final output by
             if a skip connection is added. Defaults to 1.0.
-        use_transformer (bool, optional): whether to use transformer layer. Defaults 
+        use_transformer (bool, optional): whether to use transformer layer. Defaults
             to False.
     """
 
