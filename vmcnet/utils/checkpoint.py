@@ -290,6 +290,7 @@ def _check_metrics_for_nans(metrics: Dict) -> bool:
     )
 
 
+@jax.jit
 def _check_for_nans(metrics: Dict, new_params: P) -> bool:
     # Jax logical constructs are used here to enable jitting, which hopefully gives
     # some performance benefit for nans checkpointing.
@@ -297,9 +298,6 @@ def _check_for_nans(metrics: Dict, new_params: P) -> bool:
     new_params = distribute.get_first_if_distributed(new_params)
     params_nans = jnp.any(jnp.isnan(jax.flatten_util.ravel_pytree(new_params)[0]))
     return jnp.logical_or(metrics_nans, params_nans)
-
-
-_check_for_nans = jax.jit(_check_for_nans, static_argnums=2)
 
 
 # TODO (ggoldsh): encapsulate the numerous settings passed into this function into some
@@ -402,7 +400,7 @@ def save_metrics_and_handle_checkpoints(
         metrics, new_data, record_amplitudes, get_amplitude_fn
     )
 
-    (checkpoint_str, nans_detected,) = save_metrics_and_regular_checkpoint(
+    (checkpoint_str, nans_detected) = save_metrics_and_regular_checkpoint(
         epoch,
         old_params,
         new_params,
