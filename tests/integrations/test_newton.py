@@ -68,7 +68,7 @@ def test_vmc_loop_newtons_x_squared():
         new_x = x - dmodel / ddmodel
         return new_x, optimizer_state, None, key
 
-    min_x, _, _, _ = train.vmc.vmc_loop(
+    min_x, _, _, _, _ = train.vmc.vmc_loop(
         x,
         optimizer_state,
         dummy_data,

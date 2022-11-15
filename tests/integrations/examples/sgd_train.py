@@ -70,7 +70,7 @@ def sgd_vmc_loop_with_logging(
     # Train!
     with caplog.at_level(logging.INFO):
         data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
-        params, optimizer_state, data, key = train.vmc.vmc_loop(
+        params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
             params,
             optimizer_state,
             data,

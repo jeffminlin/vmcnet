@@ -61,7 +61,7 @@ key = jax.random.PRNGKey(seed)
 data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
 
 # Train!
-params, optimizer_state, data, key = train.vmc.vmc_loop(
+params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
     params,
     optimizer_state,
     data,

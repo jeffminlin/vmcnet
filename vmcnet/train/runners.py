@@ -431,7 +431,7 @@ def _burn_and_run_vmc(
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
     is_eval: bool,
-) -> Tuple[P, S, D, PRNGKey]:
+) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every
@@ -450,7 +450,7 @@ def _burn_and_run_vmc(
     data, key = mcmc.metropolis.burn_data(
         burning_step, run_config.nburn, params, data, key
     )
-    params, optimizer_state, data, key = train.vmc.vmc_loop(
+    return train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,
@@ -469,8 +469,6 @@ def _burn_and_run_vmc(
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
     )
-
-    return params, optimizer_state, data, key
 
 
 def _compute_and_save_energy_statistics(
@@ -545,7 +543,7 @@ def run_molecule() -> None:
             data, params, optimizer_state, key
         )
 
-    params, optimizer_state, data, key = _burn_and_run_vmc(
+    params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
@@ -559,7 +557,11 @@ def run_molecule() -> None:
         is_eval=False,
     )
 
-    logging.info("Completed VMC! Evaluating")
+    if nans_detected:
+        logging.info("VMC terminated due to Nans! Aborting.")
+        return
+    else:
+        logging.info("Completed VMC! Evaluating")
 
     # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
     # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post

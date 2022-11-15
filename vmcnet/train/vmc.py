@@ -26,7 +26,7 @@ def vmc_loop(
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
-) -> Tuple[P, S, D, PRNGKey]:
+) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -81,8 +81,9 @@ def vmc_loop(
             of the energy and variance. Defaults to 200.
 
     Returns:
-        A tuple of (trained parameters, final optimizer state, final data, final key).
-        These are the same structure as (params, optimizer_state, initial_data, key).
+        A tuple of (trained parameters, final optimizer state, final data, final key,
+        nans_detected). The first four entries are the same structure as
+        (params, optimizer_state, initial_data, key).
     """
     (
         checkpoint_dir,
@@ -92,6 +93,7 @@ def vmc_loop(
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
+    nans_detected = False
 
     with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
         for epoch in range(nepochs):
@@ -155,4 +157,4 @@ def vmc_loop(
             checkpoint_writer, best_checkpoint_data, logdir
         )
 
-    return params, optimizer_state, data, key
+    return params, optimizer_state, data, key, nans_detected
