@@ -111,20 +111,23 @@ def test_ferminet_two_electron_layer_shape_and_equivariance():
     bias_initializer = models.weights.get_bias_initializer("normal")
     activation_fn = jnp.tanh
 
-    two_elec_layer = models.equivariance.FermiNetTwoElectronLayer(
-        ndense, kernel_initializer, bias_initializer, activation_fn
-    )
+    use_transformer_options = [False, True]
+    
+    for use_transformer in use_transformer_options:
+        two_elec_layer = models.equivariance.FermiNetTwoElectronLayer(
+            ndense, kernel_initializer, bias_initializer, activation_fn, use_transformer
+        )
 
-    key, subkey = jax.random.split(key)
-    params = two_elec_layer.init(subkey, input_2e)
+        key, subkey = jax.random.split(key)
+        params = two_elec_layer.init(subkey, input_2e)
 
-    output = two_elec_layer.apply(params, input_2e)
-    perm_output = two_elec_layer.apply(params, perm_input_2e)
+        output = two_elec_layer.apply(params, input_2e)
+        perm_output = two_elec_layer.apply(params, perm_input_2e)
 
-    assert output.shape == (nchains, nelec_total, nelec_total, ndense)
-    np.testing.assert_allclose(
-        output[:, permutation][..., permutation, :], perm_output, atol=1e-5
-    )
+        assert output.shape == (nchains, nelec_total, nelec_total, ndense)
+        np.testing.assert_allclose(
+            output[:, permutation][..., permutation, :], perm_output, atol=1e-5
+        )
 
 
 @pytest.mark.slow

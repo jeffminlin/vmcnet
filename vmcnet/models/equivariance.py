@@ -494,9 +494,13 @@ class FermiNetOneElectronLayer(Module):
                 dense_2e_split = self._compute_transformed_2e_means(in_2e)
                 dense_out = tree_sum(dense_out, dense_2e_split)
             else:
-                dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
-                dense_out = tree_sum(dense_out, dense_2e_split_new)
-
+                if self.use_transformer: 
+                    dense_2e_split_new = self._compute_transformed_2e_means_new(in_1e)
+                    dense_out = tree_sum(dense_out, dense_2e_split_new)
+                else:
+                    dense_2e_split = self._compute_transformed_2e_means(in_2e)
+                    dense_out = tree_sum(dense_out, dense_2e_split)
+                    
         dense_out_concat = jnp.concatenate(dense_out, axis=-2)
         nonlinear_out = self._activation_fn(dense_out_concat)
 
@@ -522,6 +526,8 @@ class FermiNetTwoElectronLayer(Module):
             whenever the shapes of the input and output match. Defaults to True.
         skip_connection_scale (float, optional): quantity to scale the final output by
             if a skip connection is added. Defaults to 1.0.
+        use_transformer (bool, optional): whether to use transformer layer. Defaults 
+            to False.
     """
 
     ndense: int
@@ -531,6 +537,7 @@ class FermiNetTwoElectronLayer(Module):
     use_bias: bool = True
     skip_connection: bool = True
     skip_connection_scale: float = 1.0
+    use_transformer: bool = False
 
     def setup(self):
         """Setup Dense layer."""
@@ -554,17 +561,21 @@ class FermiNetTwoElectronLayer(Module):
         (..., n_total, n_total, d'), and optionally adding a skip connection. The
         function itself is just a standard residual network layer.
         """
-        x_mean1 = self._attention_mix_1(x)
-        x_mean2 = jnp.swapaxes(x, -3, -2)
-        x_mean2 = self._attention_mix_2(x_mean2)
-        x_mean2 = jnp.swapaxes(x_mean2, -3, -2)
-        x_new = jnp.concatenate([x, x_mean1, x_mean2], axis=-1)
+        if self.use_transformer:
+            x_mean1 = self._attention_mix_1(x)
+            x_mean2 = jnp.swapaxes(x, -3, -2)
+            x_mean2 = self._attention_mix_2(x_mean2)
+            x_mean2 = jnp.swapaxes(x_mean2, -3, -2)
+            x_new = jnp.concatenate([x, x_mean1, x_mean2], axis=-1)
 
-        dense_out = self._dense(x_new)
+            dense_out = self._dense(x_new)
+        else:
+            dense_out = self._dense(x)
         nonlinear_out = self._activation_fn(dense_out)
 
         if self.skip_connection and _valid_skip(x, nonlinear_out):
             nonlinear_out = self.skip_connection_scale * (nonlinear_out + x)
+
         return nonlinear_out
 
 
