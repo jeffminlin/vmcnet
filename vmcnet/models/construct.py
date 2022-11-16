@@ -638,6 +638,7 @@ def get_residual_blocks_for_ferminet_backflow(
                 use_bias,
                 skip_connection=two_electron_skip,
                 skip_connection_scale=two_electron_skip_scale,
+                use_transformer=use_transformer,
             )
         residual_blocks.append(
             FermiNetResidualBlock(one_electron_layer, two_electron_layer)
