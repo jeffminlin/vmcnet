@@ -61,12 +61,11 @@ def test_vmc_loop_newtons_x_squared():
 
     # do Newton's method, x <- x - f'(x) / f''(x)
     def update_param_fn(x, data, optimizer_state, key):
-        del data
         dmodel = 2.0 * (x - a) + 4.0 * jnp.power(x - a, 3)
         ddmodel = 2.0 + 12.0 * jnp.power(x - a, 2)
 
         new_x = x - dmodel / ddmodel
-        return new_x, optimizer_state, None, key
+        return new_x, data, optimizer_state, None, key
 
     min_x, _, _, _ = train.vmc.vmc_loop(
         x,

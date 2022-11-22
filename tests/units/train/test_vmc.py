@@ -34,8 +34,7 @@ def test_vmc_loop_logging(caplog):
     }
 
     def update_param_fn(params, data, optimizer_state, key):
-        del data
-        return params, optimizer_state, fixed_metrics, key
+        return params, data, optimizer_state, fixed_metrics, key
 
     for pmapped in [True, False]:
         caplog.clear()
@@ -110,9 +109,8 @@ def test_vmc_loop_number_of_updates():
     )
 
     def update_param_fn(params, data, optimizer_state, key):
-        del data
         optimizer_state += 1
-        return params, optimizer_state, None, key
+        return params, data, optimizer_state, None, key
 
     data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
     _, new_optimizer_state, new_data, _ = train.vmc.vmc_loop(
