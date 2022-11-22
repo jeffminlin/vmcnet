@@ -335,10 +335,6 @@ def _setup_vmc(
     )
     get_amplitude_fn = pacore.get_amplitude_from_data
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
-    if not apply_pmap:
-        update_data_fn = jax.jit(update_data_fn)
-    else:
-        update_data_fn = utils.distribute.pmap(update_data_fn)
 
     # Setup metropolis step
     burning_step, walker_fn = _get_mcmc_fns(
