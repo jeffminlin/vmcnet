@@ -238,7 +238,7 @@ def create_eval_update_param_fn(
         metrics = {"energy": energy, "variance": variance}
         if record_local_energies:
             metrics.update({"local_energies": local_energies})
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(
         eval_update_param_fn, apply_pmap, {"energy", "variance"}
