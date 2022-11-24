@@ -119,7 +119,8 @@ def get_update_data_fn(
         no_nan_amp = amplitude[no_nan_index][0]
 
         position = jnp.where(
-            jnp.expand_dims(amplitude_is_nan, -1),
+            # Position has 2 extra axes relative to amplitude
+            jnp.expand_dims(amplitude_is_nan, (-1, -2)),
             no_nan_pos,
             position,
         )

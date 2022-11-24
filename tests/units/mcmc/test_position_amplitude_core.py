@@ -117,7 +117,7 @@ def test_distribute_position_amplitude_data():
 
 
 def test_update_data_fn():
-    pos = jnp.array([[0, 0], [0, 1], [0, 2], [0, 3]])
+    pos = jnp.array([[[0, 0]], [[0, 1]], [[0, 2]], [[0, 3]]])
     amplitude = jnp.array([-1, -2, -3, -4])
     metadata = 2
     data = pacore.make_position_amplitude_data(pos, amplitude, metadata)
