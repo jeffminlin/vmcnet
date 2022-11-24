@@ -1,12 +1,13 @@
 """Test model antisymmetries."""
 import time
 import itertools
+import math
 
 import jax.numpy as jnp
 import jax
 import numpy as np
 
-n = 2
+n = (7,7)
 dy = 256
 ndense = 64
 activation = jnp.tanh
@@ -16,6 +17,7 @@ key = jax.random.PRNGKey(0)
 def get_alternating_signs(n: int):
     """Return alternating series of 1 and -1, of length n."""
     return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+
 
 def _get_lexicographic_signs(n: int):
     """Get the signs of the n! permutations of (1,...,n) in lexicographic order."""
@@ -27,43 +29,71 @@ def _get_lexicographic_signs(n: int):
 
     return signs
 
-perms = jnp.array(list(itertools.permutations(range(n))))
-signs = _get_lexicographic_signs(n)
 
-weights1 = jax.random.normal(key, (n, dy, ndense))
+perms = jnp.array(list(itertools.permutations(range(n[0])))), jnp.array(
+    list(itertools.permutations(range(n[1])))
+)
+signs = _get_lexicographic_signs(n[0]), _get_lexicographic_signs(n[1])
+
+weights1 = jax.random.normal(key, (n[0], dy, ndense)), jax.random.normal(
+    key, (n[1], dy, ndense)
+)
 weights2 = jax.random.normal(key, (ndense,))
 
 # x should be (n, dy)
 @jax.jit
 def simple_ffnn(x):
-    dense = jnp.einsum('...ij,ijk->...k', x, weights1)
+    dense0 = jnp.einsum("...ij,ijk->...k", x[0], weights1[0])
+    dense1 = jnp.einsum("...ij,ijk->...k", x[1], weights1[1])
+    dense = dense0 + dense1
     dense = activation(dense)
     return dense @ weights2
 
 
 # x should be (n, dy)
+# TODO: add in signs
 @jax.jit
 def bruteforce_antisym(x):
-    x_perms = jnp.take(x, perms, axis=0)
+    x_perms = jnp.take(x[0], perms[0], axis=0), jnp.take(x[1], perms[1], axis=0)
+    x_perms = jnp.expand_dims(x_perms[0], 1), jnp.expand_dims(x_perms[1], 0)
+    desired_shape0 = math.factorial(n[0]), math.factorial(n[1]), n[0], dy
+    desired_shape1 = math.factorial(n[0]), math.factorial(n[1]), n[1], dy
+    x_perms = jnp.broadcast_to(x_perms[0], desired_shape0), jnp.broadcast_to(
+        x_perms[1], desired_shape1
+    )
     perms_out = simple_ffnn(x_perms)
-    signed_perms_out = signs * perms_out
-    return jnp.sum(signed_perms_out)
+    return jnp.sum(perms_out)
+
 
 # x should be (n, dy)
+# TODO: add in signs
 @jax.jit
 def fast_antisym(x):
     # x is (n,dy)
     # weights are [n, dy, ndense)
     # Now we have (n,n,ndense)
-    pairwise_dense = jnp.einsum('ij,kjl', x, weights1)
-    pairwise_per_perm = pairwise_dense[perms, jnp.arange(n), :]
-    dense_per_perm = jnp.sum(pairwise_per_perm, axis=1)
-    dense_per_perm = activation(dense_per_perm)
-    outs_per_perm = dense_per_perm @ weights2 * signs
-    return jnp.sum(outs_per_perm)
-    # return contributions
+    matmul_matrix = jnp.einsum("ij,kjl", x[0], weights1[0]), jnp.einsum(
+        "ij,kjl", x[1], weights1[1]
+    )
+    matmul_matrix = (
+        matmul_matrix[0][perms[0], jnp.arange(n[0]), :],
+        matmul_matrix[1][perms[1], jnp.arange(n[1]), :],
+    )
+    dense = jnp.sum(matmul_matrix[0], axis=1), jnp.sum(matmul_matrix[1], axis=1)
 
-inputs = jax.random.normal(key, (n, dy))
+    desired_shape = math.factorial(n[0]), math.factorial(n[1]), ndense
+    dense = jnp.broadcast_to(
+        jnp.expand_dims(dense[0], 1), desired_shape
+    ), jnp.broadcast_to(jnp.expand_dims(dense[1], 0), desired_shape)
+
+    dense = dense[0] + dense[1]
+    dense = activation(dense)
+    out = dense @ weights2
+
+    return jnp.sum(out, axis=(0, 1))
+
+
+inputs = jax.random.normal(key, (n[0], dy)), jax.random.normal(key, (n[1], dy))
 
 start = time.time()
 out = simple_ffnn(inputs)
