@@ -7,9 +7,16 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, SLArray, PyTree
+from vmcnet.utils.typing import Array, ParticleSplit, PyTree, SLArray
 from vmcnet.utils.slog_helpers import array_list_to_slog, array_to_slog, slog_multiply
-from .core import Module, get_alternating_signs, is_tuple_of_arrays
+from .core import (
+    Activation,
+    Module,
+    get_alternating_signs,
+    get_nelec_per_split,
+    is_tuple_of_arrays,
+)
+from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> Array:
@@ -286,3 +293,85 @@ class GenericAntisymmetrize(Module):
             return antisymmetrized_out
 
         return array_to_slog(antisymmetrized_out)
+
+
+class TwoLayerAntisym(Module):
+    ndense: int
+    features: int
+    spin_split: ParticleSplit
+    activation_fn: Activation
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+    bias_init: WeightInitializer = get_kernel_initializer("normal")
+    use_bias: bool = True
+    # TODO: implement kfac registration
+    register_kfac: bool = True
+
+    def get_dense_single_leaf(self, leaf_inputs, leaf_kernel, n_leaf):
+        # (
+        matmul_matrix = jnp.einsum("...ij,...kjl", leaf_inputs, leaf_kernel)
+        perms = jnp.array(list(itertools.permutations(range(n_leaf))))
+        # (..., n!, n, ndense)
+        diag_products = matmul_matrix[..., perms, jnp.arange(n_leaf), :]
+        # (..., n!, ndense)
+        out = jnp.sum(diag_products, axis=-2)
+
+        return out
+
+    def setup(self):
+        """Setup two layer antisym."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._activation_fn = self.activation_fn
+
+    @flax.linen.compact
+    def __call__(self, inputs: Array) -> SLArray:
+        """Applies a two layer NN with antisymmetrization.
+
+        Args:
+            inputs (Array): Shape (..., n, d)
+        """
+        split_inputs = jnp.split(inputs, self.spin_split, axis=-2)
+
+        kernel_dense = self.param(
+            "kernel_dense",
+            self.kernel_init,
+            (inputs.shape[-2], inputs.shape[-1], self.ndense),
+        )
+        split_kernel = jnp.split(kernel_dense, self.spin_split, axis=-3)
+
+        # TODO: handle more generic spin split.
+        # [i: (..., n[i]!, ndense)]
+        nelec = inputs.shape[-2]
+        nelec_per_spin = list(get_nelec_per_split(self.spin_split, nelec))
+        dense_per_leaf = jax.tree_multimap(
+            self.get_dense_single_leaf, split_inputs, split_kernel, nelec_per_spin
+        )
+
+        dense_per_leaf[0] = jnp.expand_dims(dense_per_leaf[0], -2)
+        dense_per_leaf[1] = jnp.expand_dims(dense_per_leaf[1], -3)
+        # (..., n[0]!, n[1]!, ndense)
+        dense_in = dense_per_leaf[0] + dense_per_leaf[1]
+        if self.use_bias:
+            bias = self.param("bias", self.bias_init, (self.ndense,))
+            dense_in = dense_in + bias
+        dense_out = self._activation_fn(dense_in)
+
+        kernel_feat = self.param(
+            "kernel_feat",
+            self.kernel_init,
+            (self.ndense, self.features),
+        )
+        # (..., n[0]!, n[1]!, nfeat)
+        feat_out = dense_out @ kernel_feat
+
+        # (..., n[0]!, 1, 1), (..., n[1]!, 1)
+        signs0 = jnp.expand_dims(_get_lexicographic_signs(nelec_per_spin[0]), (-2, -1))
+        signs1 = jnp.expand_dims(_get_lexicographic_signs(nelec_per_spin[1]), -1)
+
+        # (..., n[0]!, n[1]!, nfeat)
+        signed_out = feat_out * signs0 * signs1
+        out = jnp.sum(signed_out, axis=(-3, -2))
+        return (
+            jnp.sign(out),
+            jnp.log(jnp.abs(out)),
+        )

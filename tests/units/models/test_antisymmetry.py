@@ -9,6 +9,7 @@ import vmcnet.models as models
 from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
 
 
+@pytest.mark.slow
 def test_slogdet_product():
     """Test that slogdet outputs are combined correctly over a pytree."""
     m1 = jnp.array(
@@ -46,6 +47,7 @@ def test_slogdet_product():
     np.testing.assert_allclose(log_prod, jnp.array([-jnp.inf, jnp.log(25)]))
 
 
+@pytest.mark.slow
 def test_lexicographic_order_of_perms():
     """Test getting all permutations and their signs for three things."""
     x = jnp.array([[1], [2], [3]])
@@ -157,3 +159,39 @@ def test_generic_antisymmetrize_product():
             np.testing.assert_allclose(output, slogdet_product, rtol=1e-6)
         else:
             np.testing.assert_allclose(output, det_product, rtol=1e-6)
+
+
+def test_two_layer_antisym():
+    nelec = 7
+    spin_split = (4,)
+    nwalk = 10
+
+    d = 60
+    ndense = 20
+    nfeat = 1
+
+    key = jax.random.PRNGKey(0)
+    input = jax.random.normal(key, (nwalk, nelec, d))
+
+    two_layer_antisym = models.antisymmetry.TwoLayerAntisym(
+        ndense, nfeat, spin_split, jnp.tanh
+    )
+    params = two_layer_antisym.init(key, input)
+
+    s, l = two_layer_antisym.apply(params, input)
+
+    odd_perm = [1, 0, 2, 3, 5, 6, 4]
+    odd_input = input[:, odd_perm, :]
+
+    so, lo = two_layer_antisym.apply(params, odd_input)
+
+    np.testing.assert_allclose(so, s * -1)
+    np.testing.assert_allclose(lo, l, rtol=1e-5)
+
+    even_perm = [2, 0, 1, 3, 5, 6, 4]
+    even_input = input[:, even_perm, :]
+
+    se, le = two_layer_antisym.apply(params, even_input)
+
+    np.testing.assert_allclose(se, s)
+    np.testing.assert_allclose(le, l, rtol=1e-5)

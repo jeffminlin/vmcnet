@@ -24,6 +24,7 @@ from .antisymmetry import (
     GenericAntisymmetrize,
     FactorizedAntisymmetrize,
     slogdet_product,
+    TwoLayerAntisym,
 )
 from .core import (
     Activation,
@@ -1562,18 +1563,15 @@ class GenericAntisymmetry(Module):
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
-        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
-        sign_psi, log_antisym = GenericAntisymmetrize(
-            SimpleResNet(
-                self.ndense_resnet,
-                1,
-                self.nlayers_resnet,
-                self._activation_fn_resnet,
-                self.kernel_initializer_resnet,
-                self.bias_initializer_resnet,
-                use_bias=self.resnet_use_bias,
-            )
-        )(split_spins)
+        sign_psi, log_antisym = TwoLayerAntisym(
+            self.ndense_resnet,
+            1,
+            self.spin_split,
+            self._activation_fn_resnet,
+            self.kernel_initializer_resnet,
+            self.bias_initializer_resnet,
+            self.resnet_use_bias,
+        )(stream_1e)
         jastrow_part = self._jastrow(
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
         )
