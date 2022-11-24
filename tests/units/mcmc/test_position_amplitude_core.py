@@ -114,3 +114,27 @@ def test_distribute_position_amplitude_data():
         np.testing.assert_equal(amplitude[device_index], jnp.array([-device_index - 1]))
         # Metadata is replicated across devices
         np.testing.assert_array_equal(move_metadata[device_index], jnp.array([2, 3]))
+
+
+def test_update_data_fn():
+    pos = jnp.array([[0, 0], [0, 1], [0, 2], [0, 3]])
+    amplitude = jnp.array([-1, -2, -3, -4])
+    metadata = 2
+    data = pacore.make_position_amplitude_data(pos, amplitude, metadata)
+
+    new_amp = jnp.array([-2, -3, jnp.nan, -5])
+
+    def model_apply(_1, _2):
+        return new_amp
+
+    update_data_fn = pacore.get_update_data_fn(model_apply)
+    dummy_param = 3
+
+    data = update_data_fn(data, dummy_param)
+
+    (position, amplitude, move_metadata) = pacore.to_pam_tuple(data)
+    expected_pos = jnp.array([pos[0], pos[1], pos[0], pos[3]])
+    expected_amp = jnp.array([new_amp[0], new_amp[1], new_amp[0], new_amp[3]])
+
+    np.testing.assert_allclose(position, expected_pos)
+    np.testing.assert_allclose(amplitude, expected_amp)

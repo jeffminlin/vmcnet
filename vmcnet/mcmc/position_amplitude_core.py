@@ -112,6 +112,19 @@ def get_update_data_fn(
     def update_data_fn(data: PositionAmplitudeData, params: P) -> PositionAmplitudeData:
         position = data["walker_data"]["position"]
         amplitude = model_apply(params, position)
+        amplitude_is_nan = jnp.isnan(amplitude)
+
+        no_nan_index = jnp.nonzero(jnp.logical_not(amplitude_is_nan), size=1)
+        no_nan_pos = position[no_nan_index][0]
+        no_nan_amp = amplitude[no_nan_index][0]
+
+        position = jnp.where(
+            jnp.expand_dims(amplitude_is_nan, -1),
+            no_nan_pos,
+            position,
+        )
+        amplitude = jnp.where(amplitude_is_nan, no_nan_amp, amplitude)
+
         return make_position_amplitude_data(position, amplitude, data["move_metadata"])
 
     return update_data_fn
