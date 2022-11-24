@@ -1572,6 +1572,9 @@ class GenericAntisymmetry(Module):
             self.bias_initializer_resnet,
             self.resnet_use_bias,
         )(stream_1e)
+        sign_psi = jnp.sum(sign_psi, axis=-1)
+        log_antisym = jnp.sum(log_antisym, axis=-1)
+
         jastrow_part = self._jastrow(
             input_stream_1e, input_stream_2e, stream_1e, r_ei, r_ee
         )
