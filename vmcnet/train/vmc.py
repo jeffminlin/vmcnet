@@ -22,12 +22,11 @@ def vmc_loop(
     best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
-    checkpoint_if_nans: bool = False,
-    only_checkpoint_first_nans: bool = True,
+    check_for_nans: bool = False,
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
-) -> Tuple[P, S, D, PRNGKey]:
+) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -75,29 +74,26 @@ def vmc_loop(
             error-adjusted running avg of the energy. Higher means the variance is more
             important, and lower means the energy is more important. See
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`. Defaults to 10.0.
-        checkpoint_if_nans (bool, optional): whether to save checkpoints when
-            nan energy values are recorded. Defaults to False.
-        only_checkpoint_first_nans (bool, optional): whether to checkpoint only the
-            first time nans are encountered, or every time. Useful to capture a nan
-            checkpoint without risking writing too many checkpoints if the optimization
-            starts to hit nans most or every epoch after some point. Only relevant if
-            checkpoint_if_nans is True. Defaults to True.
+        check_for_nans (bool, optional): whether to check for nans in the vmc loop. If
+            so, then after nans are detected, a checkpoint will be saved and the loop
+            will be aborted. Defaults to False.
         nhistory_max (int, optional): How much history to keep in the running histories
             of the energy and variance. Defaults to 200.
 
     Returns:
-        A tuple of (trained parameters, final optimizer state, final data, final key).
-        These are the same structure as (params, optimizer_state, initial_data, key).
+        A tuple of (trained parameters, final optimizer state, final data, final key,
+        nans_detected). The first four entries are the same structure as
+        (params, optimizer_state, initial_data, key).
     """
     (
         checkpoint_dir,
         checkpoint_metric,
         running_energy_and_variance,
         best_checkpoint_data,
-        saved_nans_checkpoint,
     ) = utils.checkpoint.initialize_checkpointing(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
+    nans_detected = False
 
     with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
         for epoch in range(nepochs):
@@ -117,7 +113,8 @@ def vmc_loop(
                 params, data, optimizer_state, key
             )
 
-            if metrics is None:  # don't checkpoint if no metrics to checkpoint
+            # Don't checkpoint if no metrics to checkpoint
+            if metrics is None:
                 continue
 
             metrics["accept_ratio"] = accept_ratio
@@ -126,7 +123,7 @@ def vmc_loop(
                 checkpoint_metric,
                 checkpoint_str,
                 best_checkpoint_data,
-                saved_nans_checkpoint,
+                nans_detected,
             ) = utils.checkpoint.save_metrics_and_handle_checkpoints(
                 epoch,
                 old_params,
@@ -147,19 +144,17 @@ def vmc_loop(
                 best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
-                checkpoint_if_nans=checkpoint_if_nans,
-                only_checkpoint_first_nans=only_checkpoint_first_nans,
-                saved_nans_checkpoint=saved_nans_checkpoint,
+                check_for_nans=check_for_nans,
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
-            # TODO: add flag which gives a way to break out of the VMC loop when the
-            # first nan has been hit, to keep jobs from running past useful output in
-            # some cases
+
+            if nans_detected:
+                break
 
         utils.checkpoint.finish_checkpointing(
             checkpoint_writer, best_checkpoint_data, logdir
         )
 
-    return params, optimizer_state, data, key
+    return params, optimizer_state, data, key, nans_detected

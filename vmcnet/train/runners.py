@@ -444,29 +444,27 @@ def _burn_and_run_vmc(
     update_param_fn: updates.params.UpdateParamFn[P, D, S],
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
-    should_checkpoint: bool = True,
-) -> Tuple[P, S, D, PRNGKey]:
-    if should_checkpoint:
+    is_eval: bool,
+) -> Tuple[P, S, D, PRNGKey, bool]:
+    if not is_eval:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every
         checkpoint_dir = run_config.checkpoint_dir
         checkpoint_variance_scale = run_config.checkpoint_variance_scale
         nhistory_max = run_config.nhistory_max
-        checkpoint_if_nans = run_config.checkpoint_if_nans
-        only_checkpoint_first_nans = run_config.only_checkpoint_first_nans
+        check_for_nans = run_config.check_for_nans
     else:
         checkpoint_every = None
         best_checkpoint_every = None
         checkpoint_dir = ""
         checkpoint_variance_scale = 0
         nhistory_max = 0
-        checkpoint_if_nans = False
-        only_checkpoint_first_nans = True
+        check_for_nans = False
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, run_config.nburn, params, data, key
     )
-    params, optimizer_state, data, key = train.vmc.vmc_loop(
+    return train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,
@@ -480,14 +478,11 @@ def _burn_and_run_vmc(
         best_checkpoint_every=best_checkpoint_every,
         checkpoint_dir=checkpoint_dir,
         checkpoint_variance_scale=checkpoint_variance_scale,
-        checkpoint_if_nans=checkpoint_if_nans,
-        only_checkpoint_first_nans=only_checkpoint_first_nans,
+        check_for_nans=check_for_nans,
         record_amplitudes=run_config.record_amplitudes,
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
     )
-
-    return params, optimizer_state, data, key
 
 
 def _compute_and_save_energy_statistics(
@@ -563,7 +558,7 @@ def run_molecule() -> None:
             data, params, optimizer_state, key
         )
 
-    params, optimizer_state, data, key = _burn_and_run_vmc(
+    params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
@@ -574,10 +569,14 @@ def run_molecule() -> None:
         update_param_fn,
         get_amplitude_fn,
         key,
-        should_checkpoint=True,
+        is_eval=False,
     )
 
-    logging.info("Completed VMC! Evaluating")
+    if nans_detected:
+        logging.info("VMC terminated due to Nans! Aborting.")
+        return
+    else:
+        logging.info("Completed VMC! Evaluating")
 
     # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
     # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post
@@ -617,7 +616,7 @@ def run_molecule() -> None:
         eval_update_param_fn,
         get_amplitude_fn,
         key,
-        should_checkpoint=False,
+        is_eval=True,
     )
 
     # need to check for local_energy.txt because when config.eval.nepochs=0 the file is

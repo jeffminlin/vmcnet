@@ -115,7 +115,7 @@ def test_vmc_loop_number_of_updates():
         return params, optimizer_state, None, key
 
     data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
-    _, new_optimizer_state, new_data, _ = train.vmc.vmc_loop(
+    _, new_optimizer_state, new_data, _, _ = train.vmc.vmc_loop(
         params,
         optimizer_state,
         data,

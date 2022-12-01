@@ -61,7 +61,7 @@ key = jax.random.PRNGKey(seed)
 data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
 
 # Train!
-params, optimizer_state, data, key = train.vmc.vmc_loop(
+params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
     params,
     optimizer_state,
     data,
@@ -70,6 +70,7 @@ params, optimizer_state, data, key = train.vmc.vmc_loop(
     walker_fn,
     update_param_fn,
     key,
+    False,
     logdir,
     checkpoint_every=checkpoint_every,
     checkpoint_dir=checkpoint_dir,
