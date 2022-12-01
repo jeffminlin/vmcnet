@@ -17,6 +17,7 @@ from vmcnet.utils.typing import (
     OptimizerState,
     P,
     PRNGKey,
+    UpdateDataFn,
 )
 
 from .params import (
@@ -59,6 +60,7 @@ def get_update_fn_and_init_optimizer(
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
     apply_pmap: bool = True,
@@ -72,6 +74,7 @@ def get_update_fn_and_init_optimizer(
         params (pytree): params with which to initialize optimizer state
         data (pytree): data with which to initialize optimizer state
         get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
@@ -103,6 +106,7 @@ def get_update_fn_and_init_optimizer(
             params,
             data,
             get_position_fn,
+            update_data_fn,
             energy_data_val_and_grad,
             key,
             learning_rate_schedule,
@@ -114,6 +118,7 @@ def get_update_fn_and_init_optimizer(
         (update_param_fn, optimizer_state,) = get_sgd_update_fn_and_state(
             params,
             get_position_fn,
+            update_data_fn,
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.sgd,
@@ -125,6 +130,7 @@ def get_update_fn_and_init_optimizer(
         (update_param_fn, optimizer_state,) = get_adam_update_fn_and_state(
             params,
             get_position_fn,
+            update_data_fn,
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.adam,
@@ -137,6 +143,7 @@ def get_update_fn_and_init_optimizer(
             log_psi_apply,
             params,
             get_position_fn,
+            update_data_fn,
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.sr,
@@ -158,6 +165,7 @@ def get_kfac_update_fn_and_state(
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
     learning_rate_schedule: Callable[[int], jnp.float32],
@@ -171,6 +179,7 @@ def get_kfac_update_fn_and_state(
         params (pytree): params with which to initialize optimizer state
         data (pytree): data with which to initialize optimizer state
         get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
@@ -217,6 +226,7 @@ def get_kfac_update_fn_and_state(
         optimizer,
         optimizer_config.damping,
         pacore.get_position_from_data,
+        update_data_fn,
         record_param_l1_norm=record_param_l1_norm,
     )
 
@@ -261,6 +271,7 @@ def _get_optax_update_fn_and_state(
     optimizer: optax.GradientTransformation,
     params: P,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -275,6 +286,7 @@ def _get_optax_update_fn_and_state(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
+        update_data_fn=update_data_fn,
         record_param_l1_norm=record_param_l1_norm,
         apply_pmap=apply_pmap,
     )
@@ -287,6 +299,7 @@ def _get_optax_update_fn_and_state(
 def get_adam_update_fn_and_state(
     params: P,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
@@ -298,6 +311,7 @@ def get_adam_update_fn_and_state(
     Args:
         params (pytree): params with which to initialize optimizer state
         get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
@@ -325,6 +339,7 @@ def get_adam_update_fn_and_state(
         optimizer,
         params,
         get_position_fn,
+        update_data_fn,
         energy_data_val_and_grad,
         record_param_l1_norm,
         apply_pmap,
@@ -334,6 +349,7 @@ def get_adam_update_fn_and_state(
 def get_sgd_update_fn_and_state(
     params: P,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
@@ -345,6 +361,7 @@ def get_sgd_update_fn_and_state(
     Args:
         params (pytree): params with which to initialize optimizer state
         get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
@@ -372,6 +389,7 @@ def get_sgd_update_fn_and_state(
         optimizer,
         params,
         get_position_fn,
+        update_data_fn,
         energy_data_val_and_grad,
         record_param_l1_norm,
         apply_pmap,
@@ -382,6 +400,7 @@ def get_sr_update_fn_and_state(
     log_psi_apply: ModelApply[P],
     params: P,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: Callable[[int], jnp.float32],
     optimizer_config: ConfigDict,
@@ -397,6 +416,7 @@ def get_sr_update_fn_and_state(
             function is (params, x) -> log|psi(x)|
         params (pytree): params with which to initialize optimizer state
         get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
         energy_data_val_and_grad (Callable): function which computes the clipped energy
             value and gradient. Has the signature
                 (params, x)
@@ -474,6 +494,7 @@ def get_sr_update_fn_and_state(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
+        update_data_fn=update_data_fn,
         record_param_l1_norm=record_param_l1_norm,
         apply_pmap=apply_pmap,
     )

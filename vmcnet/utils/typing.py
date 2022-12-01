@@ -73,5 +73,6 @@ ModelApply = Callable[[P, Array], Array]
 
 GetPositionFromData = Callable[[D], Array]
 GetAmplitudeFromData = GetPositionFromData[D]
+UpdateDataFn = Callable[[D, P], D]
 
 ClippingFn = Callable[[Array, jnp.float32], Array]

@@ -334,6 +334,7 @@ def _setup_vmc(
         log_psi_apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
     get_amplitude_fn = pacore.get_amplitude_from_data
+    update_data_fn = pacore.get_update_data_fn(log_psi_apply)
 
     # Setup metropolis step
     burning_step, walker_fn = _get_mcmc_fns(
@@ -357,6 +358,7 @@ def _setup_vmc(
         params,
         data,
         pacore.get_position_from_data,
+        update_data_fn,
         energy_data_val_and_grad,
         key,
         apply_pmap=apply_pmap,

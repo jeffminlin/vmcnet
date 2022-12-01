@@ -23,9 +23,10 @@ from vmcnet.utils.typing import (
     PRNGKey,
     PyTree,
     S,
+    UpdateDataFn,
 )
 
-UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, S, Dict, PRNGKey]]
+UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, D, S, Dict, PRNGKey]]
 
 
 def _update_metrics_with_noclip(
@@ -49,7 +50,7 @@ def _make_traced_fn_with_single_metrics(
     pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
 
     def pmapped_update_param_fn_with_single_metrics(params, data, optimizer_state, key):
-        params, optimizer_state, metrics, key = pmapped_update_param_fn(
+        params, data, optimizer_state, metrics, key = pmapped_update_param_fn(
             params, data, optimizer_state, key
         )
         if metrics_to_get_first is None:
@@ -60,7 +61,7 @@ def _make_traced_fn_with_single_metrics(
                 if distributed_metric is not None:
                     metrics[metric] = utils.distribute.get_first(distributed_metric)
 
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     return pmapped_update_param_fn_with_single_metrics
 
@@ -69,6 +70,7 @@ def create_grad_energy_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     optimizer_apply: Callable[[P, P, S, D], Tuple[P, S]],
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     apply_pmap: bool = True,
     record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[P, D, S]:
@@ -87,6 +89,7 @@ def create_grad_energy_update_param_fn(
             (grad_energy, params, optimizer_state) -> (new_params, new_optimizer_state).
         get_position_fn (GetPositionFromData): gets the walker positions from the MCMC
             data.
+        update_data_fn (Callable): function which updates data for new params
         apply_pmap (bool, optional): whether to apply jax.pmap to the walker function.
             If False, applies jax.jit. Defaults to True.
 
@@ -108,13 +111,15 @@ def create_grad_energy_update_param_fn(
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
         )
+        data = update_data_fn(data, params)
+
         metrics = {"energy": energy, "variance": aux_energy_data[0]}
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
         )
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": tree_reduce_l1(params)})
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
 
@@ -134,6 +139,7 @@ def create_kfac_update_param_fn(
     optimizer: kfac_ferminet_alpha.Optimizer,
     damping: jnp.float32,
     get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
     record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
     """Create momentum-less KFAC update step function.
@@ -144,6 +150,7 @@ def create_kfac_update_param_fn(
         damping (jnp.float32): damping coefficient
         get_position_fn (GetPositionFromData): function which gets the walker positions
             from the data. Has signature data -> Array
+        update_data_fn (Callable): function which updates data for new params
 
     Returns:
         Callable: function which updates the parameters given the current data, params,
@@ -156,6 +163,7 @@ def create_kfac_update_param_fn(
     if optimizer.multi_device:
         momentum = utils.distribute.replicate_all_local_devices(momentum)
         damping = utils.distribute.replicate_all_local_devices(damping)
+        update_data_fn = utils.distribute.pmap(update_data_fn)
 
     traced_compute_param_norm = _get_traced_compute_param_norm(optimizer.multi_device)
 
@@ -169,6 +177,8 @@ def create_kfac_update_param_fn(
             momentum=momentum,
             damping=damping,
         )
+        data = update_data_fn(data, params)
+
         energy = stats["loss"]
         variance = stats["aux"][0]
         energy_noclip = stats["aux"][2]
@@ -191,7 +201,7 @@ def create_kfac_update_param_fn(
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": stats_to_save[4]})
 
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     return update_param_fn
 
@@ -234,7 +244,7 @@ def create_eval_update_param_fn(
         metrics = {"energy": energy, "variance": variance}
         if record_local_energies:
             metrics.update({"local_energies": local_energies})
-        return params, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(
         eval_update_param_fn, apply_pmap, {"energy", "variance"}

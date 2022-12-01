@@ -11,6 +11,7 @@ import vmcnet.utils as utils
 from vmcnet.mcmc.position_amplitude_core import (
     distribute_position_amplitude_data,
     get_position_from_data,
+    get_update_data_fn,
 )
 from vmcnet.mcmc.simple_position_amplitude import (
     make_simple_pos_amp_gaussian_step,
@@ -59,6 +60,7 @@ def sgd_vmc_loop_with_logging(
         energy_data_val_and_grad,
         sgd_apply,
         get_position_from_data,
+        get_update_data_fn(log_psi_model.apply),
     )
 
     # Distribute everything via jax.pmap
