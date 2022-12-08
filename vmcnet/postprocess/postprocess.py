@@ -1,3 +1,9 @@
+####################################################################################################
+
+logs_root='logs'
+
+####################################################################################################
+
 import os
 import sys
 import subprocess
@@ -12,15 +18,23 @@ from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify
 def listpaths(path):
     return [os.path.join(path,f) for f in os.listdir(path)]
 
-def pickfrom(options,infos):
-    optionstext='\n'.join(['{}: {} ({})'.format(i+1,p,info) for i,(p,info) in enumerate(zip(options,infos))])
-    inp=input('\nInput number 1-{} and press enter:\n{}\n'.format(len(options),optionstext))
-    optionid=int(inp)-1
-    return options[optionid]
+def pickfrom(alloptions,allinfos):
+    blocksize=9
+    s=0
+    while True:
+        options,infos=alloptions[s:s+blocksize],allinfos[s:s+blocksize]
+        optionstext='\n'.join(['{}: {} ({})'.format(i+1,p,info) for i,(p,info) in enumerate(zip(options,infos))])
+        inp=input('\nInput number 1-{} or d=down/u=up (and press enter):\n{}\n'.format(len(options),optionstext))
+        if inp=='d': s=(s+blocksize)%len(alloptions)
+        if inp=='u': s=(s-blocksize)%len(alloptions)
+        try:
+            optionid=int(inp)-1
+            return options[optionid]
+        except:
+            pass
 
-def pickrun(cutoff=10):
-    paths=list(reversed(sorted(listpaths('logs'))))
-    paths=paths[:cutoff]
+def pickrun(rootpath):
+    paths=list(reversed(sorted(listpaths(rootpath))))
     def getinfo(path):
         try:
             #return str(io.load_config_dict(path,'config.json')['problem'])[:100]
@@ -44,14 +58,14 @@ def loadrun(path):
     kwargs=dict(dtype=config['dtype'])
 
     slog_psi = get_model_from_config(*args,**kwargs)
+    print('Loaded model')
     slog_f = get_model_from_config_nonsym(*args,**kwargs)
+    print('Loaded nonsymmetrized model')
 
     return slog_psi,slog_f,paramshist,datahist,config
 
-def slog_to_rel_ent(fX,AfX):
-    _,l=fX
-    _,lA=AfX
-    return jnp.average(l)-jnp.average(lA)
+def slog_to_rel_ent(f,g):
+    return jnp.average(f[1])-jnp.average(g[1])
 
 def showfile(path):
     try: subprocess.Popen(['open',path])
@@ -63,21 +77,22 @@ def showfile(path):
 
 if __name__=='__main__':
 
-    path=pickrun()
+    path=pickrun(rootpath=logs_root)
     slog_Af,slog_f,paramshist,datahist,config=loadrun(path)
 
     AfX=[]
     fX=[]
 
-    print(config)
+    samplescutoff=250
 
     for i,(params,data) in enumerate(zip(paramshist,datahist)):
 
         if 'v' in sys.argv and i==0:
             n1,n2=config['problem']['nelec']
             print('\nverifying correct nonsym-antisym relation')
-            verify(slog_f.apply,slog_Af.apply,params,data[0,:5,:,:],n1,n2,full=config['model']['full_det'])
+            verify(slog_f.apply,slog_Af.apply,params,data[0,:2,:,:],n1,n2,full=config['model']['full_det'])
 
+        data=data[:,:samplescutoff,:,:]
         AfX.append(slog_Af.apply(params,data))
         fX.append(slog_f.apply(params,data))
 
@@ -87,9 +102,9 @@ if __name__=='__main__':
     plt.legend()
 
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
-    plotpath=os.path.join(path,'postprocessed/ratio.pdf') 
+    plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
 
     plt.savefig(plotpath)
-    showfile(plotpath)
+    showfile(os.path.split(plotpath)[0])
 
 

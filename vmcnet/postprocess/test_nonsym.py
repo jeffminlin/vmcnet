@@ -14,10 +14,8 @@ def direct_AS(f,n1,n2,full=False):
         def Af(params,X):
             pl = models.antisymmetry.ParallelPermutations(n)
             (PX, signs), _ = pl.init_with_output(rnd.PRNGKey(0), X)
-            AfX=0
             outblock=f(params,PX)
-            AfX+=jnp.inner(signs,outblock)
-            return AfX
+            return jnp.inner(signs,outblock)
     else:
         def Af(params,X):
             pl1 = models.antisymmetry.ParallelPermutations(n1)

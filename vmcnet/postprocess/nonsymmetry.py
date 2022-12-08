@@ -68,7 +68,6 @@ class FermiNet_Nonsym(FermiNet):
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
         if self._symmetrized_det_fn is not None:
-            raise ValueError
 
             # dets is ArrayList of shape [norb_splits: (ndeterminants, ...)]
             prods = jax.tree_map(diagprod, orbitals)
