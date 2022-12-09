@@ -81,8 +81,6 @@ if __name__=='__main__':
     AfX=[]
     fX=[]
 
-    samplescutoff=250
-
     for i,(params,data) in enumerate(zip(paramshist,datahist)):
 
         if 'v' in sys.argv and i==0:
@@ -90,7 +88,6 @@ if __name__=='__main__':
             print('\nverifying correct nonsym-antisym relation')
             verify(slog_f.apply,slog_Af.apply,params,data[0,:2,:,:],n1,n2,full=config['model']['full_det'])
 
-        data=data[:,:samplescutoff,:,:]
         AfX.append(slog_Af.apply(params,data))
         fX.append(slog_f.apply(params,data))
 
