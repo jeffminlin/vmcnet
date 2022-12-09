@@ -1,8 +1,4 @@
-####################################################################################################
-
 logs_root='logs'
-
-####################################################################################################
 
 import os
 import sys
@@ -24,6 +20,7 @@ def pickfrom(alloptions,allinfos):
     while True:
         options,infos=alloptions[s:s+blocksize],allinfos[s:s+blocksize]
         optionstext='\n'.join(['{}: {} ({})'.format(i+1,p,info) for i,(p,info) in enumerate(zip(options,infos))])
+        optionstext='u: up\n'+optionstext+'\nd: down'
         inp=input('\nInput number 1-{} or d=down/u=up (and press enter):\n{}\n'.format(len(options),optionstext))
         if inp=='d': s=(s+blocksize)%len(alloptions)
         if inp=='u': s=(s-blocksize)%len(alloptions)
@@ -98,12 +95,18 @@ if __name__=='__main__':
 
         print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
-    plt.plot([slog_to_rel_ent(f,Af) for f,Af in zip(fX,AfX)],'bo-',label='E[log(|f|/|Af|)]')
-    plt.legend()
 
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
-    plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
+    fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
 
+    ax1.plot([slog_to_rel_ent(f,Af) for f,Af in zip(fX,AfX)],'bo-',label='E[log(|f|/|Af|)]')
+    ax1.legend()
+
+    ax2.plot([jnp.average(f[-1]**2/Af[-1]**2) for f,Af in zip(fX,AfX)],'bo-',label='|f|^2/|Af|^2')
+    ax2.legend()
+    ax2.set_yscale('log')
+
+    plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
     showfile(os.path.split(plotpath)[0])
 
