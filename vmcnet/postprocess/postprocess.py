@@ -107,9 +107,10 @@ if __name__=='__main__':
     plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
 
-    outdatapath=os.path.join(path,'postprocessed/outdata')
-    with open(outdatapath,'wb') as handle:
-        pickle.dump({'f':fX,'Af':AfX},handle)
+    if 'sd' in sys.argv:
+        outdatapath=os.path.join(path,'postprocessed/outdata')
+        with open(outdatapath,'wb') as handle:
+            pickle.dump({'f':fX,'Af':AfX},handle)
 
     showfile(os.path.split(plotpath)[0])
 
