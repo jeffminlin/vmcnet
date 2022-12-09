@@ -10,6 +10,7 @@ from vmcnet.utils import io
 from vmcnet.models.construct import get_model_from_config
 from vmcnet.postprocess.re_construct import get_model_from_config_nonsym
 from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify
+import pickle
 
 def listpaths(path):
     return [os.path.join(path,f) for f in os.listdir(path)]
@@ -108,6 +109,11 @@ if __name__=='__main__':
 
     plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
+
+    outdatapath=os.path.join(path,'postprocessed/outdata')
+    with open(outdatapath,'wb') as handle:
+        pickle.dump({'f':fX,'Af':AfX},handle)
+
     showfile(os.path.split(plotpath)[0])
 
 
