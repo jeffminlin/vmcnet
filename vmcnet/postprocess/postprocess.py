@@ -112,7 +112,8 @@ if __name__=='__main__':
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
     fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
 
-    p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
+    p1=[jnp.average(slf[1]/slAf[1]) for slf,slAf in zip(sl_fX,sl_AfX)]
+    #p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
     ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
     ax1.legend()
 
@@ -125,18 +126,15 @@ if __name__=='__main__':
     ax2.legend()
     ax2.set_yscale('log')
 
-    breakpoint()
-
     plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
 
     outdatapath=os.path.join(path,'postprocessed/plotdata')
     with open(outdatapath,'wb') as handle:
         pickle.dump({'times':timehist,'fnorms':fnorms,'Afnorms':Afnorms,'rel_ent':p1},handle)
-    if 'sd' in sys.argv:
-        outdatapath=os.path.join(path,'postprocessed/outdata')
-        with open(outdatapath,'wb') as handle:
-            pickle.dump({'times':timehist,'f':fX,'Af':AfX,'P':PX},handle)
+    outdatapath=os.path.join(path,'postprocessed/outdata')
+    with open(outdatapath,'wb') as handle:
+        pickle.dump({'times':timehist,'f':fX,'Af':AfX,'P':PX},handle)
 
     showfile(os.path.split(plotpath)[0])
 
