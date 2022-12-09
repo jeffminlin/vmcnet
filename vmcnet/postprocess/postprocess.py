@@ -7,9 +7,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from numpy import load
 from vmcnet.utils import io
+from vmcnet.utils.slog_helpers import array_from_slog as del_slog
 from vmcnet.models.construct import get_model_from_config
 from vmcnet.postprocess.re_construct import get_model_from_config_nonsym
-from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify
+from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify, noslog
 import pickle
 
 def listpaths(path):
@@ -43,7 +44,10 @@ def pickrun(rootpath):
     return pickfrom(paths,infos)
 
 def loadrun(path):
+    gettime=lambda p: int(os.path.split(p)[-1][:-4])
+
     checkpointpaths=listpaths(os.path.join(path,'checkpoints'))
+    checkpointpaths.sort(key=gettime)
     config=io.load_config_dict(path,'config.json')
     model=config['model']
     problem=config['problem']
@@ -60,10 +64,7 @@ def loadrun(path):
     slog_f = get_model_from_config_nonsym(*args,**kwargs)
     print('Loaded nonsymmetrized model')
 
-    return slog_psi,slog_f,paramshist,datahist,config
-
-def slog_to_rel_ent(f,g):
-    return jnp.average(f[1])-jnp.average(g[1])
+    return slog_psi,slog_f,paramshist,datahist,[gettime(p) for p in checkpointpaths],config
 
 def showfile(path):
     try: subprocess.Popen(['open',path])
@@ -76,41 +77,66 @@ def showfile(path):
 if __name__=='__main__':
 
     path=pickrun(rootpath=logs_root)
-    slog_Af,slog_f,paramshist,datahist,config=loadrun(path)
+    slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+    Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
 
-    AfX=[]
-    fX=[]
+    sl_AfX=[]
+    sl_fX=[]
+    PX=[]
+    PX_now=[]
+    M=10
 
     for i,(params,data) in enumerate(zip(paramshist,datahist)):
+        if i%M==0:
+            X=data
+            p=Af(params,X)**2
+            p=p/jnp.sum(p)
 
         if 'v' in sys.argv and i==0:
             n1,n2=config['problem']['nelec']
             print('\nverifying correct nonsym-antisym relation')
-            verify(slog_f.apply,slog_Af.apply,params,data[0,:2,:,:],n1,n2,full=config['model']['full_det'])
+            verify(slog_f.apply,slog_Af.apply,params,X[0,:2,:,:],n1,n2,full=config['model']['full_det'])
 
-        AfX.append(slog_Af.apply(params,data))
-        fX.append(slog_f.apply(params,data))
+        sl_AfX.append(slog_Af.apply(params,X))
+        sl_fX.append(slog_f.apply(params,X))
+
+        PX.append(p)
+        p_now=del_slog(sl_AfX[-1])**2
+        p_now=p_now/jnp.sum(p_now)
+        PX_now.append(p_now)
 
         print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
+    unweight=[1/p for p in PX]
 
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
     fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
 
-    ax1.plot([slog_to_rel_ent(f,Af) for f,Af in zip(fX,AfX)],'bo-',label='E[log(|f|/|Af|)]')
+    p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
+    ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
     ax1.legend()
 
-    ax2.plot([jnp.average(f[-1]**2/Af[-1]**2) for f,Af in zip(fX,AfX)],'bo-',label='|f|^2/|Af|^2')
+    fX=[del_slog(sl) for sl in sl_fX]
+    AfX=[del_slog(sl) for sl in sl_AfX]
+    fnorms=[jnp.sum(uw*p*f**2) for f,p,uw in zip(fX,PX_now,unweight)]
+    Afnorms=[jnp.sum(uw*p*Af**2) for Af,p,uw in zip(AfX,PX_now,unweight)]
+
+    ax2.plot(timehist,[f/Af for f,Af in zip(fnorms,Afnorms)],'bo-',label='|f|^2/|Af|^2')
     ax2.legend()
     ax2.set_yscale('log')
+
+    breakpoint()
 
     plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
 
+    outdatapath=os.path.join(path,'postprocessed/plotdata')
+    with open(outdatapath,'wb') as handle:
+        pickle.dump({'times':timehist,'fnorms':fnorms,'Afnorms':Afnorms,'rel_ent':p1},handle)
     if 'sd' in sys.argv:
         outdatapath=os.path.join(path,'postprocessed/outdata')
         with open(outdatapath,'wb') as handle:
-            pickle.dump({'f':fX,'Af':AfX},handle)
+            pickle.dump({'times':timehist,'f':fX,'Af':AfX,'P':PX},handle)
 
     showfile(os.path.split(plotpath)[0])
 

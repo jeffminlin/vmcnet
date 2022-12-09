@@ -4,6 +4,7 @@ from vmcnet.utils.distribute import pmap
 from vmcnet import models
 from numpy.testing import assert_allclose
 from jax.config import config
+import jax
 
 
 def direct_AS(f,n1,n2,full=False):
@@ -45,4 +46,4 @@ def noslog(slog):
     def f(params,X):
         signs,logs=slog(params,X)
         return signs*jnp.exp(logs)
-    return f
+    return jax.jit(f)
