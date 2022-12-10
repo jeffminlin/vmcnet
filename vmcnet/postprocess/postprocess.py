@@ -89,49 +89,48 @@ if __name__=='__main__':
     plotdatapath=os.path.join(path,'postprocessed/plotdata')
     outdatapath=os.path.join(path,'postprocessed/outdata')
 
-    match mode:
-        case 'from_raw':
-            slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
-            Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
+    if mode=='from_raw':
+        slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+        Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
 
-            sl_AfX=[]
-            sl_fX=[]
-            PX=[]
-            PX_now=[]
-            M=10
+        sl_AfX=[]
+        sl_fX=[]
+        PX=[]
+        PX_now=[]
+        M=10
 
-            for i,(params,data) in enumerate(zip(paramshist,datahist)):
-                if i%M==0:
-                    X=data
-                    p=Af(params,X)**2
-                    p=p/jnp.sum(p)
+        for i,(params,data) in enumerate(zip(paramshist,datahist)):
+            if i%M==0:
+                X=data
+                p=Af(params,X)**2
+                p=p/jnp.sum(p)
 
-                if 'v' in sys.argv and i==0:
-                    n1,n2=config['problem']['nelec']
-                    print('\nverifying correct nonsym-antisym relation')
-                    verify(slog_f.apply,slog_Af.apply,params,X[0,:2,:,:],n1,n2,full=config['model']['full_det'])
+            if 'v' in sys.argv and i==0:
+                n1,n2=config['problem']['nelec']
+                print('\nverifying correct nonsym-antisym relation')
+                verify(slog_f.apply,slog_Af.apply,params,X[0,:2,:,:],n1,n2,full=config['model']['full_det'])
 
-                sl_AfX.append(slog_Af.apply(params,X))
-                sl_fX.append(slog_f.apply(params,X))
+            sl_AfX.append(slog_Af.apply(params,X))
+            sl_fX.append(slog_f.apply(params,X))
 
-                PX.append(p)
-                p_now=del_slog(sl_AfX[-1])**2
-                p_now=p_now/jnp.sum(p_now)
-                PX_now.append(p_now)
+            PX.append(p)
+            p_now=del_slog(sl_AfX[-1])**2
+            p_now=p_now/jnp.sum(p_now)
+            PX_now.append(p_now)
 
-                print('checkpoint {}/{}'.format(i+1,len(paramshist)))
+            print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
 
-            with open(outdatapath,'wb') as handle:
-                pickle.dump({'timehist':timehist,\
-                    'sl_fX':sl_fX,'sl_AfX':sl_AfX,'PX':PX,'PX_now':PX_now,\
-                    'paramshist':paramshist},handle)
+        with open(outdatapath,'wb') as handle:
+            pickle.dump({'timehist':timehist,\
+                'sl_fX':sl_fX,'sl_AfX':sl_AfX,'PX':PX,'PX_now':PX_now,\
+                'paramshist':paramshist},handle)
 
-        case 'justplot':
-            with open(outdatapath,'rb') as handle:
-                outdata=pickle.load(handle)
-            for k,v in outdata.items():
-                globals()[k]=v
+    if mode=='justplot':
+        with open(outdatapath,'rb') as handle:
+            outdata=pickle.load(handle)
+        for k,v in outdata.items():
+            globals()[k]=v
 
     unweight=[1/p for p in PX]
     fX=[del_slog(sl) for sl in sl_fX]
