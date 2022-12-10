@@ -12,6 +12,8 @@ from vmcnet.models.construct import get_model_from_config
 from vmcnet.postprocess.re_construct import get_model_from_config_nonsym
 from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify, noslog
 import pickle
+from jax import tree_util as tu
+import functools
 
 def listpaths(path):
     return [os.path.join(path,f) for f in os.listdir(path)]
@@ -76,66 +78,96 @@ def showfile(path):
 
 if __name__=='__main__':
 
-    path=pickrun(rootpath=logs_root)
-    slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
-    Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
-
-    sl_AfX=[]
-    sl_fX=[]
-    PX=[]
-    PX_now=[]
-    M=10
-
-    for i,(params,data) in enumerate(zip(paramshist,datahist)):
-        if i%M==0:
-            X=data
-            p=Af(params,X)**2
-            p=p/jnp.sum(p)
-
-        if 'v' in sys.argv and i==0:
-            n1,n2=config['problem']['nelec']
-            print('\nverifying correct nonsym-antisym relation')
-            verify(slog_f.apply,slog_Af.apply,params,X[0,:2,:,:],n1,n2,full=config['model']['full_det'])
-
-        sl_AfX.append(slog_Af.apply(params,X))
-        sl_fX.append(slog_f.apply(params,X))
-
-        PX.append(p)
-        p_now=del_slog(sl_AfX[-1])**2
-        p_now=p_now/jnp.sum(p_now)
-        PX_now.append(p_now)
-
-        print('checkpoint {}/{}'.format(i+1,len(paramshist)))
-
-    unweight=[1/p for p in PX]
+    try:
+        path='.' if 'energy.txt' in os.listdir() else pickrun(rootpath=sys.argv[1])
+    except:
+        print('\nPass path to logs folder as first argument, e.g.,\npython postprocess.py logs\nor\npython postprocess.py .\n')
+        quit()
 
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
-    fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
+    mode='justplot' if 'justplot' in sys.argv else 'from_raw'
+    plotdatapath=os.path.join(path,'postprocessed/plotdata')
+    outdatapath=os.path.join(path,'postprocessed/outdata')
 
-    p1=[jnp.average(slf[1]/slAf[1]) for slf,slAf in zip(sl_fX,sl_AfX)]
-    #p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
-    ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
-    ax1.legend()
+    match mode:
+        case 'from_raw':
+            slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+            Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
 
+            sl_AfX=[]
+            sl_fX=[]
+            PX=[]
+            PX_now=[]
+            M=10
+
+            for i,(params,data) in enumerate(zip(paramshist,datahist)):
+                if i%M==0:
+                    X=data
+                    p=Af(params,X)**2
+                    p=p/jnp.sum(p)
+
+                if 'v' in sys.argv and i==0:
+                    n1,n2=config['problem']['nelec']
+                    print('\nverifying correct nonsym-antisym relation')
+                    verify(slog_f.apply,slog_Af.apply,params,X[0,:2,:,:],n1,n2,full=config['model']['full_det'])
+
+                sl_AfX.append(slog_Af.apply(params,X))
+                sl_fX.append(slog_f.apply(params,X))
+
+                PX.append(p)
+                p_now=del_slog(sl_AfX[-1])**2
+                p_now=p_now/jnp.sum(p_now)
+                PX_now.append(p_now)
+
+                print('checkpoint {}/{}'.format(i+1,len(paramshist)))
+
+
+            with open(outdatapath,'wb') as handle:
+                pickle.dump({'timehist':timehist,\
+                    'sl_fX':sl_fX,'sl_AfX':sl_AfX,'PX':PX,'PX_now':PX_now,\
+                    'paramshist':paramshist},handle)
+
+        case 'justplot':
+            with open(outdatapath,'rb') as handle:
+                outdata=pickle.load(handle)
+            for k,v in outdata.items():
+                globals()[k]=v
+
+    unweight=[1/p for p in PX]
     fX=[del_slog(sl) for sl in sl_fX]
     AfX=[del_slog(sl) for sl in sl_AfX]
     fnorms=[jnp.sum(uw*p*f**2) for f,p,uw in zip(fX,PX_now,unweight)]
     Afnorms=[jnp.sum(uw*p*Af**2) for Af,p,uw in zip(AfX,PX_now,unweight)]
+    p1=[jnp.average(slf[1]/slAf[1]) for slf,slAf in zip(sl_fX,sl_AfX)]
 
-    ax2.plot(timehist,[f/Af for f,Af in zip(fnorms,Afnorms)],'bo-',label='|f|^2/|Af|^2')
+    WLnorms=[[jnp.average(L**2) for L in tu.tree_leaves(params)] for params in paramshist]
+    #Wnorms=[functools.reduce(lambda x,y:x+y,wln) for wln in WLnorms]
+    Wnorms=[jnp.median(jnp.array(wln)) for wln in WLnorms]
+
+    #p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
+    #fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
+    #ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
+    #ax1.legend()
+
+    fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
+    #ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
+
+    ax1.plot(timehist,[f/Af for f,Af in zip(fnorms,Afnorms)],'bo-',label='|f|^2/|Af|^2')
+    ax1.legend()
+    ax1.set_yscale('log')
+    ax2.plot(timehist,fnorms,'bo-',label='|f|^2')
+    ax2.plot(timehist,Wnorms,'sr:',label='|W|')
     ax2.legend()
     ax2.set_yscale('log')
+    ax3.plot(timehist,Afnorms,'bo-',label='|Af|^2')
+    ax3.legend()
+    ax3.set_yscale('log')
 
     plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
     plt.savefig(plotpath)
 
-    outdatapath=os.path.join(path,'postprocessed/plotdata')
-    with open(outdatapath,'wb') as handle:
-        pickle.dump({'times':timehist,'fnorms':fnorms,'Afnorms':Afnorms,'rel_ent':p1},handle)
-    outdatapath=os.path.join(path,'postprocessed/outdata')
-    with open(outdatapath,'wb') as handle:
-        pickle.dump({'times':timehist,'f':fX,'Af':AfX,'P':PX},handle)
-
-    showfile(os.path.split(plotpath)[0])
+    opath=os.path.split(plotpath)[0]
+    print(opath)
+    showfile(opath)
 
 
