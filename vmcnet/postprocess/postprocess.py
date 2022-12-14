@@ -16,6 +16,7 @@
 
 
 from vmcnet.postprocess.pickrun import listpaths,pickrun,showfile
+import sys
 
 samplesbound=10000      # run with arg samplesbound=100 to speed up
 mode='from_raw_data'    # run with arg mode=justplot to quickly modify the visuals of previously generated plots
@@ -31,11 +32,9 @@ for s in sys.argv[1:]:
 try: path=pickrun(logpath)
 except: path=pickrun('.')
 
-
-###
+######################################################################################################################
 
 import os
-import sys
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from numpy import load
