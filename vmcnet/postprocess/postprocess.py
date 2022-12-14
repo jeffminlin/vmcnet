@@ -101,11 +101,11 @@ if __name__=='__main__':
 
         for i,(params,data) in enumerate(zip(paramshist,datahist)):
             if 'staticsamples' in sys.argv:
-                print('using static samples')
-                sigma1=jnp.sqrt(jnp.average(datahist[0]**2))
-                sigma2=jnp.sqrt(jnp.average(datahist[-1]**2))
-                sigma=max(sigma1,sigma2)
                 if i==0:
+                    print('using static samples')
+                    sigma1=jnp.sqrt(jnp.average(datahist[0]**2))
+                    sigma2=jnp.sqrt(jnp.average(datahist[-1]**2))
+                    sigma=max(sigma1,sigma2)
                     X=sigma*rnd.normal(rnd.PRNGKey(0),data.shape)
                     p=jnp.exp(-jnp.sum(X**2,axis=(-2,-1))/(2*sigma))
                     p=p/jnp.sum(p)
