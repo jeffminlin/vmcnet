@@ -18,7 +18,7 @@
 from vmcnet.postprocess.pickrun import listpaths,pickrun,showfile
 import sys
 
-samplesbound=10000      # run with arg samplesbound=100 to speed up
+samplesbound=2000      # run with arg samplesbound=100 to speed up
 mode='from_raw_data'    # run with arg mode=justplot to quickly modify the visuals of previously generated plots
 
 for s in sys.argv[1:]:
@@ -76,11 +76,19 @@ plotdatapath=os.path.join(path,'postprocessed/plotdata')
 outdatapath=os.path.join(path,'postprocessed/outdata')
 
 slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+
+*_,n,d=datahist[0].shape
+var_gaussian=jnp.average(datahist[0]**2+datahist[-1]**2)
+X_gaussian=rnd.normal(rnd.PRNGKey(0),(1,samplesbound,n,d))*jnp.sqrt(var_gaussian)
+logp=-jnp.sum(X_gaussian**2/(2*var_gaussian),axis=(-2,-1))-0.5*jnp.log(2*math.pi*var_gaussian)
+
 if mode=='from_raw_data':
     Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
 
     sl_AfX=[]
     sl_fX=[]
+    sl_AfX_gaussian=[]
+    sl_fX_gaussian=[]
 
     for i,(params,X) in enumerate(zip(paramshist,datahist)):
         X=X[:,:samplesbound,:,:]
@@ -91,6 +99,8 @@ if mode=='from_raw_data':
 
         sl_AfX.append(slog_Af.apply(params,X))
         sl_fX.append(slog_f.apply(params,X))
+        sl_AfX_gaussian.append(slog_Af.apply(params,X_gaussian))
+        sl_fX_gaussian.append(slog_f.apply(params,X_gaussian))
         print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
     with open(outdatapath,'wb') as handle:
@@ -102,19 +112,22 @@ if mode=='justplot':
     for k,v in outdata.items():
         globals()[k]=v
 
+opath=os.path.join(path,'postprocessed')
+print('output path:')
+print(opath)
+info={b:str(config[a][b]) for a,b in [('problem','nelec'),('model','ndeterminants')]}
+
+
+# entropy plots
+
 order_of_mag_f=[jnp.average(sl[1]) for sl in sl_fX]
 order_of_mag_Af=[jnp.average(sl[1]) for sl in sl_AfX]
-
 relative_order=[f-Af for f,Af in zip(order_of_mag_f,order_of_mag_Af)]
 
 WLnorms=[[jnp.average(L**2) for L in tu.tree_leaves(params)] for params in paramshist]
 Wnorms=[jnp.max(jnp.array(wln)) for wln in WLnorms]
 
-opath=os.path.join(path,'postprocessed')
-info={b:str(config[a][b]) for a,b in [('problem','nelec'),('model','ndeterminants')]}
-
 for suffix in ['','_xlog']:
-#for suffix in ['']:
     fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
     fig.suptitle(' '.join(['{}={}'.format(a,b) for a,b in info.items()]))
     ax1.plot(timehist,relative_order,'b-',label='E[log(|f(X)|/|Af(X)|)]')
@@ -127,8 +140,27 @@ for suffix in ['','_xlog']:
             ax.set_xscale('log')
     plt.savefig(os.path.join(opath,'rel_ent{}.pdf'.format(suffix)))
 
-print('output path:')
-print(opath)
+# norm plots
+
+fnorms=[jnp.average(jnp.exp(2*sl[1]-logp)) for sl in sl_fX_gaussian]
+Afnorms=[jnp.average(jnp.exp(2*sl[1]-logp)) for sl in sl_AfX_gaussian]
+ratios=[f/Af for f,Af in zip(fnorms,Afnorms)]
+
+for suffix in ['','_xlog']:
+    fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
+    fig.suptitle(' '.join(['{}={}'.format(a,b) for a,b in info.items()]))
+    ax1.plot(timehist,ratios,'b-',label='|f|^2/|Af|^2')
+    ax2.plot(timehist,fnorms,'r--',label='|f|^2')
+    ax2.plot(timehist,Afnorms,'b-',label='|Af|^2')
+    ax3.plot(timehist,Wnorms,'r',label='|W|')
+    for ax in (ax1,ax2,ax3):
+        ax.legend()
+        ax.set_yscale('log')
+        if 'xlog' in suffix:
+            ax.set_xscale('log')
+    plt.savefig(os.path.join(opath,'norms{}.pdf'.format(suffix)))
+
+
 showfile(opath)
 
 
