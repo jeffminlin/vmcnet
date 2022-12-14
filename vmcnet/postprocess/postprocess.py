@@ -12,8 +12,8 @@ from vmcnet.models.construct import get_model_from_config
 from vmcnet.postprocess.re_construct import get_model_from_config_nonsym
 from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify, noslog
 import pickle
-from jax import tree_util as tu
-import functools
+from jax import tree_util as tu, random as rnd
+import math
 
 def listpaths(path):
     return [os.path.join(path,f) for f in os.listdir(path)]
@@ -100,10 +100,20 @@ if __name__=='__main__':
         M=10
 
         for i,(params,data) in enumerate(zip(paramshist,datahist)):
-            if i%M==0:
-                X=data
-                p=Af(params,X)**2
-                p=p/jnp.sum(p)
+            if 'staticsamples' in sys.argv:
+                print('using static samples')
+                sigma1=jnp.sqrt(jnp.average(datahist[0]**2))
+                sigma2=jnp.sqrt(jnp.average(datahist[-1]**2))
+                sigma=max(sigma1,sigma2)
+                if i==0:
+                    X=sigma*rnd.normal(rnd.PRNGKey(0),data.shape)
+                    p=jnp.exp(-jnp.sum(X**2,axis=(-2,-1))/(2*sigma))
+                    p=p/jnp.sum(p)
+            else:
+                if i%M==0:
+                    X=data
+                    p=Af(params,X)**2
+                    p=p/jnp.sum(p)
 
             if 'v' in sys.argv and i==0:
                 n1,n2=config['problem']['nelec']
@@ -141,7 +151,7 @@ if __name__=='__main__':
 
     WLnorms=[[jnp.average(L**2) for L in tu.tree_leaves(params)] for params in paramshist]
     #Wnorms=[functools.reduce(lambda x,y:x+y,wln) for wln in WLnorms]
-    Wnorms=[jnp.median(jnp.array(wln)) for wln in WLnorms]
+    Wnorms=[jnp.max(jnp.array(wln)) for wln in WLnorms]
 
     #p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
     #fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
