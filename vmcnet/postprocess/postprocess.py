@@ -1,49 +1,23 @@
-logs_root='logs'
+# example:
+# python PATH-TO-postprocess.py logpath=PATH-TO-logs
+#
+# or from logs dir OR logs/20220101-120000:
+# python PATH-TO-postprocess.py
 
 import os
 import sys
-import subprocess
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 from numpy import load
 from vmcnet.utils import io
-from vmcnet.utils.slog_helpers import array_from_slog as del_slog
 from vmcnet.models.construct import get_model_from_config
 from vmcnet.postprocess.re_construct import get_model_from_config_nonsym
 from vmcnet.postprocess.test_nonsym import assert_f_Af_slog as verify, noslog
+from vmcnet.postprocess.pickrun import listpaths,pickrun,showfile
 import pickle
 from jax import tree_util as tu, random as rnd
 import math
 
-def listpaths(path):
-    return [os.path.join(path,f) for f in os.listdir(path)]
-
-def pickfrom(alloptions,allinfos):
-    blocksize=9
-    s=0
-    while True:
-        options,infos=alloptions[s:s+blocksize],allinfos[s:s+blocksize]
-        optionstext='\n'.join(['{}: {} ({})'.format(i+1,p,info) for i,(p,info) in enumerate(zip(options,infos))])
-        optionstext='u: up\n'+optionstext+'\nd: down'
-        inp=input('\nInput number 1-{} or d=down/u=up (and press enter):\n{}\n'.format(len(options),optionstext))
-        if inp=='d': s=(s+blocksize)%len(alloptions)
-        if inp=='u': s=(s-blocksize)%len(alloptions)
-        try:
-            optionid=int(inp)-1
-            return options[optionid]
-        except:
-            pass
-
-def pickrun(rootpath):
-    paths=list(reversed(sorted(listpaths(rootpath))))
-    def getinfo(path):
-        try:
-            #return str(io.load_config_dict(path,'config.json')['problem'])[:100]
-            return '{} checkpoints'.format(len(os.listdir(os.path.join(path,'checkpoints'))))
-        except:
-            return ''
-    infos=[getinfo(p) for p in paths]
-    return pickfrom(paths,infos)
 
 def loadrun(path):
     gettime=lambda p: int(os.path.split(p)[-1][:-4])
@@ -68,53 +42,57 @@ def loadrun(path):
 
     return slog_psi,slog_f,paramshist,datahist,[gettime(p) for p in checkpointpaths],config
 
-def showfile(path):
-    try: subprocess.Popen(['open',path])
-    except: pass
-    try: subprocess.Popen(['xdg-open',path])
-    except: pass
-    try: os.startfile(path)
-    except: pass
 
 if __name__=='__main__':
 
-    try:
-        path='.' if 'energy.txt' in os.listdir() else pickrun(rootpath=sys.argv[1])
-    except:
-        print('\nPass path to logs folder as first argument, e.g.,\npython postprocess.py logs\nor\npython postprocess.py .\n')
-        quit()
+    samplesbound=10000      # run with arg samplesbound=100 to speed up
+    mode='from_raw_data'    # run with arg mode=justplot to quickly modify the visuals of previously generated plots
+
+    for s in sys.argv[1:]:
+        if '=' in s:
+            k,v=s.split('=')
+            try: v=int(v)
+            except: pass
+            globals()[k]=v
+
+    #################### options ####################
+    #
+    # __To process pre-selected run__:
+    # run from 20220101-120000 or with arg logpath=20220101-120000
+    #
+    # __To browse logs directory and process selected run__:
+    # run from logs directory or with arg logpath=PATH-TO-LOGS-DIR 
+    #
+    #
+    #################################################
+
+    try: path=pickrun(logpath)
+    except: path=pickrun('.')
 
     os.makedirs(os.path.join(path,'postprocessed'), exist_ok=True)
-    mode='justplot' if 'justplot' in sys.argv else 'from_raw'
+
     plotdatapath=os.path.join(path,'postprocessed/plotdata')
     outdatapath=os.path.join(path,'postprocessed/outdata')
 
-    if mode=='from_raw':
-        slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+    slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
+    if mode=='from_raw_data':
         Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
 
         sl_AfX=[]
         sl_fX=[]
-        PX=[]
-        PX_now=[]
-        M=10
 
-        for i,(params,data) in enumerate(zip(paramshist,datahist)):
-            if 'staticsamples' in sys.argv:
-                if i==0:
-                    print('using static samples')
-                    sigma1=jnp.sqrt(jnp.average(datahist[0]**2))
-                    sigma2=jnp.sqrt(jnp.average(datahist[-1]**2))
-                    sigma=max(sigma1,sigma2)
-                    X=sigma*rnd.normal(rnd.PRNGKey(0),data.shape)
-                    p=jnp.exp(-jnp.sum(X**2,axis=(-2,-1))/(2*sigma))
-                    p=p/jnp.sum(p)
-            else:
-                if i%M==0:
-                    X=data
-                    p=Af(params,X)**2
-                    p=p/jnp.sum(p)
+        # print('using static samples')
+        # _,_,n,d=datahist[0].shape
+        # var1=jnp.average(datahist[0]**2)
+        # var2=jnp.average(datahist[-1]**2)
+        # sigma=jnp.sqrt(var1+var2)
+        # X=sigma*rnd.normal(rnd.PRNGKey(0),(1,samples,n,d))
+        # print(sigma)
+        # p=jnp.exp(-jnp.sum(X**2,axis=(-2,-1))/(2*sigma**2))/(jnp.sqrt(2*math.pi)*sigma)**(n*d)
+        # breakpoint()
 
+        for i,(params,X) in enumerate(zip(paramshist,datahist)):
+            X=X[:,:samplesbound,:,:]
             if 'v' in sys.argv and i==0:
                 n1,n2=config['problem']['nelec']
                 print('\nverifying correct nonsym-antisym relation')
@@ -122,19 +100,10 @@ if __name__=='__main__':
 
             sl_AfX.append(slog_Af.apply(params,X))
             sl_fX.append(slog_f.apply(params,X))
-
-            PX.append(p)
-            p_now=del_slog(sl_AfX[-1])**2
-            p_now=p_now/jnp.sum(p_now)
-            PX_now.append(p_now)
-
             print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
-
         with open(outdatapath,'wb') as handle:
-            pickle.dump({'timehist':timehist,\
-                'sl_fX':sl_fX,'sl_AfX':sl_AfX,'PX':PX,'PX_now':PX_now,\
-                'paramshist':paramshist},handle)
+            pickle.dump({'sl_fX':sl_fX,'sl_AfX':sl_AfX},handle)
 
     if mode=='justplot':
         with open(outdatapath,'rb') as handle:
@@ -142,40 +111,37 @@ if __name__=='__main__':
         for k,v in outdata.items():
             globals()[k]=v
 
-    unweight=[1/p for p in PX]
-    fX=[del_slog(sl) for sl in sl_fX]
-    AfX=[del_slog(sl) for sl in sl_AfX]
-    fnorms=[jnp.sum(uw*p*f**2) for f,p,uw in zip(fX,PX_now,unweight)]
-    Afnorms=[jnp.sum(uw*p*Af**2) for Af,p,uw in zip(AfX,PX_now,unweight)]
-    p1=[jnp.average(slf[1]/slAf[1]) for slf,slAf in zip(sl_fX,sl_AfX)]
+    # fX=[array_from_slog(sl) for sl in sl_fX]
+    # AfX=[array_from_slog(sl) for sl in sl_AfX]
+    # fnorms=[jnp.average(f**2/p) for f,p in zip(fX,PX)]
+    # Afnorms=[jnp.average(Af**2/p) for Af,p in zip(AfX,PX)]
+
+    order_of_mag_f=[jnp.average(sl[1]) for sl in sl_fX]
+    order_of_mag_Af=[jnp.average(sl[1]) for sl in sl_AfX]
+
+    relative_order=[f-Af for f,Af in zip(order_of_mag_f,order_of_mag_Af)]
 
     WLnorms=[[jnp.average(L**2) for L in tu.tree_leaves(params)] for params in paramshist]
-    #Wnorms=[functools.reduce(lambda x,y:x+y,wln) for wln in WLnorms]
     Wnorms=[jnp.max(jnp.array(wln)) for wln in WLnorms]
 
-    #p1=[jnp.sum(uw*p_now*(slf[1]/slAf[1])) for slf,slAf,p_now,uw in zip(sl_fX,sl_AfX,PX_now,unweight)]
-    #fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,5))
-    #ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
-    #ax1.legend()
+    opath=os.path.join(path,'postprocessed')
+    info={b:str(config[a][b]) for a,b in [('problem','nelec'),('model','ndeterminants')]}
 
-    fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
-    #ax1.plot(timehist,p1,'bo-',label='E[log(|f|/|Af|)]')
+    for suffix in ['','_xlog']:
+    #for suffix in ['']:
+        fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
+        fig.suptitle(' '.join(['{}={}'.format(a,b) for a,b in info.items()]))
+        ax1.plot(timehist,relative_order,'b-',label='E[log(|f(X)|/|Af(X)|)]')
+        ax2.plot(timehist,order_of_mag_f,'r--',label='E[log|f(X)|]')
+        ax2.plot(timehist,order_of_mag_Af,'b-',label='E[log|Af(X)|]')
+        ax3.plot(timehist,Wnorms,'r',label='|W|')
+        for ax in (ax1,ax2,ax3):
+            ax.legend()
+            if 'xlog' in suffix:
+                ax.set_xscale('log')
+        plt.savefig(os.path.join(opath,'rel_ent{}.pdf'.format(suffix)))
 
-    ax1.plot(timehist,[f/Af for f,Af in zip(fnorms,Afnorms)],'bo-',label='|f|^2/|Af|^2')
-    ax1.legend()
-    ax1.set_yscale('log')
-    ax2.plot(timehist,fnorms,'bo-',label='|f|^2')
-    ax2.plot(timehist,Wnorms,'sr:',label='|W|')
-    ax2.legend()
-    ax2.set_yscale('log')
-    ax3.plot(timehist,Afnorms,'bo-',label='|Af|^2')
-    ax3.legend()
-    ax3.set_yscale('log')
-
-    plotpath=os.path.join(path,'postprocessed/rel_ent.pdf') 
-    plt.savefig(plotpath)
-
-    opath=os.path.split(plotpath)[0]
+    print('output path:')
     print(opath)
     showfile(opath)
 
