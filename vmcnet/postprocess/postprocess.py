@@ -18,7 +18,8 @@
 from vmcnet.postprocess.pickrun import listpaths,pickrun,showfile
 import sys
 
-samplesbound=2000      # run with arg samplesbound=100 to speed up
+samplesbound=2000       # run with arg samplesbound=100 to speed up
+plotboth=0              # run with arg 1 to plot the biased overlap with a Gaussian with no 1/p
 mode='from_raw_data'    # run with arg mode=justplot to quickly modify the visuals of previously generated plots
 
 for s in sys.argv[1:]:
@@ -77,10 +78,15 @@ outdatapath=os.path.join(path,'postprocessed/outdata')
 
 slog_Af,slog_f,paramshist,datahist,timehist,config=loadrun(path)
 
-*_,n,d=datahist[0].shape
+_,samples,n,d=datahist[0].shape
 var_gaussian=jnp.average(datahist[0]**2+datahist[-1]**2)
-X_gaussian=rnd.normal(rnd.PRNGKey(0),(1,samplesbound,n,d))*jnp.sqrt(var_gaussian)
-logp=-jnp.sum(X_gaussian**2/(2*var_gaussian),axis=(-2,-1))-0.5*jnp.log(2*math.pi*var_gaussian)
+X_gaussian=rnd.normal(rnd.PRNGKey(0),(1,min(samples,samplesbound),n,d))*jnp.sqrt(var_gaussian)
+logp_gaussian=-jnp.sum(X_gaussian**2/(2*var_gaussian),axis=(-2,-1))-0.5*jnp.log(2*math.pi*var_gaussian)*n*d
+
+# estimate squared norm of last psi 
+C=jnp.average(jnp.exp(2*slog_Af.apply(paramshist[-1],X_gaussian)[-1]-logp_gaussian))
+X_last=datahist[-1]
+logp_last=2*slog_Af.apply(paramshist[-1],X_last)[-1]-jnp.log(C)
 
 if mode=='from_raw_data':
     Af,f=noslog(slog_Af.apply),noslog(slog_f.apply)
@@ -89,6 +95,8 @@ if mode=='from_raw_data':
     sl_fX=[]
     sl_AfX_gaussian=[]
     sl_fX_gaussian=[]
+    sl_AfX_last=[]
+    sl_fX_last=[]
 
     for i,(params,X) in enumerate(zip(paramshist,datahist)):
         X=X[:,:samplesbound,:,:]
@@ -101,6 +109,8 @@ if mode=='from_raw_data':
         sl_fX.append(slog_f.apply(params,X))
         sl_AfX_gaussian.append(slog_Af.apply(params,X_gaussian))
         sl_fX_gaussian.append(slog_f.apply(params,X_gaussian))
+        #sl_AfX_last.append(slog_Af.apply(params,X_last))
+        #sl_fX_last.append(slog_f.apply(params,X_last))
         print('checkpoint {}/{}'.format(i+1,len(paramshist)))
 
     with open(outdatapath,'wb') as handle:
@@ -142,16 +152,29 @@ for suffix in ['','_xlog']:
 
 # norm plots
 
-fnorms=[jnp.average(jnp.exp(2*sl[1]-logp)) for sl in sl_fX_gaussian]
-Afnorms=[jnp.average(jnp.exp(2*sl[1]-logp)) for sl in sl_AfX_gaussian]
+fnorms=[jnp.average(jnp.exp(2*sl[1]-logp_gaussian)) for sl in sl_fX_gaussian]
+Afnorms=[jnp.average(jnp.exp(2*sl[1]-logp_gaussian)) for sl in sl_AfX_gaussian]
 ratios=[f/Af for f,Af in zip(fnorms,Afnorms)]
+
+sc=1/jnp.average(jnp.exp(logp_gaussian))
+fnorms_=[sc*jnp.average(jnp.exp(2*sl[1])) for sl in sl_fX_gaussian]
+Afnorms_=[sc*jnp.average(jnp.exp(2*sl[1])) for sl in sl_AfX_gaussian]
+ratios_=[f/Af for f,Af in zip(fnorms_,Afnorms_)]
+
+#fnorms=[jnp.average(jnp.exp(2*sl[1]-logp_last)) for sl in sl_fX_last]
+#Afnorms=[jnp.average(jnp.exp(2*sl[1]-logp_last)) for sl in sl_AfX_last]
+#ratios=[f/Af for f,Af in zip(fnorms,Afnorms)]
 
 for suffix in ['','_xlog']:
     fig,(ax1,ax2,ax3)=plt.subplots(3,1,figsize=(7,14))
     fig.suptitle(' '.join(['{}={}'.format(a,b) for a,b in info.items()]))
-    ax1.plot(timehist,ratios,'b-',label='|f|^2/|Af|^2')
-    ax2.plot(timehist,fnorms,'r--',label='|f|^2')
-    ax2.plot(timehist,Afnorms,'b-',label='|Af|^2')
+    ax1.plot(timehist,ratios,'bo-',label='|f|^2/|Af|^2')
+    if plotboth: ax1.plot(timehist,ratios_,'b:',label='|f|^2/|Af|^2 no division')
+    ax2.plot(timehist,fnorms,'ro-',label='|f|^2')
+    if plotboth: ax2.plot(timehist,fnorms_,'r:',label='|f|^2 no division')
+    ax2.plot(timehist,Afnorms,'bo-',label='|Af|^2')
+    if plotboth: ax2.plot(timehist,Afnorms_,'b:',label='|Af|^2 no division')
+
     ax3.plot(timehist,Wnorms,'r',label='|W|')
     for ax in (ax1,ax2,ax3):
         ax.legend()
