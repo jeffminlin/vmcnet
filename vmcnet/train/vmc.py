@@ -1,4 +1,6 @@
 """Main VMC loop."""
+import time
+import logging
 from typing import Tuple, Optional
 
 from vmcnet.mcmc.metropolis import WalkerFn
@@ -107,6 +109,8 @@ def vmc_loop(
             old_data = data
             old_key = key
 
+            start = time.perf_counter()
+
             accept_ratio, data, key = walker_fn(params, data, key)
 
             params, data, optimizer_state, metrics, key = update_param_fn(
@@ -149,6 +153,9 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+
+            end = time.perf_counter()
+            logging.info(f"Time for epoch {epoch}: {end-start}")
 
             if nans_detected:
                 break
