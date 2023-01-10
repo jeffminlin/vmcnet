@@ -285,7 +285,9 @@ def create_value_and_grad_energy_fn(
             jax.grad(log_psi_apply, argnums=0), in_axes=(None, 0), out_axes=0
         )(params, positions)
 
-        grad_log_psi_4 = jnp.power(jax.flatten_util.ravel_pytree(grad_log_psi)[0], 4)
+        grad_log_psi_4 = utils.distribute.mean_all_local_devices(
+            jnp.power(jax.flatten_util.ravel_pytree(grad_log_psi)[0], 4)
+        )
 
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't

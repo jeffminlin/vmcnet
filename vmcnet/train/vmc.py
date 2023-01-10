@@ -120,7 +120,6 @@ def vmc_loop(
 
             metrics["accept_ratio"] = accept_ratio
 
-            print(f"All metrics: {metrics}")
             (
                 checkpoint_metric,
                 checkpoint_str,
@@ -150,7 +149,7 @@ def vmc_loop(
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
-            # utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
             if nans_detected:
                 break
