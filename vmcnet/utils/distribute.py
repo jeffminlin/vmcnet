@@ -59,6 +59,7 @@ def get_first(obj: T) -> T:
 
 
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
+psum_if_pmap = functools.partial(wrap_if_pmap(jax.lax.psum), axis_name=PMAP_AXIS_NAME)
 
 
 def mean_all_local_devices(x: Array) -> jnp.float32:

@@ -24,7 +24,7 @@ def _make_initial_params_and_data(model_omega, nchains):
     return log_psi_model, params, random_particle_positions, amplitudes, key
 
 
-def main():
+def run(learning_rate_strat, nchains, learning_rate):
     """Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
 
     Integration test for the overall API, to make sure it comes together correctly and
@@ -35,14 +35,10 @@ def main():
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 1000
-    nburn = 100
-    nepochs = 1000
+    nburn = 1000
+    nepochs = 10000
     nsteps_per_param_update = 10
     std_move = 0.25
-    learning_rate = 5e-2
-    # learning_rate_strat = "constant"
-    learning_rate_strat = "decay"
 
     dir = f"/Users/gil/PycharmProjects/VMCNet/vmcnet/tests/integrations/examples/convergence_data_nc_{nchains}_learning_{learning_rate_strat}"
     shutil.rmtree(
@@ -79,6 +75,14 @@ def main():
         logdir=dir,
         learning_rate_strat=learning_rate_strat,
     )
+
+
+def main():
+    learning_rate = 1e-2
+    for learning_rate_strat in ["constant", "decay"]:
+        for nchains in [10, 1000]:
+            run(learning_rate_strat, nchains, learning_rate)
+
 
 
 if __name__ == "__main__":

@@ -80,6 +80,8 @@ def sgd_vmc_loop_with_logging(
         )
 
     data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
+
+    print(opt_state)
     params, opt_state, data, key, _ = train.vmc.vmc_loop(
         params,
         opt_state,
@@ -93,4 +95,5 @@ def sgd_vmc_loop_with_logging(
         checkpoint_every=checkpoint_every,
         checkpoint_dir=checkpoint_dir,
     )
+    print(opt_state)
     return data, params, opt_state, key

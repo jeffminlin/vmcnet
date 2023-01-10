@@ -108,9 +108,10 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
-        grad_energy_2 = utils.distribute.pmean_if_pmap(
-            jnp.power(jax.flatten_util.ravel_pytree(grad_energy)[0], 2)
+        grad_energy_2 = (
+            jnp.linalg.norm(jax.flatten_util.ravel_pytree(grad_energy)[0]) ** 2
         )
+
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
         )
