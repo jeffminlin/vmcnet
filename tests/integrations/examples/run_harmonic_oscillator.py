@@ -30,21 +30,25 @@ def main():
     Integration test for the overall API, to make sure it comes together correctly and
     can optimize a simple 1 parameter model rapidly.
     """
-    shutil.rmtree("tests/integrations/examples/convergence_data", ignore_errors=True)
-
     # Problem parameters
     model_omega = 2.5
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 10
-    print(f"nchains: {nchains}")
-    nburn = 1000
-    nepochs = 100
-    nsteps_per_param_update = 500
+    nchains = 1000
+    nburn = 100
+    nepochs = 1000
+    nsteps_per_param_update = 10
     std_move = 0.25
-    learning_rate = 1e-2
+    learning_rate = 5e-2
+    # learning_rate_strat = "constant"
+    learning_rate_strat = "decay"
 
+    dir = f"/Users/gil/PycharmProjects/VMCNet/vmcnet/tests/integrations/examples/convergence_data_nc_{nchains}_learning_{learning_rate_strat}"
+    shutil.rmtree(
+        dir,
+        ignore_errors=True,
+    )
     # Initialize model and chains of walkers
     (
         log_psi_model,
@@ -60,7 +64,6 @@ def main():
         spring_constant, log_psi_model.apply
     )
 
-
     _, params, _, _ = sgd_vmc_loop_with_logging(
         data,
         params,
@@ -73,7 +76,8 @@ def main():
         learning_rate,
         log_psi_model,
         local_energy_fn,
-        logdir="tests/integrations/examples/convergence_data",
+        logdir=dir,
+        learning_rate_strat=learning_rate_strat,
     )
 
 

@@ -1,5 +1,6 @@
 """Shared SGD integration test for examples."""
 import jax
+import jax.numpy as jnp
 
 import vmcnet.mcmc as mcmc
 import vmcnet.physics as physics
@@ -25,13 +26,14 @@ def sgd_vmc_loop_with_logging(
     nepochs,
     nsteps_per_param_update,
     std_move,
-    optimizer_state,
+    init_learning_rate,
     log_psi_model,
     local_energy_fn,
     should_distribute_data=True,
     logdir=None,
     checkpoint_every=None,
     checkpoint_dir=None,
+    learning_rate_strat="constant",
 ):
     """Run a VMC test with a very simple SGD optimizer and given model."""
     # Setup metropolis step
@@ -43,11 +45,21 @@ def sgd_vmc_loop_with_logging(
     )
 
     # Define parameter updates
-    def sgd_apply(grad, params, learning_rate, data):
+    def sgd_apply(grad, params, opt_state, data):
         del data
+        epoch = opt_state["epoch"]
+        learning_rate = opt_state["learning_rate"]
+        if learning_rate_strat == "constant":
+            opt_state = {"epoch": epoch + 1, "learning_rate": init_learning_rate}
+        else:
+            opt_state = {
+                "epoch": epoch + 1,
+                "learning_rate": init_learning_rate / (1 + epoch / 10),
+            }
+
         return (
             jax.tree_map(lambda a, b: a - learning_rate * b, params, grad),
-            learning_rate,
+            opt_state,
         )
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
@@ -60,16 +72,17 @@ def sgd_vmc_loop_with_logging(
         get_update_data_fn(log_psi_model.apply),
     )
 
+    opt_state = {"epoch": 0, "learning_rate": init_learning_rate}
     # Distribute everything via jax.pmap
     if should_distribute_data:
-        (data, params, optimizer_state, key,) = utils.distribute.distribute_vmc_state(
-            data, params, optimizer_state, key, distribute_position_amplitude_data
+        (data, params, opt_state, key,) = utils.distribute.distribute_vmc_state(
+            data, params, opt_state, key, distribute_position_amplitude_data
         )
 
     data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
-    params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
+    params, opt_state, data, key, _ = train.vmc.vmc_loop(
         params,
-        optimizer_state,
+        opt_state,
         data,
         nchains,
         nepochs,
@@ -80,4 +93,4 @@ def sgd_vmc_loop_with_logging(
         checkpoint_every=checkpoint_every,
         checkpoint_dir=checkpoint_dir,
     )
-    return data, params, optimizer_state, key
+    return data, params, opt_state, key
