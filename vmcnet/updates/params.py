@@ -108,12 +108,21 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
+        grad_energy_2 = utils.distribute.pmean_if_pmap(
+            jnp.power(jax.flatten_util.ravel_pytree(grad_energy)[0], 2)
+        )
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
         )
         data = update_data_fn(data, params)
 
-        metrics = {"energy": energy, "variance": aux_energy_data[0]}
+        metrics = {
+            "energy": energy,
+            "variance": aux_energy_data[0],
+            "energy_4": aux_energy_data[4],
+            "grad_log_psi_4": aux_energy_data[5],
+            "grad_energy_2": grad_energy_2,
+        }
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
         )

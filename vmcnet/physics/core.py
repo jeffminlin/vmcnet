@@ -8,7 +8,14 @@ from kfac_ferminet_alpha import loss_functions
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
 
-EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
+EnergyAuxData = Tuple[
+    jnp.float32,
+    Array,
+    Optional[jnp.float32],
+    Optional[jnp.float32],
+    Optional[jnp.float32],
+    Optional[jnp.float32],
+]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
 
@@ -145,7 +152,7 @@ def laplacian_psi_over_psi(
 
 def get_statistics_from_local_energy(
     local_energies: Array, nchains: int, nan_safe: bool = True
-) -> Tuple[jnp.float32, jnp.float32]:
+) -> Tuple[jnp.float32, jnp.float32, jnp.float32]:
     """Collectively reduce local energies to an average energy and variance.
 
     Args:
@@ -168,10 +175,12 @@ def get_statistics_from_local_energy(
     else:
         allreduce_mean = utils.distribute.mean_all_local_devices
     energy = allreduce_mean(local_energies)
+
+    energy_4 = allreduce_mean(jnp.power(local_energies, 4))
     variance = (
         allreduce_mean(jnp.square(local_energies - energy)) * nchains / (nchains - 1)
     )  # adjust by n / (n - 1) to get an unbiased estimator
-    return energy, variance
+    return energy, variance, energy_4
 
 
 def get_default_energy_bwd(
@@ -268,33 +277,65 @@ def create_value_and_grad_energy_fn(
     @jax.custom_vjp
     def compute_energy_data(params: P, positions: Array) -> EnergyData:
         local_energies_noclip = local_energy_fn(params, positions)
+
+        # def abs_log_psi(params, positions):
+        #     return log_psi_apply(params, positions)
+
+        grad_log_psi = jax.vmap(
+            jax.grad(log_psi_apply, argnums=0), in_axes=(None, 0), out_axes=0
+        )(params, positions)
+
+        grad_log_psi_4 = jnp.power(jax.flatten_util.ravel_pytree(grad_log_psi)[0], 4)
+
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
             # do these in a nan-safe way. This makes nans more visible and makes sure
             # nans checkpointing will work properly.
-            energy_noclip, variance_noclip = get_statistics_from_local_energy(
+            (
+                energy_noclip,
+                variance_noclip,
+                energy_4_noclip,
+            ) = get_statistics_from_local_energy(
                 local_energies_noclip, nchains, nan_safe=False
             )
 
-            local_energies = clipping_fn(local_energies_noclip, energy_noclip)
-            energy, variance = get_statistics_from_local_energy(
+            local_energies, _ = clipping_fn(local_energies_noclip, energy_noclip)
+            energy, variance, _ = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )
 
-            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
+            aux_data = (
+                variance,
+                local_energies,
+                energy_noclip,
+                variance_noclip,
+                energy_4_noclip,
+                grad_log_psi_4,
+            )
         else:
             local_energies = local_energies_noclip
-            energy, variance = get_statistics_from_local_energy(
+            energy, variance, _ = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )
 
             # Even though there's no clipping function, still record noclip metrics
             # without nan-safety so that checkpointing epochs with nans can be
             # supported.
-            energy_noclip, variance_noclip = get_statistics_from_local_energy(
+            (
+                energy_noclip,
+                variance_noclip,
+                energy_4_noclip,
+            ) = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=False
             )
-            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
+            aux_data = (
+                variance,
+                local_energies,
+                energy_noclip,
+                variance_noclip,
+                energy_4_noclip,
+                grad_log_psi_4,
+            )
         return energy, aux_data
 
     def energy_fwd(params: P, positions: Array):

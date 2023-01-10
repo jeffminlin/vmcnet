@@ -67,10 +67,11 @@ def test_harmonic_oscillator_vmc(caplog):
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 100 * jax.local_device_count()
-    nburn = 100
+    nchains = 1 * jax.local_device_count()
+    print(f"nchains: {nchains}")
+    nburn = 1000
     nepochs = 50
-    nsteps_per_param_update = 5
+    nsteps_per_param_update = 500
     std_move = 0.25
     learning_rate = 1e-2
 
