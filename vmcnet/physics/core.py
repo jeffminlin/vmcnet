@@ -301,7 +301,7 @@ def create_value_and_grad_energy_fn(
                 local_energies_noclip, nchains, nan_safe=False
             )
 
-            local_energies, _ = clipping_fn(local_energies_noclip, energy_noclip)
+            local_energies = clipping_fn(local_energies_noclip, energy_noclip)
             energy, variance, _ = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )

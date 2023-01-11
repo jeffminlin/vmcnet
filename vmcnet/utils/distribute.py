@@ -62,6 +62,10 @@ pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AX
 psum_if_pmap = functools.partial(wrap_if_pmap(jax.lax.psum), axis_name=PMAP_AXIS_NAME)
 
 
+def sum_all_local_devices(x: Array) -> jnp.float32:
+    return psum_if_pmap(jnp.sum(x))
+
+
 def mean_all_local_devices(x: Array) -> jnp.float32:
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))

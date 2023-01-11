@@ -40,7 +40,8 @@ def run(learning_rate_strat, nchains, learning_rate):
     nsteps_per_param_update = 10
     std_move = 0.25
 
-    dir = f"/Users/gil/PycharmProjects/VMCNet/vmcnet/tests/integrations/examples/convergence_data_nc_{nchains}_learning_{learning_rate_strat}"
+    dir = f"/Users/gil/PycharmProjects/VMCNet/vmcnet/tests/integrations/examples/convergence_data_nc_{nchains}_learning_{learning_rate_strat}_{learning_rate}"
+
     shutil.rmtree(
         dir,
         ignore_errors=True,
@@ -78,11 +79,10 @@ def run(learning_rate_strat, nchains, learning_rate):
 
 
 def main():
-    learning_rate = 1e-2
-    for learning_rate_strat in ["constant", "decay"]:
-        for nchains in [10, 1000]:
+    learning_rate_strat = "decay"
+    for learning_rate in [1e-2, 8e-2]:
+        for nchains in [1000, 10]:
             run(learning_rate_strat, nchains, learning_rate)
-
 
 
 if __name__ == "__main__":

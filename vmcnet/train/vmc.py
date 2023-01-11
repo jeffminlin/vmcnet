@@ -114,6 +114,8 @@ def vmc_loop(
                 params, data, optimizer_state, key
             )
 
+            metrics["theta"] = jax.flatten_util.ravel_pytree(params)[0][0]
+
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
                 continue

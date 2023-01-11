@@ -107,10 +107,10 @@ def create_grad_energy_update_param_fn(
         energy_data, grad_energy = energy_data_val_and_grad(params, position)
         energy, aux_energy_data = energy_data
 
+        grad_energy_1 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0])
+        grad_energy_2 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0] ** 2)
+
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
-        grad_energy_2 = (
-            jnp.linalg.norm(jax.flatten_util.ravel_pytree(grad_energy)[0]) ** 2
-        )
 
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
@@ -122,6 +122,7 @@ def create_grad_energy_update_param_fn(
             "variance": aux_energy_data[0],
             "energy_4": aux_energy_data[4],
             "grad_log_psi_4": aux_energy_data[5],
+            "grad_energy_1": grad_energy_1,
             "grad_energy_2": grad_energy_2,
         }
         metrics = _update_metrics_with_noclip(
@@ -248,7 +249,7 @@ def create_eval_update_param_fn(
 
     def eval_update_param_fn(params, data, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
-        energy, variance = physics.core.get_statistics_from_local_energy(
+        energy, variance, _ = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
