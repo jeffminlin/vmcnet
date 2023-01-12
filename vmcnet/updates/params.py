@@ -107,6 +107,8 @@ def create_grad_energy_update_param_fn(
         energy_data, grad_energy = energy_data_val_and_grad(params, position)
         energy, aux_energy_data = energy_data
 
+        print(grad_energy)
+        breakpoint()
         grad_energy_1 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0])
         grad_energy_2 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0] ** 2)
 
@@ -120,8 +122,10 @@ def create_grad_energy_update_param_fn(
         metrics = {
             "energy": energy,
             "variance": aux_energy_data[0],
-            "energy_4": aux_energy_data[4],
-            "grad_log_psi_4": aux_energy_data[5],
+            "energy_2": aux_energy_data[4],
+            "energy_4": aux_energy_data[5],
+            "grad_log_psi_2": aux_energy_data[6],
+            "grad_log_psi_4": aux_energy_data[7],
             "grad_energy_1": grad_energy_1,
             "grad_energy_2": grad_energy_2,
         }

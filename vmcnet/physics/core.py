@@ -15,6 +15,8 @@ EnergyAuxData = Tuple[
     Optional[jnp.float32],
     Optional[jnp.float32],
     Optional[jnp.float32],
+    Optional[jnp.float32],
+    Optional[jnp.float32],
 ]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
@@ -152,7 +154,7 @@ def laplacian_psi_over_psi(
 
 def get_statistics_from_local_energy(
     local_energies: Array, nchains: int, nan_safe: bool = True
-) -> Tuple[jnp.float32, jnp.float32, jnp.float32]:
+) -> Tuple[jnp.float32, jnp.float32, jnp.float32, jnp.float32]:
     """Collectively reduce local energies to an average energy and variance.
 
     Args:
@@ -175,12 +177,17 @@ def get_statistics_from_local_energy(
     else:
         allreduce_mean = utils.distribute.mean_all_local_devices
     energy = allreduce_mean(local_energies)
+    print(local_energies.shape)
+    print(energy.shape)
 
+    energy_2 = allreduce_mean(jnp.power(local_energies, 2))
     energy_4 = allreduce_mean(jnp.power(local_energies, 4))
+    print(energy_4.shape)
+    breakpoint()
     variance = (
         allreduce_mean(jnp.square(local_energies - energy)) * nchains / (nchains - 1)
     )  # adjust by n / (n - 1) to get an unbiased estimator
-    return energy, variance, energy_4
+    return energy, variance, energy_2, energy_4
 
 
 def get_default_energy_bwd(
@@ -281,12 +288,22 @@ def create_value_and_grad_energy_fn(
         # def abs_log_psi(params, positions):
         #     return log_psi_apply(params, positions)
 
-        grad_log_psi = jax.vmap(
-            jax.grad(log_psi_apply, argnums=0), in_axes=(None, 0), out_axes=0
-        )(params, positions)
+        def grad_log_psi_2(params, positions):
+            grad_log_psi = jax.grad(log_psi_apply, argnums=0)(params, positions)
+            print(grad_log_psi)
+            grad_log_psi_flat = jax.flatten_util.ravel_pytree(grad_log_psi)[0]
+            print(grad_log_psi_flat.shape)
+            grad_log_psi_norm_square = jnp.sum(jnp.power(grad_log_psi_flat, 2))
+            return grad_log_psi_norm_square
 
+        grad_log_psi_2_vals = jax.vmap(grad_log_psi_2, in_axes=(None, 0), out_axes=0)(
+            params, positions
+        )
+        print(grad_log_psi_2_vals)
+        breakpoint()
+        grad_log_psi_2 = utils.distribute.mean_all_local_devices(grad_log_psi_2_vals)
         grad_log_psi_4 = utils.distribute.mean_all_local_devices(
-            jnp.power(jax.flatten_util.ravel_pytree(grad_log_psi)[0], 4)
+            jnp.power(grad_log_psi_2_vals, 2)
         )
 
         if clipping_fn is not None:
@@ -296,13 +313,14 @@ def create_value_and_grad_energy_fn(
             (
                 energy_noclip,
                 variance_noclip,
+                energy_2_noclip,
                 energy_4_noclip,
             ) = get_statistics_from_local_energy(
                 local_energies_noclip, nchains, nan_safe=False
             )
 
             local_energies = clipping_fn(local_energies_noclip, energy_noclip)
-            energy, variance, _ = get_statistics_from_local_energy(
+            energy, variance, _, _ = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )
 
@@ -311,12 +329,14 @@ def create_value_and_grad_energy_fn(
                 local_energies,
                 energy_noclip,
                 variance_noclip,
+                energy_2_noclip,
                 energy_4_noclip,
+                grad_log_psi_2,
                 grad_log_psi_4,
             )
         else:
             local_energies = local_energies_noclip
-            energy, variance, _ = get_statistics_from_local_energy(
+            energy, variance, _, _ = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=nan_safe
             )
 
@@ -326,6 +346,7 @@ def create_value_and_grad_energy_fn(
             (
                 energy_noclip,
                 variance_noclip,
+                energy_2_noclip,
                 energy_4_noclip,
             ) = get_statistics_from_local_energy(
                 local_energies, nchains, nan_safe=False
@@ -335,7 +356,9 @@ def create_value_and_grad_energy_fn(
                 local_energies,
                 energy_noclip,
                 variance_noclip,
+                energy_2_noclip,
                 energy_4_noclip,
+                grad_log_psi_2,
                 grad_log_psi_4,
             )
         return energy, aux_data
