@@ -108,7 +108,6 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         print(grad_energy)
-        breakpoint()
         grad_energy_1 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0])
         grad_energy_2 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0] ** 2)
 

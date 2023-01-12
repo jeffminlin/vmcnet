@@ -183,7 +183,7 @@ def get_statistics_from_local_energy(
     energy_2 = allreduce_mean(jnp.power(local_energies, 2))
     energy_4 = allreduce_mean(jnp.power(local_energies, 4))
     print(energy_4.shape)
-    breakpoint()
+
     variance = (
         allreduce_mean(jnp.square(local_energies - energy)) * nchains / (nchains - 1)
     )  # adjust by n / (n - 1) to get an unbiased estimator
@@ -300,7 +300,7 @@ def create_value_and_grad_energy_fn(
             params, positions
         )
         print(grad_log_psi_2_vals)
-        breakpoint()
+
         grad_log_psi_2 = utils.distribute.mean_all_local_devices(grad_log_psi_2_vals)
         grad_log_psi_4 = utils.distribute.mean_all_local_devices(
             jnp.power(grad_log_psi_2_vals, 2)
