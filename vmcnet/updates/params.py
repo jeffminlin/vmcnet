@@ -252,7 +252,7 @@ def create_eval_update_param_fn(
 
     def eval_update_param_fn(params, data, optimizer_state, key):
         local_energies = local_energy_fn(params, get_position_fn(data))
-        energy, variance, _ = physics.core.get_statistics_from_local_energy(
+        energy, variance, _, _ = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
         metrics = {"energy": energy, "variance": variance}
