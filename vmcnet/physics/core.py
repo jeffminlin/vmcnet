@@ -17,6 +17,7 @@ EnergyAuxData = Tuple[
     Optional[jnp.float32],
     Optional[jnp.float32],
     Optional[jnp.float32],
+    Optional[jnp.float32],
 ]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
@@ -299,13 +300,20 @@ def create_value_and_grad_energy_fn(
         grad_log_psi_2_vals = jax.vmap(grad_log_psi_2, in_axes=(None, 0), out_axes=0)(
             params, positions
         )
-        print(grad_log_psi_2_vals)
+        print(grad_log_psi_2_vals.shape)
+        print(local_energies_noclip.shape)
 
         grad_log_psi_2 = utils.distribute.mean_all_local_devices(grad_log_psi_2_vals)
         grad_log_psi_4 = utils.distribute.mean_all_local_devices(
             jnp.power(grad_log_psi_2_vals, 2)
         )
-
+        EL_grad_log_psi_2_vals = (
+            jnp.power(local_energies_noclip, 2) * grad_log_psi_2_vals
+        )
+        EL_grad_log_psi_2 = utils.distribute.mean_all_local_devices(
+            EL_grad_log_psi_2_vals
+        )
+        print(EL_grad_log_psi_2_vals.shape)
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
             # do these in a nan-safe way. This makes nans more visible and makes sure
@@ -333,6 +341,7 @@ def create_value_and_grad_energy_fn(
                 energy_4_noclip,
                 grad_log_psi_2,
                 grad_log_psi_4,
+                EL_grad_log_psi_2,
             )
         else:
             local_energies = local_energies_noclip
@@ -360,6 +369,7 @@ def create_value_and_grad_energy_fn(
                 energy_4_noclip,
                 grad_log_psi_2,
                 grad_log_psi_4,
+                EL_grad_log_psi_2,
             )
         return energy, aux_data
 

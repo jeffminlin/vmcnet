@@ -125,6 +125,7 @@ def create_grad_energy_update_param_fn(
             "energy_4": aux_energy_data[5],
             "grad_log_psi_2": aux_energy_data[6],
             "grad_log_psi_4": aux_energy_data[7],
+            "EL_grad_log_psi_2": aux_energy_data[8],
             "grad_energy_1": grad_energy_1,
             "grad_energy_2": grad_energy_2,
         }
