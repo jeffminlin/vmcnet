@@ -40,8 +40,8 @@ def _get_learning_rate_schedule(
     elif optimizer_config.schedule_type == "inverse_time":
 
         def learning_rate_schedule(t):
-            return optimizer_config.learning_rate / (
-                1.0 + optimizer_config.learning_decay_rate * t
+            return optimizer_config.learning_rate / jnp.sqrt(
+                (1.0 + optimizer_config.learning_decay_rate * t)
             )
 
     else:
