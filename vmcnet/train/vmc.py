@@ -1,6 +1,7 @@
 """Main VMC loop."""
 from typing import Tuple, Optional
 import jax
+import jax.numpy as jnp
 
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
@@ -97,6 +98,8 @@ def vmc_loop(
     nans_detected = False
 
     with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
+        grad_energy_flat_prev = None
+
         for epoch in range(nepochs):
             # Save state for checkpointing at the start of the epoch for two reasons:
             # 1. To save the model that generates the best energy and variance metrics,
@@ -109,12 +112,24 @@ def vmc_loop(
             old_key = key
 
             accept_ratio, data, key = walker_fn(params, data, key)
-
-            params, data, optimizer_state, metrics, key = update_param_fn(
+            new_params, data, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
             )
 
-            metrics["theta"] = jax.flatten_util.ravel_pytree(params)[0][0]
+            # Lipschitz denominator
+            old_params_flat = jax.flatten_util.ravel_pytree(params)[0]
+            new_params_flat = jax.flatten_util.ravel_pytree(new_params)[0]
+            metrics["dtheta"] = jnp.linalg.norm(new_params_flat - old_params_flat)
+
+            # Lipschitz numerator
+            grad_energy_flat = metrics["grad_energy_flat"]
+            if grad_energy_flat_prev is not None:
+                metrics["dgrad_energy"] = jnp.linalg.norm(grad_energy_flat - grad_energy_flat_prev)
+                grad_energy_flat_prev = grad_energy_flat
+            # Don't want to log giant array
+            del metrics["grad_energy_flat"]
+
+            params = new_params
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:

@@ -108,8 +108,9 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         print(grad_energy)
-        grad_energy_1 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0])
-        grad_energy_2 = jnp.sum(jax.flatten_util.ravel_pytree(grad_energy)[0] ** 2)
+        grad_energy_flat = jax.flatten_util.ravel_pytree(grad_energy)[0]
+        grad_energy_1 = jnp.sum(grad_energy_flat)
+        grad_energy_2 = jnp.sum(grad_energy_flat ** 2)
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
 
@@ -126,6 +127,7 @@ def create_grad_energy_update_param_fn(
             "grad_log_psi_2": aux_energy_data[6],
             "grad_log_psi_4": aux_energy_data[7],
             "EL_grad_log_psi_2": aux_energy_data[8],
+            "grad_energy_flat": grad_energy_flat,
             "grad_energy_1": grad_energy_1,
             "grad_energy_2": grad_energy_2,
         }
