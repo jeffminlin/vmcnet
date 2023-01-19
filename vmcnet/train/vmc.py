@@ -124,8 +124,11 @@ def vmc_loop(
             # Lipschitz numerator
             grad_energy_flat = metrics["grad_energy_flat"]
             if grad_energy_flat_prev is not None:
-                metrics["dgrad_energy"] = jnp.linalg.norm(grad_energy_flat - grad_energy_flat_prev)
-                grad_energy_flat_prev = grad_energy_flat
+                metrics["dgrad_energy"] = jnp.linalg.norm(
+                    grad_energy_flat - grad_energy_flat_prev
+                )
+
+            grad_energy_flat_prev = grad_energy_flat
             # Don't want to log giant array
             del metrics["grad_energy_flat"]
 
