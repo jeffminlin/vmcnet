@@ -1180,7 +1180,30 @@ class AGPFermiNet(Module):
 
         up_ei, down_ei = jnp.split(r_ei, self.spin_split, axis=-3)
 
-        # TODO (ggoldsh): add exp envelopes
+        # (..., nelec_up [r], nelecup + 1 [orb])
+        up_env = _compute_exponential_envelopes_on_leaf(
+            up_ei,
+            nelec_up + 1,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            isotropic=True,
+        )
+        # (..., nelec_up [r], nelec_up [orb]), (..., nelec_up [r], 1)
+        up_up_env, up_agp_env = jnp.split(up_env, (nelec_up,), axis=-1)
+
+        # (..., nelec_down [r], nelec_down + 1 [orb])
+        down_env = _compute_exponential_envelopes_on_leaf(
+            down_ei,
+            nelec_down + 1,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            isotropic=True,
+        )
+        # (..., nelec_down [r], nelec_down [orb]), (..., nelec_down [r], 1 [orb])
+        down_down_env, down_agp_env = jnp.split(down_env, (nelec_down,), axis=-1)
+        # (..., 1 [orb], nelec_down [r])
+        down_agp_env = jnp.swapaxes(down_agp_env, -1, -2)
+
         # TODO (ggoldsh): add support for multiple dets
         # (..., nelec_up [r], nelec_up [orb])
         up_block = Dense(
@@ -1188,15 +1211,8 @@ class AGPFermiNet(Module):
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
         )(up_1e)
-        # (..., nelec [r], nelec [orb])
-        up_env = _compute_exponential_envelopes_on_leaf(
-            up_ei,
-            nelec_up,
-            self.kernel_initializer_envelope_dim,
-            self.kernel_initializer_envelope_ion,
-            isotropic=True,
-        )
-        up_block = up_env * up_block
+        # (..., nelec_up [r], nelec_up [orb])
+        up_block = up_block * up_up_env
 
         # (..., nelec_down [r], nelec_down [orb])
         down_block = Dense(
@@ -1205,30 +1221,9 @@ class AGPFermiNet(Module):
             self.bias_initializer_orbital_linear,
         )(down_1e)
         # (..., nelec [r], nelec [orb])
-        down_env = _compute_exponential_envelopes_on_leaf(
-            down_ei,
-            nelec_down,
-            self.kernel_initializer_envelope_dim,
-            self.kernel_initializer_envelope_ion,
-            isotropic=True,
-        )
-        # (..., nelec [r], nelec [orb])
-        down_block = down_env * down_block
+        down_block = down_block * down_down_env
         # (..., nelec_down [orb], nelec_down [r])
         down_block = jnp.swapaxes(down_block, -2, -1)
-
-        # (..., d)
-        feature_mean = jnp.mean(stream_1e, axis=-2)
-        # (..., nelec_up * nelec_down)
-        invariant_block = Dense(
-            nelec_down * nelec_up,
-            self.kernel_initializer_orbital_linear,
-            self.bias_initializer_orbital_linear,
-        )(feature_mean)
-        # (..., nelec_down, nelec_up)
-        invariant_block = jnp.reshape(
-            invariant_block, (*invariant_block.shape[:-1], nelec_down, nelec_up)
-        )
 
         # (..., nelec_up, 1, d)
         up_expanded = jnp.expand_dims(up_1e, -2)
@@ -1254,6 +1249,20 @@ class AGPFermiNet(Module):
         )(agp_input)
         # (..., nelec_up, nelec_down)
         agp_block = jnp.squeeze(agp_block, axis=-1)
+        agp_block = agp_block * up_agp_env * down_agp_env
+
+        # (..., d)
+        feature_mean = jnp.mean(stream_1e, axis=-2)
+        # (..., nelec_up * nelec_down)
+        invariant_block = Dense(
+            nelec_down * nelec_up,
+            self.kernel_initializer_orbital_linear,
+            self.bias_initializer_orbital_linear,
+        )(feature_mean)
+        # (..., nelec_down, nelec_up)
+        invariant_block = jnp.reshape(
+            invariant_block, (*invariant_block.shape[:-1], nelec_down, nelec_up)
+        )
 
         # (..., nelec, nelec_up)
         up_inv = jnp.concatenate([up_block, invariant_block], axis=-2)

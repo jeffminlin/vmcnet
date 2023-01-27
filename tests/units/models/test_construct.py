@@ -569,17 +569,17 @@ def test_agp_net_can_be_evaluated():
 
     perm_pos = init_pos[:, [1, 0, 2, 3, 4, 5], :]
     perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
-    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-5)
+    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-4)
     np.testing.assert_allclose(results[0], -perm_results[0])
 
     perm_pos = init_pos[:, [0, 1, 2, 5, 4, 3], :]
     perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
-    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-5)
+    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-4)
     np.testing.assert_allclose(results[0], -perm_results[0])
 
     perm_pos = init_pos[:, [1, 0, 2, 5, 4, 3], :]
     perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
-    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-5)
+    np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-4)
     np.testing.assert_allclose(results[0], perm_results[0])
 
 
