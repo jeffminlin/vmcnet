@@ -42,6 +42,7 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
     compute_input_streams,
+    _compute_exponential_envelopes_on_leaf,
 )
 from .invariance import InvariantTensor
 from .jastrow import (
@@ -1177,6 +1178,8 @@ class AGPFermiNet(Module):
         # [(..., nelec_up, d), (..., nelec_down, d)]
         up_1e, down_1e = jnp.split(stream_1e, self.spin_split, axis=-2)
 
+        up_ei, down_ei = jnp.split(r_ei, self.spin_split, axis=-3)
+
         # TODO (ggoldsh): add exp envelopes
         # TODO (ggoldsh): add support for multiple dets
         # (..., nelec_up [r], nelec_up [orb])
@@ -1185,12 +1188,32 @@ class AGPFermiNet(Module):
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
         )(up_1e)
+        # (..., nelec [r], nelec [orb])
+        up_env = _compute_exponential_envelopes_on_leaf(
+            up_ei,
+            nelec_up,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            isotropic=True,
+        )
+        up_block = up_env * up_block
+
         # (..., nelec_down [r], nelec_down [orb])
         down_block = Dense(
             nelec_down,
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
         )(down_1e)
+        # (..., nelec [r], nelec [orb])
+        down_env = _compute_exponential_envelopes_on_leaf(
+            down_ei,
+            nelec_down,
+            self.kernel_initializer_envelope_dim,
+            self.kernel_initializer_envelope_ion,
+            isotropic=True,
+        )
+        # (..., nelec [r], nelec [orb])
+        down_block = down_env * down_block
         # (..., nelec_down [orb], nelec_down [r])
         down_block = jnp.swapaxes(down_block, -2, -1)
 
