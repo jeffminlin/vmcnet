@@ -1179,18 +1179,20 @@ class AGPFermiNet(Module):
 
         # TODO (ggoldsh): add exp envelopes
         # TODO (ggoldsh): add support for multiple dets
-        # (..., nelec_up, nelec_up)
+        # (..., nelec_up [r], nelec_up [orb])
         up_block = Dense(
             nelec_up,
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
         )(up_1e)
-        # (..., nelec_down, nelec_down)
+        # (..., nelec_down [r], nelec_down [orb])
         down_block = Dense(
             nelec_down,
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
         )(down_1e)
+        # (..., nelec_down [orb], nelec_down [r])
+        down_block = jnp.swapaxes(down_block, -2, -1)
 
         # (..., d)
         feature_mean = jnp.mean(stream_1e, axis=-2)
@@ -1207,8 +1209,18 @@ class AGPFermiNet(Module):
 
         # (..., nelec_up, 1, d)
         up_expanded = jnp.expand_dims(up_1e, -2)
+        # (..., nelec_up, nelec_down, d)
+        up_expanded = jnp.broadcast_to(
+            up_expanded,
+            (*up_expanded.shape[:-3], nelec_up, nelec_down, up_expanded.shape[-1]),
+        )
         # (..., 1, nelec_down, d)
         down_expanded = jnp.expand_dims(down_1e, -3)
+        # (..., nelec_up, nelec_down, d)
+        down_expanded = jnp.broadcast_to(
+            up_expanded,
+            (*down_expanded.shape[:-3], nelec_up, nelec_down, down_expanded.shape[-1]),
+        )
         # (..., nelec_up, nelec_down, 2*d)
         agp_input = jnp.concatenate([up_expanded, down_expanded], axis=-1)
         # (..., nelec_up, nelec_down, 1)
