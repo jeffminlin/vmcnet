@@ -130,6 +130,7 @@ def get_model_from_config(
 
     ferminet_model_types = [
         "ferminet",
+        "agp_ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
     ]
@@ -171,6 +172,26 @@ def get_model_from_config(
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
                 full_det=model_config.full_det,
+            )
+        elif model_config.type == "agp_ferminet":
+            return AGPFermiNet(
+                spin_split,
+                compute_input_streams,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -1136,7 +1157,6 @@ class AGPFermiNet(Module):
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool
-    isotropic_decay: bool
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(

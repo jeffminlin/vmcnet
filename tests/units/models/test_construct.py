@@ -699,6 +699,7 @@ def test_get_model_from_default_config():
             _construct_model(model_type, explicit_antisym_subtype=subtype)
     for model_type in [
         "ferminet",
+        "agp_ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
     ]:
