@@ -1157,6 +1157,7 @@ class AGPFermiNet(Module):
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool
+    agp_use_dot_product: bool
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
@@ -1172,6 +1173,73 @@ class AGPFermiNet(Module):
         # https://github.com/python/mypy/issues/708
         self._compute_input_streams = self.compute_input_streams
         self._backflow = self.backflow
+
+    def get_agp_block(
+        self, down_1e, down_agp_env, nelec_down, up_1e, up_agp_env, nelec_up
+    ):
+        if self.agp_use_dot_product:
+            # (..., nelec_up, d)
+            up_w = Dense(
+                up_1e.shape[-1],
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(up_1e)
+            # (..., nelec_up, 1, d)
+            up_w = jnp.expand_dims(up_w, -2)
+            # (..., nelec_up, nelec_down, d)
+            up_w = jnp.broadcast_to(
+                up_w,
+                (*up_w.shape[:-3], nelec_up, nelec_down, up_w.shape[-1]),
+            )
+            # (..., nelec_down, d)
+            down_w = Dense(
+                down_1e.shape[-1],
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(down_1e)
+            # (..., 1, nelec_down, d)
+            down_w = jnp.expand_dims(down_w, -3)
+            # (..., nelec_up, nelec_down, d)
+            down_w = jnp.broadcast_to(
+                down_w,
+                (*down_w.shape[:-3], nelec_up, nelec_down, down_w.shape[-1]),
+            )
+            # (..., nelec_up, nelec_down, d)
+            up_down_prod = down_w * up_w
+            # (..., nelec_up, nelec_down)
+            agp_block = jnp.sum(up_down_prod, axis=-1)
+            return agp_block * up_agp_env * down_agp_env
+        else:
+            # (..., nelec_up, 1, d)
+            up_expanded = jnp.expand_dims(up_1e, -2)
+            # (..., nelec_up, nelec_down, d)
+            up_expanded = jnp.broadcast_to(
+                up_expanded,
+                (*up_expanded.shape[:-3], nelec_up, nelec_down, up_expanded.shape[-1]),
+            )
+            # (..., 1, nelec_down, d)
+            down_expanded = jnp.expand_dims(down_1e, -3)
+            # (..., nelec_up, nelec_down, d)
+            down_expanded = jnp.broadcast_to(
+                down_expanded,
+                (
+                    *down_expanded.shape[:-3],
+                    nelec_up,
+                    nelec_down,
+                    down_expanded.shape[-1],
+                ),
+            )
+            # (..., nelec_up, nelec_down, 2*d)
+            agp_input = jnp.concatenate([up_expanded, down_expanded], axis=-1)
+            # (..., nelec_up, nelec_down, 1)
+            agp_block = Dense(
+                1,
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(agp_input)
+            # (..., nelec_up, nelec_down)
+            agp_block = jnp.squeeze(agp_block, axis=-1)
+            return agp_block * up_agp_env * down_agp_env
 
     @flax.linen.compact
     def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
@@ -1245,31 +1313,9 @@ class AGPFermiNet(Module):
         # (..., nelec_down [orb], nelec_down [r])
         down_block = jnp.swapaxes(down_block, -2, -1)
 
-        # (..., nelec_up, 1, d)
-        up_expanded = jnp.expand_dims(up_1e, -2)
-        # (..., nelec_up, nelec_down, d)
-        up_expanded = jnp.broadcast_to(
-            up_expanded,
-            (*up_expanded.shape[:-3], nelec_up, nelec_down, up_expanded.shape[-1]),
+        agp_block = self.get_agp_block(
+            down_1e, down_agp_env, nelec_down, up_1e, up_agp_env, nelec_up
         )
-        # (..., 1, nelec_down, d)
-        down_expanded = jnp.expand_dims(down_1e, -3)
-        # (..., nelec_up, nelec_down, d)
-        down_expanded = jnp.broadcast_to(
-            down_expanded,
-            (*down_expanded.shape[:-3], nelec_up, nelec_down, down_expanded.shape[-1]),
-        )
-        # (..., nelec_up, nelec_down, 2*d)
-        agp_input = jnp.concatenate([up_expanded, down_expanded], axis=-1)
-        # (..., nelec_up, nelec_down, 1)
-        agp_block = Dense(
-            1,
-            self.kernel_initializer_orbital_linear,
-            self.bias_initializer_orbital_linear,
-        )(agp_input)
-        # (..., nelec_up, nelec_down)
-        agp_block = jnp.squeeze(agp_block, axis=-1)
-        agp_block = agp_block * up_agp_env * down_agp_env
 
         # (..., d)
         feature_mean = jnp.mean(stream_1e, axis=-2)
