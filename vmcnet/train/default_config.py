@@ -193,7 +193,10 @@ def get_default_model_config() -> Dict:
     config = {
         "type": "ferminet",
         "ferminet": base_ferminet_config,
-        "agp_ferminet": base_ferminet_config,
+        "agp_ferminet": {
+            **base_ferminet_config,
+            "agp_use_dot_product": True,
+        },
         "embedded_particle_ferminet": {
             **base_ferminet_config,
             "nhidden_fermions_per_spin": (2, 2),

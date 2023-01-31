@@ -192,6 +192,7 @@ def get_model_from_config(
                     model_config.bias_init_orbital_linear
                 ),
                 orbitals_use_bias=model_config.orbitals_use_bias,
+                agp_use_dot_product=model_config.agp_use_dot_product,
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -1098,54 +1099,8 @@ class AGPFermiNet(Module):
             (key, shape, dtype) -> Array
         orbitals_use_bias (bool): whether to add a bias term in the linear part of the
             orbitals.
-        isotropic_decay (bool): whether the decay for each ion should be anisotropic
-            (w.r.t. the dimensions of the input), giving envelopes of the form
-            exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
-            exp(-||a(r - R||)) for a number a.
-        determinant_fn (DeterminantFn or None): A optional function with signature
-            dout, [nspins: (..., ndeterminants)] -> (..., dout).
-
-            If not None, the function will be used to calculate Psi based on the
-            outputs of the orbital matrix determinants. Depending on the
-            determinant_fn_mode selected, this function can be used in one of several
-            ways.
-
-            If the mode is SIGN_COVARIANCE, the function will use d=1
-            and will be explicitly symmetrized over the sign group, on a per-spin basis,
-            to be sign-covariant (odd). If PARALLEL_EVEN or PAIRWISE_EVEN are
-            selected, the function will be symmetrized to be spin-wise sign invariant
-            (even).
-
-            For PARALLEL_EVEN, the function will use d=ndeterminants, and each
-            output will be multiplied by the product of corresponding determinants. That
-            is, for 2 spins, with up determinants u_i and down determinants d_i, the
-            ansatz will be sum_{i}(u_i * d_i * f_i(u,d)), where f_i(u,d) is the
-            symmetrized determinant function.
-
-            For PAIRWISE_EVEN, the function will use
-            d=ndeterminants**nspins, and each output will again be multiplied by a
-            product of determinants, but this time the determinants will range over all
-            pairs. That is, for 2 spins, the ansatz will be
-            sum_{i, j}(u_i * d_j * f_{i,j}(u,d)). Currently, PAIRWISE_EVEN mode only
-            supports nspins = 2.
-
-            If None, the equivalent of PARALLEL_EVEN mode (overriding any set
-            determinant_fn_mode) is used without a symmetrized resnet (so the output,
-            before any log-transformations, is a sum of products of determinants).
-        determinant_fn_mode (DeterminantFnMode): One of SIGN_COVARIANCE,
-            PARALLEL_EVEN, or PAIRWISE_EVEN. Used to decide how exactly to use the
-            provided determinant_fn to calculate an ansatz for Psi; irrelevant
-            if determinant_fn is set to None.
-        full_det (bool): If True, the model will use a single, "full" determinant with
-            orbitals from particles of all spins. For example, for a spin_split of
-            (2,2), the original FermiNet with ndeterminants=1 would calculate two
-            separate 2x2 orbital matrices and multiply their determinants together. A
-            full determinant model would instead calculate a single 4x4 matrix, with the
-            first two particle indices corresponding to the up-spin particles and the
-            last two particle indices corresponding to the down-spin particles. The
-            output of the model would then be the determinant of that single matrix, if
-            ndeterminants=1, or the sum of multiple such determinants if
-            ndeterminants>1.
+        agp_use_dot_product (bool): whether to use dot product in agp block, versus
+            default of concatenate.
     """
 
     spin_split: ParticleSplit
