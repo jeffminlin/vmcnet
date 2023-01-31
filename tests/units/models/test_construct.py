@@ -196,7 +196,6 @@ def _make_agp_net():
         models.weights.get_kernel_initializer("ones"),
         models.weights.get_bias_initializer("uniform"),
         orbitals_use_bias=True,
-        isotropic_decay=True,
     )
 
     return key, init_pos, slog_psi

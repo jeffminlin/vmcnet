@@ -1256,7 +1256,7 @@ class AGPFermiNet(Module):
         down_expanded = jnp.expand_dims(down_1e, -3)
         # (..., nelec_up, nelec_down, d)
         down_expanded = jnp.broadcast_to(
-            up_expanded,
+            down_expanded,
             (*down_expanded.shape[:-3], nelec_up, nelec_down, down_expanded.shape[-1]),
         )
         # (..., nelec_up, nelec_down, 2*d)
