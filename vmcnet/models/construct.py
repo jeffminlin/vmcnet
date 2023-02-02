@@ -34,6 +34,7 @@ from .core import (
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
+    _split_mean,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -1161,8 +1162,17 @@ class AGPFermiNet(Module):
             )
             # (..., nelec_up, nelec_down, d)
             up_down_prod = down_w * up_w
+            # (..., nelec_up, nelec_down, 1)
+            agp_block = jnp.sum(up_down_prod, axis=-1, keepdims=True)
             # (..., nelec_up, nelec_down)
-            agp_block = jnp.sum(up_down_prod, axis=-1)
+            agp_block = jnp.squeeze(
+                Dense(
+                    1,
+                    self.kernel_initializer_orbital_linear,
+                    self.bias_initializer_orbital_linear,
+                )(agp_block),
+                -1,
+            )
             return agp_block * up_agp_env * down_agp_env
         else:
             # (..., nelec_up, 1, d)
@@ -1272,14 +1282,18 @@ class AGPFermiNet(Module):
             down_1e, down_agp_env, nelec_down, up_1e, up_agp_env, nelec_up
         )
 
-        # (..., d)
-        feature_mean = jnp.mean(stream_1e, axis=-2)
+        # [(..., d), (..., d)]
+        split_feature_mean = _split_mean(
+            stream_1e, self.spin_split, axis=-2, keepdims=False
+        )
+        # (..., 2*d)
+        concat_feature_mean = jnp.concatenate(split_feature_mean, axis=-1)
         # (..., nelec_up * nelec_down)
         invariant_block = Dense(
             nelec_down * nelec_up,
             self.kernel_initializer_orbital_linear,
             self.bias_initializer_orbital_linear,
-        )(feature_mean)
+        )(concat_feature_mean)
         # (..., nelec_down, nelec_up)
         invariant_block = jnp.reshape(
             invariant_block, (*invariant_block.shape[:-1], nelec_down, nelec_up)
