@@ -197,6 +197,9 @@ def get_default_model_config() -> Dict:
             **base_ferminet_config,
             "agp_use_dot_product": True,
         },
+        "pfaff_net": {
+            **base_ferminet_config,
+        },
         "embedded_particle_ferminet": {
             **base_ferminet_config,
             "nhidden_fermions_per_spin": (2, 2),

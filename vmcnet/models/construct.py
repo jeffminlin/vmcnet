@@ -132,6 +132,7 @@ def get_model_from_config(
     ferminet_model_types = [
         "ferminet",
         "agp_ferminet",
+        "pfaff_net",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
     ]
@@ -194,6 +195,26 @@ def get_model_from_config(
                 ),
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 agp_use_dot_product=model_config.agp_use_dot_product,
+            )
+        elif model_config.type == "pfaff_net":
+            return PfaffNet(
+                spin_split,
+                compute_input_streams,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
