@@ -1115,14 +1115,6 @@ class AGPFermiNet(Module):
     orbitals_use_bias: bool
     agp_use_dot_product: bool
 
-    def _get_bad_determinant_fn_mode_error(self) -> ValueError:
-        raise ValueError(
-            "Only supported determinant function modes are SIGN_COVARIANCE, "
-            "PARALLEL_EVEN, and PAIRWISE_EVEN. Received {}.".format(
-                self.determinant_fn_mode
-            )
-        )
-
     def setup(self):
         """Setup backflow and symmetrized determinant function."""
         # workaround MyPy's typing error for callable attribute, see
@@ -1311,6 +1303,211 @@ class AGPFermiNet(Module):
         return slog_det
 
         # return slog_sum_over_axis(slog_dets)
+
+
+class PfaffNet(Module):
+    """FermiNet/generalized Slater determinant model.
+
+    This model was first introduced in the following papers:
+        https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429
+        https://arxiv.org/abs/2011.07125
+    Their repository can be found at https://github.com/deepmind/ferminet, which
+    includes a JAX branch.
+
+    Attributes:
+        spin_split (ParticleSplit): number of spins to split the input equally,
+            or specified sequence of locations to split along the 2nd-to-last axis.
+            E.g., if nelec = 10, and `spin_split` = 2, then the input is split (5, 5).
+            If nelec = 10, and `spin_split` = (2, 4), then the input is split into
+            (2, 4, 4) -- note when `spin_split` is a sequence, there will be one more
+            spin than the length of the sequence. In the original use-case of spin-1/2
+            particles, `spin_split` should be either the number 2 (for closed-shell
+            systems) or should be a Sequence with length 1 whose element is less than
+            the total number of electrons.
+        compute_input_streams (ComputeInputStreams): function to compute input
+            streams from electron positions. Has the signature
+            (elec_pos of shape (..., n, d)) -> (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+                optional r_ei of shape (..., n, nion, d),
+                optional r_ee of shape (..., n, n, d),
+            )
+        backflow (Callable): function which computes position features from the electron
+            positions. Has the signature
+            (
+                stream_1e of shape (..., n, d'),
+                optional stream_2e of shape (..., nelec, nelec, d2),
+            ) -> stream_1e of shape (..., n, d')
+        ndeterminants (int): number of determinants in the FermiNet model, i.e. the
+            number of distinct orbital layers applied
+        kernel_initializer_orbital_linear (WeightInitializer): kernel initializer for
+            the linear part of the orbitals. Has signature
+            (key, shape, dtype) -> Array
+        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
+            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
+            this initializes a single decay rate number per ion and orbital. If
+            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
+            orbital. Has signature (key, shape, dtype) -> Array
+        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
+            linear combination over the ions of exponential envelopes. Has signature
+            (key, shape, dtype) -> Array
+        bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
+            linear part of the orbitals. Has signature
+            (key, shape, dtype) -> Array
+        orbitals_use_bias (bool): whether to add a bias term in the linear part of the
+            orbitals.
+        agp_use_dot_product (bool): whether to use dot product in agp block, versus
+            default of concatenate.
+    """
+
+    spin_split: ParticleSplit
+    compute_input_streams: ComputeInputStreams
+    backflow: Backflow
+    ndeterminants: int
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool
+
+    def setup(self):
+        """Setup backflow and symmetrized determinant function."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
+        self._backflow = self.backflow
+
+    def get_agp_block(
+        self, down_1e, down_agp_env, nelec_down, up_1e, up_agp_env, nelec_up
+    ):
+        if self.agp_use_dot_product:
+            # (..., nelec_up, d)
+            up_w = Dense(
+                up_1e.shape[-1],
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(up_1e)
+            # (..., nelec_up, 1, d)
+            up_w = jnp.expand_dims(up_w, -2)
+            # (..., nelec_up, nelec_down, d)
+            up_w = jnp.broadcast_to(
+                up_w,
+                (*up_w.shape[:-3], nelec_up, nelec_down, up_w.shape[-1]),
+            )
+            # (..., nelec_down, d)
+            down_w = Dense(
+                down_1e.shape[-1],
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(down_1e)
+            # (..., 1, nelec_down, d)
+            down_w = jnp.expand_dims(down_w, -3)
+            # (..., nelec_up, nelec_down, d)
+            down_w = jnp.broadcast_to(
+                down_w,
+                (*down_w.shape[:-3], nelec_up, nelec_down, down_w.shape[-1]),
+            )
+            # (..., nelec_up, nelec_down, d)
+            up_down_prod = down_w * up_w
+            # (..., nelec_up, nelec_down, 1)
+            agp_block = jnp.sum(up_down_prod, axis=-1, keepdims=True)
+            # (..., nelec_up, nelec_down)
+            agp_block = jnp.squeeze(
+                Dense(
+                    1,
+                    self.kernel_initializer_orbital_linear,
+                    self.bias_initializer_orbital_linear,
+                )(agp_block),
+                -1,
+            )
+            return agp_block * up_agp_env * down_agp_env
+        else:
+            # (..., nelec_up, 1, d)
+            up_expanded = jnp.expand_dims(up_1e, -2)
+            # (..., nelec_up, nelec_down, d)
+            up_expanded = jnp.broadcast_to(
+                up_expanded,
+                (*up_expanded.shape[:-3], nelec_up, nelec_down, up_expanded.shape[-1]),
+            )
+            # (..., 1, nelec_down, d)
+            down_expanded = jnp.expand_dims(down_1e, -3)
+            # (..., nelec_up, nelec_down, d)
+            down_expanded = jnp.broadcast_to(
+                down_expanded,
+                (
+                    *down_expanded.shape[:-3],
+                    nelec_up,
+                    nelec_down,
+                    down_expanded.shape[-1],
+                ),
+            )
+            # (..., nelec_up, nelec_down, 2*d)
+            agp_input = jnp.concatenate([up_expanded, down_expanded], axis=-1)
+            # (..., nelec_up, nelec_down, 1)
+            agp_block = Dense(
+                1,
+                self.kernel_initializer_orbital_linear,
+                self.bias_initializer_orbital_linear,
+            )(agp_input)
+            # (..., nelec_up, nelec_down)
+            agp_block = jnp.squeeze(agp_block, axis=-1)
+            return agp_block * up_agp_env * down_agp_env
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
+        """Compose FermiNet backflow -> orbitals -> logabs determinant product.
+
+        Args:
+            elec_pos (Array): array of particle positions (..., nelec, d)
+
+        Returns:
+            Array: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
+        nelec_total = elec_pos.shape[-2]
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+
+        # (..., nelec, d)
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        if nelec_total % 2 == 1:
+            # (..., 1, d)
+            mean_1e = jnp.mean(stream_1e, axis=-2, keepdims=True)
+            # (..., nelec + 1, d)
+            stream_1e = jnp.concatenate([stream_1e, mean_1e], axis=-2)
+
+        # nelec_eff = nelec_total or nelec_total + 1
+        # (..., nelec_eff, 1, d)
+        stream_1e_row = jnp.expand_dims(stream_1e, -2)
+        # (..., 1, nelec_eff, d)
+        stream_1e_col = jnp.expand_dims(stream_1e, -3)
+
+        # (..., nelec_eff, 1, d)
+        row_out = Dense(
+            stream_1e.shape[-1],
+            self.kernel_initializer_orbital_linear,
+            self.bias_initializer_orbital_linear,
+        )(stream_1e_row)
+        # (..., 1, nelec_eff, d)
+        col_out = Dense(
+            stream_1e.shape[-1],
+            self.kernel_initializer_orbital_linear,
+            self.bias_initializer_orbital_linear,
+        )(stream_1e_col)
+        # (..., nelec_eff, nelec_eff)
+        dot_entries = jnp.sum(row_out * col_out, axis=-1)
+        # Need skew symmetry to take Pfaffian
+        skew_sym = dot_entries - jnp.swapaxes(dot_entries, -1, -2)
+
+        sdet, logabsdet = jnp.linalg.slogdet(skew_sym)
+        # Pfaffian is sqrt(det), sign doesn't matter but will always be positive here
+        return sdet, logabsdet / 2
 
 
 class EmbeddedParticleFermiNet(FermiNet):

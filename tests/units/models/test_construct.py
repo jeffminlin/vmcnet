@@ -220,6 +220,37 @@ def _make_agp_nets():
     return key, init_pos, slog_psis
 
 
+def _make_pfaff_nets():
+    (
+        key,
+        ion_pos,
+        _,
+        init_pos,
+        spin_split,
+        ndense_list,
+    ) = _get_initial_pos_and_hyperparams()
+
+    compute_input_streams = _get_compute_input_streams(ion_pos)
+    backflow = _get_backflow(spin_split, ndense_list, False, False, 0)
+
+    slog_psis = []
+    slog_psis.append(
+        models.construct.PfaffNet(
+            spin_split,
+            compute_input_streams,
+            backflow,
+            2,
+            models.weights.get_kernel_initializer("he_normal"),
+            models.weights.get_kernel_initializer("lecun_normal"),
+            models.weights.get_kernel_initializer("ones"),
+            models.weights.get_bias_initializer("uniform"),
+            orbitals_use_bias=True,
+        )
+    )
+
+    return key, init_pos, slog_psis
+
+
 def _make_embedded_particle_ferminets():
     (
         key,
@@ -601,6 +632,33 @@ def test_agp_net_can_be_evaluated():
         perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
         np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-3)
         np.testing.assert_allclose(results[0], perm_results[0])
+
+
+@pytest.mark.slow
+def test_pfaff_net_can_be_evaluated():
+    """Check evaluation of FermiNet does not fail."""
+    key, init_pos, slog_psis = _make_pfaff_nets()
+
+    for slog_psi in slog_psis:
+        params = slog_psi.init(key, init_pos)
+        results = jax.jit(slog_psi.apply)(params, init_pos)
+        chex.assert_shape(results, init_pos.shape[:-2])
+
+        perm_pos = init_pos[:, [1, 0, 2, 3, 4, 5], :]
+        perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
+        np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-3)
+        # Do not verify sign of PfaffNet as it is not calculated
+        # np.testing.assert_allclose(results[0], -perm_results[0])
+
+        perm_pos = init_pos[:, [0, 1, 2, 5, 4, 3], :]
+        perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
+        np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-3)
+        # np.testing.assert_allclose(results[0], -perm_results[0])
+
+        perm_pos = init_pos[:, [1, 0, 2, 5, 4, 3], :]
+        perm_results = jax.jit(slog_psi.apply)(params, perm_pos)
+        np.testing.assert_allclose(results[1], perm_results[1], rtol=1e-3)
+        # np.testing.assert_allclose(results[0], perm_results[0])
 
 
 def test_embedded_particle_ferminet_can_be_constructed():
