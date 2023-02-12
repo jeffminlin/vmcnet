@@ -1,41 +1,43 @@
 import jax
-import jax.scipy as scipy
+
+# import jax.scipy as scipy
 import numpy as np
 import jax.numpy as jnp
 import time
 
-# TODO: test against log domain version to make sure it's not faster.
 # TODO: investigate numerical stability of laplace_inv to make sure it's not an issue.
 # TODO: implement in FermiNet, either as custom local energy or preferably as a custom
 # determinant function that has this behavior when differentiated TWICE (could be tricky).
-# TODO: test in FermiNet context.
+# TODO: Test in FermiNet context (look for effect on iteration speed).
 # TODO: debug why first time makes things slow even after the attempted throw-away run
 
 # PERFORMANCE NOTES
-# WITHOUT BATCHES:
-#   for all versions: consistently >=3 times faster than old version, and it gets
-#       better for larger determinants. By n=40 (largest systems studied so far) it's ~7x faster,
-#       by n=80 (not yet in reach for existing methods) it's almost 10x faster
+# WITH BATCHES of size 1000, with slogdet for old version, with laplace_inv:
+#   n=7 (N): 2.5x sped-up
+#   n=14 (N2): 2x speed-up
+#   n=42 (benzene): 3x speed-up
+#   n=84 (benzene dimer): 3.4x speed-up
 #
-# WITH BATCHES of size 1000 (more realistic):
-#   for laplace_linsolve the speed-up is ~3x for n=10 but goes down to almost nothing by n=40
-#   for laplace_inv the speed-up is ~3x for n=10 and goes UP to almost ~10x for n=20, n=40
+# laplace_linsolve shows much worse to no speed-up
+# without batches gives different results but is irrelevant
+# For old version, slogdet is 3x faster than det, so need to benchmark against that.
 
 
 def getA(x):
     return B @ x + C @ x**2
 
 
-def getDetA(x):
-    return jnp.linalg.det(getA(x))
+def log_abs_psi(x):
+    return jnp.linalg.slogdet(getA(x))[1]
 
 
 def laplace_old(x, n):
     result = 0.0
-    gradDetA = jax.grad(getDetA)
+    grad_log_psi = jax.grad(log_abs_psi)
 
     for i in range(n):
-        result += jax.jvp(gradDetA, (x,), (np.eye(1, n, i)[0],))[1][i]
+        primals, tangents = jax.jvp(grad_log_psi, (x,), (np.eye(1, n, i)[0],))
+        result += jnp.square(primals[i]) + tangents[i]
 
     return result
 
@@ -53,44 +55,43 @@ def grad2A(x, i, n):
     return gAi, g2Ai
 
 
-def laplace_linsolve(x, n):
-    A = getA(x)
-    detA = getDetA(x)
-
-    dATs = []
-    d2ATs = []
-    for i in range(n):
-        dAi, d2Ai = grad2A(x, i, n)
-        dATs.append(dAi.T)
-        d2ATs.append(d2Ai.T)
-
-    dAT_stack = jnp.stack(dATs, axis=-1)
-    # TODO: this is wasteful, should be able to speed-up the d2A part
-    d2AT_stack = jnp.stack(d2ATs, axis=-1)
-    alldAT = jnp.concatenate([dAT_stack, d2AT_stack], axis=-1)
-
-    o_shape = alldAT.shape
-    flat_shape = (o_shape[0], o_shape[1] * o_shape[2])
-    dA_reshaped = jnp.reshape(alldAT, flat_shape)
-    matProds_flat = scipy.linalg.solve(A.T, dA_reshaped)
-    matProds = jnp.reshape(matProds_flat, o_shape)
-    dA_prods, dA2_prods = jnp.split(matProds, (n,), axis=-1)
-
-    result = jnp.einsum("iid->", dA2_prods)
-
-    # Move batch axis to front (denoted d in einsum)
-    B = jnp.swapaxes(dA_prods, 0, -1)
-    result += jnp.sum(jnp.trace(B, axis1=1, axis2=2) ** 2)
-    result -= jnp.sum(jnp.einsum("dii->di", B) ** 2)
-    result -= 2 * jnp.einsum("dij,dji->", jax.numpy.triu(B, k=1), B)
-
-    return result * detA
+# def laplace_linsolve(x, n):
+#     A = getA(x)
+#     detA = log_abs_psi(x)
+#
+#     dATs = []
+#     d2ATs = []
+#     for i in range(n):
+#         dAi, d2Ai = grad2A(x, i, n)
+#         dATs.append(dAi.T)
+#         d2ATs.append(d2Ai.T)
+#
+#     dAT_stack = jnp.stack(dATs, axis=-1)
+#     # TODO: this is wasteful, should be able to speed-up the d2A part
+#     d2AT_stack = jnp.stack(d2ATs, axis=-1)
+#     alldAT = jnp.concatenate([dAT_stack, d2AT_stack], axis=-1)
+#
+#     o_shape = alldAT.shape
+#     flat_shape = (o_shape[0], o_shape[1] * o_shape[2])
+#     dA_reshaped = jnp.reshape(alldAT, flat_shape)
+#     matProds_flat = scipy.linalg.solve(A.T, dA_reshaped)
+#     matProds = jnp.reshape(matProds_flat, o_shape)
+#     dA_prods, dA2_prods = jnp.split(matProds, (n,), axis=-1)
+#
+#     result = jnp.einsum("iid->", dA2_prods)
+#
+#     # Move batch axis to front (denoted d in einsum)
+#     B = jnp.swapaxes(dA_prods, 0, -1)
+#     result += jnp.sum(jnp.trace(B, axis1=1, axis2=2) ** 2)
+#     result -= jnp.sum(jnp.einsum("dii->di", B) ** 2)
+#     result -= 2 * jnp.einsum("dij,dji->", jax.numpy.triu(B, k=1), B)
+#
+#     return result * detA
 
 
 def laplace_inv(x, n):
     A = getA(x)
     Ainv = jnp.linalg.inv(A)
-    detA = getDetA(x)
 
     dAs = []
     d2As = []
@@ -111,7 +112,7 @@ def laplace_inv(x, n):
     # Negative diagonal terms of the 2x2 determinants
     result -= 2 * jnp.einsum("dij,dji->", jax.numpy.triu(B, k=1), B)
 
-    return result * detA
+    return result
 
 
 #
@@ -150,9 +151,9 @@ laplace_old = jax.vmap(jax.jit(laplace_old, static_argnums=1), in_axes=(0, None)
 laplace_new = jax.vmap(jax.jit(laplace_inv, static_argnums=1), in_axes=(0, None))
 
 
-nsample = 10
+nsample = 100
 nbatch = 1000
-ns = [1, 5, 10, 20, 40]
+ns = [7, 14, 42, 84]
 
 old_times = []
 new_times = []
@@ -197,6 +198,9 @@ for n in ns:
 
     if np.any(np.abs((result_new - result_old) / result_new) > 1e-2):
         print(f"WARNING: max relative err between old, new greater than 1e-2")
+        print(f"Old: {result_old[:10]}")
+        print(f"New: {result_new[:10]}")
+
 
 print(old_times)
 print(new_times)
