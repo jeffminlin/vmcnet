@@ -26,40 +26,42 @@ def get_laplace_old_and_new(
 
         return result
 
-    def grad_phi(x, i):
-        A, gAi = jax.jvp(get_phi, (x,), (jnp.eye(1, n_coord, i, dtype=dtype)[0],))
+    def grad_phi(x, tangent_vec):
+        A, gAi = jax.jvp(get_phi, (x,), (tangent_vec,))
         return gAi
 
-    def grad_phi_2(x, i):
+    def grad_phi_2(x, tangent_vec):
         def grad_phi_i(x):
-            return grad_phi(x, i)
+            return grad_phi(x, tangent_vec)
 
-        gAi, g2Ai = jax.jvp(grad_phi_i, (x,), (jnp.eye(1, n_coord, i, dtype=dtype)[0],))
+        gAi, g2Ai = jax.jvp(grad_phi_i, (x,), (tangent_vec,))
         return gAi, g2Ai
 
     def laplace_inv(x):
         phi = get_phi(x)
         phi_inv = jnp.linalg.inv(phi)
 
-        d_phis = []
-        d2_phis = []
-        for i in range(n_coord):
-            d_phi_dxi, d2_phi_dxi = grad_phi_2(x, i)
-            d_phis.append(d_phi_dxi)
-            d2_phis.append(d2_phi_dxi)
+        result = dtype(0.0)
 
-        d2_phis = jnp.stack(d2_phis)
-        # Rows of d2A multiplied by just the matching columns of Ainv
-        result = jnp.einsum("dij,ji->", d2_phis, phi_inv)
+        # NOTE: It's possible to batch these computations more aggressively by
+        # stacking across all coordinates i before doing the einsums. However, this
+        # uses a lot of memory and can cause OOM errors for larger determinants.
 
-        d_phis = jnp.stack(d_phis)
-        B = d_phis @ phi_inv
-        # Clever way to calculate positive diagonal terms of the 2x2 determinants
-        result += jnp.sum(jnp.trace(B, axis1=1, axis2=2) ** 2) - jnp.sum(
-            jnp.einsum("dii->di", B) ** 2
-        )
-        # Negative diagonal terms of the 2x2 determinants
-        result -= 2 * jnp.einsum("dij,dji->", jax.numpy.triu(B, k=1), B)
+        identity_matrix = jnp.eye(n_coord, dtype=dtype)
+
+        def handle_coord(i, result):
+            d_phi_dxi, d2_phi_dxi = grad_phi_2(x, identity_matrix[i])
+            # Second derivative contribution
+            result += jnp.einsum("ij,ji->", d2_phi_dxi, phi_inv)
+            # First derivative contribution
+            B = d_phi_dxi @ phi_inv
+            # Clever way to calculate positive diagonal terms of the 2x2 determinants
+            result += jnp.trace(B) ** 2 - jnp.sum(jnp.diag(B) ** 2)
+            # Negative diagonal terms of the 2x2 determinants
+            result -= 2 * jnp.einsum("ij,ji->", jax.numpy.triu(B, k=1), B)
+            return result
+
+        result = jax.lax.fori_loop(0, n_coord, handle_coord, result)
 
         return result
 

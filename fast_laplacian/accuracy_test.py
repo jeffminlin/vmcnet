@@ -48,27 +48,35 @@ def run_test(xs, xs_64, laplace_64, laplace_old, laplace_new):
 if __name__ == "__main__":
     nsample = 10
     nbatch = 1000
-    n = 42
+    n_orb = 14
+    d = 3
+    n_coord = n_orb * 3
 
-    for K in [1, 1e3, 1e6, 1e9]:
+    for K in [1, 1e3, 1e6]:
         for M in [1]:
-            for seed in [0, 1]:
+            for seed in [0]:
                 print(f"Testing with condition number {K}, multiplier {M}, seed {seed}")
 
                 key = jax.random.PRNGKey(seed)
                 key1, key2, key3, key4, key5 = jax.random.split(key, 5)
 
-                U = jax.random.normal(key1, (n, n), dtype=jnp.float32) / n
+                U = jax.random.normal(key1, (n_orb, n_orb), dtype=jnp.float32)
                 U, _ = jnp.linalg.qr(U)
-                S = jnp.diag(jnp.linspace(1, K, n, dtype=jnp.float32))
-                V = jax.random.normal(key2, (n, n), dtype=jnp.float32) / n
+                S = jnp.diag(jnp.linspace(1, K, n_orb, dtype=jnp.float32))
+                V = jax.random.normal(key2, (n_orb, n_orb), dtype=jnp.float32)
                 V, _ = jnp.linalg.qr(V)
 
-                Phi0 = U @ S @ V * M
-                Phi1 = jax.random.normal(key3, (n, n, n), dtype=jnp.float32) / n
-                Phi2 = jax.random.normal(key4, (n, n, n), dtype=jnp.float32) / n
-                xs = (
-                    jax.random.normal(key5, (nsample, nbatch, n), dtype=jnp.float32) / n
+                Phi0 = U @ S @ V * M / n_coord
+                Phi1 = (
+                    jax.random.normal(key3, (n_orb, n_orb, n_coord), dtype=jnp.float32)
+                    / n_coord
+                )
+                Phi2 = (
+                    jax.random.normal(key4, (n_orb, n_orb, n_coord), dtype=jnp.float32)
+                    / n_coord
+                )
+                xs = jax.random.normal(
+                    key5, (nsample, nbatch, n_coord), dtype=jnp.float32
                 )
 
                 Phi0_64 = jnp.array(Phi0, dtype=jnp.float64)
@@ -77,11 +85,11 @@ if __name__ == "__main__":
                 xs_64 = jnp.array(xs, dtype=jnp.float64)
 
                 laplace_64, _ = get_laplace_old_and_new(
-                    n, Phi0_64, Phi1_64, Phi2_64, dtype=jnp.float64
+                    n_coord, Phi0_64, Phi1_64, Phi2_64, dtype=jnp.float64
                 )
 
                 laplace_old, laplace_new = get_laplace_old_and_new(
-                    n, Phi0, Phi1, Phi2, dtype=jnp.float32, use_linsolve=True
+                    n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32
                 )
 
                 run_test(xs, xs_64, laplace_64, laplace_old, laplace_new)

@@ -8,15 +8,16 @@ from fast_laplacian import get_laplace_old_and_new
 PERFORMANCE NOTES
 LAPLACE_INV: 3x faster than laplace_autodiff on highly batched computation
     Batch size 1,000
-      n=7 (N): 1.5x speed-up
-      n=14 (N2): 2x speed-up
-      n=42 (benzene): 2.5x speed-up
-      n=84 (benzene dimer): OOM
+      n=7 (N): no speed-up
+      n=14 (N2): 1.4x speed-up
+      n=42 (benzene): 2.8x speed-up
+      n=84 (benzene dimer): runs to completion; but old approach fails so can't compare
+            5s per epoch -> 
     Batch size 10,000
-      n=7 (N): 2.5x speed-up
-      n=14 (N2): 3.7x speed-up
-      n=42 (benzene): OOM on laplace_new
-      n=84 (benzene dimer): OOM
+      n=7 (N): 1.6x speed-up
+      n=14 (N2): 1.7x speed-up
+      n=42 (benzene): 2.5x speed-up
+      n=84 (benzene dimer): didn't try
   
 LAPLACE_LINSOLVE: slower or same speed as laplace_autodiff, and uses more memory.
     Batch size 1,000:
@@ -29,8 +30,9 @@ LAPLACE_LINSOLVE: slower or same speed as laplace_autodiff, and uses more memory
       n=14 (N2): no speed-up
       n=42 (benzene): OOM
 
-TODO: investigate run-time
-
+MISC: 
+    PSIFORMER benzene dimer uses ~1000 determinants per A100 GPU and this takes
+        3 seconds per iteration (wall-clock time). 
 """
 
 
@@ -67,7 +69,7 @@ def run_test(xs, laplace_old, laplace_new, n):
 
 
 nsample = 10
-nbatch = 1000
+nbatch = 10000
 n_orbs = [1, 84]
 d = 3
 
@@ -91,4 +93,5 @@ if __name__ == "__main__":
         laplace_old, laplace_new = get_laplace_old_and_new(
             n_coord, Phi0, Phi1, Phi2, use_linsolve=False
         )
-        result_old_32, result_new_32 = run_test(xs, laplace_old, laplace_new, n_orb)
+        laplace_old = laplace_new
+        result_old, result_new = run_test(xs, laplace_old, laplace_new, n_orb)
