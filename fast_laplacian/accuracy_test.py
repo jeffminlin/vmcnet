@@ -10,10 +10,6 @@ from fast_laplacian import get_laplace_old_and_new
 LAPLACE_INV
   Usually at least as accurate as the old method
   Suffers when K is high, M is low, but the laplace_autodiff suffers too
-  
-LAPLACE_LINSOLVE
-  Seems to be moderately more stable than laplace_inv and laplace_autodiff, but it's 
-    not fully consistent.
 """
 
 

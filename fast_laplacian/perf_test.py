@@ -6,29 +6,14 @@ from fast_laplacian import get_laplace_old_and_new
 
 """
 PERFORMANCE NOTES
-LAPLACE_INV: 3x faster than laplace_autodiff on highly batched computation
+LAPLACE_INV: 3x faster than laplace_autodiff on larger determinants
     Batch size 1,000
       n=7 (N): no speed-up
-      n=14 (N2): 1.4x speed-up
-      n=42 (benzene): 2.8x speed-up
-      n=84 (benzene dimer): runs to completion; but old approach fails so can't compare
-            5s per epoch -> 
-    Batch size 10,000
-      n=7 (N): 1.6x speed-up
-      n=14 (N2): 1.7x speed-up
-      n=42 (benzene): 2.5x speed-up
-      n=84 (benzene dimer): didn't try
-  
-LAPLACE_LINSOLVE: slower or same speed as laplace_autodiff, and uses more memory.
-    Batch size 1,000:
-      n=7 (N): no speed-up
-      n=14 (N2): 10% speed-up
-      n=42 (benzene): 25% slow-down
-      n=84 (benzene dimer): 40% slow-down
-   Batch size 10,000:
-      n=7 (N): 15% speed-up
-      n=14 (N2): no speed-up
-      n=42 (benzene): OOM
+      n=14 (N2): 1.3x speed-up
+      n=21: 2.1x speed-up
+      n=42 (benzene): 2.6x speed-up
+      n=63: 2.9x faster
+      n=84 (benzene dimer): laplace_old crashes so can't compare.
 
 MISC: 
     PSIFORMER benzene dimer uses ~1000 determinants per A100 GPU and this takes
@@ -64,13 +49,14 @@ def run_test(xs, laplace_old, laplace_new, n):
     if n > 1:
         print(f"Time for old approach: {time_old}")
         print(f"Time for new approach: {time_new}")
+        print(f"Speed-up: {time_old/time_new}")
 
     return result_old, result_new
 
 
 nsample = 10
-nbatch = 10000
-n_orbs = [1, 84]
+nbatch = 1000
+n_orbs = [1, 7, 14, 21, 42, 63]
 d = 3
 
 if __name__ == "__main__":
@@ -90,8 +76,5 @@ if __name__ == "__main__":
         Phi2 = jax.random.normal(key3, (n_orb, n_orb, n_coord)) / n_orb
         xs = jax.random.normal(key4, (nsample + 1, nbatch, n_coord))
 
-        laplace_old, laplace_new = get_laplace_old_and_new(
-            n_coord, Phi0, Phi1, Phi2, use_linsolve=False
-        )
-        laplace_old = laplace_new
+        laplace_old, laplace_new = get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2)
         result_old, result_new = run_test(xs, laplace_old, laplace_new, n_orb)
