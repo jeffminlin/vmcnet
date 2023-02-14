@@ -12,8 +12,14 @@ LAPLACE_INV: 3x faster than laplace_autodiff on larger determinants
       n=14 (N2): 1.3x speed-up
       n=21: 2.1x speed-up
       n=42 (benzene): 2.6x speed-up
-      n=63: 2.9x faster
+      n=63: 2.9x speed-up
       n=84 (benzene dimer): laplace_old crashes so can't compare.
+
+THE ISSUE
+    In the psiformer paper on the benzene dimer the GPUs each handle ~1000 walkers just
+    like this test and the per-iteration time is 3s. On n=63 here we're only saving
+    0.28s per iteration and this number would be much less on A100, so it seems like
+    this can't be the bottleneck.
 
 MISC: 
     PSIFORMER benzene dimer uses ~1000 determinants per A100 GPU and this takes

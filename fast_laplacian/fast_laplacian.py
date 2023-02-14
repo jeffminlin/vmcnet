@@ -14,12 +14,16 @@ def get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32):
     def laplace_autodiff(x):
         result = 0.0
         grad_log_psi = jax.grad(log_abs_psi)
+        # NOTE: Perf is the same with linearize and without, but this formulation is a bit
+        # more elegant and is what the ferminet repo currently uses.
+        grad_log_psi_val, jvp_grad_log_psi = jax.linearize(grad_log_psi, x)
+
+        result += jnp.sum(grad_log_psi_val**2)
 
         for i in range(n_coord):
-            primals, tangents = jax.jvp(
-                grad_log_psi, (x,), (jnp.eye(1, n_coord, i, dtype=dtype)[0],)
-            )
-            result += jnp.square(primals[i]) + tangents[i]
+            in_tangents = jnp.eye(1, n_coord, i, dtype=dtype)[0]
+            out_tangents = jvp_grad_log_psi(in_tangents)
+            result += out_tangents[i]
 
         return result
 
