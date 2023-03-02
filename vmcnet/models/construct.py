@@ -8,9 +8,10 @@ import flax
 import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
+import copy
 
 from vmcnet.models import antiequivariance
-from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
+from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis, slog_multiply
 from vmcnet.utils.typing import (
     Array,
     ArrayList,
@@ -125,6 +126,23 @@ def get_model_from_config(
     )
 
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
+
+    args=(nelec,ion_pos,ion_charges,dtype)
+    # different si,fi type (requires config.model={type:doubleansatz,learner_config={},target_config={}})
+    if model_config.type=='doubleansatz':
+        return DoubleAnsatz(
+            get_model_from_config(model_config.learner_config,*args),
+            get_model_from_config(model_config.target_config,*args)
+        )
+    # same si, fi type (easiest to test by setting config.model.type=doubleferminet)
+    elif 'double' in model_config.type:
+        singletype=model_config.type.split('double')[-1]
+        single_model_config=copy.deepcopy(model_config)
+        single_model_config.type=singletype
+        return DoubleAnsatz(
+            get_model_from_config(single_model_config,*args),
+            get_model_from_config(single_model_config,*args)
+        )
 
     ferminet_model_types = [
         "ferminet",
@@ -729,6 +747,30 @@ def _reshape_raw_ferminet_orbitals(
     ]
     # Move axis to [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
     return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
+
+
+class DoubleAnsatz(Module):
+    learner: Module
+    target: Module
+
+    def setup(self):
+        # if we want to create learner, target from hyperparams
+        pass
+
+    @staticmethod
+    def split(XY: Array) -> Tuple[SLArray,SLArray]:
+        n2=XY.shape[-2]
+        n=n2//2
+        X=XY[...,:n,:]
+        Y=XY[...,n:,:]
+        return X,Y
+
+    @flax.linen.compact
+    def __call__(self, XY: Array) -> SLArray:  # type: ignore[override]
+        X,Y=self.split(XY)
+        return slog_multiply(self.learner(X),self.target(Y))
+
+
 
 
 class FermiNet(Module):

@@ -18,6 +18,7 @@ import vmcnet.mcmc as mcmc
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
+from vmcnet.models.construct import DoubleAnsatz
 import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.updates as updates
@@ -277,6 +278,7 @@ def _get_energy_fns(
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+    
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
@@ -288,6 +290,40 @@ def _get_energy_fns(
     )
 
     return local_energy_fn, energy_data_val_and_grad
+
+def _get_supervised_energy_fns(
+    vmc_config: ConfigDict,
+    log_psi_apply: ModelApply[P],
+    slog_si_apply: ModelApply[P],
+    slog_fi_apply: ModelApply[P],
+) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+
+    clipping_fn = _get_clipping_fn(vmc_config)
+
+    si=lambda P,X: utils.slog_helpers.array_from_slog(slog_si_apply(P,X))
+    fi=lambda P,X: utils.slog_helpers.array_from_slog(slog_fi_apply(P,X))
+
+    # The following can potentially be moved to physics.core 
+    # similarly to physics.core.create_value_and_grad_energy_fn
+    # TODO: better way to extract si/fi parameters
+    def local_energy_fn(P,XY):
+        import flax.core.frozen_dict as frozen_dict
+        Ps=frozen_dict.freeze({'params':P['params']['learner']})
+        Pf=frozen_dict.freeze({'params':P['params']['target']})
+        X,Y=DoubleAnsatz.split(XY)
+        return (fi(Ps,X)/si(Ps,X))*(si(Pf,Y)/fi(Pf,Y))
+
+    """
+    TODO: create custom gradient of local energy
+    """
+    value_and_grad=physics.core.create_value_and_grad_energy_fn(
+            log_psi_apply,
+            local_energy_fn,
+            nchains=vmc_config.nchains,
+            clipping_fn=clipping_fn,
+            nan_safe=vmc_config.nan_safe,
+        )
+    return local_energy_fn, value_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -317,6 +353,9 @@ def _setup_vmc(
         key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
     )
 
+    if 'double' in config.model.type: #supervised setting
+        init_pos=jnp.concatenate([init_pos,init_pos],axis=-2)
+
     # Make the model
     log_psi_apply, params, key = _get_and_init_model(
         config.model,
@@ -341,9 +380,21 @@ def _setup_vmc(
         config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
-    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi_apply
-    )
+    if 'double' in config.model.type: #supervised setting
+
+        doubleansatz = models.construct.get_model_from_config(
+            config.model, nelec, ion_pos, ion_charges, dtype=dtype
+        )
+
+        slog_si_apply=doubleansatz.learner.apply
+        slog_fi_apply=doubleansatz.target.apply
+        local_energy_fn, energy_data_val_and_grad = _get_supervised_energy_fns(
+            config.vmc, log_psi_apply, slog_si_apply, slog_fi_apply
+        )
+    else:
+        local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
+            config.vmc, ion_pos, ion_charges, log_psi_apply
+        )
 
     # Setup parameter updates
     if apply_pmap:
