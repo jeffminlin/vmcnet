@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from cofactor import cofactor_solve
 
 
 def get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32):
@@ -38,9 +39,11 @@ def get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32):
         gAi, g2Ai = jax.jvp(grad_phi_i, (x,), (tangent_vec,))
         return gAi, g2Ai
 
-    def laplace_inv(x):
+    def laplace_det_lemma(x):
         phi = get_phi(x)
-        phi_inv = jnp.linalg.inv(phi)
+        eye = jnp.eye(phi.shape[-1], phi.shape[-1])
+        det_phi, phi_adj = cofactor_solve(phi, eye)
+
         result = dtype(0.0)
 
         # NOTE: It's possible to batch these computations more aggressively by
@@ -51,9 +54,9 @@ def get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32):
         def handle_coord(i, result):
             d_phi_dxi, d2_phi_dxi = grad_phi_2(x, identity_matrix[i])
 
-            result += jnp.einsum("ij,ji->", d2_phi_dxi, phi_inv)
+            result += jnp.einsum("ij,ji->", d2_phi_dxi, phi_adj)
 
-            B = d_phi_dxi @ phi_inv
+            B = d_phi_dxi @ phi_adj
             # Clever way to calculate positive diagonal terms of the 2x2 determinants
             result += jnp.trace(B) ** 2 - jnp.sum(jnp.diag(B) ** 2)
             # Negative diagonal terms of the 2x2 determinants
@@ -62,10 +65,10 @@ def get_laplace_old_and_new(n_coord, Phi0, Phi1, Phi2, dtype=jnp.float32):
 
         result = jax.lax.fori_loop(0, n_coord, handle_coord, result)
 
-        return result
+        return result / det_phi
 
     # NOTE: jax.jit is necessary, vmap does NOT do it automatically.
     laplace_old = jax.vmap(jax.jit(laplace_autodiff))
-    laplace_new = jax.vmap(jax.jit(laplace_inv))
+    laplace_new = jax.vmap(jax.jit(laplace_det_lemma))
 
     return laplace_old, laplace_new
