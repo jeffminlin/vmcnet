@@ -303,27 +303,66 @@ def _get_supervised_energy_fns(
     si=lambda P,X: utils.slog_helpers.array_from_slog(slog_si_apply(P,X))
     fi=lambda P,X: utils.slog_helpers.array_from_slog(slog_fi_apply(P,X))
 
-    # The following can potentially be moved to physics.core 
-    # similarly to physics.core.create_value_and_grad_energy_fn
-    # TODO: better way to extract si/fi parameters
+    """
+    The following can potentially be moved to physics.core 
+    similarly to physics.core.create_value_and_grad_energy_fn
+    """
     def local_energy_fn(P,XY):
-        import flax.core.frozen_dict as frozen_dict
-        Ps=frozen_dict.freeze({'params':P['params']['learner']})
-        Pf=frozen_dict.freeze({'params':P['params']['target']})
+        Si=DoubleAnsatz.with_si_params(si,P)
+        Fi=DoubleAnsatz.with_fi_params(fi,P)
         X,Y=DoubleAnsatz.split(XY)
-        return (fi(Ps,X)/si(Ps,X))*(si(Pf,Y)/fi(Pf,Y))
+        return (Fi(X)/Si(X))*(Si(Y)/Fi(Y))
 
     """
-    TODO: create custom gradient of local energy
+    paulinet (16):
+    E_X[(Fi(X)/Si(X)-avg)grad_log_Si(X)]*E_Y[Si(Y)/Fi(Y)]
     """
-    value_and_grad=physics.core.create_value_and_grad_energy_fn(
+    def value_and_grad1(P,XY):
+        Si=DoubleAnsatz.with_si_params(si,P)
+        Fi=DoubleAnsatz.with_fi_params(fi,P)
+        X,Y=DoubleAnsatz.split(XY)
+        LE_=(Fi(X)/Si(X))*(Si(Y)/Fi(Y))
+
+        clip=lambda x:clipping_fn(x,jnp.average(x))
+
+        E_, VAR_ = physics.core.get_statistics_from_local_energy(LE_, vmc_config.nchains, nan_safe=False)
+        LE=clip(LE_)
+        E, VAR = physics.core.get_statistics_from_local_energy(LE, vmc_config.nchains, nan_safe=vmc_config.nan_safe)
+
+        ratio=Fi(X)/Si(X)
+        centered=ratio-jnp.average(ratio)
+        scaling=jnp.average(Si(Y)/Fi(Y))
+
+        def takegradof(P_):
+            slog_Si=DoubleAnsatz.with_si_params(slog_si_apply,P_)
+            return scaling*jnp.average(clip(centered*slog_Si(X)[1]))
+
+        print('LE: {}'.format(LE))
+        aux=(VAR,LE,E_,VAR_)
+        return (E,aux), jax.grad(takegradof)(P)
+
+    """
+    temporary stand-in gradient
+    """
+    value_and_grad2=physics.core.create_value_and_grad_energy_fn(
             log_psi_apply,
             local_energy_fn,
             nchains=vmc_config.nchains,
             clipping_fn=clipping_fn,
             nan_safe=vmc_config.nan_safe,
         )
-    return local_energy_fn, value_and_grad
+
+    """
+    temporarily check correct signatures
+    """
+    from inspect import signature
+    print('\nsig1')
+    print(signature(value_and_grad1))
+    print('\nsig2')
+    print(signature(value_and_grad2))
+    print('ok')
+
+    return local_energy_fn, value_and_grad1
 
 
 # TODO: don't forget to update type hint to be more general when
