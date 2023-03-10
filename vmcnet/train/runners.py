@@ -707,3 +707,86 @@ def vmc_statistics() -> None:
     _compute_and_save_energy_statistics(
         args.local_energies_file_path, output_dir, output_filename
     )
+
+
+
+
+
+def run_supervised() -> None:
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(config.logging_level)
+    logdir = _get_logdir_and_save_config(reload_config, config)
+    _save_git_hash(logdir)
+
+    dtype_to_use = _get_dtype(config)
+
+    ion_pos, ion_charges, nelec = _get_electron_ion_config_as_arrays(
+        config, dtype=dtype_to_use
+    )
+
+    key = jax.random.PRNGKey(config.initial_seed)
+
+    (
+        log_psi_apply,
+        burning_step,
+        walker_fn,
+        local_energy_fn,
+        update_param_fn,
+        get_amplitude_fn,
+        params,
+        data,
+        optimizer_state,
+        key,
+    ) = _setup_vmc(
+        config,
+        ion_pos,
+        ion_charges,
+        nelec,
+        key,
+        dtype=dtype_to_use,
+        apply_pmap=config.distribute,
+    )
+
+    reload_from_checkpoint = (
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_checkpoint_file
+    )
+
+    if reload_from_checkpoint:
+        checkpoint_file_path = os.path.join(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
+        )
+        directory, filename = os.path.split(checkpoint_file_path)
+        _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
+            directory, filename
+        )
+        (
+            data,
+            params,
+            optimizer_state,
+            key,
+        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+            data, params, optimizer_state, key
+        )
+
+    params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
+        config.vmc,
+        logdir,
+        params,
+        optimizer_state,
+        data,
+        burning_step,
+        walker_fn,
+        update_param_fn,
+        get_amplitude_fn,
+        key,
+        is_eval=False,
+    )
+
+    if nans_detected:
+        logging.info("VMC terminated due to Nans! Aborting.")
+        return
+    else:
+        logging.info("Completed VMC! Evaluating")
