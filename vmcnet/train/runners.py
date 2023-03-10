@@ -810,15 +810,23 @@ def run_supervised() -> None:
             data, params, optimizer_state, key
         )
 
+    eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
+        config,
+        log_psi_apply,
+        local_energy_fn,
+        pacore.get_position_from_data,
+        apply_pmap=config.distribute,
+    )
+
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
         optimizer_state,
         data,
-        burning_step,
-        walker_fn,
-        update_param_fn,
+        eval_burning_step,
+        eval_walker_fn,
+        eval_update_param_fn,
         get_amplitude_fn,
         key,
         is_eval=False,
