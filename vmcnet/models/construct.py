@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 import copy
+import flax.core.frozen_dict as frozen_dict
 
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis, slog_multiply
@@ -764,6 +765,18 @@ class DoubleAnsatz(Module):
         X=XY[...,:n,:]
         Y=XY[...,n:,:]
         return X,Y
+
+    # TODO: add type signature
+    @staticmethod
+    def with_si_params(f,params):
+        Ps=frozen_dict.freeze({'params':params['params']['learner']})
+        return lambda X: f(Ps,X)
+
+    # TODO: add type signature
+    @staticmethod
+    def with_fi_params(f,params):
+        Pf=frozen_dict.freeze({'params':params['params']['target']})
+        return lambda X: f(Pf,X)
 
     @flax.linen.compact
     def __call__(self, XY: Array) -> SLArray:  # type: ignore[override]
