@@ -140,10 +140,9 @@ def get_model_from_config(
         singletype=model_config.type.split('double')[-1]
         single_model_config=copy.deepcopy(model_config)
         single_model_config.type=singletype
-        return DoubleAnsatz(
-            get_model_from_config(single_model_config,*args),
-            get_model_from_config(single_model_config,*args)
-        )
+        si=get_model_from_config(single_model_config,*args)
+        fi=get_model_from_config(single_model_config,*args)
+        return DoubleAnsatz(si,fi)
 
     ferminet_model_types = [
         "ferminet",

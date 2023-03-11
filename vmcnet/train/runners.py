@@ -1,3 +1,8 @@
+import jax
+# from jax import jit
+# from jax.config import config
+# config.update('jax_disable_jit', True)
+
 """Entry points for running standard jobs."""
 import argparse
 import datetime
@@ -8,7 +13,7 @@ import subprocess
 from typing import Optional, Tuple
 
 import flax
-import jax
+#import jax
 import jax.numpy as jnp
 import numpy as np
 from absl import flags
@@ -37,7 +42,6 @@ from vmcnet.utils.typing import (
 )
 
 FLAGS = flags.FLAGS
-
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
     logging.info("Reload configuration: \n%s", reload_config)
@@ -311,7 +315,7 @@ def _get_supervised_energy_fns(
         Si=DoubleAnsatz.with_si_params(si,P)
         Fi=DoubleAnsatz.with_fi_params(fi,P)
         X,Y=DoubleAnsatz.split(XY)
-        return (Fi(X)/Si(X))*(Si(Y)/Fi(Y))
+        return -(Fi(X)/Si(X))*(Si(Y)/Fi(Y))
 
     """
     paulinet (16):
@@ -321,7 +325,11 @@ def _get_supervised_energy_fns(
         Si=DoubleAnsatz.with_si_params(si,P)
         Fi=DoubleAnsatz.with_fi_params(fi,P)
         X,Y=DoubleAnsatz.split(XY)
-        LE_=(Fi(X)/Si(X))*(Si(Y)/Fi(Y))
+        LE_=-(Fi(X)/Si(X))*(Si(Y)/Fi(Y))
+
+        #from jax.experimental.host_callback import call, id_tap, id_print        
+        #id_print(LE_)
+        print(LE_)
 
         clip=lambda x:clipping_fn(x,jnp.average(x))
 
@@ -362,7 +370,7 @@ def _get_supervised_energy_fns(
     print(signature(value_and_grad2))
     print('ok')
 
-    return local_energy_fn, value_and_grad1
+    return local_energy_fn, value_and_grad2
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -393,7 +401,10 @@ def _setup_vmc(
     )
 
     if 'double' in config.model.type: #supervised setting
-        init_pos=jnp.concatenate([init_pos,init_pos],axis=-2)
+        key, init_pos2 = physics.core.initialize_molecular_pos(
+            key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
+        )
+        init_pos=jnp.concatenate([init_pos,init_pos2],axis=-2)
 
     # Make the model
     log_psi_apply, params, key = _get_and_init_model(
@@ -420,6 +431,11 @@ def _setup_vmc(
     )
 
     if 'double' in config.model.type: #supervised setting
+
+        #breakpoint()
+
+        import flax.core.frozen_dict as frozen_dict
+        params=frozen_dict.freeze({'params': {'learner': params['params']['learner'], 'target': params['params']['learner']}})
 
         doubleansatz = models.construct.get_model_from_config(
             config.model, nelec, ion_pos, ion_charges, dtype=dtype
@@ -810,23 +826,15 @@ def run_supervised() -> None:
             data, params, optimizer_state, key
         )
 
-    eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
-        config,
-        log_psi_apply,
-        local_energy_fn,
-        pacore.get_position_from_data,
-        apply_pmap=config.distribute,
-    )
-
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
         optimizer_state,
         data,
-        eval_burning_step,
-        eval_walker_fn,
-        eval_update_param_fn,
+        burning_step,
+        walker_fn,
+        update_param_fn,
         get_amplitude_fn,
         key,
         is_eval=False,
