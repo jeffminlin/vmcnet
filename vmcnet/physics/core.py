@@ -223,7 +223,7 @@ def create_value_and_grad_energy_fn(
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
 
-    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
+    mean_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
         val_and_grad_energy = jax.value_and_grad(local_energy_fn, argnums=0)
@@ -262,20 +262,28 @@ def create_value_and_grad_energy_fn(
             )
             aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
 
-        grad_log_psi_apply = jax.grad(log_psi_apply, argnums=0)
+        value_grad_log_psi_apply = jax.value_and_grad(log_psi_apply, argnums=0)
         vmapped_grad_log_psi = jax.vmap(
-            grad_log_psi_apply, in_axes=(None, 0), out_axes=0
+            value_grad_log_psi_apply, in_axes=(None, 0), out_axes=(0, 0)
         )
-        grad_log_psi = vmapped_grad_log_psi(params, positions)
-        mean_grad_log_psi = jax.tree_map(mean_grad_fn, grad_log_psi)
+        log_psi, grad_log_psi = vmapped_grad_log_psi(params, positions)
+        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
+        mean_grad_log_psi = jax.tree_map(mean_fn, grad_log_psi)
         centered_grad_log_psi = jax.tree_multimap(
             lambda x, y: x - y, grad_log_psi, mean_grad_log_psi
         )
 
+        def multiply_grad_by_local_energies(grad):
+            le_shape = (local_energies_noclip.shape[0], *((1,) * (len(grad.shape) - 1)))
+            le = jnp.reshape(local_energies_noclip, le_shape)
+            return grad * le
+
         grad_log_psi_contribution = jax.tree_map(
-            lambda cg: 2 * cg * local_energies_noclip, centered_grad_log_psi
+            multiply_grad_by_local_energies, centered_grad_log_psi
         )
-        grad_E = tree_sum(grad_log_psi_contribution, local_energy_grads)
+        grad_E = jax.tree_map(
+            mean_fn, tree_sum(grad_log_psi_contribution, local_energy_grads)
+        )
 
         return (energy_noclip, aux_data), grad_E
 
