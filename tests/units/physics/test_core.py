@@ -44,7 +44,7 @@ def test_total_energy_grad():
 
     def local_energy_fn(a, x):
         del a
-        return target_local_energies
+        return jnp.sum(x)
 
     total_energy_value_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains

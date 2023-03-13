@@ -29,4 +29,4 @@ def create_continuous_kinetic_energy(
     def kinetic_energy_fn(params: P, x: Array) -> Array:
         return 0.5 * jnp.sum(grad_log_psi_apply(params, x) ** 2)
 
-    return jax.vmap(kinetic_energy_fn, in_axes=(None, 0), out_axes=0)
+    return kinetic_energy_fn

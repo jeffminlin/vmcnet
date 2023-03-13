@@ -59,7 +59,7 @@ def make_dummy_log_f():
 
 def make_dummy_x():
     """Make a simple array of inputs."""
-    return jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    return jnp.array([[1.0, 2.0], [-3.0, 4.0], [5.0, -6.0]])
 
 
 def make_dummy_data_params_and_key():
