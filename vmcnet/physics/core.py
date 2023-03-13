@@ -7,6 +7,7 @@ from kfac_ferminet_alpha import loss_functions
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
+from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 
 EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
 EnergyData = Tuple[jnp.float32, EnergyAuxData]
@@ -221,9 +222,13 @@ def create_value_and_grad_energy_fn(
     mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
-        local_energies_noclip, local_energy_grads = jax.value_and_grad(
-            local_energy_fn, argnums=0
-        )(params, positions)
+        val_and_grad_energy = jax.value_and_grad(local_energy_fn, argnums=0)
+        val_and_grad_energy_vmapped = jax.vmap(
+            val_and_grad_energy, in_axes=(None, 0), out_axes=0
+        )
+        local_energies_noclip, local_energy_grads = val_and_grad_energy_vmapped(
+            params, positions
+        )
 
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
@@ -253,11 +258,21 @@ def create_value_and_grad_energy_fn(
             )
             aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
 
-        grad_log_psi = jax.grad(log_psi_apply, argnums=0)(params, positions)
-        mean_grad_log_psi = mean_grad_fn(grad_log_psi)
-        centered_grad_log_psi = grad_log_psi - mean_grad_log_psi
+        grad_log_psi_apply = jax.grad(log_psi_apply, argnums=0)
+        vmapped_grad_log_psi = jax.vmap(
+            grad_log_psi_apply, in_axes=(None, 0), out_axes=0
+        )
+        grad_log_psi = vmapped_grad_log_psi(params, positions)
+        mean_grad_log_psi = jax.tree_map(mean_grad_fn, grad_log_psi)
+        centered_grad_log_psi = jax.tree_multimap(
+            lambda x, y: x - y, grad_log_psi, mean_grad_log_psi
+        )
 
-        grad_E = 2 * centered_grad_log_psi * local_energy_grads + local_energy_grads
+        grad_log_psi_contribution = jax.tree_map(
+            lambda cg: 2 * cg * local_energies_noclip, centered_grad_log_psi
+        )
+        grad_E = tree_sum(grad_log_psi_contribution, local_energy_grads)
+
         return (energy_noclip, aux_data), grad_E
 
     return energy_val_and_grad
