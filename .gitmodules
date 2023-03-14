@@ -1,0 +1,3 @@
+[submodule "postprocess/mcmc"]
+	path = postprocess/mcmc
+	url = https://github.com/nilin/mcmc/
