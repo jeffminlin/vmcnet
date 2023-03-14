@@ -112,6 +112,15 @@ def vmc_loop(
             params, data, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
             )
+            print(
+                "Spring constant: "
+                + str(
+                    float(
+                        params["params"]["submodels_1"]["Dense_0"]["kernel"][0][0, 0]
+                        ** 2
+                    )
+                )
+            )
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
