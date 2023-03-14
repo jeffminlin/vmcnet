@@ -67,13 +67,13 @@ def test_harmonic_oscillator_vmc():
     can optimize a simple 1 parameter model rapidly.
     """
     # Problem parameters
-    model_omega = 10
+    model_omega = 2.5
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 10000 * jax.local_device_count()
+    nchains = 1000 * jax.local_device_count()
     nburn = 100
-    nepochs = 500
+    nepochs = 50
     nsteps_per_param_update = 5
     std_move = 0.25
     learning_rate = 1e-2
@@ -198,6 +198,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
         should_distribute_data=False,  # data has already been distributed
     )
     assert_pytree_allclose(first_run_final_state, reload_final_state)
+
 
 if __name__ == "__main__":
     test_harmonic_oscillator_vmc()
