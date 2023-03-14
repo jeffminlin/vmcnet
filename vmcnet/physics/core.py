@@ -1,4 +1,5 @@
 """Core local energy and gradient construction routines."""
+import logging
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex
@@ -226,13 +227,17 @@ def create_value_and_grad_energy_fn(
     mean_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
-        val_and_grad_energy = jax.value_and_grad(local_energy_fn, argnums=0)
-        val_and_grad_energy_vmapped = jax.vmap(
-            val_and_grad_energy, in_axes=(None, 0), out_axes=0
+        print(f"params: {params}")
+        print(f"positions: {positions}")
+        val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
+        val_and_grad_local_energy_vmapped = jax.vmap(
+            val_and_grad_local_energy, in_axes=(None, 0), out_axes=0
         )
-        local_energies_noclip, local_energy_grads = val_and_grad_energy_vmapped(
+        local_energies_noclip, local_energy_grads = val_and_grad_local_energy_vmapped(
             params, positions
         )
+        print(f"LE: {local_energies_noclip}")
+        print(f"LEG: {local_energy_grads}")
 
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
@@ -267,24 +272,39 @@ def create_value_and_grad_energy_fn(
             value_grad_log_psi_apply, in_axes=(None, 0), out_axes=(0, 0)
         )
         log_psi, grad_log_psi = vmapped_grad_log_psi(params, positions)
+        print(f"logpsi: {log_psi}")
+        print(f"gradlogpsi: {grad_log_psi}")
+
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
         mean_grad_log_psi = jax.tree_map(mean_fn, grad_log_psi)
+        # Following probably not necessary
+        mean_grad_log_psi = jax.tree_map(
+            lambda a: jnp.expand_dims(a, axis=0), mean_grad_log_psi
+        )
+        print(f"mean gradlogpsi: {mean_grad_log_psi}")
         centered_grad_log_psi = jax.tree_multimap(
             lambda x, y: x - y, grad_log_psi, mean_grad_log_psi
         )
+        print(f"centered gradlogpsi: {centered_grad_log_psi}")
 
         def multiply_grad_by_local_energies(grad):
+            logging.info(f"LE SHAPE: {local_energies_noclip.shape}")
+            logging.info(f"GRAD SHAPE: {grad.shape}")
             le_shape = (local_energies_noclip.shape[0], *((1,) * (len(grad.shape) - 1)))
             le = jnp.reshape(local_energies_noclip, le_shape)
-            return grad * le
+            logging.info(f"LE NEW SHAPE: {le.shape}")
+            return 2 * grad * le
 
         grad_log_psi_contribution = jax.tree_map(
             multiply_grad_by_local_energies, centered_grad_log_psi
         )
+        print(f"Gradlogpsi contribution: {grad_log_psi_contribution}")
         grad_E = jax.tree_map(
             mean_fn, tree_sum(grad_log_psi_contribution, local_energy_grads)
         )
+        print(f"Energy: {energy}")
+        print(f"Grad_E: {grad_E}")
 
-        return (energy_noclip, aux_data), grad_E
+        return (energy, aux_data), grad_E
 
     return energy_val_and_grad

@@ -19,7 +19,6 @@ from vmcnet.mcmc.simple_position_amplitude import (
 
 
 def sgd_vmc_loop_with_logging(
-    caplog,
     data,
     params,
     key,
@@ -75,20 +74,19 @@ def sgd_vmc_loop_with_logging(
         )
 
     # Train!
-    with caplog.at_level(logging.INFO):
-        data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
-        params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
-            params,
-            optimizer_state,
-            data,
-            nchains,
-            nepochs,
-            walker_fn,
-            update_param_fn,
-            key,
-            logdir,
-            checkpoint_every=checkpoint_every,
-            checkpoint_dir=checkpoint_dir,
-            is_pmapped=should_distribute_data,
-        )
-        return data, params, optimizer_state, key
+    data, key = mcmc.metropolis.burn_data(burning_step, nburn, params, data, key)
+    params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
+        params,
+        optimizer_state,
+        data,
+        nchains,
+        nepochs,
+        walker_fn,
+        update_param_fn,
+        key,
+        logdir,
+        checkpoint_every=checkpoint_every,
+        checkpoint_dir=checkpoint_dir,
+        is_pmapped=should_distribute_data,
+    )
+    return data, params, optimizer_state, key

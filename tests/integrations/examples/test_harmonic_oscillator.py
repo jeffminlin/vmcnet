@@ -1,6 +1,7 @@
 """Integration tests for the quantum harmonic oscillator."""
 
 import os
+import logging
 
 import jax
 import jax.numpy as jnp
@@ -16,7 +17,7 @@ from vmcnet.utils.io import reload_vmc_state
 
 from tests.test_utils import assert_pytree_allclose
 
-from .sgd_train import sgd_vmc_loop_with_logging
+from tests.integrations.examples.sgd_train import sgd_vmc_loop_with_logging
 
 
 def _make_initial_params_and_data(model_omega, nchains):
@@ -56,20 +57,23 @@ def test_five_particle_ground_state_harmonic_oscillator():
 
 
 @pytest.mark.slow
-def test_harmonic_oscillator_vmc(caplog):
+def test_harmonic_oscillator_vmc():
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
     """Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
 
     Integration test for the overall API, to make sure it comes together correctly and
     can optimize a simple 1 parameter model rapidly.
     """
     # Problem parameters
-    model_omega = 2.5
+    model_omega = 10
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 100 * jax.local_device_count()
+    nchains = 10000 * jax.local_device_count()
     nburn = 100
-    nepochs = 50
+    nepochs = 500
     nsteps_per_param_update = 5
     std_move = 0.25
     learning_rate = 1e-2
@@ -90,7 +94,6 @@ def test_harmonic_oscillator_vmc(caplog):
     )
 
     _, params, _, _ = sgd_vmc_loop_with_logging(
-        caplog,
         data,
         params,
         key,
@@ -152,7 +155,6 @@ def test_reload_reproduces_results(caplog, tmp_path):
 
     # Run first 13 iterations, from scratch, saving a checkpoint at epoch 10
     first_run_final_state = sgd_vmc_loop_with_logging(
-        caplog,
         data,
         params,
         key,
@@ -182,7 +184,6 @@ def test_reload_reproduces_results(caplog, tmp_path):
 
     # Rerun last few epochs and test that results are the same
     reload_final_state = sgd_vmc_loop_with_logging(
-        caplog,
         data,
         params,
         key,
@@ -197,3 +198,6 @@ def test_reload_reproduces_results(caplog, tmp_path):
         should_distribute_data=False,  # data has already been distributed
     )
     assert_pytree_allclose(first_run_final_state, reload_final_state)
+
+if __name__ == "__main__":
+    test_harmonic_oscillator_vmc()
