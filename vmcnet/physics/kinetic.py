@@ -28,6 +28,6 @@ def create_continuous_kinetic_energy(
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
     def kinetic_energy_fn(params: P, x: Array) -> jnp.float32:
-        return 0.5 * jnp.sum(grad_log_psi_apply(params, x) ** 2)
+        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
 
     return kinetic_energy_fn
