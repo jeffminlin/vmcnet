@@ -71,12 +71,12 @@ def test_harmonic_oscillator_vmc():
     spring_constant = 1.5
 
     # Training hyperparameters
-    nchains = 1000 * jax.local_device_count()
+    nchains = 10000 * jax.local_device_count()
     nburn = 100
-    nepochs = 50
+    nepochs = 500
     nsteps_per_param_update = 5
     std_move = 0.25
-    learning_rate = 1e-2
+    learning_rate = 1e-3
 
     # Initialize model and chains of walkers
     (

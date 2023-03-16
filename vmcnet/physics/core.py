@@ -239,25 +239,32 @@ def create_value_and_grad_energy_fn(
         log_psi, grad_log_psi = vmapped_grad_log_psi(params, positions)
 
         loss_functions.register_normal_predictive_distribution(log_psi[:, None])
-        mean_grad_log_psi = jax.tree_map(mean_fn, grad_log_psi)
 
-        centered_grad_log_psi = jax.tree_multimap(
-            lambda x, y: x - y, grad_log_psi, mean_grad_log_psi
+        # Mean of even walkers
+        mean_even_grad_log_psi = jax.tree_map(
+            lambda a: mean_fn(a[0::2, ...]), grad_log_psi
         )
+        # Centered odd walkers
+        centered_odd_grad_log_psi = jax.tree_multimap(
+            lambda x, y: x[1::2, ...] - y, grad_log_psi, mean_even_grad_log_psi
+        )
+        odd_local_energy = local_energies_noclip[1::2, ...]
 
         def multiply_grad_by_local_energies(grad):
             le_target_shape = (
-                local_energies_noclip.shape[0],
+                odd_local_energy.shape[0],
                 *((1,) * (len(grad.shape) - 1)),
             )
-            le = jnp.reshape(local_energies_noclip, le_target_shape)
+            le = jnp.reshape(odd_local_energy, le_target_shape)
             return 2 * grad * le
 
         grad_log_psi_contribution = jax.tree_map(
-            multiply_grad_by_local_energies, centered_grad_log_psi
+            multiply_grad_by_local_energies, centered_odd_grad_log_psi
         )
         grad_E = jax.tree_map(
-            mean_fn, tree_sum(grad_log_psi_contribution, local_energy_grads)
+            lambda a, b: mean_fn(a) + mean_fn(b),
+            grad_log_psi_contribution,
+            local_energy_grads,
         )
 
         return (energy, aux_data), grad_E
