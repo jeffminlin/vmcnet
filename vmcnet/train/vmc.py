@@ -1,6 +1,8 @@
 """Main VMC loop."""
 from typing import Tuple, Optional
 
+import jax
+
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
@@ -105,10 +107,11 @@ def vmc_loop(
             # rather than the model one parameter UPDATE after the best metrics.
             # 2. To ensure a fully consistent state can be reloaded from a checkpoint, &
             # the exact subsequent behavior can be reproduced (if run on same machine).
-            old_params = params
-            old_state = optimizer_state
-            old_data = data
-            old_key = key
+            # NOTE: jax deletes the old arrays if we don't make copies.
+            old_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
+            old_state = jax.tree_util.tree_map(lambda x: x.copy(), optimizer_state)
+            old_data = data.copy()
+            old_key = key.copy()
 
             accept_ratio, data, key = walker_fn(params, data, key)
 

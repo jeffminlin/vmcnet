@@ -208,7 +208,7 @@ def get_kfac_update_fn_and_state(
         l2_reg=optimizer_config.l2_reg,
         norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,
-        value_func_has_rng=True,
+        value_func_has_rng=False,
         learning_rate_schedule=learning_rate_schedule,
         curvature_ema=optimizer_config.curvature_ema,
         inverse_update_period=optimizer_config.inverse_update_period,
