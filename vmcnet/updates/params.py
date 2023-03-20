@@ -1,6 +1,7 @@
 """Routines which handle model parameter updating."""
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
+import chex
 import jax
 import jax.numpy as jnp
 import kfac_jax
@@ -136,7 +137,7 @@ def _get_traced_compute_param_norm(
 
 def create_kfac_update_param_fn(
     optimizer: kfac_jax.Optimizer,
-    damping: jnp.float32,
+    damping: chex.Numeric,
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     record_param_l1_norm: bool = False,
@@ -146,7 +147,7 @@ def create_kfac_update_param_fn(
     Args:
         optimizer (kfac_jax.Optimizer): instance of the Optimizer class from
             kfac_jax
-        damping (jnp.float32): damping coefficient
+        damping (chex.Numeric): damping coefficient
         get_position_fn (GetPositionFromData): function which gets the walker positions
             from the data. Has signature data -> Array
         update_data_fn (Callable): function which updates data for new params
@@ -256,8 +257,8 @@ def create_eval_update_param_fn(
 def constrain_norm(
     grads: P,
     preconditioned_grads: P,
-    learning_rate: jnp.float32,
-    norm_constraint: jnp.float32 = 0.001,
+    learning_rate: chex.Numeric,
+    norm_constraint: chex.Numeric = 0.001,
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
     sq_norm_grads = tree_inner_product(preconditioned_grads, grads)

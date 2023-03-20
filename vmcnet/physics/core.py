@@ -1,6 +1,7 @@
 """Core local energy and gradient construction routines."""
 from typing import Callable, Optional, Sequence, Tuple, cast
 
+import chex
 import jax
 import jax.numpy as jnp
 import kfac_jax
@@ -8,8 +9,10 @@ import kfac_jax
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
 
-EnergyAuxData = Tuple[jnp.float32, Array, Optional[jnp.float32], Optional[jnp.float32]]
-EnergyData = Tuple[jnp.float32, EnergyAuxData]
+EnergyAuxData = Tuple[
+    chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
+]
+EnergyData = Tuple[chex.Numeric, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
 
 
@@ -20,7 +23,7 @@ def initialize_molecular_pos(
     ion_charges: Array,
     nelec_total: int,
     init_width: float = 1.0,
-    dtype=jnp.float32,
+    dtype=chex.Numeric,
 ) -> Tuple[PRNGKey, Array]:
     """Initialize a set of plausible initial electron positions.
 
@@ -85,7 +88,7 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
     x: Array,
-) -> jnp.float32:
+) -> chex.Numeric:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
     The computation is done by computing (forward-mode) derivatives of the gradient to
@@ -119,7 +122,7 @@ def laplacian_psi_over_psi(
         x (Array): second input to grad_log_psi
 
     Returns:
-        jnp.float32: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
+        chex.Numeric: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
     flat_x = jnp.reshape(x, (-1,))
@@ -145,7 +148,7 @@ def laplacian_psi_over_psi(
 
 def get_statistics_from_local_energy(
     local_energies: Array, nchains: int, nan_safe: bool = True
-) -> Tuple[jnp.float32, jnp.float32]:
+) -> Tuple[chex.Numeric, chex.Numeric]:
     """Collectively reduce local energies to an average energy and variance.
 
     Args:
@@ -158,7 +161,7 @@ def get_statistics_from_local_energy(
             unexpected nans. Defaults to True.
 
     Returns:
-        (jnp.float32, jnp.float32): local energy average, local energy (sample) variance
+        (chex.Numeric, chex.Numeric): local energy average, local energy (sample) variance
     """
     # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
     # compiled version of these two computations, since the quality of the gradients
@@ -200,7 +203,7 @@ def get_default_energy_bwd(
 
     def scaled_by_local_e(
         params: P, positions: Array, centered_local_energies: Array
-    ) -> jnp.float32:
+    ) -> chex.Numeric:
         log_psi = log_psi_apply(params, positions)
         kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
         return 2.0 * mean_grad_fn(centered_local_energies * log_psi)

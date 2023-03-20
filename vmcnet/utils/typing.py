@@ -8,11 +8,11 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Unio
 
 from jax.random import KeyArray
 import flax.core.frozen_dict as frozen_dict
-import jax.numpy as jnp
+from jax import Array
+from jax.typing import ArrayLike
 import kfac_jax
 import optax
 
-Array = jnp.ndarray
 
 PRNGKey = KeyArray
 
@@ -75,4 +75,4 @@ GetPositionFromData = Callable[[D], Array]
 GetAmplitudeFromData = GetPositionFromData[D]
 UpdateDataFn = Callable[[D, P], D]
 
-ClippingFn = Callable[[Array, jnp.float32], Array]
+ClippingFn = Callable[[Array, ArrayLike], Array]

@@ -1,4 +1,6 @@
-# This file is are taken directly from DeepMind's FermiNet repository, see
+# type: ignore
+#
+# The rest of this file is are taken directly from DeepMind's FermiNet repository, see
 # https://github.com/deepmind/ferminet/blob/61af370b60179baf01bc1fc5873b8d7f18381600/ferminet/curvature_tags_and_blocks.py
 #
 # Copyright 2020 DeepMind Technologies Limited.

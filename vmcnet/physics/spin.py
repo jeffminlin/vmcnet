@@ -1,6 +1,7 @@
 """Spin calculations."""
 from typing import Callable
 
+import chex
 import jax.numpy as jnp
 
 from vmcnet.utils.distribute import get_mean_over_first_axis_fn
@@ -9,7 +10,7 @@ from vmcnet.utils.typing import Array, P, ModelApply, SLArray
 
 def create_spin_square_expectation(
     local_spin_exchange: ModelApply[P], nelec: Array, nan_safe: bool = True
-) -> Callable[[P, Array], jnp.float32]:
+) -> Callable[[P, Array], chex.Numeric]:
     """Create a function which estimates the observable <psi | S^2 | psi> / <psi | psi>.
 
     We assume a wavefunction of spin-1/2 particles. If the wavefunction psi is given by
@@ -56,7 +57,7 @@ def create_spin_square_expectation(
     """
     mean_fn = get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
-    def spin_square_expectation(params: P, x: Array) -> jnp.float32:
+    def spin_square_expectation(params: P, x: Array) -> chex.Numeric:
         local_spin_exchange_out = local_spin_exchange(params, x)
         spin_square = (
             0.25 * (nelec[0] - nelec[1]) ** 2

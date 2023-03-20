@@ -2,8 +2,8 @@
 import functools
 from typing import Callable, Tuple
 
+import chex
 import jax
-import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
@@ -61,12 +61,12 @@ def get_first(obj: T) -> T:
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
 
 
-def mean_all_local_devices(x: Array) -> jnp.float32:
+def mean_all_local_devices(x: Array) -> chex.Numeric:
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
 
-def nanmean_all_local_devices(x: Array) -> jnp.float32:
+def nanmean_all_local_devices(x: Array) -> chex.Numeric:
     """Compute a nan-safe mean over all local devices."""
     return pmean_if_pmap(jnp.nanmean(x))
 

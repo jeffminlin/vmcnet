@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -39,21 +40,21 @@ class RunningMetric:
     Attributes:
         nhistory_max (int): maximum length of the running history to keep when adding
             new values
-        avg (jnp.float32): the running average, should be equal to
+        avg (chex.Numeric): the running average, should be equal to
             jnp.mean(self.history). Stored here to avoid recomputation when new values
             are added
-        history (deque[jnp.float32]): the running history of the metric
+        history (deque[chex.Numeric]): the running history of the metric
     """
 
     nhistory_max: int
-    avg: jnp.float32 = 0.0
-    history: deque[jnp.float32] = field(default_factory=deque)
+    avg: chex.Numeric = 0.0
+    history: deque[chex.Numeric] = field(default_factory=deque)
 
-    def move_history_window(self, new_value: jnp.float32):
+    def move_history_window(self, new_value: chex.Numeric):
         """Append new value to running history, remove oldest if length > nhistory_max.
 
         Args:
-            new_value (jnp.float32): new value to insert into the history
+            new_value (chex.Numeric): new value to insert into the history
         """
         if self.nhistory_max <= 0:
             return
@@ -201,7 +202,7 @@ def initialize_checkpointing(
     nhistory_max: int,
     logdir: str = None,
     checkpoint_every: int = None,
-) -> Tuple[str, jnp.float32, RunningEnergyVariance, Optional[CheckpointData]]:
+) -> Tuple[str, chex.Numeric, RunningEnergyVariance, Optional[CheckpointData]]:
     """Initialize checkpointing objects.
 
     A suffix is added to the checkpointing directory if one with the same name already
@@ -260,11 +261,11 @@ def _add_amplitude_to_metrics_if_requested(
 
 
 def get_checkpoint_metric(
-    energy_running_avg: jnp.float32,
-    variance_running_avg: jnp.float32,
+    energy_running_avg: chex.Numeric,
+    variance_running_avg: chex.Numeric,
     nsamples: int,
     variance_scale: float,
-) -> jnp.float32:
+) -> chex.Numeric:
     """Get an error-adjusted running average of the energy for checkpointing.
 
     The parameter variance_scale can be tuned and probably should scale linearly with
@@ -272,8 +273,8 @@ def get_checkpoint_metric(
     variance, lower means more allergic to high energies.
 
     Args:
-        energy_running_avg (jnp.float32): running average of the energy
-        variance_running_avg (jnp.float32): running average of the variance
+        energy_running_avg (chex.Numeric): running average of the energy
+        variance_running_avg (chex.Numeric): running average of the variance
         nsamples (int): total number of samples reflected in the running averages, equal
             to the number of parallel chains times the length of the history
         variance_scale (float): weight of the variance part of the checkpointing metric.
@@ -282,7 +283,7 @@ def get_checkpoint_metric(
             autocorrelation.
 
     Returns:
-        jnp.float32: error adjusted running average of the energy
+        chex.Numeric: error adjusted running average of the energy
     """
     # TODO(Jeffmin): eventually maybe put in some cheap best guess at the IAC?
     if variance_scale <= 0.0 or nsamples <= 0:
@@ -323,7 +324,7 @@ def save_metrics_and_handle_checkpoints(
     running_energy_and_variance: RunningEnergyVariance,
     checkpoint_writer: CheckpointWriter,
     metrics_writer: MetricsWriter,
-    checkpoint_metric: jnp.float32,
+    checkpoint_metric: chex.Numeric,
     logdir: Optional[str] = None,
     variance_scale: float = 10.0,
     checkpoint_every: Optional[int] = None,
@@ -333,7 +334,7 @@ def save_metrics_and_handle_checkpoints(
     check_for_nans: bool = False,
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
-) -> Tuple[jnp.float32, str, Optional[CheckpointData[D, P, S]], bool]:
+) -> Tuple[chex.Numeric, str, Optional[CheckpointData[D, P, S]], bool]:
     """Checkpoint the current state of the VMC loop.
 
     There are two situations to checkpoint:
@@ -363,7 +364,7 @@ def save_metrics_and_handle_checkpoints(
             been pmapped, etc.
         running_energy_and_variance (RunningEnergyVariance): running history of energies
             and variances
-        checkpoint_metric (jnp.float32): current best error adjusted running average of
+        checkpoint_metric (chex.Numeric): current best error adjusted running average of
             the energy history
         best_checkpoint_every (int): limit on how often to save best
             checkpoint, even if energy is improving. When the error-adjusted running avg
@@ -390,7 +391,7 @@ def save_metrics_and_handle_checkpoints(
         check_for_nans (bool, optional): whether to check for nans. Defaults to False.
 
     Returns:
-        (jnp.float32, str, CheckpointData, bool): best error-adjusted energy
+        (chex.Numeric, str, CheckpointData, bool): best error-adjusted energy
         average, then string indicating if checkpointing has been done, then new best
         checkpoint data (or None), then whether nans were detected.
     """
@@ -465,13 +466,13 @@ def track_and_save_best_checkpoint(
     nchains: int,
     running_energy_and_variance: RunningEnergyVariance,
     checkpoint_writer: CheckpointWriter,
-    checkpoint_metric: jnp.float32,
+    checkpoint_metric: chex.Numeric,
     logdir: str,
     variance_scale: float,
     checkpoint_str: str,
     best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
-) -> Tuple[str, jnp.float32, Optional[CheckpointData[D, P, S]]]:
+) -> Tuple[str, chex.Numeric, Optional[CheckpointData[D, P, S]]]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
 
     Args:
@@ -490,7 +491,7 @@ def track_and_save_best_checkpoint(
             been pmapped, etc.
         running_energy_and_variance (RunningEnergyVariance): running history of energies
             and variances
-        checkpoint_metric (jnp.float32): current best error adjusted running average of
+        checkpoint_metric (chex.Numeric): current best error adjusted running average of
             the energy history
         logdir (str): name of parent log directory. If None, no checkpointing
             is done. Defaults to None.
@@ -512,7 +513,7 @@ def track_and_save_best_checkpoint(
             checkpoint for the best energy observed so far.
 
     Returns:
-        (str, jnp.float32, CheckpointData): previous checkpointing string with
+        (str, chex.Numeric, CheckpointData): previous checkpointing string with
         additional info if this function did checkpointing, then best error-adjusted
         energy average, then new best checkpoint data, or None.
     """

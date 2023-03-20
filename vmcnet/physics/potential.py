@@ -1,5 +1,7 @@
 """Potential energy terms."""
 from typing import Tuple
+
+import chex
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, ModelApply, ModelParams
@@ -19,13 +21,13 @@ def _compute_displacements(x: Array, y: Array) -> Array:
 
 
 def _compute_soft_norm(
-    displacements: Array, softening_term: jnp.float32 = 0.0
+    displacements: Array, softening_term: chex.Scalar = 0.0
 ) -> Array:
     """Compute an (optionally softened) norm, sqrt((sum_i x_i^2) + softening_term^2).
 
     Args:
         displacements (Array): array of shape (..., d)
-        softening_term (jnp.float32, optional): this amount squared is added to
+        softening_term (chex.Scalar, optional): this amount squared is added to
             sum_i x_i^2 before taking the sqrt. The smaller this term, the closer the
             derivative gets to a step function (but the derivative is continuous except
             for for softening term exactly equal to zero!). When zero, gives the usual
@@ -49,8 +51,8 @@ def _get_ion_ion_info(ion_locations: Array, ion_charges: Array) -> Tuple[Array, 
 def create_electron_ion_coulomb_potential(
     ion_locations: Array,
     ion_charges: Array,
-    strength: jnp.float32 = 1.0,
-    softening_term: jnp.float32 = 0.0,
+    strength: chex.Scalar = 1.0,
+    softening_term: chex.Scalar = 0.0,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential attraction between electron and ion.
 
@@ -59,9 +61,9 @@ def create_electron_ion_coulomb_potential(
             number of ion positions and d is the dimension of the space they live in
         ion_charges (Array): an (n,) array of ion charges, in units of one
             elementary charge (the charge of one electron)
-        strength (jnp.float32, optional): amount to multiply the overall interaction by.
+        strength (chex.Scalar, optional): amount to multiply the overall interaction by.
             Defaults to 1.0.
-        softening_term (jnp.float32, optional): this amount squared is added to
+        softening_term (chex.Scalar, optional): this amount squared is added to
             sum_i x_i^2 before taking the sqrt in the norm calculation. When zero, the
             usual vector 2-norm is used to compute distance. Defaults to 0.0.
 
@@ -85,14 +87,14 @@ def create_electron_ion_coulomb_potential(
 
 
 def create_electron_electron_coulomb_potential(
-    strength: jnp.float32 = 1.0, softening_term: jnp.float32 = 0.0
+    strength: chex.Scalar = 1.0, softening_term: chex.Scalar = 0.0
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential repulsion between pairs of electrons.
 
     Args:
-        strength (jnp.float32, optional): amount to multiply the overall interaction by.
+        strength (chex.Scalar, optional): amount to multiply the overall interaction by.
             Defaults to 1.0.
-        softening_term (jnp.float32, optional): this amount squared is added to
+        softening_term (chex.Scalar, optional): this amount squared is added to
             sum_i x_i^2 before taking the sqrt in the norm calculation. When zero, the
             usual vector 2-norm is used to compute distance. Defaults to 0.0.
 

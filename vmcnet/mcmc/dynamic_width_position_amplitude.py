@@ -1,6 +1,7 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
 from typing import Callable, TypedDict
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -18,20 +19,20 @@ class MoveMetadata(TypedDict):
     """Metadata for metropolis algorithm with dynamically sized gaussian steps.
 
     Attributes:
-        std_move (jnp.float32): the standard deviation of the gaussian step
-        move_acceptance_sum (jnp.float32): the sum of the move acceptance ratios of
+        std_move (chex.Scalar): the standard deviation of the gaussian step
+        move_acceptance_sum (chex.Numeric): the sum of the move acceptance ratios of
             each step taken since the last std_move update. At update time, this sum
             will be divided by moves_since_update to get the overall average, and
             std_move will be adjusted in order to attempt to keep this value near some
             target.
-        moves_since_update (jnp.int32): Number of moves since the last std_move update.
+        moves_since_update (int): Number of moves since the last std_move update.
             This is tracked so that the metropolis algorithm can make updates to
             std_move at fixed intervals rather than with every step.
     """
 
-    std_move: jnp.float32
-    move_acceptance_sum: jnp.float32
-    moves_since_update: jnp.int32
+    std_move: chex.Scalar
+    move_acceptance_sum: chex.Numeric
+    moves_since_update: int
 
 
 class DynamicWidthPositionAmplitudeData(TypedDict):
@@ -47,20 +48,20 @@ DWPAData = DynamicWidthPositionAmplitudeData
 def make_dynamic_width_position_amplitude_data(
     position: Array,
     amplitude: Array,
-    std_move: jnp.float32,
-    move_acceptance_sum: jnp.float32 = 0.0,
-    moves_since_update: jnp.int32 = 0,
+    std_move: chex.Scalar,
+    move_acceptance_sum: chex.Scalar = 0.0,
+    moves_since_update: int = 0,
 ) -> DWPAData:
     """Create instance of DynamicWidthPositionAmplitudeData.
 
     Args:
         position (Array): the particle positions
         amplitude (Array): the wavefunction amplitudes
-        std_move (jnp.float32): std for gaussian moves
-        move_acceptance_sum (jnp.float32): sum of the acceptance ratios of each step
+        std_move (chex.Scalar): std for gaussian moves
+        move_acceptance_sum (chex.Scalar): sum of the acceptance ratios of each step
             since the last update. Default of 0 should not be altered if using this
             function for initial data.
-        moves_since_update (jnp.float32): the number of moves since the std_move was
+        moves_since_update (int): the number of moves since the std_move was
             last updated. Default of 0 should not be altered if using this function
             for initial data.
 
@@ -79,28 +80,28 @@ def make_dynamic_width_position_amplitude_data(
 
 
 def make_threshold_adjust_std_move(
-    target_acceptance_prob: jnp.float32 = 0.5,
-    threshold_delta: jnp.float32 = 0.1,
-    adjustment_delta: jnp.float32 = 0.1,
-) -> Callable[[jnp.float32, jnp.float32], jnp.float32]:
+    target_acceptance_prob: chex.Scalar = 0.5,
+    threshold_delta: chex.Scalar = 0.1,
+    adjustment_delta: chex.Scalar = 0.1,
+) -> Callable[[chex.Scalar, chex.Scalar], chex.Scalar]:
     """Create a step size adjustment fn which aims to maintain a 50% acceptance rating.
 
     Works by increasing the step size when the acceptance is at least some delta above
     a target, and decreasing it when the acceptance is the some delta below the target.
 
     Args:
-        target_acceptance_prob (jnp.float32): target value for the average acceptance
+        target_acceptance_prob (chex.Scalar): target value for the average acceptance
             ratio. Defaults to 0.5.
-        threshold_delta (jnp.float32): how far away from the target the acceptance ratio
+        threshold_delta (chex.Scalar): how far away from the target the acceptance ratio
             must be to trigger a compensating update. Defaults to 0.1.
-        adjustment_delta (jnp.float32): how big of an adjustment to make to the step
+        adjustment_delta (chex.Scalar): how big of an adjustment to make to the step
             width. Adjustments will multiply by either (1.0 + adjustment_delta) or
             (1.0 - adjustment_delta). Defaults to 0.1.
     """
 
     def adjust_std_move(
-        old_std_move: jnp.float32, avg_move_acceptance: jnp.float32
-    ) -> jnp.float32:
+        old_std_move: chex.Scalar, avg_move_acceptance: chex.Scalar
+    ) -> chex.Scalar:
         # Use jax.lax.cond since the predicates are data dependent.
         std_move = jax.lax.cond(
             avg_move_acceptance > target_acceptance_prob + threshold_delta,
@@ -120,8 +121,8 @@ def make_threshold_adjust_std_move(
 
 
 def make_update_move_metadata_fn(
-    nmoves_per_update: jnp.int32,
-    adjust_std_move_fn: Callable[[jnp.float32, jnp.float32], jnp.float32],
+    nmoves_per_update: int,
+    adjust_std_move_fn: Callable[[chex.Scalar, chex.Scalar], chex.Scalar],
 ) -> Callable[[MoveMetadata, Array], MoveMetadata]:
     """Create a function that updates the move_metadata periodically.
 
@@ -129,7 +130,7 @@ def make_update_move_metadata_fn(
     updating the std of the gaussian step is handled by adjust_std_move_fn.
 
     Args:
-        nmoves_per_update (jnp.int32): std_move will be updated every time this many
+        nmoves_per_update (int): std_move will be updated every time this many
             steps are taken.
         adjust_std_move_fn (Callable): handles the logic for updating std_move.
             Has signature (old_std_move, avg_move_acceptance) -> new_std_move
@@ -177,9 +178,9 @@ def make_update_move_metadata_fn(
 
 def make_dynamic_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
-    nmoves_per_update: jnp.int32 = 10,
+    nmoves_per_update: int = 10,
     adjust_std_move_fn: Callable[
-        [jnp.float32, jnp.float32], jnp.float32
+        [chex.Scalar, chex.Scalar], chex.Scalar
     ] = make_threshold_adjust_std_move(),
     logabs: bool = True,
 ) -> MetropolisStep:
@@ -188,7 +189,7 @@ def make_dynamic_pos_amp_gaussian_step(
     Args:
         model_apply (Callable): function which evaluates a model. Has signature
             (params, position) -> amplitude
-        nmoves_per_update (jnp.int32): number of metropolis steps to take between each
+        nmoves_per_update (int): number of metropolis steps to take between each
             update to std_move
         adjust_std_move_fn (Callable): handles the logic for updating std_move. Has
             signature (old_std_move, avg_move_acceptance) -> new_std_move

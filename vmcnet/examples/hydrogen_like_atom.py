@@ -1,6 +1,7 @@
 """Exactly solvable single-electron hydrogen-like atom."""
 from typing import Callable, Union
 
+import chex
 import flax
 import jax.numpy as jnp
 
@@ -21,10 +22,10 @@ class HydrogenLikeWavefunction(models.core.Module):
     precisely when decay_rate = nuclear_charge.
 
     Attributes:
-        decay_rate (jnp.float32): initial decay rate in the model
+        decay_rate (chex.Scalar): initial decay rate in the model
     """
 
-    init_decay_rate: jnp.float32
+    init_decay_rate: chex.Scalar
 
     @flax.linen.compact
     def __call__(self, x: Array) -> Array:  # type: ignore[override]
@@ -49,8 +50,8 @@ class HydrogenLikeWavefunction(models.core.Module):
 
 
 def make_hydrogen_like_local_energy(
-    log_psi_apply: Callable[[P, Array], Union[jnp.float32, Array]],
-    charge: jnp.float32,
+    log_psi_apply: Callable[[P, Array], Union[chex.Numeric, Array]],
+    charge: chex.Scalar,
     d: int = 3,
 ) -> ModelApply[P]:
     """Local energy calculation for the hydrogen-like atom in general dimension d.
@@ -60,7 +61,7 @@ def make_hydrogen_like_local_energy(
             inputs x. It is okay for it to produce batch outputs on batches of x as long
             as it produces a single number for single x. Has the signature
             (params, single_x_in) -> log|psi(single_x_in)|
-        charge (jnp.float32): charge of the nucleus
+        charge (chex.Scalar): charge of the nucleus
         d (int, optional): Dimension of the system (number of coordinates that each
             ion and electron has). Defaults to 3.
 

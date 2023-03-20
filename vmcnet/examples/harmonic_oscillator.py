@@ -1,4 +1,5 @@
 """Harmonic oscillator model."""
+import chex
 import flax
 import jax
 import jax.numpy as jnp
@@ -86,12 +87,12 @@ class HarmonicOscillatorOrbitals(models.core.Module):
     particles in a single leaf).
 
     Attributes:
-        omega_init (jnp.float32): initial value for omega in the model; when this
+        omega_init (chex.Scalar): initial value for omega in the model; when this
             matches the omega in the potential energy, then these orbitals become
             eigenfunctions
     """
 
-    omega_init: jnp.float32
+    omega_init: chex.Scalar
 
     @flax.linen.compact
     def _single_leaf_call(self, x: Array) -> Array:
@@ -118,7 +119,7 @@ class HarmonicOscillatorOrbitals(models.core.Module):
 
 
 def make_harmonic_oscillator_spin_half_model(
-    nspin_first: int, model_omega_init: jnp.float32
+    nspin_first: int, model_omega_init: chex.Scalar
 ) -> models.core.Module:
     """Create a spin-1/2 quantum harmonic oscillator wavefunction (two spins).
 
@@ -126,7 +127,7 @@ def make_harmonic_oscillator_spin_half_model(
         nspin_first (int): number of the alpha spin type, where the number of spins of
             each type is (alpha, beta); the model assumes that its input along the
             second-to-last dimension has size alpha + beta
-        model_omega_init (jnp.float32): spring constant inside the model; when it
+        model_omega_init (chex.Scalar): spring constant inside the model; when it
             matches the spring constant in the hamiltonian, then this model evaluates an
             eigenstate
 
@@ -144,7 +145,7 @@ def make_harmonic_oscillator_spin_half_model(
     return models.core.ComposedModel([split_spin_fn, orbitals, logdet_fn])
 
 
-def harmonic_oscillator_potential(omega: jnp.float32, x: Array) -> jnp.float32:
+def harmonic_oscillator_potential(omega: chex.Scalar, x: Array) -> chex.Numeric:
     """Potential energy for independent harmonic oscillators with spring constant omega.
 
     This function computes sum_i 0.5 * (omega * x_i)^2. If x has more than one axis,
@@ -155,23 +156,23 @@ def harmonic_oscillator_potential(omega: jnp.float32, x: Array) -> jnp.float32:
     expects the first axis of x to correspond to the particle index.
 
     Args:
-        omega (jnp.float32): spring constant
+        omega (chex.Scalar): spring constant
         x (Array): array of particle positions, where the first axis corresponds
             to particle index
 
     Returns:
-        jnp.float32: potential energy value for this configuration x
+        chex.Numeric: potential energy value for this configuration x
     """
     return 0.5 * jnp.sum(jnp.square(omega * x))
 
 
 def make_harmonic_oscillator_local_energy(
-    omega: jnp.float32, log_psi_apply: ModelApply[P]
+    omega: chex.Scalar, log_psi_apply: ModelApply[P]
 ) -> ModelApply[P]:
     """Factory to create a local energy fn for the harmonic oscillator log|psi|.
 
     Args:
-        omega (jnp.float32): spring constant for the harmonic oscillator
+        omega (chex.Scalar): spring constant for the harmonic oscillator
         log_psi_apply (Callable): function which evaluates log|psi| for a harmonic
             oscillator model wavefunction psi. Has the signature
             (params, x) -> log|psi(x)|.
