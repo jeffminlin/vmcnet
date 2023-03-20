@@ -215,7 +215,9 @@ class TwoBodyExpDecay(Module):
         sum_ee_effect = jnp.sum(jnp.triu(ee_distances), axis=-1, keepdims=True)
 
         if self.trainable:
-            split_over_ions = jnp.split(ei_distances, ei_distances.shape[-1], axis=-1)
+            split_over_ions = models.core.split(
+                ei_distances, ei_distances.shape[-1], axis=-1
+            )
             # TODO: potentially add support for this to SplitDense or otherwise?
             split_scaled_ei_distances = [
                 Dense(

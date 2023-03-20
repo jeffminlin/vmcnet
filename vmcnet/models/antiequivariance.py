@@ -13,6 +13,7 @@ from .core import (
     get_alternating_signs,
     get_nelec_per_split,
     is_tuple_of_arrays,
+    split,
 )
 from .equivariance import DoublyEquivariantOrbitalLayer, FermiNetOrbitalLayer
 from .weights import WeightInitializer
@@ -126,7 +127,7 @@ def multiply_antieq_by_eq_features(
         (ArrayList): list of per-spin arrays of shape (..., nelec[i], d) which
         represent the product of the equivariant inputs with the antiequivariance.
     """
-    split_inputs = jnp.split(eq_features, spin_split, axis=-2)
+    split_inputs = split(eq_features, spin_split, axis=-2)
     return tree_prod(split_inputs, split_antieq)
 
 
@@ -148,7 +149,7 @@ def multiply_slog_antieq_by_eq_features(
         represent the product of the equivariant inputs with the antiequivariance.
     """
     # Expand antiequivariance to shape (..., nelec[i], 1)] to broadcast with inputs
-    split_slog_inputs = array_list_to_slog(jnp.split(eq_features, spin_split, axis=-2))
+    split_slog_inputs = array_list_to_slog(split(eq_features, spin_split, axis=-2))
 
     return jax.tree_map(
         slog_multiply,

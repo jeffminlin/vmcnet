@@ -17,6 +17,7 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
+    split,
 )
 from flax.linen import SelfAttention  # noqa
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
@@ -166,7 +167,7 @@ def _transformer_mix(
     # in_1e has shape (..., n, d_1e)
     # split_x has shape [i: (..., n[i], d_1e)]
 
-    split_x = jnp.split(x, splits, axis=axis)
+    split_x = split(x, splits, axis=axis)
     split_x_mix = jax.tree_map(self_attention_layer, split_x)
 
     return split_x_mix
@@ -310,7 +311,7 @@ class FermiNetOneElectronLayer(Module):
             dense_mixed = self._mixed_dense(all_spins)
 
             # split the results of the batch applied dense layer back into the spins
-            dense_mixed_split = jnp.split(dense_mixed, len(split_concats), axis=-2)
+            dense_mixed_split = split(dense_mixed, len(split_concats), axis=-2)
         else:
             split_concat = jnp.concatenate(split_means, axis=-1)
             dense_mixed = self._mixed_dense(split_concat)
@@ -339,7 +340,7 @@ class FermiNetOneElectronLayer(Module):
         particle ordering and the specified spin split.
         """
         # split to get [i: (..., n[i], n_total, d)]
-        split_2e = jnp.split(in_2e, self.spin_split, axis=-3)
+        split_2e = split(in_2e, self.spin_split, axis=-3)
 
         # for each i, do a split and average along axis=-2, then concatenate
         concat_2e = []
@@ -361,7 +362,7 @@ class FermiNetOneElectronLayer(Module):
         # i, then split over the spins again before returning
         all_spins = jnp.concatenate(concat_2e, axis=-2)
         dense_2e = self._dense_2e(all_spins)
-        return jnp.split(dense_2e, self.spin_split, axis=-2)
+        return split(dense_2e, self.spin_split, axis=-2)
 
     def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
         """Compute the 1e mixed for the given input.
@@ -418,7 +419,7 @@ class FermiNetOneElectronLayer(Module):
             stream
         """
         dense_unmixed = self._unmixed_dense(in_1e)
-        dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
+        dense_unmixed_split = split(dense_unmixed, self.spin_split, axis=-2)
 
         dense_mixed_split = self._compute_mixed_split(in_1e)
 
@@ -659,10 +660,10 @@ class SplitDense(Module):
         Returns:
             [(..., n[i], self.ndense_per_split[i])]: list of length nsplits, where
             nsplits is the number of splits created by
-            jnp.split(x, self.split, axis=-2), and the ith entry of the output is the
+            split(x, self.split, axis=-2), and the ith entry of the output is the
             ith split transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
-        x_split = jnp.split(x, self.split, axis=-2)
+        x_split = split(x, self.split, axis=-2)
         return [self._dense_layers[i](split) for i, split in enumerate(x_split)]
 
 
@@ -715,7 +716,7 @@ def _compute_exponential_envelopes_all_splits(
     isotropic: bool = False,
 ) -> ArrayList:
     """Calculate exponential envelopes for all splits."""
-    r_ei_split = jnp.split(r_ei, orbitals_split, axis=-3)
+    r_ei_split = split(r_ei, orbitals_split, axis=-3)
     return jax.tree_map(
         functools.partial(
             _compute_exponential_envelopes_on_leaf,
@@ -948,7 +949,7 @@ class DoublyEquivariantOrbitalLayer(Module):
             determinants, nelec[i] should be equal to self.norbitals_per_split[i].
         """
         # split_x is a list of nsplits arrays of shape (..., nelec[i], d)]
-        split_x = jnp.split(x, self.orbitals_split, -2)
+        split_x = split(x, self.orbitals_split, -2)
         # orbs is a list of nsplits arrays of shape
         # (..., nelec[i], nelec[i], norbitals[i])
         orbs = [

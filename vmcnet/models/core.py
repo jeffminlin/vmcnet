@@ -1,6 +1,6 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Sequence, TYPE_CHECKING, Tuple, Union, cast
+from typing import Callable, Sequence, TYPE_CHECKING, Sequence, Tuple, Union, cast
 
 import flax
 import jax
@@ -10,11 +10,22 @@ import numpy as np
 # from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
+from vmcnet.utils.typing import (
+    Array,
+    ArrayLike,
+    ArrayList,
+    PyTree,
+    SLArray,
+    ParticleSplit,
+)
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
+
+
+def split(x: ArrayLike, split: ParticleSplit, axis: int = 0):
+    return jnp.split(x, jnp.array(split), axis)
 
 
 def _split_mean(
@@ -24,7 +35,7 @@ def _split_mean(
     keepdims: bool = True,
 ) -> ArrayList:
     """Split x on an axis and take the mean over that axis in each of the splits."""
-    split_x = jnp.split(x, splits, axis=axis)
+    split_x = split(x, splits, axis=axis)
     split_x_mean = jax.tree_map(
         functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
     )

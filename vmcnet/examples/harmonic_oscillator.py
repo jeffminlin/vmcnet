@@ -137,7 +137,7 @@ def make_harmonic_oscillator_spin_half_model(
     """
 
     def split_spin_fn(x):
-        return jnp.split(x, [nspin_first], axis=-2)
+        return models.core.split(x, [nspin_first], axis=-2)
 
     orbitals = HarmonicOscillatorOrbitals(model_omega_init)
     logdet_fn = models.antisymmetry.logdet_product

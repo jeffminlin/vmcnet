@@ -33,6 +33,7 @@ from .core import (
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
+    split,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -1116,7 +1117,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         ]
         orbitals_split = get_spin_split(total_nelec_per_spin)
 
-        split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
+        split_input_particles = split(elec_pos, self.spin_split, axis=-2)
         (
             invariance_stream_1e,
             invariance_stream_2e,
@@ -1431,7 +1432,7 @@ class FactorizedAntisymmetry(Module):
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
-        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        split_spins = split(stream_1e, self.spin_split, axis=-2)
 
         def fn_to_antisymmetrize(x_one_spin):
             resnet_outputs = [
@@ -1562,7 +1563,7 @@ class GenericAntisymmetry(Module):
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
-        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        split_spins = split(stream_1e, self.spin_split, axis=-2)
         sign_psi, log_antisym = GenericAntisymmetrize(
             SimpleResNet(
                 self.ndense_resnet,

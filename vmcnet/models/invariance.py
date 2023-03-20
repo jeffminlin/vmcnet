@@ -73,7 +73,7 @@ class SplitMeanDense(Module):
 
         Returns:
             [(..., self.ndense_per_spin[i])]: list of length nsplits, where nsplits
-            is the number of splits created by jnp.split(x, self.split, axis=-2),
+            is the number of splits created by split(x, self.split, axis=-2),
             and the ith entry of the output is the ith split mean (an array of shape
             (..., d)) transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
