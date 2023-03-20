@@ -9,7 +9,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Unio
 from jax.random import KeyArray
 import flax.core.frozen_dict as frozen_dict
 import jax.numpy as jnp
-import kfac_ferminet_alpha.optimizer as kfac_opt
+import kfac_jax
 import optax
 
 Array = jnp.ndarray
@@ -39,7 +39,7 @@ S = TypeVar("S", bound=PyTree)
 
 # Actual optimizer states currently used
 # TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
-OptimizerState = Union[kfac_opt.State, optax.OptState]
+OptimizerState = Union[kfac_jax.optimizer.OptimizerState, optax.OptState]
 
 # Union type of all possible model parameter types. For now just FrozenDict.
 # TODO: figure out how to make FrozenDict not be interpretted by mypy as Any

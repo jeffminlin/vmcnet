@@ -1,12 +1,13 @@
 """Test that KFAC treats Dense and LogDomainDense in the same way."""
-import kfac_ferminet_alpha
+import kfac_jax
 import jax
 import jax.numpy as jnp
 import pytest
-from kfac_ferminet_alpha import utils as kfac_utils
+from kfac_jax import utils as kfac_utils
 
 import vmcnet.models as models
 import vmcnet.utils as utils
+import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
 from vmcnet.utils.slog_helpers import array_to_slog, array_from_slog
 
 from tests.test_utils import (
@@ -16,7 +17,7 @@ from tests.test_utils import (
 
 
 def _make_optimizer_from_loss_and_grad(loss_and_grad):
-    return kfac_ferminet_alpha.Optimizer(
+    return kfac_jax.Optimizer(
         loss_and_grad,
         l2_reg=0.0,
         norm_constraint=0.001,
@@ -30,6 +31,9 @@ def _make_optimizer_from_loss_and_grad(loss_and_grad):
         estimation_mode="fisher_exact",
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+        auto_register_kwargs=dict(
+            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,
+        ),
     )
 
 
@@ -100,14 +104,14 @@ def test_log_domain_dense_kfac_matches_dense_kfac():
     def dense_loss(params, x):
         prediction = dense_layer.apply(params, x)
         target = target_fn(x)
-        kfac_ferminet_alpha.register_squared_error_loss(prediction, target)
+        kfac_jax.register_squared_error_loss(prediction, target)
         return utils.distribute.mean_all_local_devices(jnp.square(prediction - target))
 
     def logdomaindense_loss(params, x):
         slog_out = logdomaindense_layer.apply(params, array_to_slog(x))
         prediction = array_from_slog(slog_out)
         target = target_fn(x)
-        kfac_ferminet_alpha.register_squared_error_loss(prediction, target)
+        kfac_jax.register_squared_error_loss(prediction, target)
         return utils.distribute.mean_all_local_devices(jnp.square(prediction - target))
 
     dense_loss_and_grad = jax.value_and_grad(dense_loss, argnums=0)

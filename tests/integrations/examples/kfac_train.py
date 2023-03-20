@@ -1,13 +1,14 @@
 """KFAC integration test runner for examples."""
 import logging
 
-import kfac_ferminet_alpha
+import kfac_jax
 
 import vmcnet.mcmc as mcmc
 import vmcnet.train as train
 import vmcnet.physics as physics
 import vmcnet.updates as updates
 import vmcnet.utils as utils
+import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
 from vmcnet.mcmc.position_amplitude_core import (
     distribute_position_amplitude_data,
     get_position_from_data,
@@ -53,7 +54,7 @@ def kfac_vmc_loop_with_logging(
     def learning_rate_schedule(t):
         return learning_rate
 
-    optimizer = kfac_ferminet_alpha.Optimizer(
+    optimizer = kfac_jax.Optimizer(
         energy_data_val_and_grad,
         l2_reg=0.0,
         norm_constraint=0.001,
@@ -67,6 +68,9 @@ def kfac_vmc_loop_with_logging(
         estimation_mode="fisher_exact",
         multi_device=True,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+        auto_register_kwargs=dict(
+            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,
+        ),
     )
 
     update_param_fn = updates.params.create_kfac_update_param_fn(

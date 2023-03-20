@@ -3,8 +3,7 @@ from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-import kfac_ferminet_alpha
-from kfac_ferminet_alpha import optimizer as kfac_opt
+import kfac_jax
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
@@ -136,17 +135,17 @@ def _get_traced_compute_param_norm(
 
 
 def create_kfac_update_param_fn(
-    optimizer: kfac_ferminet_alpha.Optimizer,
+    optimizer: kfac_jax.Optimizer,
     damping: jnp.float32,
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     record_param_l1_norm: bool = False,
-) -> UpdateParamFn[kfac_opt.Parameters, D, kfac_opt.State]:
+) -> UpdateParamFn[P, D, OptimizerState]:
     """Create momentum-less KFAC update step function.
 
     Args:
-        optimizer (kfac_ferminet_alpha.Optimizer): instance of the Optimizer class from
-            kfac_ferminet_alpha
+        optimizer (kfac_jax.Optimizer): instance of the Optimizer class from
+            kfac_jax
         damping (jnp.float32): damping coefficient
         get_position_fn (GetPositionFromData): function which gets the walker positions
             from the data. Has signature data -> Array
@@ -253,6 +252,7 @@ def create_eval_update_param_fn(
     return traced_fn
 
 
+# TODO (ggoldsh): can remove this?
 def constrain_norm(
     grads: P,
     preconditioned_grads: P,

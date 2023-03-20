@@ -4,7 +4,8 @@ from typing import Optional
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, SLArray
-from vmcnet.utils.kfac import register_batch_dense
+
+# from vmcnet.utils.kfac import register_batch_dense
 
 
 def log_linear_exp(
@@ -51,10 +52,10 @@ def log_linear_exp(
         # swap axis and -1 to conform to jnp.dot and register_batch_dense api
         terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)
         transformed_divided_by_max = jnp.dot(terms_divided_by_max, weights)
-        if register_kfac:
-            transformed_divided_by_max = register_batch_dense(
-                transformed_divided_by_max, terms_divided_by_max, weights, None
-            )
+        # if register_kfac:
+        #     transformed_divided_by_max = register_batch_dense(
+        #         transformed_divided_by_max, terms_divided_by_max, weights, None
+        #     )
 
         # swap axis and -1 back after the contraction and registration
         transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, axis, -1)

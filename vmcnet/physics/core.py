@@ -3,7 +3,7 @@ from typing import Callable, Optional, Sequence, Tuple, cast
 
 import jax
 import jax.numpy as jnp
-from kfac_ferminet_alpha import loss_functions
+import kfac_jax
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
@@ -202,7 +202,7 @@ def get_default_energy_bwd(
         params: P, positions: Array, centered_local_energies: Array
     ) -> jnp.float32:
         log_psi = log_psi_apply(params, positions)
-        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
+        kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
         return 2.0 * mean_grad_fn(centered_local_energies * log_psi)
 
     _get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)

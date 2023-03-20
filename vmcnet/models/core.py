@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vmcnet.utils.kfac import register_batch_dense
+# from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
@@ -195,10 +195,10 @@ class Dense(Module):
             bias = self.param("bias", self.bias_init, (self.features,))
             y = y + bias
 
-        if self.register_kfac:
-            return register_batch_dense(y, inputs, kernel, bias)
-        else:
-            return y
+        # if self.register_kfac:
+        #     return register_batch_dense(y, inputs, kernel, bias)
+        # else:
+        return y
 
 
 class LogDomainDense(Module):

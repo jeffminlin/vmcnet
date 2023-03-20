@@ -2,14 +2,14 @@
 from typing import Callable, Tuple
 
 import jax.numpy as jnp
-import kfac_ferminet_alpha
-import kfac_ferminet_alpha.optimizer as kfac_opt
+from kfac_jax import Optimizer as kfac_Optimizer
 import optax
 from ml_collections import ConfigDict
 
 import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
+import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
@@ -172,7 +172,7 @@ def get_kfac_update_fn_and_state(
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKey]:
+) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
     """Get an update param function, initial state, and key for KFAC.
 
     Args:
@@ -203,11 +203,12 @@ def get_kfac_update_fn_and_state(
         initial optimizer state, and
         PRNGKey
     """
-    optimizer = kfac_ferminet_alpha.Optimizer(
+    optimizer = kfac_Optimizer(
         energy_data_val_and_grad,
         l2_reg=optimizer_config.l2_reg,
         norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,
+        value_func_has_rng=True,
         learning_rate_schedule=learning_rate_schedule,
         curvature_ema=optimizer_config.curvature_ema,
         inverse_update_period=optimizer_config.inverse_update_period,
@@ -217,6 +218,9 @@ def get_kfac_update_fn_and_state(
         estimation_mode=optimizer_config.estimation_mode,
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+        auto_register_kwargs=dict(
+            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,
+        ),
     )
     key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)
 
