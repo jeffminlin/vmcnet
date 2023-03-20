@@ -40,17 +40,17 @@ class RunningMetric:
     Attributes:
         nhistory_max (int): maximum length of the running history to keep when adding
             new values
-        avg (chex.Numeric): the running average, should be equal to
+        avg (chex.Scalar): the running average, should be equal to
             jnp.mean(self.history). Stored here to avoid recomputation when new values
             are added
-        history (deque[chex.Numeric]): the running history of the metric
+        history (deque[chex.Scalar]): the running history of the metric
     """
 
     nhistory_max: int
-    avg: chex.Numeric = 0.0
-    history: deque[chex.Numeric] = field(default_factory=deque)
+    avg: chex.Scalar = 0.0
+    history: deque[chex.Scalar] = field(default_factory=deque)
 
-    def move_history_window(self, new_value: chex.Numeric):
+    def move_history_window(self, new_value: chex.Scalar):
         """Append new value to running history, remove oldest if length > nhistory_max.
 
         Args:
@@ -201,8 +201,8 @@ class MetricsWriter(ThreadedWriter[Dict]):
 def initialize_checkpointing(
     checkpoint_dir: str,
     nhistory_max: int,
-    logdir: str = None,
-    checkpoint_every: int = None,
+    logdir: Optional[str] = None,
+    checkpoint_every: Optional[int] = None,
 ) -> Tuple[str, chex.Numeric, RunningEnergyVariance, Optional[CheckpointData]]:
     """Initialize checkpointing objects.
 
@@ -236,8 +236,8 @@ def initialize_checkpointing(
 
 def finish_checkpointing(
     checkpoint_writer: CheckpointWriter,
-    best_checkpoint_data: CheckpointData = None,
-    logdir: str = None,
+    best_checkpoint_data: Optional[CheckpointData] = None,
+    logdir: Optional[str] = None,
 ):
     """Save any final checkpoint data to the CheckpointWriter."""
     if logdir is not None and best_checkpoint_data is not None:
@@ -294,18 +294,17 @@ def get_checkpoint_metric(
     return energy_running_avg + jnp.sqrt(variance_running_avg / effective_nsamples)
 
 
-def _check_metrics_for_nans(metrics: Dict) -> bool:
+def _check_metrics_for_nans(metrics: Dict) -> chex.Numeric:
     return jnp.logical_or(
         jnp.isnan(metrics["energy_noclip"]), jnp.isnan(metrics["variance_noclip"])
     )
 
 
 @jax.jit
-def _check_for_nans(metrics: Dict, new_params: P) -> bool:
+def _check_for_nans(metrics: Dict, new_params: P) -> chex.Numeric:
     # Jax logical constructs are used here to enable jitting, which hopefully gives
     # some performance benefit for nans checkpointing.
     metrics_nans = _check_metrics_for_nans(metrics)
-    new_params = distribute.get_first_if_distributed(new_params)
     params_nans = jnp.any(jnp.isnan(jax.flatten_util.ravel_pytree(new_params)[0]))
     return jnp.logical_or(metrics_nans, params_nans)
 
@@ -562,7 +561,7 @@ def save_metrics_and_regular_checkpoint(
     metrics_writer: MetricsWriter,
     checkpoint_dir: str,
     checkpoint_str: str,
-    checkpoint_every: int = None,
+    checkpoint_every: Optional[int] = None,
     check_for_nans: bool = False,
 ) -> Tuple[str, bool]:
     """Save current metrics to file, and save model state regularly.

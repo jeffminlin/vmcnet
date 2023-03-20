@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import kfac_jax
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
+from vmcnet.utils.typing import Array, ArrayLike, P, ClippingFn, PRNGKey, ModelApply
 
 EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
@@ -88,7 +88,7 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
     x: Array,
-) -> chex.Numeric:
+) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
     The computation is done by computing (forward-mode) derivatives of the gradient to
@@ -122,7 +122,7 @@ def laplacian_psi_over_psi(
         x (Array): second input to grad_log_psi
 
     Returns:
-        chex.Numeric: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
+        Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
     flat_x = jnp.reshape(x, (-1,))
@@ -142,7 +142,7 @@ def laplacian_psi_over_psi(
         )
         return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
 
-    out, _ = jax.lax.scan(step_fn, (0, 0.0), xs=None, length=n)
+    out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=n)
     return out[1]
 
 

@@ -1,5 +1,5 @@
 """Antiequivariant parts to compose into a model."""
-from typing import Tuple
+from typing import Optional, Tuple
 
 import flax
 import jax
@@ -203,7 +203,7 @@ class OrbitalCofactorAntiequivarianceLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, eq_inputs: Array, r_ei: Array = None
+        self, eq_inputs: Array, r_ei: Optional[Array] = None
     ) -> ArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
@@ -289,7 +289,7 @@ class SLogOrbitalCofactorAntiequivarianceLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, eq_inputs: Array, r_ei: Array = None
+        self, eq_inputs: Array, r_ei: Optional[Array] = None
     ) -> SLArrayList:
         """Calculate the orbitals and the cofactor-based antiequivariance.
 
@@ -375,7 +375,7 @@ class PerParticleDeterminantAntiequivarianceLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, eq_inputs: Array, r_ei: Array = None
+        self, eq_inputs: Array, r_ei: Optional[Array] = None
     ) -> ArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 
@@ -460,7 +460,7 @@ class SLogPerParticleDeterminantAntiequivarianceLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, eq_inputs: Array, r_ei: Array = None
+        self, eq_inputs: Array, r_ei: Optional[Array] = None
     ) -> SLArrayList:
         """Calculate the per-particle orbitals and the antiequivariant determinants.
 

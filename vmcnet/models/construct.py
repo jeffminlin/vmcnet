@@ -183,7 +183,7 @@ def get_model_from_config(
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
             )
-            invariance_backflow: Optional[Module] = get_backflow_from_config(
+            invariance_backflow = get_backflow_from_config(
                 invariance_config.backflow,
                 spin_split,
                 dtype=dtype,

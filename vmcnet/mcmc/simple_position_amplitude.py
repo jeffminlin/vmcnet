@@ -39,7 +39,7 @@ def make_simple_position_amplitude_data(position: Array, amplitude: Array) -> SP
 
 def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
-    std_move: chex.Numeric,
+    std_move: chex.Scalar,
     logabs: bool = True,
 ) -> MetropolisStep[P, SPAData]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.

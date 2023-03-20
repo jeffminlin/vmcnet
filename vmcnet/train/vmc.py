@@ -17,7 +17,7 @@ def vmc_loop(
     walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
     key: PRNGKey,
-    logdir: str = None,
+    logdir: Optional[str] = None,
     checkpoint_every: Optional[int] = 1000,
     best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",

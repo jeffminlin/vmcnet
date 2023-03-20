@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 from jax import core
 
-from vmcnet.utils.typing import Array, D, P, PRNGKey, PyTree, S, T
+from vmcnet.utils.typing import Array, ArrayLike, D, P, PRNGKey, S, T
 
 
 # axis name to pmap over
@@ -73,7 +73,7 @@ def nanmean_all_local_devices(x: Array) -> chex.Numeric:
 
 def get_mean_over_first_axis_fn(
     nan_safe: bool = True,
-) -> Callable[[Array], Array]:
+) -> Callable[[ArrayLike], ArrayLike]:
     """Get a function which averages over the first axis over all local devices.
 
     Args:
@@ -89,7 +89,7 @@ def get_mean_over_first_axis_fn(
     else:
         local_mean_fn = functools.partial(jnp.mean, axis=0)
 
-    def mean_fn(x: Array) -> Array:
+    def mean_fn(x: ArrayLike) -> ArrayLike:
         return pmean_if_pmap(local_mean_fn(x))
 
     return mean_fn

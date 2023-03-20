@@ -281,8 +281,8 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
     r_ii, charge_charge_prods = physics.potential._get_ion_ion_info(
         ion_pos, ion_charges
     )
-    jastrow_scale_factor = 0.5 * jnp.sum(
-        jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
+    jastrow_scale_factor = float(
+        0.5 * jnp.sum(jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods)
     )
     jastrow = TwoBodyExpDecay(
         ion_charges,

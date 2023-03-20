@@ -4,10 +4,10 @@ from typing import Tuple
 import chex
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ModelApply, ModelParams
+from vmcnet.utils.typing import Array, ArrayLike, ModelApply, ModelParams
 
 
-def _compute_displacements(x: Array, y: Array) -> Array:
+def _compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
     """Compute the pairwise displacements between x and y in the second-to-last dim.
 
     Args:
@@ -21,7 +21,7 @@ def _compute_displacements(x: Array, y: Array) -> Array:
 
 
 def _compute_soft_norm(
-    displacements: Array, softening_term: chex.Scalar = 0.0
+    displacements: ArrayLike, softening_term: chex.Scalar = 0.0
 ) -> Array:
     """Compute an (optionally softened) norm, sqrt((sum_i x_i^2) + softening_term^2).
 
@@ -41,7 +41,9 @@ def _compute_soft_norm(
     )
 
 
-def _get_ion_ion_info(ion_locations: Array, ion_charges: Array) -> Tuple[Array, Array]:
+def _get_ion_ion_info(
+    ion_locations: ArrayLike, ion_charges: ArrayLike
+) -> Tuple[Array, Array]:
     """Get pairwise ion-ion displacements and charge-charge products."""
     ion_ion_displacements = _compute_displacements(ion_locations, ion_locations)
     charge_charge_prods = jnp.expand_dims(ion_charges, axis=-1) * ion_charges
@@ -74,7 +76,7 @@ def create_electron_ion_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: Array) -> Array:
+    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
         del params
         electron_ion_displacements = _compute_displacements(x, ion_locations)
         electron_ion_distances = _compute_soft_norm(
@@ -105,7 +107,7 @@ def create_electron_electron_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: Array) -> Array:
+    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
         del params
         electron_electron_displacements = _compute_displacements(x, x)
         electron_electron_distances = _compute_soft_norm(
@@ -143,7 +145,7 @@ def create_ion_ion_coulomb_potential(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )
 
-    def potential_fn(params: ModelParams, x: Array) -> Array:
+    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
         del params, x
         return constant_potential
 

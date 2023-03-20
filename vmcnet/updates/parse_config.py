@@ -1,5 +1,5 @@
 """Get update functions from ConfigDicts."""
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import chex
 from kfac_jax import Optimizer as kfac_Optimizer
@@ -31,7 +31,7 @@ from .sr import SRMode, get_fisher_inverse_fn
 
 def _get_learning_rate_schedule(
     optimizer_config: ConfigDict,
-) -> Callable[[int], chex.Numeric]:
+) -> Callable[[chex.Array], Optional[chex.Array]]:
     if optimizer_config.schedule_type == "constant":
 
         def learning_rate_schedule(t):
@@ -168,7 +168,7 @@ def get_kfac_update_fn_and_state(
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: Callable[[chex.Array], Optional[chex.Array]],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,

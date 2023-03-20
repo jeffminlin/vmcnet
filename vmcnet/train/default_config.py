@@ -194,7 +194,8 @@ def get_default_model_config() -> Dict:
         "type": "ferminet",
         "ferminet": base_ferminet_config,
         "embedded_particle_ferminet": {
-            **base_ferminet_config,
+            # NOTE (ggoldsh): mypy throws error on following line; no idea why.
+            **base_ferminet_config,  # type: ignore
             "nhidden_fermions_per_spin": (2, 2),
             "invariance": {
                 "input_streams": input_streams,

@@ -1,7 +1,8 @@
 """Functions to get weight initializers from names."""
 import functools
-from typing import Any, Callable, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable, Sequence, Union
 
+import chex
 import jax.numpy as jnp
 from jax.nn.initializers import (
     zeros,
@@ -19,12 +20,10 @@ from jax.nn.initializers import (
 )
 from ml_collections import ConfigDict
 
-from vmcnet.utils.typing import Array
-
 Key = Any
-Shape = Iterable[int]
+Shape = Sequence[Union[int, Any]]
 Dtype = Any
-WeightInitializer = Callable[[Key, Shape, Dtype], Array]
+WeightInitializer = Callable[[Key, Shape, Dtype], Any]
 
 INITIALIZER_CONSTRUCTORS: Dict[str, Callable] = {
     "zeros": lambda dtype=jnp.float32: functools.partial(zeros, dtype=dtype),
@@ -105,7 +104,7 @@ def get_bias_init_from_config(config, dtype=jnp.float32):
     return get_bias_initializer(config.type, dtype=dtype)
 
 
-def get_constant_init(constant: float):
+def get_constant_init(constant: chex.Numeric):
     """Get a weight initializer for a constant array with specified dtype, ignoring key.
 
     Args:
