@@ -1,5 +1,5 @@
 """Spin calculations."""
-from typing import Callable
+from typing import Callable, List
 
 import chex
 import jax.numpy as jnp
@@ -70,7 +70,7 @@ def create_spin_square_expectation(
 
 
 def create_local_spin_exchange(
-    slog_psi_apply: Callable[[P, Array], SLArray], nelec: Array
+    slog_psi_apply: Callable[[P, Array], SLArray], nelec: List[int]
 ) -> ModelApply[P]:
     """Create the local observable from exchange of a spin-up and spin-down electron.
 
@@ -120,6 +120,7 @@ def create_local_spin_exchange(
             sign_psi, log_psi = slog_psi_apply(params, x)
 
             swapped_indices = list(range(x.shape[-2]))
+
             swapped_indices[0], swapped_indices[nelec[0]] = nelec[0], 0
             x_exchanged = jnp.take(x, jnp.array(swapped_indices), axis=-2)
             sign_exchanged_psi, log_exchanged_psi = slog_psi_apply(params, x_exchanged)
