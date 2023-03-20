@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import kfac_jax
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, ArrayLike, P, ClippingFn, PRNGKey, ModelApply
+from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
 
 EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
@@ -161,7 +161,8 @@ def get_statistics_from_local_energy(
             unexpected nans. Defaults to True.
 
     Returns:
-        (chex.Numeric, chex.Numeric): local energy average, local energy (sample) variance
+        (chex.Numeric, chex.Numeric): local energy average, local energy (sample)
+        variance
     """
     # TODO(Jeffmin) might be worth investigating the numerical stability of the XLA
     # compiled version of these two computations, since the quality of the gradients

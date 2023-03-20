@@ -17,7 +17,6 @@ import chex
 import jax
 import jax.numpy as jnp
 
-import vmcnet.utils.distribute as distribute
 import vmcnet.utils.io as io
 from vmcnet.utils.typing import (
     CheckpointData,

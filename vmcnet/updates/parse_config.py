@@ -9,7 +9,7 @@ from ml_collections import ConfigDict
 import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
+from vmcnet.utils.curvature_tags_and_blocks import GRAPH_PATTERNS
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
@@ -219,7 +219,7 @@ def get_kfac_update_fn_and_state(
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
         auto_register_kwargs=dict(
-            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,
+            graph_patterns=GRAPH_PATTERNS,
         ),
     )
     key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)

@@ -3,7 +3,6 @@
 from typing import TypedDict
 
 import chex
-import jax.numpy as jnp
 
 from .metropolis import MetropolisStep
 from .position_amplitude_core import (

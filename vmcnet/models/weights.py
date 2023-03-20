@@ -1,6 +1,6 @@
 """Functions to get weight initializers from names."""
 import functools
-from typing import Any, Callable, Dict, Iterable, Sequence, Union
+from typing import Any, Callable, Dict, Sequence, Union
 
 import chex
 import jax.numpy as jnp

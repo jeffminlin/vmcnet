@@ -1,9 +1,7 @@
 """Kinetic energy terms."""
-from typing import Callable, Union
+from typing import Callable
 
-import chex
 import jax
-import jax.numpy as jnp
 
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, P, ModelApply

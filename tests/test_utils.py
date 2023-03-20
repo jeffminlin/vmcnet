@@ -1,5 +1,5 @@
 """Shared pieces for the test suite."""
-from typing import Any, Dict, Tuple, Union
+from typing import Tuple
 
 import flax.core.frozen_dict as frozen_dict
 import jax

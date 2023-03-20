@@ -1,5 +1,5 @@
 """Exactly solvable single-electron hydrogen-like atom."""
-from typing import Callable, Union
+from typing import Callable
 
 import chex
 import flax
@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Array, ArrayLike, P, ModelApply
+from vmcnet.utils.typing import Array, P, ModelApply
 
 
 class HydrogenLikeWavefunction(models.core.Module):

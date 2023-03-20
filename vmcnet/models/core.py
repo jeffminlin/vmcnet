@@ -1,6 +1,6 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Sequence, TYPE_CHECKING, Sequence, Tuple, Union, cast
+from typing import Callable, TYPE_CHECKING, Sequence, Tuple, Union, cast
 
 import flax
 import jax
@@ -25,6 +25,7 @@ SLActivation = Callable[[SLArray], SLArray]
 
 
 def split(x: ArrayLike, split: ParticleSplit, axis: int = 0):
+    """Split x on axis as specified by particle split."""
     return jnp.split(x, jnp.array(split), axis)
 
 
