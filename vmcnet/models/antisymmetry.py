@@ -35,7 +35,7 @@ def slogdet_product(xs: PyTree) -> SLArray:
     """
     slogdets = jax.tree_map(jnp.linalg.slogdet, xs)
 
-    slogdet_leaves, _ = jax.tree_flatten(slogdets, is_tuple_of_arrays)
+    slogdet_leaves, _ = jax.tree_util.tree_flatten(slogdets, is_tuple_of_arrays)
     sign_prod, log_prod = functools.reduce(
         lambda a, b: (a[0] * b[0], a[1] + b[1]), slogdet_leaves
     )
@@ -235,7 +235,7 @@ class GenericAntisymmetrize(Module):
             self.fn_to_antisymmetrize on all leaves of xs.
         """
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
-        perms_and_signs_leaves, _ = jax.tree_flatten(
+        perms_and_signs_leaves, _ = jax.tree_util.tree_flatten(
             perms_and_signs, is_tuple_of_arrays
         )
         nleaves = len(perms_and_signs_leaves)

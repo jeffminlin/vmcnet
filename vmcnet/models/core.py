@@ -26,7 +26,7 @@ SLActivation = Callable[[SLArray], SLArray]
 
 def split(x: ArrayLike, split: ParticleSplit, axis: int = 0):
     """Split x on axis as specified by particle split."""
-    return jnp.split(x, jnp.array(split), axis)
+    return jnp.split(x, np.array(split), axis)
 
 
 def _split_mean(
