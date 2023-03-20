@@ -26,6 +26,7 @@ def vmc_loop(
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
+    is_pmapped=True,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
@@ -95,7 +96,9 @@ def vmc_loop(
     )
     nans_detected = False
 
-    with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
+    with CheckpointWriter(
+        is_pmapped
+    ) as checkpoint_writer, MetricsWriter() as metrics_writer:
         for epoch in range(nepochs):
             # Save state for checkpointing at the start of the epoch for two reasons:
             # 1. To save the model that generates the best energy and variance metrics,

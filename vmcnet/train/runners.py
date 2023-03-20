@@ -447,6 +447,7 @@ def _burn_and_run_vmc(
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
     is_eval: bool,
+    is_pmapped: bool,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
@@ -484,6 +485,7 @@ def _burn_and_run_vmc(
         record_amplitudes=run_config.record_amplitudes,
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
+        is_pmapped=is_pmapped,
     )
 
 
@@ -572,6 +574,7 @@ def run_molecule() -> None:
         get_amplitude_fn,
         key,
         is_eval=False,
+        is_pmapped=config.distribute,
     )
 
     if nans_detected:
@@ -619,6 +622,7 @@ def run_molecule() -> None:
         get_amplitude_fn,
         key,
         is_eval=True,
+        is_pmapped=config.distribute,
     )
 
     # need to check for local_energy.txt because when config.eval.nepochs=0 the file is

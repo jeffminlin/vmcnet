@@ -9,7 +9,7 @@ import json
 from ml_collections import ConfigDict
 import numpy as np
 
-from .distribute import get_first_if_distributed
+from .distribute import get_first
 from .typing import CheckpointData
 
 C = TypeVar("C", Dict, ConfigDict)
@@ -94,7 +94,9 @@ def load_config_dict(logdir: str, relative_path: str):
         return ConfigDict(dict_with_tuples)
 
 
-def process_checkpoint_data_for_saving(checkpoint_data: CheckpointData):
+def process_checkpoint_data_for_saving(
+    checkpoint_data: CheckpointData, is_distributed: bool
+):
     """Process potentially pmapped checkpoint data to prepare for saving to disc.
 
     Params and opt_state are always replicated across devices, so here we save only
@@ -102,8 +104,9 @@ def process_checkpoint_data_for_saving(checkpoint_data: CheckpointData):
     """
     (epoch, data, params, optimizer_state, key) = checkpoint_data
     params = params.unfreeze()
-    params = get_first_if_distributed(params)
-    optimizer_state = get_first_if_distributed(optimizer_state)
+    if is_distributed:
+        params = get_first(params)
+        optimizer_state = get_first(optimizer_state)
     return (epoch, data, params, optimizer_state, key)
 
 

@@ -57,7 +57,7 @@ def is_tuple_of_arrays(x: PyTree) -> bool:
 
 def get_alternating_signs(n: int) -> Array:
     """Return alternating series of 1 and -1, of length n."""
-    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+    return jnp.ones(n).at[1::2].set(-1)
 
 
 def get_nsplits(split: ParticleSplit) -> int:

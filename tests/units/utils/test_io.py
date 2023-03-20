@@ -26,7 +26,7 @@ def test_pmapped_save_and_reload_vmc_state(tmp_path):
 
     # Save the vmc state to file, then reload it and redistribute it
     processed_data = io.process_checkpoint_data_for_saving(
-        (epoch, data, params, opt_state, key)
+        (epoch, data, params, opt_state, key), is_distributed=True
     )
     io.save_vmc_state(directory, file_name, processed_data)
     (
@@ -68,7 +68,7 @@ def test_non_pmapped_save_and_reload_vmc_state(tmp_path):
 
     # Save the vmc state to file, then reload it and redistribute it
     processed_data = io.process_checkpoint_data_for_saving(
-        (epoch, data, params, opt_state, key)
+        (epoch, data, params, opt_state, key), is_distributed=False
     )
     io.save_vmc_state(directory, file_name, processed_data)
     (
@@ -102,7 +102,7 @@ def test_array_data_save_and_reload_vmc_state(tmp_path):
 
     # Save the vmc state to file, then reload it and redistribute it
     processed_data = io.process_checkpoint_data_for_saving(
-        (epoch, data, params, opt_state, key)
+        (epoch, data, params, opt_state, key), is_distributed=False
     )
     io.save_vmc_state(directory, file_name, processed_data)
     (

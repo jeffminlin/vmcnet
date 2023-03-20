@@ -84,5 +84,6 @@ def sgd_vmc_loop_with_logging(
             logdir,
             checkpoint_every=checkpoint_every,
             checkpoint_dir=checkpoint_dir,
+            is_pmapped=should_distribute_data,
         )
         return data, params, optimizer_state, key

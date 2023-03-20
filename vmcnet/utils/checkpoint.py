@@ -149,6 +149,12 @@ class ThreadedWriter(Generic[T]):
 class CheckpointWriter(ThreadedWriter[CheckpointData]):
     """A ThreadedWriter for saving checkpoints during training."""
 
+    is_pmapped: bool
+
+    def __init__(self, is_pmapped):
+        super().__init__()
+        self.is_pmapped = is_pmapped
+
     def write_out_data(
         self, directory: str, name: str, checkpoint_data: CheckpointData
     ):
@@ -170,7 +176,9 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
 
     def save_data(self, directory: str, name: str, checkpoint_data: CheckpointData):
         """Queue up checkpoint data to be written to disc."""
-        checkpoint_data = io.process_checkpoint_data_for_saving(checkpoint_data)
+        checkpoint_data = io.process_checkpoint_data_for_saving(
+            checkpoint_data, self.is_pmapped
+        )
         # Move data to CPU to avoid clogging up GPU memory with queued checkpoints
         checkpoint_data = jax.device_put(checkpoint_data, jax.devices("cpu")[0])
         super().save_data(directory, name, checkpoint_data)
