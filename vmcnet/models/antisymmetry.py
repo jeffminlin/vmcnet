@@ -13,11 +13,11 @@ from .core import Module, get_alternating_signs, is_tuple_of_arrays
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> Array:
-    return functools.reduce(lambda a, b: a + b, jax.tree_leaves(xs))
+    return functools.reduce(lambda a, b: a + b, jax.tree_utils.tree_leaves(xs))
 
 
 def _reduce_prod_over_leaves(xs: PyTree) -> Array:
-    return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
+    return functools.reduce(lambda a, b: a * b, jax.tree_utils.tree_leaves(xs))
 
 
 def slogdet_product(xs: PyTree) -> SLArray:
@@ -170,13 +170,13 @@ class FactorizedAntisymmetrize(Module):
         # compatibility problems
         antisyms = jax.tree_map(
             self._single_leaf_call,
-            jax.tree_leaves(self.fns_to_antisymmetrize),
-            jax.tree_leaves(xs),
+            jax.tree_utils.tree_leaves(self.fns_to_antisymmetrize),
+            jax.tree_utils.tree_leaves(xs),
         )
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
-        slog_antisyms = array_list_to_slog(jax.tree_leaves(antisyms))
+        slog_antisyms = array_list_to_slog(jax.tree_utils.tree_leaves(antisyms))
         return functools.reduce(slog_multiply, slog_antisyms)
 
 

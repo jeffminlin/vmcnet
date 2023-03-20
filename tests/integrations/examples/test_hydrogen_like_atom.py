@@ -92,7 +92,9 @@ def test_hydrogen_like_sgd_vmc(caplog):
     )
 
     # Make sure the decay rate converged to the nuclear charge, since we're in 3-d
-    np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
+    np.testing.assert_allclose(
+        jax.tree_util.tree_leaves(params)[0], nuclear_charge, rtol=1e-5
+    )
 
 
 @pytest.mark.slow
@@ -129,4 +131,4 @@ def test_hydrogen_like_kfac_vmc(caplog):
     )
 
     # Make sure the decay rate converged to the nuclear charge, since we're in 3-d
-    np.testing.assert_allclose(jax.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
+    np.testing.assert_allclose(jax.tree_utils.tree_leaves(params)[0], nuclear_charge, rtol=1e-5)
