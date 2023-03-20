@@ -106,7 +106,7 @@ def test_harmonic_oscillator_vmc(caplog):
 
     # Grab the one parameter and make sure it converged to sqrt(spring constant)
     np.testing.assert_allclose(
-        jax.tree_utils.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
+        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
     )
 
 
