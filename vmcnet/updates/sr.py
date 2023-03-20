@@ -27,7 +27,7 @@ class SRMode(Enum):
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
-    mean_grad_fn: Callable[[Array], Array],
+    mean_grad_fn: Callable[[ArrayLike], ArrayLike],
     damping: float = 0.001,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,

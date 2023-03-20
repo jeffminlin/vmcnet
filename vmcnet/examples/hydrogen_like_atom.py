@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Array, P, ModelApply
+from vmcnet.utils.typing import Array, ArrayLike, P, ModelApply
 
 
 class HydrogenLikeWavefunction(models.core.Module):
@@ -50,7 +50,7 @@ class HydrogenLikeWavefunction(models.core.Module):
 
 
 def make_hydrogen_like_local_energy(
-    log_psi_apply: Callable[[P, Array], Union[chex.Numeric, Array]],
+    log_psi_apply: Callable[[P, Array], Array],
     charge: chex.Scalar,
     d: int = 3,
 ) -> ModelApply[P]:
