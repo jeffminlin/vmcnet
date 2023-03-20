@@ -4,7 +4,7 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from jax.random import KeyArray
 import flax.core.frozen_dict as frozen_dict
@@ -41,9 +41,7 @@ S = TypeVar("S", bound=PyTree)
 # TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
 OptimizerState = Union[kfac_jax.optimizer.OptimizerState, optax.OptState]
 
-# Union type of all possible model parameter types. For now just FrozenDict.
-# TODO: figure out how to make FrozenDict not be interpretted by mypy as Any
-ModelParams = frozen_dict.FrozenDict
+ModelParams = Union[frozen_dict.FrozenDict, Dict[str, Any]]
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch

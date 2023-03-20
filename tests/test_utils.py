@@ -9,9 +9,7 @@ import numpy as np
 import vmcnet.mcmc as mcmc
 import vmcnet.models as models
 import vmcnet.train.default_config as default_config
-from vmcnet.utils.typing import Array, PRNGKey, PyTree
-
-ParamsType = Union[frozen_dict.FrozenDict, Dict[str, Any]]
+from vmcnet.utils.typing import Array, PRNGKey, ModelParams, PyTree
 
 
 def get_default_config_with_chosen_model(
@@ -118,7 +116,7 @@ def get_dense_and_log_domain_dense_same_params(
     key: PRNGKey,
     batch: Array,
     dense_layer: models.core.Dense,
-) -> Tuple[ParamsType, ParamsType]:
+) -> Tuple[ModelParams, ModelParams]:
     """Get matching params for Dense and LogDomainDense layers."""
     dense_params = dense_layer.init(key, batch)
     log_domain_params = _get_log_domain_params_for_dense_layer(dense_params["params"])
@@ -130,7 +128,7 @@ def get_resnet_and_log_domain_resnet_same_params(
     key: PRNGKey,
     batch: Array,
     resnet: models.core.SimpleResNet,
-) -> Tuple[ParamsType, ParamsType]:
+) -> Tuple[ModelParams, ModelParams]:
     """Get matching params for SimpleResNet and LogDomainResnet models."""
     resnet_params = resnet.init(key, batch)
     log_domain_params = {}

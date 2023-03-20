@@ -95,9 +95,7 @@ def _get_dtype_init_constructors(dtype):
     return kernel_init_constructor, bias_init_constructor
 
 
-def slog_psi_to_log_psi_apply(
-    slog_psi_apply: Callable[..., SLArray]
-) -> Callable[..., Array]:
+def slog_psi_to_log_psi_apply(slog_psi_apply) -> Callable[..., Array]:
     """Get a log|psi| model apply callable from a sign(psi), log|psi| apply callable."""
 
     def log_psi_apply(*args) -> Array:
