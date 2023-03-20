@@ -153,6 +153,7 @@ class CheckpointWriter(ThreadedWriter[CheckpointData]):
     is_pmapped: bool
 
     def __init__(self, is_pmapped):
+        """Init Checkpoint Writer."""
         super().__init__()
         self.is_pmapped = is_pmapped
 
