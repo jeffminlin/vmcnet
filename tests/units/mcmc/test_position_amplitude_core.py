@@ -29,13 +29,15 @@ def test_gaussian_proposal_with_nonzero_step_width():
     )
 
 
-def _get_data_for_test_update() -> Tuple[
-    pacore.PositionAmplitudeData,
-    pacore.PositionAmplitudeData,
-    Array,
-    Array,
-    Array,
-]:
+def _get_data_for_test_update() -> (
+    Tuple[
+        pacore.PositionAmplitudeData,
+        pacore.PositionAmplitudeData,
+        Array,
+        Array,
+        Array,
+    ]
+):
     pos = jnp.array([[0, 0], [0, 0], [0, 0], [0, 0]])
     proposed_pos = jnp.array([[1, 1], [2, 2], [3, 4], [4, 3]])
     amplitude = jnp.array([-1, -1, -1, -1])

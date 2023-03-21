@@ -77,7 +77,7 @@ def _convert_dict_lists_to_tuples(d: Dict) -> Dict:
     return jax.tree_map(
         _convert_to_tuple_if_list,
         d,
-        is_leaf=lambda l: isinstance(l, list),
+        is_leaf=lambda li: isinstance(li, list),
     )
 
 

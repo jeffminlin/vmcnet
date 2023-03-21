@@ -115,7 +115,10 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
-        (update_param_fn, optimizer_state,) = get_sgd_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_sgd_update_fn_and_state(
             params,
             get_position_fn,
             update_data_fn,
@@ -127,7 +130,10 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "adam":
-        (update_param_fn, optimizer_state,) = get_adam_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_adam_update_fn_and_state(
             params,
             get_position_fn,
             update_data_fn,
@@ -139,7 +145,10 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "sr":
-        (update_param_fn, optimizer_state,) = get_sr_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_sr_update_fn_and_state(
             log_psi_apply,
             params,
             get_position_fn,
@@ -480,7 +489,6 @@ def get_sr_update_fn_and_state(
         return optimizer_state[1].count
 
     def optimizer_apply(grad, params, optimizer_state, data):
-
         preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
