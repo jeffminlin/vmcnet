@@ -1,6 +1,4 @@
 """Shared SGD integration test for examples."""
-import logging
-
 import jax
 
 import vmcnet.mcmc as mcmc

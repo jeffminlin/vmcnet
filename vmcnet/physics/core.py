@@ -8,7 +8,7 @@ import kfac_jax
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
-from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
+from vmcnet.utils.pytree_helpers import tree_sum
 
 EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
@@ -222,7 +222,6 @@ def create_value_and_grad_energy_fn(
         where auxiliary_energy_data is the tuple
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
-
     mean_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
@@ -242,10 +241,10 @@ def create_value_and_grad_energy_fn(
         )
         log_psi, grad_log_psi = vmapped_grad_log_psi(params, positions)
 
-        loss_functions.register_normal_predictive_distribution(log_psi[:, None])
+        kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
         mean_grad_log_psi = jax.tree_map(mean_fn, grad_log_psi)
 
-        centered_grad_log_psi = jax.tree_multimap(
+        centered_grad_log_psi = jax.tree_map(
             lambda x, y: x - y, grad_log_psi, mean_grad_log_psi
         )
 

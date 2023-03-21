@@ -2,6 +2,7 @@
 from typing import Callable
 
 import jax
+import jax.numpy as jnp
 
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, P, ModelApply

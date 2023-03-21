@@ -58,6 +58,7 @@ def test_five_particle_ground_state_harmonic_oscillator():
 
 @pytest.mark.slow
 def test_harmonic_oscillator_vmc():
+    """Test VMC on harmonic oscillator."""
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
