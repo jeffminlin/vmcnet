@@ -10,9 +10,7 @@ import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 
-# Mypy can't find GRAPH_PATTERNS because we've ignored types in the curvature tags file
-# since it's not typed properly.
-from vmcnet.utils.curvature_tags_and_blocks import GRAPH_PATTERNS  # type: ignore
+import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
 
 from vmcnet.utils.typing import (
     D,
@@ -231,8 +229,10 @@ def get_kfac_update_fn_and_state(
         estimation_mode=optimizer_config.estimation_mode,
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+        # Mypy can't find GRAPH_PATTERNS because we've ignored types in the curvature
+        # tags file since it's not typed properly.
         auto_register_kwargs=dict(
-            graph_patterns=GRAPH_PATTERNS,
+            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,  # type: ignore
         ),
     )
     key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)

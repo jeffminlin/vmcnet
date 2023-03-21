@@ -99,8 +99,7 @@ def test_hydrogen_like_sgd_vmc(caplog):
 
 @pytest.mark.slow
 @pytest.mark.skip(
-    "Not sure if KFAC can handle single-param models; throws division by zero error "
-    "currently"
+    "kfac_jax seems to break on single-param models; throws division by zero error."
 )
 def test_hydrogen_like_kfac_vmc(caplog):
     """Test exp(-a * r) converges (in 3-D) to a = nuclear charge with KFAC."""
