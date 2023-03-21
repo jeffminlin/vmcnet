@@ -9,7 +9,11 @@ from ml_collections import ConfigDict
 import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.curvature_tags_and_blocks import GRAPH_PATTERNS
+
+# Mypy can't find GRAPH_PATTERNS because we've ignored types in the curvature tags file
+# since it's not typed properly.
+from vmcnet.utils.curvature_tags_and_blocks import GRAPH_PATTERNS  # type: ignore
+
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,

@@ -1,3 +1,4 @@
+# Types in this file don't pass mypy for a variety of reasons, so don't typecheck it.
 # type: ignore
 #
 # The rest of this file is are taken directly from DeepMind's FermiNet repository, see
