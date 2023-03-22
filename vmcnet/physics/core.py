@@ -226,7 +226,7 @@ def create_value_and_grad_energy_fn(
     mean_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
-        importance_weights = 1 / (1 + jnp.abs(ei_potential_fn(params, position)))
+        importance_weights = 1 / (1 + jnp.abs(ei_potential_fn(params, positions)))
 
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
