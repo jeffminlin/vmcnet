@@ -237,7 +237,12 @@ def _assemble_mol_local_energy_fn(
         [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
     )
 
-    return local_energy_fn
+    def local_energy_fn_importance(params, position):
+        return local_energy_fn(params, position) / (
+            1 + np.abs(ei_potential_fn(params, position))
+        )
+
+    return local_energy_fn_importance
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -356,11 +361,7 @@ def _setup_vmc(
     get_amplitude_fn = pacore.get_amplitude_from_data
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
 
-    # Setup metropolis step
-    burning_step, walker_fn = _get_mcmc_fns(
-        config.vmc, log_psi_apply, apply_pmap=apply_pmap
-    )
-
+    # Set up energy function
     local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
         config.vmc,
         ion_pos,
@@ -368,6 +369,21 @@ def _setup_vmc(
         log_psi_apply,
         config.problem.soften_ei,
         config.problem.soften_ee,
+    )
+
+    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+
+    # Setup metropolis step
+    def importance_log_psi_apply(params, position):
+        return (
+            log_psi_apply(params, position)
+            + np.log(1 + np.abs(ei_potential_fn(params, position))) / 2
+        )
+
+    burning_step, walker_fn = _get_mcmc_fns(
+        config.vmc, importance_log_psi_apply, apply_pmap=apply_pmap
     )
 
     # Setup parameter updates
