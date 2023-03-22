@@ -239,7 +239,7 @@ def _assemble_mol_local_energy_fn(
 
     def local_energy_fn_importance(params, position):
         return local_energy_fn(params, position) / (
-            1 + np.abs(ei_potential_fn(params, position))
+            1 + jnp.abs(ei_potential_fn(params, position))
         )
 
     return local_energy_fn_importance
@@ -379,7 +379,7 @@ def _setup_vmc(
     def importance_log_psi_apply(params, position):
         return (
             log_psi_apply(params, position)
-            + np.log(1 + np.abs(ei_potential_fn(params, position))) / 2
+            + jnp.log(1 + jnp.abs(ei_potential_fn(params, position))) / 2
         )
 
     burning_step, walker_fn = _get_mcmc_fns(
