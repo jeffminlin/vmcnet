@@ -239,7 +239,12 @@ def create_value_and_grad_energy_fn(
             params, positions
         )
 
-        aux_data, energy = calculate_statistics(local_energies_noclip)
+        importance_weights = 1 / (1 + jnp.abs(ei_potential_fn(params, positions)))
+        scale_correction = mean_fn(importance_weights)
+
+        aux_data, energy = calculate_statistics(
+            local_energies_noclip / scale_correction
+        )
 
         value_grad_log_psi_apply = jax.value_and_grad(log_psi_apply, argnums=0)
         vmapped_grad_log_psi = jax.vmap(
@@ -268,9 +273,6 @@ def create_value_and_grad_energy_fn(
         grad_E = jax.tree_map(
             mean_fn, tree_sum(grad_log_psi_contribution, local_energy_grads)
         )
-
-        importance_weights = 1 / (1 + jnp.abs(ei_potential_fn(params, positions)))
-        scale_correction = mean_fn(importance_weights)
 
         grad_E = jax.tree_map(lambda x: x / scale_correction, grad_E)
 
