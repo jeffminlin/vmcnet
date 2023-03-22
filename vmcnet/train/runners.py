@@ -242,7 +242,7 @@ def _assemble_mol_local_energy_fn(
             1 + jnp.abs(ei_potential_fn(params, position))
         )
 
-    return local_energy_fn_importance
+    return local_energy_fn, local_energy_fn_importance
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -294,8 +294,8 @@ def _get_energy_fns(
     log_psi_apply: ModelApply[P],
     soften_ei,
     soften_ee,
-) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn = _assemble_mol_local_energy_fn(
+) -> Tuple[ModelApply[P], ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+    local_energy_fn, local_energy_fn_importance = _assemble_mol_local_energy_fn(
         ion_pos,
         ion_charges,
         log_psi_apply,
@@ -306,13 +306,13 @@ def _get_energy_fns(
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
-        local_energy_fn,
+        local_energy_fn_importance,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
     )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return local_energy_fn, local_energy_fn_importance, energy_data_val_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -329,6 +329,7 @@ def _setup_vmc(
     ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
+    ModelApply[flax.core.FrozenDict],
     ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     GetAmplitudeFromData[dwpa.DWPAData],
@@ -372,7 +373,11 @@ def _setup_vmc(
     update_data_fn = pacore.get_update_data_fn(importance_log_psi_apply)
 
     # Set up energy function
-    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
+    (
+        local_energy_fn,
+        local_energy_fn_importance,
+        energy_data_val_and_grad,
+    ) = _get_energy_fns(
         config.vmc,
         ion_pos,
         ion_charges,
@@ -411,6 +416,7 @@ def _setup_vmc(
         burning_step,
         walker_fn,
         local_energy_fn,
+        local_energy_fn_importance,
         update_param_fn,
         get_amplitude_fn,
         params,
@@ -569,6 +575,7 @@ def run_molecule() -> None:
         burning_step,
         walker_fn,
         local_energy_fn,
+        local_energy_fn_importance,
         update_param_fn,
         get_amplitude_fn,
         params,
