@@ -330,7 +330,6 @@ def _setup_vmc(
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     ModelApply[flax.core.FrozenDict],
-    ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     GetAmplitudeFromData[dwpa.DWPAData],
     flax.core.FrozenDict,
@@ -360,9 +359,8 @@ def _setup_vmc(
     )
 
     def importance_log_psi_apply(params, position):
-        return (
-            log_psi_apply(params, position)
-            + jnp.log(1 + jnp.abs(ei_potential_fn(params, position))) / 2
+        return log_psi_apply(params, position) + (
+            jnp.log(1 + jnp.abs(ei_potential_fn(params, position))) / 2
         )
 
     # Make initial data
@@ -416,7 +414,6 @@ def _setup_vmc(
         burning_step,
         walker_fn,
         local_energy_fn,
-        local_energy_fn_importance,
         update_param_fn,
         get_amplitude_fn,
         params,
@@ -575,7 +572,6 @@ def run_molecule() -> None:
         burning_step,
         walker_fn,
         local_energy_fn,
-        local_energy_fn_importance,
         update_param_fn,
         get_amplitude_fn,
         params,
