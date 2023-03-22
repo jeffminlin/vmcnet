@@ -182,6 +182,7 @@ def get_statistics_from_local_energy(
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: ModelApply[P],
+    ei_potential_fn: ModelApply[P],
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
@@ -225,6 +226,8 @@ def create_value_and_grad_energy_fn(
     mean_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def energy_val_and_grad(params, positions):
+        importance_weights = 1 / (1 + jnp.abs(ei_potential_fn(params, position)))
+
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
             val_and_grad_local_energy, in_axes=(None, 0), out_axes=0
@@ -232,6 +235,8 @@ def create_value_and_grad_energy_fn(
         local_energies_noclip, local_energy_grads = val_and_grad_local_energy_vmapped(
             params, positions
         )
+        local_energies_noclip = local_energies_noclip * importance_weights
+        local_energy_grads = local_energy_grads * importance_weights
 
         aux_data, energy = calculate_statistics(local_energies_noclip)
 
@@ -262,6 +267,10 @@ def create_value_and_grad_energy_fn(
         grad_E = jax.tree_map(
             mean_fn, tree_sum(grad_log_psi_contribution, local_energy_grads)
         )
+
+        scale_correction = mean_fn(importance_weights)
+
+        grad_E = jax.tree_map(lambda x: x / scale_correction, grad_E)
 
         return (energy, aux_data), grad_E
 

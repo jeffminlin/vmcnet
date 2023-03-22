@@ -218,7 +218,7 @@ def _assemble_mol_local_energy_fn(
     use_laplacian=False,
     soften_ei=0.0,
     soften_ee=0.0,
-) -> ModelApply[P]:
+) -> Tuple[ModelApply[P], ModelApply[P]]:
     # Define parameter updates
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(
         log_psi_apply, use_laplacian
@@ -237,12 +237,7 @@ def _assemble_mol_local_energy_fn(
         [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
     )
 
-    def local_energy_fn_importance(params, position):
-        return local_energy_fn(params, position) / (
-            1 + jnp.abs(ei_potential_fn(params, position))
-        )
-
-    return local_energy_fn, local_energy_fn_importance
+    return local_energy_fn, ei_potential_fn
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -294,8 +289,8 @@ def _get_energy_fns(
     log_psi_apply: ModelApply[P],
     soften_ei,
     soften_ee,
-) -> Tuple[ModelApply[P], ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn, local_energy_fn_importance = _assemble_mol_local_energy_fn(
+) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+    local_energy_fn, ei_potential_fn = _assemble_mol_local_energy_fn(
         ion_pos,
         ion_charges,
         log_psi_apply,
@@ -303,16 +298,18 @@ def _get_energy_fns(
         soften_ei,
         soften_ee,
     )
+
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
-        local_energy_fn_importance,
+        local_energy_fn,
+        ei_potential_fn,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
     )
 
-    return local_energy_fn, local_energy_fn_importance, energy_data_val_and_grad
+    return local_energy_fn, energy_data_val_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -373,7 +370,6 @@ def _setup_vmc(
     # Set up energy function
     (
         local_energy_fn,
-        local_energy_fn_importance,
         energy_data_val_and_grad,
     ) = _get_energy_fns(
         config.vmc,
