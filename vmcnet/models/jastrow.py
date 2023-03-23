@@ -16,7 +16,6 @@ def _isotropy_on_leaf(
     r_ei_leaf: Array,
     norbitals: int,
     kernel_initializer: WeightInitializer,
-    register_kfac: bool = True,
 ) -> Array:
     """Isotropic scaling of the electron-ion displacements."""
     nion = r_ei_leaf.shape[-2]
@@ -35,7 +34,6 @@ def _isotropy_on_leaf(
         kernel_initializer,
         zeros,
         use_bias=False,
-        register_kfac=register_kfac,
     )(x_nion)
 
     # concatenate over the ion axis, then swap axes to get
@@ -48,7 +46,6 @@ def _anisotropy_on_leaf(
     r_ei_leaf: Array,
     norbitals: int,
     kernel_initializer: WeightInitializer,
-    register_kfac: bool = True,
 ) -> Array:
     """Anisotropic scaling of the electron-ion displacements."""
     batch_shapes = r_ei_leaf.shape[:-2]
@@ -63,7 +60,6 @@ def _anisotropy_on_leaf(
         kernel_initializer,
         zeros,
         use_bias=False,
-        register_kfac=register_kfac,
     )(r_ei_leaf)
 
     # concatenate over the ion axis, then reshape the last axis to separate out the
@@ -134,9 +130,7 @@ class OneBodyExpDecay(Module):
         """
         del input_stream_1e, input_stream_2e, stream_1e, r_ee
         # scale_out has shape (..., nelec, 1, nion, d)
-        scale_out = _isotropy_on_leaf(
-            r_ei, 1, self._kernel_initializer, register_kfac=True
-        )
+        scale_out = _isotropy_on_leaf(r_ei, 1, self._kernel_initializer)
         scaled_distances = jnp.linalg.norm(scale_out, axis=-1)
 
         abs_lin_comb_distances = jnp.sum(scaled_distances, axis=(-1, -2, -3))
@@ -166,8 +160,6 @@ class TwoBodyExpDecay(Module):
             interaction. Defaults to 1.0.
         log_scale_factor (float, optional): Amount to add to the log jastrow (amounts to
             a multiplicative factor after exponentiation). Defaults to 0.0.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
             (False). Defaults to True.
         trainable (bool, optional): whether to allow the jastrow to be trainable.
@@ -177,7 +169,6 @@ class TwoBodyExpDecay(Module):
     init_ei_strength: Union[Array, Sequence[float]]
     init_ee_strength: float = 1.0
     log_scale_factor: float = 0.0
-    register_kfac: bool = True
     logabs: bool = True
     trainable: bool = True
 
@@ -215,14 +206,15 @@ class TwoBodyExpDecay(Module):
         sum_ee_effect = jnp.sum(jnp.triu(ee_distances), axis=-1, keepdims=True)
 
         if self.trainable:
-            split_over_ions = jnp.split(ei_distances, ei_distances.shape[-1], axis=-1)
+            split_over_ions = models.core.split(
+                ei_distances, ei_distances.shape[-1], axis=-1
+            )
             # TODO: potentially add support for this to SplitDense or otherwise?
             split_scaled_ei_distances = [
                 Dense(
                     1,
                     kernel_init=get_constant_init(self.init_ei_strength[i]),
                     use_bias=False,
-                    register_kfac=self.register_kfac,
                 )(single_ion_displacement)
                 for i, single_ion_displacement in enumerate(split_over_ions)
             ]
@@ -232,7 +224,6 @@ class TwoBodyExpDecay(Module):
                 1,
                 kernel_init=get_constant_init(self.init_ee_strength),
                 use_bias=False,
-                register_kfac=self.register_kfac,
             )(sum_ee_effect)
         else:
             scaled_ei_distances = self.init_ei_strength * ei_distances
@@ -253,7 +244,6 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
     ion_pos: Array,
     ion_charges: Array,
     init_ee_strength: float = 1.0,
-    register_kfac: bool = True,
     logabs: bool = True,
     trainable: bool = True,
 ) -> Jastrow:
@@ -268,8 +258,6 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
             elementary charge (the charge of one electron)
         init_ee_strength (float, optional): the initial strength of the
             electron-electron interaction. Defaults to 1.0.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
         logabs (bool, optional): whether to return the log jastrow (True) or the jastrow
             (False). Defaults to True.
         trainable (bool, optional): whether to allow the jastrow to be trainable.
@@ -281,14 +269,13 @@ def get_two_body_decay_scaled_for_chargeless_molecules(
     r_ii, charge_charge_prods = physics.potential._get_ion_ion_info(
         ion_pos, ion_charges
     )
-    jastrow_scale_factor = 0.5 * jnp.sum(
-        jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods
+    jastrow_scale_factor = float(
+        0.5 * jnp.sum(jnp.linalg.norm(r_ii, axis=-1) * charge_charge_prods)
     )
     jastrow = TwoBodyExpDecay(
         ion_charges,
         init_ee_strength,
         log_scale_factor=jastrow_scale_factor,
-        register_kfac=register_kfac,
         logabs=logabs,
         trainable=trainable,
     )

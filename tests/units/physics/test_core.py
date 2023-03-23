@@ -24,9 +24,10 @@ def test_laplacian_psi_over_psi():
 
 def test_total_energy_grad():
     """Test the custom gradient of the total energy."""
-    # since log|psi(x)| = a * sum(x^2), we have
-    # log_psi_grad(x) = (grad_a psi / psi)(x) = sum(x^2)
+
     def log_psi_apply(a, x):
+        # since log|psi(x)| = a * sum(x^2), we have
+        # log_psi_grad(x) = (grad_a psi / psi)(x) = sum(x^2)
         return a * jnp.sum(jnp.square(x), axis=-1)
 
     a = 3.5

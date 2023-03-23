@@ -1,6 +1,8 @@
 """Main VMC loop."""
 from typing import Tuple, Optional
 
+import jax
+
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
@@ -17,7 +19,7 @@ def vmc_loop(
     walker_fn: WalkerFn[P, D],
     update_param_fn: UpdateParamFn[P, D, S],
     key: PRNGKey,
-    logdir: str = None,
+    logdir: Optional[str] = None,
     checkpoint_every: Optional[int] = 1000,
     best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",
@@ -26,6 +28,7 @@ def vmc_loop(
     record_amplitudes: bool = False,
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
+    is_pmapped=True,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
@@ -95,17 +98,20 @@ def vmc_loop(
     )
     nans_detected = False
 
-    with CheckpointWriter() as checkpoint_writer, MetricsWriter() as metrics_writer:
+    with CheckpointWriter(
+        is_pmapped
+    ) as checkpoint_writer, MetricsWriter() as metrics_writer:
         for epoch in range(nepochs):
             # Save state for checkpointing at the start of the epoch for two reasons:
             # 1. To save the model that generates the best energy and variance metrics,
             # rather than the model one parameter UPDATE after the best metrics.
             # 2. To ensure a fully consistent state can be reloaded from a checkpoint, &
             # the exact subsequent behavior can be reproduced (if run on same machine).
-            old_params = params
-            old_state = optimizer_state
-            old_data = data
-            old_key = key
+            # NOTE: jax deletes the old arrays if we don't make copies.
+            old_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
+            old_state = jax.tree_util.tree_map(lambda x: x.copy(), optimizer_state)
+            old_data = data.copy()
+            old_key = key.copy()
 
             accept_ratio, data, key = walker_fn(params, data, key)
 

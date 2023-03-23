@@ -4,7 +4,6 @@ from typing import Optional
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, SLArray
-from vmcnet.utils.kfac import register_batch_dense
 
 
 def log_linear_exp(
@@ -12,7 +11,6 @@ def log_linear_exp(
     vals: Array,
     weights: Optional[Array] = None,
     axis: int = 0,
-    register_kfac: bool = True,
 ) -> SLArray:
     """Stably compute sign and log(abs(.)) of sum_i(sign_i * w_ij * exp(vals_i)) + b_j.
 
@@ -37,8 +35,6 @@ def log_linear_exp(
             the given axis, with shape (d, d'). If not provided, a simple sum is taken
             instead, equivalent to (d, 1) weights equal to 1. Defaults to None.
         axis (int, optional): axis along which to take the sum and max. Defaults to 0.
-        register_kfac (bool, optional): if weights are not None, whether to register the
-            linear part of the computation with KFAC. Defaults to True.
 
     Returns:
         (SLArray): sign of linear combination, log of linear
@@ -48,15 +44,11 @@ def log_linear_exp(
     max_val = jnp.max(vals, axis=axis, keepdims=True)
     terms_divided_by_max = signs * jnp.exp(vals - max_val)
     if weights is not None:
-        # swap axis and -1 to conform to jnp.dot and register_batch_dense api
+        # swap axis and -1 to conform to jnp.dot api
         terms_divided_by_max = jnp.swapaxes(terms_divided_by_max, axis, -1)
         transformed_divided_by_max = jnp.dot(terms_divided_by_max, weights)
-        if register_kfac:
-            transformed_divided_by_max = register_batch_dense(
-                transformed_divided_by_max, terms_divided_by_max, weights, None
-            )
 
-        # swap axis and -1 back after the contraction and registration
+        # swap axis and -1 back after the contraction
         transformed_divided_by_max = jnp.swapaxes(transformed_divided_by_max, axis, -1)
     else:
         transformed_divided_by_max = jnp.sum(

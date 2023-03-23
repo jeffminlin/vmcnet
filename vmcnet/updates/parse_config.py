@@ -1,15 +1,17 @@
 """Get update functions from ConfigDicts."""
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
-import jax.numpy as jnp
-import kfac_ferminet_alpha
-import kfac_ferminet_alpha.optimizer as kfac_opt
+import chex
+from kfac_jax import Optimizer as kfac_Optimizer
 import optax
 from ml_collections import ConfigDict
 
 import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.physics as physics
 import vmcnet.utils as utils
+
+import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
+
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
@@ -31,7 +33,7 @@ from .sr import SRMode, get_fisher_inverse_fn
 
 def _get_learning_rate_schedule(
     optimizer_config: ConfigDict,
-) -> Callable[[int], jnp.float32]:
+) -> Callable[[chex.Array], Optional[chex.Array]]:
     if optimizer_config.schedule_type == "constant":
 
         def learning_rate_schedule(t):
@@ -115,7 +117,10 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
-        (update_param_fn, optimizer_state,) = get_sgd_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_sgd_update_fn_and_state(
             params,
             get_position_fn,
             update_data_fn,
@@ -127,7 +132,10 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "adam":
-        (update_param_fn, optimizer_state,) = get_adam_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_adam_update_fn_and_state(
             params,
             get_position_fn,
             update_data_fn,
@@ -139,7 +147,10 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "sr":
-        (update_param_fn, optimizer_state,) = get_sr_update_fn_and_state(
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_sr_update_fn_and_state(
             log_psi_apply,
             params,
             get_position_fn,
@@ -168,11 +179,11 @@ def get_kfac_update_fn_and_state(
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[chex.Array], Optional[chex.Array]],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
-) -> Tuple[UpdateParamFn[P, D, kfac_opt.State], kfac_opt.State, PRNGKey]:
+) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
     """Get an update param function, initial state, and key for KFAC.
 
     Args:
@@ -203,11 +214,12 @@ def get_kfac_update_fn_and_state(
         initial optimizer state, and
         PRNGKey
     """
-    optimizer = kfac_ferminet_alpha.Optimizer(
+    optimizer = kfac_Optimizer(
         energy_data_val_and_grad,
         l2_reg=optimizer_config.l2_reg,
         norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,
+        value_func_has_rng=False,
         learning_rate_schedule=learning_rate_schedule,
         curvature_ema=optimizer_config.curvature_ema,
         inverse_update_period=optimizer_config.inverse_update_period,
@@ -217,6 +229,11 @@ def get_kfac_update_fn_and_state(
         estimation_mode=optimizer_config.estimation_mode,
         multi_device=apply_pmap,
         pmap_axis_name=utils.distribute.PMAP_AXIS_NAME,
+        # Mypy can't find GRAPH_PATTERNS because we've ignored types in the curvature
+        # tags file since it's not typed properly.
+        auto_register_kwargs=dict(
+            graph_patterns=curvature_tags_and_blocks.GRAPH_PATTERNS,  # type: ignore
+        ),
     )
     key, subkey = utils.distribute.split_or_psplit_key(key, apply_pmap)
 
@@ -234,7 +251,7 @@ def get_kfac_update_fn_and_state(
 
 
 def _get_adam_optax_optimizer(
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[int], chex.Numeric],
     optimizer_config: ConfigDict,
 ) -> optax.GradientTransformation:
     return optax.adam(
@@ -247,7 +264,7 @@ def _get_adam_optax_optimizer(
 
 
 def _get_sgd_optax_optimizer(
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[int], chex.Numeric],
     optimizer_config: ConfigDict,
 ) -> optax.GradientTransformation:
     return optax.sgd(
@@ -301,7 +318,7 @@ def get_adam_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[int], chex.Numeric],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -351,7 +368,7 @@ def get_sgd_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[int], chex.Numeric],
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -402,7 +419,7 @@ def get_sr_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], jnp.float32],
+    learning_rate_schedule: Callable[[int], chex.Numeric],
     optimizer_config: ConfigDict,
     descent_config: ConfigDict,
     record_param_l1_norm: bool = False,
@@ -476,7 +493,6 @@ def get_sr_update_fn_and_state(
         return optimizer_state[1].count
 
     def optimizer_apply(grad, params, optimizer_state, data):
-
         preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)

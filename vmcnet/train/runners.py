@@ -5,8 +5,9 @@ import functools
 import logging
 import os
 import subprocess
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
+import chex
 import flax
 import jax
 import jax.numpy as jnp
@@ -68,7 +69,7 @@ def _save_git_hash(logdir):
     writer.close()
 
 
-def _get_dtype(config: ConfigDict) -> jnp.dtype:
+def _get_dtype(config: ConfigDict):
     if config.dtype == "float32":
         return jnp.float32
     elif config.dtype == "float64":
@@ -100,7 +101,7 @@ def _get_and_init_model(
     key: PRNGKey,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[ModelApply[flax.core.FrozenDict], flax.core.FrozenDict, PRNGKey]:
+) -> Tuple[ModelApply[flax.core.FrozenDict], Any, PRNGKey]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -235,7 +236,10 @@ def _assemble_mol_local_energy_fn(
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
 # a training trick rather than a physics thing, so maybe this stays here
 def total_variation_clipping_fn(
-    local_energies: Array, energy_noclip: jnp.float32, threshold=5.0, clip_center="mean"
+    local_energies: Array,
+    energy_noclip: chex.Numeric,
+    threshold=5.0,
+    clip_center="mean",
 ) -> Array:
     """Clip local es to within a multiple of the total variation from a center."""
     if clip_center == "mean":
@@ -312,7 +316,7 @@ def _setup_vmc(
     OptimizerState,
     PRNGKey,
 ]:
-    nelec_total = jnp.sum(nelec)
+    nelec_total = int(jnp.sum(nelec))
     key, init_pos = physics.core.initialize_molecular_pos(
         key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
     )
@@ -412,11 +416,14 @@ def _make_new_data_for_eval(
     ion_charges: Array,
     nelec: Array,
     key: PRNGKey,
+    is_pmapped: bool,
     dtype=jnp.float32,
 ) -> Tuple[PRNGKey, dwpa.DWPAData]:
-    nelec_total = jnp.sum(nelec)
+    nelec_total = int(jnp.sum(nelec))
     # grab the first key if distributed
-    key = utils.distribute.get_first_if_distributed(key)
+    if is_pmapped:
+        key = utils.distribute.get_first(key)
+
     key, init_pos = physics.core.initialize_molecular_pos(
         key,
         config.eval.nchains,
@@ -447,6 +454,7 @@ def _burn_and_run_vmc(
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
     is_eval: bool,
+    is_pmapped: bool,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
@@ -484,6 +492,7 @@ def _burn_and_run_vmc(
         record_amplitudes=run_config.record_amplitudes,
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
+        is_pmapped=is_pmapped,
     )
 
 
@@ -572,6 +581,7 @@ def run_molecule() -> None:
         get_amplitude_fn,
         key,
         is_eval=False,
+        is_pmapped=config.distribute,
     )
 
     if nans_detected:
@@ -604,6 +614,7 @@ def run_molecule() -> None:
             ion_charges,
             nelec,
             key,
+            is_pmapped=config.distribute,
             dtype=dtype_to_use,
         )
 
@@ -619,6 +630,7 @@ def run_molecule() -> None:
         get_amplitude_fn,
         key,
         is_eval=True,
+        is_pmapped=config.distribute,
     )
 
     # need to check for local_energy.txt because when config.eval.nepochs=0 the file is

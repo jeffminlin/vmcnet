@@ -33,6 +33,7 @@ from .core import (
     get_nelec_per_split,
     get_nsplits,
     get_spin_split,
+    split,
 )
 from .equivariance import (
     FermiNetBackflow,
@@ -94,9 +95,7 @@ def _get_dtype_init_constructors(dtype):
     return kernel_init_constructor, bias_init_constructor
 
 
-def slog_psi_to_log_psi_apply(
-    slog_psi_apply: Callable[..., SLArray]
-) -> Callable[..., Array]:
+def slog_psi_to_log_psi_apply(slog_psi_apply) -> Callable[..., Array]:
     """Get a log|psi| model apply callable from a sign(psi), log|psi| apply callable."""
 
     def log_psi_apply(*args) -> Array:
@@ -142,7 +141,6 @@ def get_model_from_config(
                 kernel_init_constructor(resnet_config.kernel_init),
                 bias_init_constructor(resnet_config.bias_init),
                 resnet_config.use_bias,
-                resnet_config.register_kfac,
             )
 
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
@@ -183,7 +181,7 @@ def get_model_from_config(
             invariance_compute_input_streams = get_compute_input_streams_from_config(
                 invariance_config.input_streams, ion_pos
             )
-            invariance_backflow: Optional[Module] = get_backflow_from_config(
+            invariance_backflow = get_backflow_from_config(
                 invariance_config.backflow,
                 spin_split,
                 dtype=dtype,
@@ -221,7 +219,6 @@ def get_model_from_config(
                     invariance_config.bias_initializer
                 ),
                 invariance_use_bias=invariance_config.use_bias,
-                invariance_register_kfac=invariance_config.register_kfac,
             )
         elif model_config.type == "extended_orbital_matrix_ferminet":
             invariance_config = model_config.invariance
@@ -264,7 +261,6 @@ def get_model_from_config(
                     invariance_config.bias_initializer
                 ),
                 invariance_use_bias=invariance_config.use_bias,
-                invariance_register_kfac=invariance_config.register_kfac,
             )
         else:
             raise ValueError(
@@ -492,7 +488,6 @@ def get_sign_covariance_from_config(
         return ProductsSignCovariance(
             1,
             kernel_init_constructor(model_config.products_covariance.kernel_init),
-            model_config.products_covariance.register_kfac,
             use_weights=model_config.products_covariance.use_weights,
         )
 
@@ -655,7 +650,6 @@ def get_resnet_determinant_fn_for_ferminet(
     kernel_initializer: WeightInitializer,
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
-    register_kfac: bool = False,
 ) -> DeterminantFn:
     """Get a resnet-based determinant function for FermiNet construction.
 
@@ -673,10 +667,6 @@ def get_resnet_determinant_fn_for_ferminet(
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
         bias_initializer (WeightInitializer): bias initializer for the resnet.
         use_bias (bool): Whether to use a bias in the ResNet. Defaults to True.
-        register_kfac (bool): Whether to register the ResNet Dense layers with KFAC.
-            Currently, params for this ResNet explode to huge values and cause nans
-            if register_kfac is True, so this flag defaults to false and should only be
-            overridden with care. The reason for the instability is not known.
 
     Returns:
         (DeterminantFn): A resnet-based function. Has the signature
@@ -693,7 +683,6 @@ def get_resnet_determinant_fn_for_ferminet(
             kernel_initializer,
             bias_initializer,
             use_bias,
-            register_kfac=register_kfac,
         )(concat_values)
 
     return fn
@@ -1055,8 +1044,6 @@ class EmbeddedParticleFermiNet(FermiNet):
             invariance dense layer. Has signature (key, shape, dtype) -> Array
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
-        invariance_register_kfac (bool, optional): whether to register the dense layer
-            of the invariance with KFAC. Defaults to True.
     """
 
     nhidden_fermions_per_spin: Sequence[int]
@@ -1065,7 +1052,6 @@ class EmbeddedParticleFermiNet(FermiNet):
     invariance_kernel_initializer: WeightInitializer
     invariance_bias_initializer: WeightInitializer
     invariance_use_bias: bool = True
-    invariance_register_kfac: bool = True
 
     def setup(self):
         """Setup EmbeddedParticleFermiNet."""
@@ -1085,7 +1071,6 @@ class EmbeddedParticleFermiNet(FermiNet):
             self.invariance_kernel_initializer,
             self.invariance_bias_initializer,
             self.invariance_use_bias,
-            self.invariance_register_kfac,
         )
 
     def _get_elec_pos_and_orbitals_split(
@@ -1116,7 +1101,7 @@ class EmbeddedParticleFermiNet(FermiNet):
         ]
         orbitals_split = get_spin_split(total_nelec_per_spin)
 
-        split_input_particles = jnp.split(elec_pos, self.spin_split, axis=-2)
+        split_input_particles = split(elec_pos, self.spin_split, axis=-2)
         (
             invariance_stream_1e,
             invariance_stream_2e,
@@ -1155,8 +1140,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             Defaults to a scaled random normal initializer.
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
-        invariance_register_kfac (bool, optional): whether to register the dense layer
-            of the invariance with KFAC. Defaults to True.
         invariance_backflow (Callable, optional): backflow function to be used for the
             invariance which generates the hidden fermion positions. If None, the
             outputs of the regular FermiNet backflow are used instead to form an
@@ -1169,7 +1152,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     )
     invariance_bias_initializer: WeightInitializer = get_kernel_initializer("normal")
     invariance_use_bias: bool = True
-    invariance_register_kfac: bool = True
     invariance_backflow: Optional[Backflow] = None
 
     def _get_invariance(
@@ -1197,7 +1179,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             kernel_initializer=self.invariance_kernel_initializer,
             bias_initializer=self.invariance_bias_initializer,
             use_bias=self.invariance_use_bias,
-            register_kfac=self.invariance_register_kfac,
         )(stream_1e, None)
         # Reshape to [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
         return _reshape_raw_ferminet_orbitals(invariance, self.ndeterminants)
@@ -1431,7 +1412,7 @@ class FactorizedAntisymmetry(Module):
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
-        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        split_spins = split(stream_1e, self.spin_split, axis=-2)
 
         def fn_to_antisymmetrize(x_one_spin):
             resnet_outputs = [
@@ -1562,7 +1543,7 @@ class GenericAntisymmetry(Module):
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
-        split_spins = jnp.split(stream_1e, self.spin_split, axis=-2)
+        split_spins = split(stream_1e, self.spin_split, axis=-2)
         sign_psi, log_antisym = GenericAntisymmetrize(
             SimpleResNet(
                 self.ndense_resnet,

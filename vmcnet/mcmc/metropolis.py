@@ -2,13 +2,14 @@
 import logging
 from typing import Callable, Tuple, cast
 
+import chex
 import jax
 import jax.numpy as jnp
 
 import vmcnet.utils as utils
 from vmcnet.utils.typing import Array, D, P, PRNGKey
 
-MetropolisStep = Callable[[P, D, PRNGKey], Tuple[jnp.float32, D, PRNGKey]]
+MetropolisStep = Callable[[P, D, PRNGKey], Tuple[chex.Numeric, D, PRNGKey]]
 WalkerFn = MetropolisStep[P, D]
 BurningStep = Callable[[P, D, PRNGKey], Tuple[D, PRNGKey]]
 
@@ -50,7 +51,7 @@ def make_metropolis_step(
 
     def metrop_step_fn(
         params: P, data: D, key: PRNGKey
-    ) -> Tuple[jnp.float32, D, PRNGKey]:
+    ) -> Tuple[chex.Numeric, D, PRNGKey]:
         """Take a single metropolis step."""
         key, subkey = jax.random.split(key)
         proposed_data, key = proposal_fn(params, data, key)
@@ -72,7 +73,7 @@ def walk_data(
     data: D,
     key: PRNGKey,
     metrop_step_fn: MetropolisStep[P, D],
-) -> Tuple[jnp.float32, D, PRNGKey]:
+) -> Tuple[chex.Numeric, D, PRNGKey]:
     """Take multiple Metropolis-Hastings steps.
 
     This function is roughly equivalent to:
@@ -99,7 +100,7 @@ def walk_data(
             signature (data, params, key) -> (mean accept prob, new data, new key)
 
     Returns:
-        (jnp.float32, pytree-like, PRNGKey): acceptance probability, new data,
+        (jnp.chex.Numeric, pytree-like, PRNGKey): acceptance probability, new data,
             new jax PRNG key split (possibly multiple times) from previous one
     """
 
@@ -177,7 +178,7 @@ def make_jitted_walker_fn(
         apply_pmap is False.
     """
 
-    def walker_fn(params: P, data: D, key: PRNGKey) -> Tuple[jnp.float32, D, PRNGKey]:
+    def walker_fn(params: P, data: D, key: PRNGKey) -> Tuple[chex.Numeric, D, PRNGKey]:
         accept_ratio, data, key = walk_data(nsteps, params, data, key, metrop_step_fn)
         accept_ratio = utils.distribute.pmean_if_pmap(accept_ratio)
         return accept_ratio, data, key
@@ -189,7 +190,7 @@ def make_jitted_walker_fn(
 
     def pmapped_walker_fn_with_single_accept_ratio(
         params: P, data: D, key: PRNGKey
-    ) -> Tuple[jnp.float32, D, PRNGKey]:
+    ) -> Tuple[chex.Numeric, D, PRNGKey]:
         accept_ratio, data, key = pmapped_walker_fn(params, data, key)
         accept_ratio = utils.distribute.get_first(accept_ratio)
         return accept_ratio, data, key
@@ -226,13 +227,13 @@ def burn_data(
 
 
 def gaussian_proposal(
-    positions: Array, std_move: jnp.float32, key: PRNGKey
+    positions: Array, std_move: chex.Scalar, key: PRNGKey
 ) -> Tuple[Array, PRNGKey]:
     """Simple symmetric gaussian proposal in all positions at once.
 
     Args:
         positions (Array): original positions
-        std_move (jnp.float32): standard deviation of the moves
+        std_move (chex.Scalar): standard deviation of the moves
         key (PRNGKey): an array with shape (2,) representing a jax PRNG key
 
     Returns:

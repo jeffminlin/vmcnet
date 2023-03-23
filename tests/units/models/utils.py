@@ -8,15 +8,17 @@ import vmcnet.models as models
 from vmcnet.utils.typing import Array, PRNGKey
 
 
-def get_elec_hyperparams() -> Tuple[
-    int,
-    int,
-    int,
-    int,
-    Tuple[int, ...],
-    Tuple[int, ...],
-    List[Tuple[int, ...]],
-]:
+def get_elec_hyperparams() -> (
+    Tuple[
+        int,
+        int,
+        int,
+        int,
+        Tuple[int, ...],
+        Tuple[int, ...],
+        List[Tuple[int, ...]],
+    ]
+):
     """Get hyperparameters for electron data."""
     nchains = 25
     nelec_total = 7

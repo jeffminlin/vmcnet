@@ -17,6 +17,7 @@ from .core import (
     _valid_skip,
     compute_ee_norm_with_safe_diag,
     get_nsplits,
+    split,
 )
 from flax.linen import SelfAttention  # noqa
 from .jastrow import _anisotropy_on_leaf, _isotropy_on_leaf
@@ -33,7 +34,7 @@ def _rolled_concat(arrays: ArrayList, n: int, axis: int = -1) -> Array:
 
 def compute_input_streams(
     elec_pos: Array,
-    ion_pos: Array = None,
+    ion_pos: Optional[Array] = None,
     include_2e_stream: bool = True,
     include_ei_norm: bool = True,
     include_ee_norm: bool = True,
@@ -94,7 +95,7 @@ def compute_input_streams(
 
 
 def compute_electron_ion(
-    elec_pos: Array, ion_pos: Array = None, include_ei_norm: bool = True
+    elec_pos: Array, ion_pos: Optional[Array] = None, include_ei_norm: bool = True
 ) -> Tuple[Array, Optional[Array]]:
     """Compute electron-ion displacements and optionally add on the distances.
 
@@ -166,7 +167,7 @@ def _transformer_mix(
     # in_1e has shape (..., n, d_1e)
     # split_x has shape [i: (..., n[i], d_1e)]
 
-    split_x = jnp.split(x, splits, axis=axis)
+    split_x = split(x, splits, axis=axis)
     split_x_mix = jax.tree_map(self_attention_layer, split_x)
 
     return split_x_mix
@@ -302,15 +303,15 @@ class FermiNetOneElectronLayer(Module):
         if self.cyclic_spins:
             # re-concatenate the averages but as [i: [i, ..., n, 1, ..., i-1]] along
             # the last dimension
-            split_concat = [_rolled_concat(split_means, idx) for idx in range(nspins)]
+            split_concats = [_rolled_concat(split_means, idx) for idx in range(nspins)]
 
             # concatenate on axis=-2 so a single dense layer can be batch applied to
             # every concatenation
-            all_spins = jnp.concatenate(split_concat, axis=-2)
+            all_spins = jnp.concatenate(split_concats, axis=-2)
             dense_mixed = self._mixed_dense(all_spins)
 
             # split the results of the batch applied dense layer back into the spins
-            dense_mixed_split = jnp.split(dense_mixed, len(split_concat), axis=-2)
+            dense_mixed_split = split(dense_mixed, len(split_concats), axis=-2)
         else:
             split_concat = jnp.concatenate(split_means, axis=-1)
             dense_mixed = self._mixed_dense(split_concat)
@@ -339,7 +340,7 @@ class FermiNetOneElectronLayer(Module):
         particle ordering and the specified spin split.
         """
         # split to get [i: (..., n[i], n_total, d)]
-        split_2e = jnp.split(in_2e, self.spin_split, axis=-3)
+        split_2e = split(in_2e, self.spin_split, axis=-3)
 
         # for each i, do a split and average along axis=-2, then concatenate
         concat_2e = []
@@ -361,7 +362,7 @@ class FermiNetOneElectronLayer(Module):
         # i, then split over the spins again before returning
         all_spins = jnp.concatenate(concat_2e, axis=-2)
         dense_2e = self._dense_2e(all_spins)
-        return jnp.split(dense_2e, self.spin_split, axis=-2)
+        return split(dense_2e, self.spin_split, axis=-2)
 
     def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
         """Compute the 1e mixed for the given input.
@@ -376,7 +377,7 @@ class FermiNetOneElectronLayer(Module):
             return self._compute_transformed_1e_means(split_1e_means)
 
     def __call__(  # type: ignore[override]
-        self, in_1e: Array, in_2e: Array = None
+        self, in_1e: Array, in_2e: Optional[Array] = None
     ) -> Array:
         """Add dense outputs on unmixed, mixed, and 2e terms to get the 1e output.
 
@@ -418,7 +419,7 @@ class FermiNetOneElectronLayer(Module):
             stream
         """
         dense_unmixed = self._unmixed_dense(in_1e)
-        dense_unmixed_split = jnp.split(dense_unmixed, self.spin_split, axis=-2)
+        dense_unmixed_split = split(dense_unmixed, self.spin_split, axis=-2)
 
         dense_mixed_split = self._compute_mixed_split(in_1e)
 
@@ -521,7 +522,7 @@ class FermiNetResidualBlock(Module):
         self._two_electron_layer = self.two_electron_layer
 
     def __call__(  # type: ignore[override]
-        self, in_1e: Array, in_2e: Array = None
+        self, in_1e: Array, in_2e: Optional[Array] = None
     ) -> Tuple[Array, Optional[Array]]:
         """Apply the one-electron layer and optionally the two-electron layer.
 
@@ -617,8 +618,6 @@ class SplitDense(Module):
             (key, shape, dtype) -> Array. Defaults to random normal
             initialization.
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense computations with
-            KFAC. Defaults to True.
     """
 
     split: ParticleSplit
@@ -626,7 +625,6 @@ class SplitDense(Module):
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Set up the dense layers for each split."""
@@ -645,7 +643,6 @@ class SplitDense(Module):
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
-                register_kfac=self.register_kfac,
             )
             for i in range(nsplits)
         ]
@@ -659,10 +656,10 @@ class SplitDense(Module):
         Returns:
             [(..., n[i], self.ndense_per_split[i])]: list of length nsplits, where
             nsplits is the number of splits created by
-            jnp.split(x, self.split, axis=-2), and the ith entry of the output is the
+            split(x, self.split, axis=-2), and the ith entry of the output is the
             ith split transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
-        x_split = jnp.split(x, self.split, axis=-2)
+        x_split = split(x, self.split, axis=-2)
         return [self._dense_layers[i](split) for i, split in enumerate(x_split)]
 
 
@@ -679,14 +676,12 @@ def _compute_exponential_envelopes_on_leaf(
             r_ei_leaf,
             norbitals,
             kernel_initializer_dim,
-            register_kfac=False,
         )
     else:
         scale_out = _anisotropy_on_leaf(
             r_ei_leaf,
             norbitals,
             kernel_initializer_dim,
-            register_kfac=True,
         )
     # scale_out has shape (..., nelec, norbitals, nion, d)
     distances = jnp.linalg.norm(scale_out, axis=-1)
@@ -698,12 +693,11 @@ def _compute_exponential_envelopes_on_leaf(
         (1,) * norbitals,
         kernel_initializer=kernel_initializer_ion,
         use_bias=False,
-        register_kfac=False,
     )(inv_exp_distances)
     # Concatenate to shape (..., nelec, norbitals, 1)
-    lin_comb_nion = jnp.concatenate(lin_comb_nion, axis=-2)
+    lin_comb_nion_concat = jnp.concatenate(lin_comb_nion, axis=-2)
 
-    return jnp.squeeze(lin_comb_nion, axis=-1)  # (..., nelec, norbitals)
+    return jnp.squeeze(lin_comb_nion_concat, axis=-1)  # (..., nelec, norbitals)
 
 
 def _compute_exponential_envelopes_all_splits(
@@ -715,7 +709,7 @@ def _compute_exponential_envelopes_all_splits(
     isotropic: bool = False,
 ) -> ArrayList:
     """Calculate exponential envelopes for all splits."""
-    r_ei_split = jnp.split(r_ei, orbitals_split, axis=-3)
+    r_ei_split = split(r_ei, orbitals_split, axis=-3)
     return jax.tree_map(
         functools.partial(
             _compute_exponential_envelopes_on_leaf,
@@ -782,7 +776,7 @@ class FermiNetOrbitalLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, x: Array, r_ei: Array = None
+        self, x: Array, r_ei: Optional[Array] = None
     ) -> ArrayList:
         """Apply a dense layer R -> R^n for each split and multiply by exp envelopes.
 
@@ -929,7 +923,7 @@ class DoublyEquivariantOrbitalLayer(Module):
 
     @flax.linen.compact
     def __call__(  # type: ignore[override]
-        self, x: Array, r_ei: Array = None
+        self, x: Array, r_ei: Optional[Array] = None
     ) -> ArrayList:
         """Calculate an equivariant orbital matrix for each input particle.
 
@@ -948,7 +942,7 @@ class DoublyEquivariantOrbitalLayer(Module):
             determinants, nelec[i] should be equal to self.norbitals_per_split[i].
         """
         # split_x is a list of nsplits arrays of shape (..., nelec[i], d)]
-        split_x = jnp.split(x, self.orbitals_split, -2)
+        split_x = split(x, self.orbitals_split, -2)
         # orbs is a list of nsplits arrays of shape
         # (..., nelec[i], nelec[i], norbitals[i])
         orbs = [

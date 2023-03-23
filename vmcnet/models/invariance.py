@@ -32,8 +32,6 @@ class SplitMeanDense(Module):
         bias_initializer (WeightInitializer): bias initializer. Has signature
             (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense computations with
-            KFAC. Defaults to True.
     """
 
     split: ParticleSplit
@@ -41,7 +39,6 @@ class SplitMeanDense(Module):
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Set up the dense layers for each split."""
@@ -60,7 +57,6 @@ class SplitMeanDense(Module):
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
-                register_kfac=self.register_kfac,
             )
             for i in range(nspins)
         ]
@@ -73,7 +69,7 @@ class SplitMeanDense(Module):
 
         Returns:
             [(..., self.ndense_per_spin[i])]: list of length nsplits, where nsplits
-            is the number of splits created by jnp.split(x, self.split, axis=-2),
+            is the number of splits created by split(x, self.split, axis=-2),
             and the ith entry of the output is the ith split mean (an array of shape
             (..., d)) transformed by a dense layer with self.ndense_per_split[i] nodes.
         """
@@ -115,8 +111,6 @@ class InvariantTensor(Module):
         bias_initializer (WeightInitializer): bias initializer for the dense layer(s).
             Has signature (key, shape, dtype) -> Array
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense computations with
-            KFAC. Defaults to True.
     """
 
     split: ParticleSplit
@@ -125,7 +119,6 @@ class InvariantTensor(Module):
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Set up the dense layers for each split."""
@@ -177,7 +170,6 @@ class InvariantTensor(Module):
             self.kernel_initializer,
             self.bias_initializer,
             self.use_bias,
-            self.register_kfac,
         )(stream_1e)
 
         return [

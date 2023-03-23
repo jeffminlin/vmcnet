@@ -27,7 +27,9 @@ def test_compose_negative_with_three_body_antisymmetry():
 
     def product_antisymmetry(xs):
         antisymmetry_tree = jax.tree_map(three_body_antisymmetry, xs)
-        return functools.reduce(lambda a, b: a * b, jax.tree_leaves(antisymmetry_tree))
+        return functools.reduce(
+            lambda a, b: a * b, jax.tree_util.tree_leaves(antisymmetry_tree)
+        )
 
     model = models.core.ComposedModel([equivariance, product_antisymmetry])
 

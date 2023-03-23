@@ -1,5 +1,5 @@
 """Test model antiequivariances."""
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import chex
 import jax.numpy as jnp
@@ -172,8 +172,8 @@ def _test_layer_antiequivariance(
     params = antieq_layer.init(key, input_1e, input_ei)
 
     # Evaluate layer on original and permuted inputs
-    output = antieq_layer.apply(params, input_1e, input_ei)
-    perm_output = antieq_layer.apply(params, perm_input_1e, perm_input_ei)
+    output: Any = antieq_layer.apply(params, input_1e, input_ei)
+    perm_output: Any = antieq_layer.apply(params, perm_input_1e, perm_input_ei)
 
     # Verify output shape and verify all signs values are  +-1
     nelec_per_spin = models.core.get_nelec_per_split(spin_split, nelec_total)

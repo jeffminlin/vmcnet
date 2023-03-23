@@ -2,7 +2,7 @@
 
 from typing import TypedDict
 
-import jax.numpy as jnp
+import chex
 
 from .metropolis import MetropolisStep
 from .position_amplitude_core import (
@@ -38,7 +38,7 @@ def make_simple_position_amplitude_data(position: Array, amplitude: Array) -> SP
 
 def make_simple_pos_amp_gaussian_step(
     model_apply: ModelApply[P],
-    std_move: jnp.float32,
+    std_move: chex.Scalar,
     logabs: bool = True,
 ) -> MetropolisStep[P, SPAData]:
     """Create metropolis step for PositionAmplitudeData with fixed gaussian step width.

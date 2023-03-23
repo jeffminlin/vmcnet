@@ -1,6 +1,5 @@
 """Testing jastrow factors."""
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -70,7 +69,7 @@ def test_log_molecular_decay_jastrow_close_to_linear():
     """
     ion_pos, elec_pos, jastrow = _get_ion_and_elec_pos_and_scaled_mol_decay_jastrow()
 
-    elec_pos = jax.ops.index_update(elec_pos, (0, 0, 2), 2e10)  # put one very far away
+    elec_pos = elec_pos.at[0, 0, 2].set(2e10)  # put one very far away
     elec_pos = elec_pos[:, :-2, :]  # remove two electrons
     r_ei, r_ee = _get_ei_and_ee(elec_pos, ion_pos)
     np.testing.assert_allclose(

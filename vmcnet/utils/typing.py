@@ -4,15 +4,15 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
-from typing import Any, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from jax.random import KeyArray
 import flax.core.frozen_dict as frozen_dict
-import jax.numpy as jnp
-import kfac_ferminet_alpha.optimizer as kfac_opt
+from jax import Array
+from jax.typing import ArrayLike
+import kfac_jax
 import optax
 
-Array = jnp.ndarray
 
 PRNGKey = KeyArray
 
@@ -39,11 +39,9 @@ S = TypeVar("S", bound=PyTree)
 
 # Actual optimizer states currently used
 # TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
-OptimizerState = Union[kfac_opt.State, optax.OptState]
+OptimizerState = Union[kfac_jax.optimizer.OptimizerState, optax.OptState]
 
-# Union type of all possible model parameter types. For now just FrozenDict.
-# TODO: figure out how to make FrozenDict not be interpretted by mypy as Any
-ModelParams = frozen_dict.FrozenDict
+ModelParams = Union[frozen_dict.FrozenDict, Dict[str, Any]]
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch
@@ -75,4 +73,4 @@ GetPositionFromData = Callable[[D], Array]
 GetAmplitudeFromData = GetPositionFromData[D]
 UpdateDataFn = Callable[[D, P], D]
 
-ClippingFn = Callable[[Array, jnp.float32], Array]
+ClippingFn = Callable[[Array, ArrayLike], Array]

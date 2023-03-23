@@ -2,12 +2,12 @@
 import functools
 from typing import Callable, Tuple
 
+import chex
 import jax
-import jax.interpreters.pxla as pxla
 import jax.numpy as jnp
 from jax import core
 
-from vmcnet.utils.typing import Array, D, P, PRNGKey, PyTree, S, T
+from vmcnet.utils.typing import Array, ArrayLike, D, P, PRNGKey, S, T
 
 
 # axis name to pmap over
@@ -61,19 +61,19 @@ def get_first(obj: T) -> T:
 pmean_if_pmap = functools.partial(wrap_if_pmap(jax.lax.pmean), axis_name=PMAP_AXIS_NAME)
 
 
-def mean_all_local_devices(x: Array) -> jnp.float32:
+def mean_all_local_devices(x: Array) -> chex.Numeric:
     """Compute mean over all local devices if distributed, otherwise the usual mean."""
     return pmean_if_pmap(jnp.mean(x))
 
 
-def nanmean_all_local_devices(x: Array) -> jnp.float32:
+def nanmean_all_local_devices(x: Array) -> chex.Numeric:
     """Compute a nan-safe mean over all local devices."""
     return pmean_if_pmap(jnp.nanmean(x))
 
 
 def get_mean_over_first_axis_fn(
     nan_safe: bool = True,
-) -> Callable[[Array], Array]:
+) -> Callable[[ArrayLike], ArrayLike]:
     """Get a function which averages over the first axis over all local devices.
 
     Args:
@@ -89,7 +89,7 @@ def get_mean_over_first_axis_fn(
     else:
         local_mean_fn = functools.partial(jnp.mean, axis=0)
 
-    def mean_fn(x: Array) -> Array:
+    def mean_fn(x: ArrayLike) -> ArrayLike:
         return pmean_if_pmap(local_mean_fn(x))
 
     return mean_fn
@@ -173,15 +173,3 @@ def distribute_vmc_state_from_checkpoint(
     key = broadcast_all_local_devices(key)
 
     return data, params, optimizer_state, key
-
-
-def is_distributed(data: PyTree) -> bool:
-    """Tests whether given data has been distributed using pmap."""
-    return isinstance(jax.tree_leaves(data)[0], pxla.ShardedDeviceArray)
-
-
-def get_first_if_distributed(data: PyTree) -> PyTree:
-    """Gets single copy of input data, which may or may not be replicated."""
-    if is_distributed(data):
-        return get_first(data)
-    return data

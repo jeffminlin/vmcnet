@@ -65,7 +65,12 @@ def sgd_vmc_loop_with_logging(
 
     # Distribute everything via jax.pmap
     if should_distribute_data:
-        (data, params, optimizer_state, key,) = utils.distribute.distribute_vmc_state(
+        (
+            data,
+            params,
+            optimizer_state,
+            key,
+        ) = utils.distribute.distribute_vmc_state(
             data, params, optimizer_state, key, distribute_position_amplitude_data
         )
 
@@ -84,5 +89,6 @@ def sgd_vmc_loop_with_logging(
             logdir,
             checkpoint_every=checkpoint_every,
             checkpoint_dir=checkpoint_dir,
+            is_pmapped=should_distribute_data,
         )
         return data, params, optimizer_state, key

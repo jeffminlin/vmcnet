@@ -13,11 +13,11 @@ from .core import Module, get_alternating_signs, is_tuple_of_arrays
 
 
 def _reduce_sum_over_leaves(xs: PyTree) -> Array:
-    return functools.reduce(lambda a, b: a + b, jax.tree_leaves(xs))
+    return functools.reduce(lambda a, b: a + b, jax.tree_util.tree_leaves(xs))
 
 
 def _reduce_prod_over_leaves(xs: PyTree) -> Array:
-    return functools.reduce(lambda a, b: a * b, jax.tree_leaves(xs))
+    return functools.reduce(lambda a, b: a * b, jax.tree_util.tree_leaves(xs))
 
 
 def slogdet_product(xs: PyTree) -> SLArray:
@@ -35,7 +35,7 @@ def slogdet_product(xs: PyTree) -> SLArray:
     """
     slogdets = jax.tree_map(jnp.linalg.slogdet, xs)
 
-    slogdet_leaves, _ = jax.tree_flatten(slogdets, is_tuple_of_arrays)
+    slogdet_leaves, _ = jax.tree_util.tree_flatten(slogdets, is_tuple_of_arrays)
     sign_prod, log_prod = functools.reduce(
         lambda a, b: (a[0] * b[0], a[1] + b[1]), slogdet_leaves
     )
@@ -170,13 +170,13 @@ class FactorizedAntisymmetrize(Module):
         # compatibility problems
         antisyms = jax.tree_map(
             self._single_leaf_call,
-            jax.tree_leaves(self.fns_to_antisymmetrize),
-            jax.tree_leaves(xs),
+            jax.tree_util.tree_leaves(self.fns_to_antisymmetrize),
+            jax.tree_util.tree_leaves(xs),
         )
         if not self.logabs:
             return _reduce_prod_over_leaves(antisyms)
 
-        slog_antisyms = array_list_to_slog(jax.tree_leaves(antisyms))
+        slog_antisyms = array_list_to_slog(jax.tree_util.tree_leaves(antisyms))
         return functools.reduce(slog_multiply, slog_antisyms)
 
 
@@ -235,7 +235,7 @@ class GenericAntisymmetrize(Module):
             self.fn_to_antisymmetrize on all leaves of xs.
         """
         perms_and_signs = jax.tree_map(self._get_single_leaf_perm, xs)
-        perms_and_signs_leaves, _ = jax.tree_flatten(
+        perms_and_signs_leaves, _ = jax.tree_util.tree_flatten(
             perms_and_signs, is_tuple_of_arrays
         )
         nleaves = len(perms_and_signs_leaves)

@@ -109,11 +109,15 @@ def test_save_best_checkpoint(mocker):
     checkpoint_metric = [jnp.inf, 2, 1, 1, 1, 1, 0.5, 0.5, 0.5]
 
     # Run 9 "epochs", substituting the mocked metrics in place of real ones
-    with checkpoint.CheckpointWriter() as checkpoint_writer:
+    with checkpoint.CheckpointWriter(is_pmapped=False) as checkpoint_writer:
         mock_save_checkpoint = mocker.patch.object(checkpoint_writer, "save_data")
         for epoch in range(9):
             mock_get_metrics.return_value = per_epoch_avg[epoch]
-            (_, _, best_checkpoint_data,) = track_and_save_best(
+            (
+                _,
+                _,
+                best_checkpoint_data,
+            ) = track_and_save_best(
                 epoch, checkpoint_writer, checkpoint_metric[epoch], best_checkpoint_data
             )
 

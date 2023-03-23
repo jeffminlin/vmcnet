@@ -1,6 +1,7 @@
 """Shared routines for position amplitude metropolis data."""
 from typing import Any, Callable, Optional, Tuple, TypedDict
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -137,7 +138,7 @@ def distribute_position_amplitude_data(
 
 def make_position_amplitude_gaussian_proposal(
     model_apply: ModelApply[P],
-    get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
+    get_std_move: Callable[[PositionAmplitudeData], chex.Scalar],
 ) -> Callable[
     [P, PositionAmplitudeData, PRNGKey], Tuple[PositionAmplitudeData, PRNGKey]
 ]:
@@ -264,7 +265,7 @@ def make_position_amplitude_update(
 
 def make_position_amplitude_gaussian_metropolis_step(
     model_apply: ModelApply[P],
-    get_std_move: Callable[[PositionAmplitudeData], jnp.float32],
+    get_std_move: Callable[[PositionAmplitudeData], chex.Scalar],
     update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None,
     logabs: bool = True,
 ) -> metropolis.MetropolisStep[P, PositionAmplitudeData]:

@@ -1,20 +1,31 @@
 """Core model building parts."""
 import functools
-from typing import Callable, Sequence, TYPE_CHECKING, Tuple, Union, cast
+from typing import Callable, TYPE_CHECKING, Sequence, Tuple, Union, cast
 
 import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
-from vmcnet.utils.typing import Array, ArrayList, PyTree, SLArray, ParticleSplit
+from vmcnet.utils.typing import (
+    Array,
+    ArrayLike,
+    ArrayList,
+    PyTree,
+    SLArray,
+    ParticleSplit,
+)
 from .weights import WeightInitializer, get_bias_initializer, get_kernel_initializer
 
 Activation = Callable[[Array], Array]
 SLActivation = Callable[[SLArray], SLArray]
+
+
+def split(x: ArrayLike, split: ParticleSplit, axis: int = 0):
+    """Split x on axis as specified by particle split."""
+    return jnp.split(x, np.array(split), axis)
 
 
 def _split_mean(
@@ -24,7 +35,7 @@ def _split_mean(
     keepdims: bool = True,
 ) -> ArrayList:
     """Split x on an axis and take the mean over that axis in each of the splits."""
-    split_x = jnp.split(x, splits, axis=axis)
+    split_x = split(x, splits, axis=axis)
     split_x_mean = jax.tree_map(
         functools.partial(jnp.mean, axis=axis, keepdims=keepdims), split_x
     )
@@ -57,7 +68,7 @@ def is_tuple_of_arrays(x: PyTree) -> bool:
 
 def get_alternating_signs(n: int) -> Array:
     """Return alternating series of 1 and -1, of length n."""
-    return jax.ops.index_update(jnp.ones(n), jax.ops.index[1::2], -1.0)
+    return jnp.ones(n).at[1::2].set(-1)
 
 
 def get_nsplits(split: ParticleSplit) -> int:
@@ -166,15 +177,12 @@ class Dense(Module):
             Defaults to random normal initialization.
         use_bias (bool, optional): whether to add a bias to the output. Defaults to
             True.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
     """
 
     features: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     @flax.linen.compact
     def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
@@ -195,10 +203,7 @@ class Dense(Module):
             bias = self.param("bias", self.bias_init, (self.features,))
             y = y + bias
 
-        if self.register_kfac:
-            return register_batch_dense(y, inputs, kernel, bias)
-        else:
-            return y
+        return y
 
 
 class LogDomainDense(Module):
@@ -215,14 +220,11 @@ class LogDomainDense(Module):
             matrix. Defaults to orthogonal initialization.
         use_bias (bool, optional): whether to add a bias to the output. Defaults to
             True.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
     """
 
     features: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     @flax.linen.compact
     def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
@@ -251,7 +253,6 @@ class LogDomainDense(Module):
             log_abs_x,
             kernel,
             axis=-1,
-            register_kfac=self.register_kfac,
         )
 
 
@@ -273,8 +274,6 @@ class SimpleResNet(Module):
             Array -> Array (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense layers with KFAC.
-            Defaults to True.
     """
 
     ndense_inner: int
@@ -284,7 +283,6 @@ class SimpleResNet(Module):
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Setup dense layers."""
@@ -298,7 +296,6 @@ class SimpleResNet(Module):
                 kernel_init=self.kernel_init,
                 bias_init=self.bias_init,
                 use_bias=self.use_bias,
-                register_kfac=self.register_kfac,
             )
             for _ in range(self.nlayers - 1)
         ]
@@ -307,7 +304,6 @@ class SimpleResNet(Module):
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
             use_bias=False,
-            register_kfac=self.register_kfac,
         )
 
     def __call__(self, x: Array) -> Array:  # type: ignore[override]

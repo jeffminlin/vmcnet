@@ -9,7 +9,7 @@ import jax.scipy as jscp
 
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
-from vmcnet.utils.typing import Array, ModelApply, P
+from vmcnet.utils.typing import Array, ArrayLike, ModelApply, P
 
 
 class SRMode(Enum):
@@ -27,7 +27,7 @@ class SRMode(Enum):
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
-    mean_grad_fn: Callable[[Array], Array],
+    mean_grad_fn: Callable[[ArrayLike], ArrayLike],
     damping: float = 0.001,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,
@@ -121,7 +121,7 @@ def get_fisher_inverse_fn(
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
-            def partial_log_psi_apply(params: P) -> Array:
+            def partial_log_psi_apply(params: P) -> ArrayLike:
                 return log_psi_apply(params, positions)
 
             _, vjp_fn = jax.vjp(partial_log_psi_apply, params)
