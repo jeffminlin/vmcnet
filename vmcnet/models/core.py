@@ -7,7 +7,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# from vmcnet.utils.kfac import register_batch_dense
 from vmcnet.utils.log_linear_exp import log_linear_exp
 from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import (
@@ -178,15 +177,12 @@ class Dense(Module):
             Defaults to random normal initialization.
         use_bias (bool, optional): whether to add a bias to the output. Defaults to
             True.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
     """
 
     features: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     @flax.linen.compact
     def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
@@ -207,9 +203,6 @@ class Dense(Module):
             bias = self.param("bias", self.bias_init, (self.features,))
             y = y + bias
 
-        # if self.register_kfac:
-        #     return register_batch_dense(y, inputs, kernel, bias)
-        # else:
         return y
 
 
@@ -227,14 +220,11 @@ class LogDomainDense(Module):
             matrix. Defaults to orthogonal initialization.
         use_bias (bool, optional): whether to add a bias to the output. Defaults to
             True.
-        register_kfac (bool, optional): whether to register the computation with KFAC.
-            Defaults to True.
     """
 
     features: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     @flax.linen.compact
     def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
@@ -263,7 +253,6 @@ class LogDomainDense(Module):
             log_abs_x,
             kernel,
             axis=-1,
-            register_kfac=self.register_kfac,
         )
 
 
@@ -285,8 +274,6 @@ class SimpleResNet(Module):
             Array -> Array (shape is preserved)
         use_bias (bool, optional): whether the dense layers should all have bias terms
             or not. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense layers with KFAC.
-            Defaults to True.
     """
 
     ndense_inner: int
@@ -296,7 +283,6 @@ class SimpleResNet(Module):
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
     bias_init: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Setup dense layers."""
@@ -310,7 +296,6 @@ class SimpleResNet(Module):
                 kernel_init=self.kernel_init,
                 bias_init=self.bias_init,
                 use_bias=self.use_bias,
-                register_kfac=self.register_kfac,
             )
             for _ in range(self.nlayers - 1)
         ]
@@ -319,7 +304,6 @@ class SimpleResNet(Module):
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
             use_bias=False,
-            register_kfac=self.register_kfac,
         )
 
     def __call__(self, x: Array) -> Array:  # type: ignore[override]

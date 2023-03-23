@@ -312,15 +312,12 @@ class ProductsSignCovariance(Module):
         features (int): the number of antisymmetric output features to generate. If
             use_weights is False, must be equal to 1.
         kernel_init (WeightInitializer): initializer for the weights of the dense layer.
-        register_kfac (bool, optional): whether to register the dense layer with KFAC.
-            Defaults to True.
         use_weights (bool, optional): whether to use a weighted sum of products.
             Defaults to False.
     """
 
     features: int
     kernel_init: WeightInitializer
-    register_kfac: bool = True
     use_weights: bool = False
 
     @flax.linen.compact
@@ -370,5 +367,4 @@ class ProductsSignCovariance(Module):
             self.features,
             kernel_init=self.kernel_init,
             use_bias=False,
-            register_kfac=self.register_kfac,
         )(flattened_dots)

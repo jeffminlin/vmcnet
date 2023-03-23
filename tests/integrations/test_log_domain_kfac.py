@@ -2,6 +2,7 @@
 import kfac_jax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from kfac_jax import utils as kfac_utils
 
@@ -80,7 +81,7 @@ def _train(nsteps, loss_and_grad, model_params, batch, key, logdomain=False):
             kernel = new_params["params"]["kernel"]
         model_params, optimizer_state = new_params, new_optimizer_state
 
-        training_results.append((jnp.copy(kernel), jnp.copy(bias), jnp.copy(loss)))
+        training_results.append((np.array(kernel), np.array(bias), jnp.array(loss)))
 
     return training_results
 

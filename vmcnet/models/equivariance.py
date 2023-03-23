@@ -618,8 +618,6 @@ class SplitDense(Module):
             (key, shape, dtype) -> Array. Defaults to random normal
             initialization.
         use_bias (bool, optional): whether to add a bias term. Defaults to True.
-        register_kfac (bool, optional): whether to register the dense computations with
-            KFAC. Defaults to True.
     """
 
     split: ParticleSplit
@@ -627,7 +625,6 @@ class SplitDense(Module):
     kernel_initializer: WeightInitializer
     bias_initializer: WeightInitializer = get_bias_initializer("normal")
     use_bias: bool = True
-    register_kfac: bool = True
 
     def setup(self):
         """Set up the dense layers for each split."""
@@ -646,7 +643,6 @@ class SplitDense(Module):
                 kernel_init=self.kernel_initializer,
                 bias_init=self.bias_initializer,
                 use_bias=self.use_bias,
-                register_kfac=self.register_kfac,
             )
             for i in range(nsplits)
         ]
@@ -680,14 +676,12 @@ def _compute_exponential_envelopes_on_leaf(
             r_ei_leaf,
             norbitals,
             kernel_initializer_dim,
-            register_kfac=False,
         )
     else:
         scale_out = _anisotropy_on_leaf(
             r_ei_leaf,
             norbitals,
             kernel_initializer_dim,
-            register_kfac=True,
         )
     # scale_out has shape (..., nelec, norbitals, nion, d)
     distances = jnp.linalg.norm(scale_out, axis=-1)
@@ -699,7 +693,6 @@ def _compute_exponential_envelopes_on_leaf(
         (1,) * norbitals,
         kernel_initializer=kernel_initializer_ion,
         use_bias=False,
-        register_kfac=False,
     )(inv_exp_distances)
     # Concatenate to shape (..., nelec, norbitals, 1)
     lin_comb_nion_concat = jnp.concatenate(lin_comb_nion, axis=-2)

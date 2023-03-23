@@ -141,7 +141,6 @@ def get_model_from_config(
                 kernel_init_constructor(resnet_config.kernel_init),
                 bias_init_constructor(resnet_config.bias_init),
                 resnet_config.use_bias,
-                resnet_config.register_kfac,
             )
 
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
@@ -220,7 +219,6 @@ def get_model_from_config(
                     invariance_config.bias_initializer
                 ),
                 invariance_use_bias=invariance_config.use_bias,
-                invariance_register_kfac=invariance_config.register_kfac,
             )
         elif model_config.type == "extended_orbital_matrix_ferminet":
             invariance_config = model_config.invariance
@@ -263,7 +261,6 @@ def get_model_from_config(
                     invariance_config.bias_initializer
                 ),
                 invariance_use_bias=invariance_config.use_bias,
-                invariance_register_kfac=invariance_config.register_kfac,
             )
         else:
             raise ValueError(
@@ -491,7 +488,6 @@ def get_sign_covariance_from_config(
         return ProductsSignCovariance(
             1,
             kernel_init_constructor(model_config.products_covariance.kernel_init),
-            model_config.products_covariance.register_kfac,
             use_weights=model_config.products_covariance.use_weights,
         )
 
@@ -654,7 +650,6 @@ def get_resnet_determinant_fn_for_ferminet(
     kernel_initializer: WeightInitializer,
     bias_initializer: WeightInitializer,
     use_bias: bool = True,
-    register_kfac: bool = False,
 ) -> DeterminantFn:
     """Get a resnet-based determinant function for FermiNet construction.
 
@@ -672,10 +667,6 @@ def get_resnet_determinant_fn_for_ferminet(
         kernel_initializer (WeightInitializer): kernel initializer for the resnet.
         bias_initializer (WeightInitializer): bias initializer for the resnet.
         use_bias (bool): Whether to use a bias in the ResNet. Defaults to True.
-        register_kfac (bool): Whether to register the ResNet Dense layers with KFAC.
-            Currently, params for this ResNet explode to huge values and cause nans
-            if register_kfac is True, so this flag defaults to false and should only be
-            overridden with care. The reason for the instability is not known.
 
     Returns:
         (DeterminantFn): A resnet-based function. Has the signature
@@ -692,7 +683,6 @@ def get_resnet_determinant_fn_for_ferminet(
             kernel_initializer,
             bias_initializer,
             use_bias,
-            register_kfac=register_kfac,
         )(concat_values)
 
     return fn
@@ -1054,8 +1044,6 @@ class EmbeddedParticleFermiNet(FermiNet):
             invariance dense layer. Has signature (key, shape, dtype) -> Array
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
-        invariance_register_kfac (bool, optional): whether to register the dense layer
-            of the invariance with KFAC. Defaults to True.
     """
 
     nhidden_fermions_per_spin: Sequence[int]
@@ -1064,7 +1052,6 @@ class EmbeddedParticleFermiNet(FermiNet):
     invariance_kernel_initializer: WeightInitializer
     invariance_bias_initializer: WeightInitializer
     invariance_use_bias: bool = True
-    invariance_register_kfac: bool = True
 
     def setup(self):
         """Setup EmbeddedParticleFermiNet."""
@@ -1084,7 +1071,6 @@ class EmbeddedParticleFermiNet(FermiNet):
             self.invariance_kernel_initializer,
             self.invariance_bias_initializer,
             self.invariance_use_bias,
-            self.invariance_register_kfac,
         )
 
     def _get_elec_pos_and_orbitals_split(
@@ -1154,8 +1140,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             Defaults to a scaled random normal initializer.
         invariance_use_bias: (bool, optional): whether to add a bias term in the dense
             layer of the invariance. Defaults to True.
-        invariance_register_kfac (bool, optional): whether to register the dense layer
-            of the invariance with KFAC. Defaults to True.
         invariance_backflow (Callable, optional): backflow function to be used for the
             invariance which generates the hidden fermion positions. If None, the
             outputs of the regular FermiNet backflow are used instead to form an
@@ -1168,7 +1152,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
     )
     invariance_bias_initializer: WeightInitializer = get_kernel_initializer("normal")
     invariance_use_bias: bool = True
-    invariance_register_kfac: bool = True
     invariance_backflow: Optional[Backflow] = None
 
     def _get_invariance(
@@ -1196,7 +1179,6 @@ class ExtendedOrbitalMatrixFermiNet(FermiNet):
             kernel_initializer=self.invariance_kernel_initializer,
             bias_initializer=self.invariance_bias_initializer,
             use_bias=self.invariance_use_bias,
-            register_kfac=self.invariance_register_kfac,
         )(stream_1e, None)
         # Reshape to [norb_splits: (ndeterminants, ..., nhidden[i], norbitals[i])]
         return _reshape_raw_ferminet_orbitals(invariance, self.ndeterminants)

@@ -146,7 +146,6 @@ def get_default_model_config() -> Dict:
         "kernel_init": {"type": "orthogonal", "scale": 2.0},
         "bias_init": normal_init,
         "use_bias": True,
-        "register_kfac": False,
         "mode": "parallel_even",
     }
 
@@ -184,7 +183,6 @@ def get_default_model_config() -> Dict:
         "invariance": invariance_for_antieq,
         "products_covariance": {
             "kernel_init": {"type": "orthogonal", "scale": 2.0},
-            "register_kfac": True,
             "use_weights": False,
         },
         "multiply_by_eq_features": False,
@@ -203,7 +201,6 @@ def get_default_model_config() -> Dict:
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                 "bias_initializer": normal_init,
                 "use_bias": True,
-                "register_kfac": True,
             },
         },
         "extended_orbital_matrix_ferminet": {
@@ -215,7 +212,6 @@ def get_default_model_config() -> Dict:
                 "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
                 "bias_initializer": normal_init,
                 "use_bias": True,
-                "register_kfac": True,
             },
         },
         # TODO (ggoldsh): these two should probably be subtypes of a single
