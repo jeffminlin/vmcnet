@@ -10,7 +10,11 @@ from vmcnet.utils.typing import Array, P, ModelApply
 
 
 def create_continuous_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array], ion_pos, ibp=False
+    log_psi_apply: Callable[[P, Array], Array],
+    ion_pos,
+    ibp=False,
+    alpha=0.2,
+    beta=0.1,
 ) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
@@ -37,8 +41,6 @@ def create_continuous_kinetic_energy(
         # (n,)
         min_dists = jnp.min(dists, axis=-1)
 
-        alpha = 0.2
-        beta = 0.05
         return (erf((min_dists - alpha) / beta) + 1) / 2
 
     def sumf(x, ion_pos):

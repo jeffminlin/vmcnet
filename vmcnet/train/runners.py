@@ -218,12 +218,16 @@ def _assemble_mol_local_energy_fn(
     ibp=True,
     soften_ei=0.0,
     soften_ee=0.0,
+    alpha=0.2,
+    beta=0.05,
 ) -> ModelApply[P]:
     # Define parameter updates
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(
         log_psi_apply,
         ion_pos,
         ibp=ibp,
+        alpha=alpha,
+        beta=beta,
     )
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_pos, ion_charges, softening_term=soften_ei
@@ -291,6 +295,8 @@ def _get_energy_fns(
     log_psi_apply: ModelApply[P],
     soften_ei,
     soften_ee,
+    alpha,
+    beta,
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
     local_energy_fn_ibp = _assemble_mol_local_energy_fn(
         ion_pos,
@@ -299,6 +305,8 @@ def _get_energy_fns(
         True,
         soften_ei,
         soften_ee,
+        alpha,
+        beta,
     )
     local_energy_fn_laplace = _assemble_mol_local_energy_fn(
         ion_pos,
@@ -307,6 +315,8 @@ def _get_energy_fns(
         False,
         soften_ei,
         soften_ee,
+        alpha,
+        beta,
     )
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
@@ -381,6 +391,8 @@ def _setup_vmc(
         log_psi_apply,
         config.problem.soften_ei,
         config.problem.soften_ee,
+        config.vmc.alpha,
+        config.vmc.beta,
     )
 
     # Setup parameter updates
