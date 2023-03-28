@@ -55,7 +55,7 @@ def create_continuous_kinetic_energy(
             )
 
         # (n,1)
-        fs = f(x, ion_pos)
+        fs = jnp.expand_dims(f(x, ion_pos), -1)
         # (n,1)
         gradfs = gradf(x, ion_pos)
         # (n,3)
