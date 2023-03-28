@@ -3,13 +3,14 @@ from typing import Callable
 
 import jax
 import jax.numpy as jnp
+from jax.scipy.special import erf
 
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, P, ModelApply
 
 
 def create_continuous_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array], use_laplacian=False
+    log_psi_apply: Callable[[P, Array], Array], ion_pos, ibp=False
 ) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
@@ -27,10 +28,43 @@ def create_continuous_kinetic_energy(
     """
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
-    def kinetic_energy_fn(params: P, x: Array) -> Array:
-        if not use_laplacian:
-            return 0.5 * jnp.sum(grad_log_psi_apply(params, x) ** 2)
+    # Evaluates fk(rk) for each k
+    def f(x, ion_pos):
+        # (n,m)
+        dists = jnp.linalg.norm(
+            jnp.expand_dims(x, -2) - jnp.expand_dims(ion_pos, -3), axis=-1
+        )
+        # (n,)
+        min_dists = jnp.min(dists, axis=-1)
 
-        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
+        alpha = 0.2
+        beta = 0.05
+        return (erf((min_dists - alpha) / beta) + 1) / 2
+
+    def sumf(x, ion_pos):
+        return jnp.sum(f(x, ion_pos))
+
+    gradf = jax.grad(sumf, argnums=0)
+
+    def kinetic_energy_fn(params: P, x: Array) -> Array:
+        if not ibp:
+            return -0.5 * physics.core.laplacian_psi_over_psi(
+                grad_log_psi_apply, params, x
+            )
+
+        # (n,1)
+        fs = f(x, ion_pos)
+        # (n,1)
+        gradfs = gradf(x, ion_pos)
+        # (n,3)
+        gradlogpsi = grad_log_psi_apply(params, x)
+
+        return 0.5 * (
+            jnp.sum(gradfs * gradlogpsi)
+            + jnp.sum((gradlogpsi**2) * fs)
+            - physics.core.laplacian_psi_over_psi(
+                grad_log_psi_apply, params, x, weights=1 - fs
+            )
+        )
 
     return kinetic_energy_fn

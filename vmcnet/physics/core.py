@@ -89,6 +89,7 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
     x: Array,
+    weights=None,
 ) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -126,9 +127,17 @@ def laplacian_psi_over_psi(
         Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
+    d = x_shape[-1]
     flat_x = jnp.reshape(x, (-1,))
     n = flat_x.shape[0]
     identity_mat = jnp.eye(n)
+
+    if weights is None:
+        # Weight everything equally
+        weights = jnp.ones_like(flat_x)
+    else:
+        # weights contains a weight per particle, so we duplicate it per dimension
+        weights = jnp.repeat(weights, d)
 
     def flattened_grad_log_psi_of_flat_x(flat_x_in):
         """Flattened input to flattened output version of grad_log_psi."""
@@ -141,7 +150,10 @@ def laplacian_psi_over_psi(
         primals, tangents = jax.jvp(
             flattened_grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
         )
-        return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
+        return (
+            i + 1,
+            carry[1] + weights[i] * (jnp.square(primals[i]) + tangents[i]),
+        ), None
 
     out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=n)
     return out[1]

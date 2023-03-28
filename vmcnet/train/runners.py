@@ -215,13 +215,15 @@ def _assemble_mol_local_energy_fn(
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
-    use_laplacian=False,
+    ibp=True,
     soften_ei=0.0,
     soften_ee=0.0,
 ) -> ModelApply[P]:
     # Define parameter updates
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(
-        log_psi_apply, use_laplacian
+        log_psi_apply,
+        ion_pos,
+        ibp=ibp,
     )
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_pos, ion_charges, softening_term=soften_ei
@@ -290,24 +292,32 @@ def _get_energy_fns(
     soften_ei,
     soften_ee,
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn = _assemble_mol_local_energy_fn(
+    local_energy_fn_ibp = _assemble_mol_local_energy_fn(
         ion_pos,
         ion_charges,
         log_psi_apply,
-        vmc_config.use_laplacian,
+        True,
+        soften_ei,
+        soften_ee,
+    )
+    local_energy_fn_laplace = _assemble_mol_local_energy_fn(
+        ion_pos,
+        ion_charges,
+        log_psi_apply,
+        False,
         soften_ei,
         soften_ee,
     )
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
-        local_energy_fn,
+        local_energy_fn_ibp,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
     )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return local_energy_fn_laplace, energy_data_val_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -361,7 +371,10 @@ def _setup_vmc(
         config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
-    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
+    (
+        local_energy_fn_laplace,
+        energy_data_val_and_grad,
+    ) = _get_energy_fns(
         config.vmc,
         ion_pos,
         ion_charges,
@@ -393,7 +406,7 @@ def _setup_vmc(
         log_psi_apply,
         burning_step,
         walker_fn,
-        local_energy_fn,
+        local_energy_fn_laplace,
         update_param_fn,
         get_amplitude_fn,
         params,
