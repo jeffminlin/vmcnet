@@ -234,6 +234,7 @@ def create_value_and_grad_energy_fn(
     nan_safe: bool = True,
     get_energy_bwd: Callable = get_default_energy_bwd,
     approximate_kinetic=False,
+    nz=1,
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -282,7 +283,6 @@ def create_value_and_grad_energy_fn(
         n = positions.shape[-1] * positions.shape[-2]
 
         if approximate_kinetic:
-            nz = 1
             z = jax.random.normal(
                 key,
                 shape=(

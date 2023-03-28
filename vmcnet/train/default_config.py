@@ -276,6 +276,8 @@ def get_default_molecular_config() -> Dict:
 def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
+        "approximate_kinetic": False,
+        "nkinetic_samples": 1,
         "nchains": 2000,
         "nepochs": 200000,
         "nburn": 5000,

@@ -298,7 +298,8 @@ def _get_energy_fns(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        approximate_kinetic=True,
+        approximate_kinetic=vmc_config.approximate_kinetic,
+        nz=vmc_config.nkinetic_samples,
     )
 
     return (
