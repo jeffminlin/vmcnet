@@ -189,4 +189,4 @@ def make_harmonic_oscillator_local_energy(
 
     potential_fn = jax.vmap(potential_fn, in_axes=(None, 0), out_axes=0)
 
-    return physics.core.combine_local_energy_terms([kinetic_fn, potential_fn])
+    return physics.core.combine_local_energy_terms([potential_fn], kinetic_fn)

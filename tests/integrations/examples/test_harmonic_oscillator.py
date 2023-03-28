@@ -1,8 +1,11 @@
 """Integration tests for the quantum harmonic oscillator."""
 
+import logging
 import os
 
 import jax
+# from jax.config import config
+# config.update('jax_disable_jit', True)
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -16,7 +19,7 @@ from vmcnet.utils.io import reload_vmc_state
 
 from tests.test_utils import assert_pytree_allclose
 
-from .sgd_train import sgd_vmc_loop_with_logging
+from tests.integrations.examples.sgd_train import sgd_vmc_loop_with_logging
 
 
 def _make_initial_params_and_data(model_omega, nchains):
@@ -55,59 +58,62 @@ def test_five_particle_ground_state_harmonic_oscillator():
     )
 
 
-@pytest.mark.slow
-def test_harmonic_oscillator_vmc(caplog):
-    """Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
 
-    Integration test for the overall API, to make sure it comes together correctly and
-    can optimize a simple 1 parameter model rapidly.
-    """
-    # Problem parameters
-    model_omega = 2.5
-    spring_constant = 1.5
+"""Test that the trainable sqrt(omega) converges to the true sqrt(spring constant).
 
-    # Training hyperparameters
-    nchains = 100 * jax.local_device_count()
-    nburn = 100
-    nepochs = 50
-    nsteps_per_param_update = 5
-    std_move = 0.25
-    learning_rate = 1e-2
+Integration test for the overall API, to make sure it comes together correctly and
+can optimize a simple 1 parameter model rapidly.
+"""
+# Problem parameters
+# with jax.disable_jit():
 
-    # Initialize model and chains of walkers
-    (
-        log_psi_model,
-        params,
-        random_particle_positions,
-        amplitudes,
-        key,
-    ) = _make_initial_params_and_data(model_omega, nchains)
-    data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
+root_logger = logging.getLogger()
+root_logger.setLevel("INFO")
+model_omega = 2.5
+spring_constant = 1.5
 
-    # Local energy function
-    local_energy_fn = qho.make_harmonic_oscillator_local_energy(
-        spring_constant, log_psi_model.apply
-    )
+# Training hyperparameters
+nchains = 100 * jax.local_device_count()
+nburn = 100
+nepochs = 50
+nsteps_per_param_update = 5
+std_move = 0.25
+learning_rate = 1e-2
 
-    _, params, _, _ = sgd_vmc_loop_with_logging(
-        caplog,
-        data,
-        params,
-        key,
-        nchains,
-        nburn,
-        nepochs,
-        nsteps_per_param_update,
-        std_move,
-        learning_rate,
-        log_psi_model,
-        local_energy_fn,
-    )
+# Initialize model and chains of walkers
+(
+    log_psi_model,
+    params,
+    random_particle_positions,
+    amplitudes,
+    key,
+) = _make_initial_params_and_data(model_omega, nchains)
+data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
 
-    # Grab the one parameter and make sure it converged to sqrt(spring constant)
-    np.testing.assert_allclose(
-        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
-    )
+# Local energy function
+local_energy_fn = qho.make_harmonic_oscillator_local_energy(
+    spring_constant, log_psi_model.apply
+)
+
+_, params, _, _ = sgd_vmc_loop_with_logging(
+    None,
+    data,
+    params,
+    key,
+    nchains,
+    nburn,
+    nepochs,
+    nsteps_per_param_update,
+    std_move,
+    learning_rate,
+    log_psi_model,
+    local_energy_fn,
+)
+
+# Grab the one parameter and make sure it converged to sqrt(spring constant)
+np.testing.assert_allclose(
+    jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
+)
 
 
 @pytest.mark.slow
@@ -119,7 +125,7 @@ def test_reload_reproduces_results(caplog, tmp_path):
     checkpoint_dir = "checkpoints"
 
     # Problem parameters
-    model_omega = 2.5
+    model_omega = 10
     spring_constant = 1.5
 
     # Training hyperparameters

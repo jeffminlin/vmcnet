@@ -1,5 +1,6 @@
 """Test a hydrogen-like atom."""
 import jax
+import logging
 import numpy as np
 import pytest
 
@@ -20,10 +21,10 @@ def _setup_hla_hyperparams_and_model():
     # Training hyperparameters
     nchains = 100 * jax.local_device_count()
     nburn = 100
-    nepochs = 100
+    nepochs = 200
     nsteps_per_param_update = 5
     std_move = 0.4
-    learning_rate = 1.0
+    learning_rate = 0.1
 
     # Initialize model and chains of walkers
     log_psi_model = hla.HydrogenLikeWavefunction(model_decay)
@@ -61,6 +62,10 @@ def _setup_hla_hyperparams_and_model():
 @pytest.mark.slow
 def test_hydrogen_like_sgd_vmc(caplog):
     """Test the wavefn exp(-a * r) converges (in 3-D) to a = nuclear charge with SGD."""
+
+    root_logger = logging.getLogger()
+    # root_logger.setLevel("INFO")
+
     (
         params,
         nuclear_charge,
