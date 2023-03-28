@@ -128,6 +128,10 @@ def laplacian_psi_over_psi(
     """
     x_shape = x.shape
     flat_x = jnp.reshape(x, (-1,))
+    n = flat_x.shape[0]
+
+    if z is None:
+        z = jnp.eye(n)
 
     def flattened_grad_log_psi_of_flat_x(flat_x_in):
         """Flattened input to flattened output version of grad_log_psi."""
@@ -293,8 +297,7 @@ def create_value_and_grad_energy_fn(
             )
             z = z / jnp.linalg.norm(z, axis=-1, keepdims=True) * jnp.sqrt(n / nz)
         else:
-            z = jnp.eye(n)
-            z = jnp.broadcast_to(z, (*positions.shape[:-2], n, n))
+            z = None
 
         local_energies_noclip = local_energy_fn(params, positions, z)
 
