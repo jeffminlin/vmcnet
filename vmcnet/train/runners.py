@@ -227,7 +227,7 @@ def _assemble_mol_local_energy_fn(
     )
 
     local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
-        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+        [ei_potential_fn, ee_potential_fn, ii_potential_fn], kinetic_fn
     )
 
     return local_energy_fn
@@ -280,18 +280,32 @@ def _get_energy_fns(
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
-) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
+) -> Tuple[
+    ModelApply[P], physics.core.ValueGradEnergyFn[P], physics.core.ValueGradEnergyFn[P]
+]:
     local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
     clipping_fn = _get_clipping_fn(vmc_config)
-    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+    exact_energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         local_energy_fn,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
     )
+    approximate_energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        log_psi_apply,
+        local_energy_fn,
+        vmc_config.nchains,
+        clipping_fn,
+        nan_safe=vmc_config.nan_safe,
+        approximate_kinetic=True,
+    )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return (
+        local_energy_fn,
+        exact_energy_data_val_and_grad,
+        approximate_energy_data_val_and_grad,
+    )
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -345,13 +359,16 @@ def _setup_vmc(
         config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
-    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi_apply
-    )
+    (
+        local_energy_fn,
+        exact_energy_data_val_and_grad,
+        approximate_energy_data_val_and_grad,
+    ) = _get_energy_fns(config.vmc, ion_pos, ion_charges, log_psi_apply)
 
     # Setup parameter updates
     if apply_pmap:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
+
     (
         update_param_fn,
         optimizer_state,
@@ -363,7 +380,7 @@ def _setup_vmc(
         data,
         pacore.get_position_from_data,
         update_data_fn,
-        energy_data_val_and_grad,
+        approximate_energy_data_val_and_grad,
         key,
         apply_pmap=apply_pmap,
     )

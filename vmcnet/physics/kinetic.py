@@ -26,7 +26,9 @@ def create_continuous_kinetic_energy(
     """
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
-    def kinetic_energy_fn(params: P, x: Array) -> Array:
-        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
+    def kinetic_energy_fn(params: P, x: Array, z) -> Array:
+        return -0.5 * physics.core.laplacian_psi_over_psi(
+            grad_log_psi_apply, params, x, z
+        )
 
-    return jax.vmap(kinetic_energy_fn, in_axes=(None, 0), out_axes=0)
+    return jax.vmap(kinetic_energy_fn, in_axes=(None, 0, 0), out_axes=0)
