@@ -18,9 +18,9 @@ def _setup_hla_hyperparams_and_model():
     ndim = 3
 
     # Training hyperparameters
-    nchains = 100 * jax.local_device_count()
+    nchains = 1000 * jax.local_device_count()
     nburn = 100
-    nepochs = 100
+    nepochs = 500
     nsteps_per_param_update = 5
     std_move = 0.4
     learning_rate = 1.0
@@ -77,7 +77,6 @@ def test_hydrogen_like_sgd_vmc(caplog):
     ) = _setup_hla_hyperparams_and_model()
 
     _, params, _, _ = sgd_vmc_loop_with_logging(
-        caplog,
         data,
         params,
         key,
