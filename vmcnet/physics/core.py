@@ -90,6 +90,8 @@ def laplacian_psi_over_psi(
     params: P,
     x: Array,
     z,
+    ion_pos,
+    cutoff_rad=0.2,
 ) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -127,30 +129,74 @@ def laplacian_psi_over_psi(
         Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
+    d = x_shape[-1]
     flat_x = jnp.reshape(x, (-1,))
     n = flat_x.shape[0]
 
-    if z is None:
-        z = jnp.eye(n)
+    eye = jnp.eye(n)
+    dims_to_diff = jnp.ones((n,))
+
+    if z is not None:
+        particles_near_ion = jnp.any(
+            jnp.linalg.norm(
+                jnp.expand_dims(x, -2) - jnp.expand_dims(ion_pos, -3), axis=-1
+            )
+            < cutoff_rad,
+            axis=-1,
+        )
+        dims_to_diff = jnp.repeat(particles_near_ion, d)  # (n,)
+
+        z = jnp.where(dims_to_diff, 0.0, z)
+        z_to_diff = jnp.any(z != 0.0, axis=-1)
+
+        nz_fixed = jnp.count_nonzero(dims_to_diff)
+        nz_sample = jnp.count_nonzero(z_to_diff)
+
+        z = (
+            z
+            / jnp.linalg.norm(z, axis=-1, keepdims=True)
+            * jnp.sqrt((n - nz_fixed) / nz_sample)
+        )
 
     def flattened_grad_log_psi_of_flat_x(flat_x_in):
         """Flattened input to flattened output version of grad_log_psi."""
         grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
         return jnp.reshape(grad_log_psi_out, (-1,))
 
-    def step_fn(carry, unused):
+    def step_fn(vecs, to_diff, carry, unused):
         del unused
         i = carry[0]
 
         primals, tangents = jax.jvp(
-            flattened_grad_log_psi_of_flat_x, (flat_x,), (z[i],)
+            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
         )
-        return (
-            i + 1,
-            carry[1] + jnp.square(jnp.dot(z[i], primals)) + jnp.dot(z[i], tangents),
-        ), None
 
-    out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=z.shape[0])
+        result = jax.lax.cond(
+            to_diff[i],
+            lambda c: c
+            + jnp.square(jnp.dot(vecs[i], primals))
+            + jnp.dot(vecs[i], tangents),
+            lambda c: c,
+            carry[1],
+        )
+        return (i + 1, result), None
+
+    out, _ = jax.lax.scan(
+        lambda c, u: step_fn(eye, dims_to_diff, c, u),
+        (0, jnp.array(0.0)),
+        xs=None,
+        length=n,
+    )
+
+    if z is not None:
+        nz = z.shape[-2]
+        out, _ = jax.lax.scan(
+            lambda c, u: step_fn(z, z_to_diff, c, u),
+            (0, out[1]),
+            xs=None,
+            length=nz,
+        )
+
     return out[1]
 
 
@@ -295,7 +341,6 @@ def create_value_and_grad_energy_fn(
                     n,
                 ),
             )
-            z = z / jnp.linalg.norm(z, axis=-1, keepdims=True) * jnp.sqrt(n / nz)
         else:
             z = None
 

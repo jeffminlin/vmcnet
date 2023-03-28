@@ -215,9 +215,12 @@ def _assemble_mol_local_energy_fn(
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
+    cutoff_rad,
 ) -> ModelApply[P]:
     # Define parameter updates
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
+    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(
+        log_psi_apply, ion_pos, cutoff_rad
+    )
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_pos, ion_charges
     )
@@ -283,7 +286,12 @@ def _get_energy_fns(
 ) -> Tuple[
     ModelApply[P], physics.core.ValueGradEnergyFn[P], physics.core.ValueGradEnergyFn[P]
 ]:
-    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        ion_pos,
+        ion_charges,
+        log_psi_apply,
+        cutoff_rad=vmc_config.kinetic_cutoff_rad,
+    )
     clipping_fn = _get_clipping_fn(vmc_config)
     exact_energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,

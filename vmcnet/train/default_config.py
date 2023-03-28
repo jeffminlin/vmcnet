@@ -278,6 +278,7 @@ def get_default_vmc_config() -> Dict:
     vmc_config = {
         "approximate_kinetic": False,
         "nkinetic_samples": 1,
+        "kinetic_cutoff_rad": 0.2,
         "nchains": 2000,
         "nepochs": 200000,
         "nburn": 5000,

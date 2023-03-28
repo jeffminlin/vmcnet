@@ -8,7 +8,9 @@ from vmcnet.utils.typing import Array, P, ModelApply
 
 
 def create_continuous_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array]
+    log_psi_apply: Callable[[P, Array], Array],
+    ion_pos,
+    cutoff_rad,
 ) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
@@ -28,7 +30,7 @@ def create_continuous_kinetic_energy(
 
     def kinetic_energy_fn(params: P, x: Array, z) -> Array:
         return -0.5 * physics.core.laplacian_psi_over_psi(
-            grad_log_psi_apply, params, x, z
+            grad_log_psi_apply, params, x, z, ion_pos, cutoff_rad
         )
 
     return jax.vmap(kinetic_energy_fn, in_axes=(None, 0, 0), out_axes=0)
