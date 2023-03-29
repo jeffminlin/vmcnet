@@ -163,22 +163,21 @@ def laplacian_psi_over_psi(
         grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
         return jnp.reshape(grad_log_psi_out, (-1,))
 
+    def eval_deriv(vec):
+        primals, tangents = jax.jvp(flattened_grad_log_psi_of_flat_x, (flat_x,), (vec,))
+        return (jnp.square(jnp.dot(vec, primals)) + jnp.dot(vec, tangents),)
+
     def step_fn(vecs, to_diff, carry, unused):
         del unused
         i = carry[0]
 
-        primals, tangents = jax.jvp(
-            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
-        )
-
         result = jax.lax.cond(
             to_diff[i],
-            lambda c: c
-            + jnp.square(jnp.dot(vecs[i], primals))
-            + jnp.dot(vecs[i], tangents),
+            lambda c: c + eval_deriv(vecs[i]),
             lambda c: c,
             carry[1],
         )
+
         return (i + 1, result), None
 
     out, _ = jax.lax.scan(
