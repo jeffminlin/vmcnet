@@ -290,24 +290,33 @@ def _get_energy_fns(
     soften_ei,
     soften_ee,
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn = _assemble_mol_local_energy_fn(
+    local_energy_fn_ibp = _assemble_mol_local_energy_fn(
         ion_pos,
         ion_charges,
         log_psi_apply,
-        vmc_config.use_laplacian,
+        False,
+        soften_ei,
+        soften_ee,
+    )
+    local_energy_fn_laplace = _assemble_mol_local_energy_fn(
+        ion_pos,
+        ion_charges,
+        log_psi_apply,
+        True,
         soften_ei,
         soften_ee,
     )
     clipping_fn = _get_clipping_fn(vmc_config)
+
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
-        local_energy_fn,
+        local_energy_fn_ibp,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
     )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return local_energy_fn_laplace, energy_data_val_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
