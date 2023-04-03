@@ -55,6 +55,7 @@ def create_electron_ion_coulomb_potential(
     ion_charges: Array,
     strength: chex.Scalar = 1.0,
     softening_term: chex.Scalar = 0.0,
+    single_particle=False,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential attraction between electron and ion.
 
@@ -76,20 +77,26 @@ def create_electron_ion_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
+    def potential_fn(params: ModelParams, x: ArrayLike, ni) -> Array:
         del params
         electron_ion_displacements = _compute_displacements(x, ion_locations)
         electron_ion_distances = _compute_soft_norm(
             electron_ion_displacements, softening_term=softening_term
         )
         coulomb_attraction = ion_charges / electron_ion_distances
-        return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
+
+        if single_particle:
+            return -strength * jnp.sum(coulomb_attraction[..., ni, :], axis=-1)
+        else:
+            return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
 
     return potential_fn
 
 
 def create_electron_electron_coulomb_potential(
-    strength: chex.Scalar = 1.0, softening_term: chex.Scalar = 0.0
+    strength: chex.Scalar = 1.0,
+    softening_term: chex.Scalar = 0.0,
+    single_particle=False,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential repulsion between pairs of electrons.
 
@@ -107,21 +114,33 @@ def create_electron_electron_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
+    def potential_fn(params: ModelParams, x: ArrayLike, ni) -> Array:
         del params
         electron_electron_displacements = _compute_displacements(x, x)
         electron_electron_distances = _compute_soft_norm(
             electron_electron_displacements, softening_term=softening_term
         )
-        return jnp.sum(
-            jnp.triu(strength / electron_electron_distances, k=1), axis=(-1, -2)
-        )
+        if single_particle:
+            return (
+                jnp.sum(
+                    jnp.delete(
+                        strength / electron_electron_distances[..., ni, :], ni, axis=-1
+                    ),
+                    axis=-1,
+                )
+                / 2
+            )
+        else:
+            return jnp.sum(
+                jnp.triu(strength / electron_electron_distances, k=1), axis=(-1, -2)
+            )
 
     return potential_fn
 
 
 def create_ion_ion_coulomb_potential(
-    ion_locations: Array, ion_charges: Array
+    ion_locations: Array,
+    ion_charges: Array,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential repulsion between stationary ions.
 
@@ -137,6 +156,7 @@ def create_ion_ion_coulomb_potential(
         (params, electron_positions of shape (..., n_elec, d))
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
+
     ion_ion_displacements, charge_charge_prods = _get_ion_ion_info(
         ion_locations, ion_charges
     )
@@ -145,8 +165,8 @@ def create_ion_ion_coulomb_potential(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )
 
-    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
-        del params, x
+    def potential_fn(params: ModelParams, x: ArrayLike, ni) -> Array:
+        del params, x, ni
         return constant_potential
 
     return potential_fn

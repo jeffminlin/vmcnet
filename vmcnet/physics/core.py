@@ -76,10 +76,10 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params: P, x: Array, z) -> Array:
-        local_energy_sum = kinetic_term(params, x, z)
+    def local_energy_fn(params: P, x: Array, ni) -> Array:
+        local_energy_sum = kinetic_term(params, x, ni)
         for term in potential_energy_terms:
-            local_energy_sum = cast(Array, local_energy_sum + term(params, x))
+            local_energy_sum = cast(Array, local_energy_sum + term(params, x, ni))
         return local_energy_sum
 
     return local_energy_fn
@@ -89,9 +89,7 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
     x: Array,
-    z,
-    ion_pos,
-    cutoff_rad=0.2,
+    ni=None,
 ) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -129,73 +127,35 @@ def laplacian_psi_over_psi(
         Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
     """
     x_shape = x.shape
-    d = x_shape[-1]
     flat_x = jnp.reshape(x, (-1,))
     n = flat_x.shape[0]
 
-    eye = jnp.eye(n)
-    dims_to_diff = jnp.ones((n,))
+    vecs = jnp.eye(n)
+    length = n
 
-    if z is not None:
-        particles_near_ion = jnp.any(
-            jnp.linalg.norm(
-                jnp.expand_dims(x, -2) - jnp.expand_dims(ion_pos, -3), axis=-1
-            )
-            < cutoff_rad,
-            axis=-1,
-        )
-        dims_to_diff = jnp.repeat(particles_near_ion, d)  # (n,)
-
-        z = jnp.where(dims_to_diff, 0.0, z)
-        z_to_diff = jnp.any(z != 0.0, axis=-1)
-
-        nz_fixed = jnp.count_nonzero(dims_to_diff)
-        nz_sample = jnp.count_nonzero(z_to_diff)
-
-        z = (
-            z
-            / jnp.linalg.norm(z, axis=-1, keepdims=True)
-            * jnp.sqrt((n - nz_fixed) / nz_sample)
-        )
+    if ni is not None:
+        vecs = jnp.eye(n, M=3, k=-3 * ni).T
+        length = 3
 
     def flattened_grad_log_psi_of_flat_x(flat_x_in):
         """Flattened input to flattened output version of grad_log_psi."""
         grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
         return jnp.reshape(grad_log_psi_out, (-1,))
 
-    def eval_deriv(vec):
-        primals, tangents = jax.jvp(flattened_grad_log_psi_of_flat_x, (flat_x,), (vec,))
-        return jnp.square(jnp.dot(vec, primals)) + jnp.dot(vec, tangents)
-
-    def step_fn(vecs, to_diff, carry, unused):
+    def step_fn(carry, unused):
         del unused
         i = carry[0]
-
-        result = jax.lax.cond(
-            to_diff[i],
-            lambda c: c + eval_deriv(vecs[i]),
-            lambda c: c,
-            carry[1],
+        primals, tangents = jax.jvp(
+            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
         )
+        return (
+            i + 1,
+            carry[1]
+            + jnp.square(jnp.dot(vecs[i], primals))
+            + jnp.dot(vecs[i], tangents),
+        ), None
 
-        return (i + 1, result), None
-
-    out, _ = jax.lax.scan(
-        lambda c, u: step_fn(eye, dims_to_diff, c, u),
-        (0, jnp.array(0.0)),
-        xs=None,
-        length=n,
-    )
-
-    if z is not None:
-        nz = z.shape[-2]
-        out, _ = jax.lax.scan(
-            lambda c, u: step_fn(z, z_to_diff, c, u),
-            (0, out[1]),
-            xs=None,
-            length=nz,
-        )
-
+    out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=length)
     return out[1]
 
 
@@ -282,8 +242,7 @@ def create_value_and_grad_energy_fn(
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
     get_energy_bwd: Callable = get_default_energy_bwd,
-    approximate_kinetic=False,
-    nz=1,
+    single_particle=False,
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -328,22 +287,16 @@ def create_value_and_grad_energy_fn(
 
     @jax.custom_vjp
     def compute_energy_data(params: P, positions: Array, key) -> EnergyData:
-        # n = positions.shape[-1] * positions.shape[-2]
-        n = positions.shape[-1] * positions.shape[-2]
+        n_particle = positions.shape[-1]
 
-        if approximate_kinetic:
-            z = jax.random.normal(
-                key,
-                shape=(
-                    *positions.shape[:-2],
-                    nz,
-                    n,
-                ),
+        i_particle = None
+
+        if single_particle:
+            i_particle = jax.random.randint(
+                key, shape=positions.shape[:-2], minval=0, maxval=n_particle
             )
-        else:
-            z = None
 
-        local_energies_noclip = local_energy_fn(params, positions, z)
+        local_energies_noclip = local_energy_fn(params, positions, i_particle)
 
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't

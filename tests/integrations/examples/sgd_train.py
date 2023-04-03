@@ -57,8 +57,7 @@ def sgd_vmc_loop_with_logging(
         log_psi_model.apply,
         local_energy_fn,
         nchains,
-        approximate_kinetic=True,
-        nz=1,
+        single_particle=True,
     )
     update_param_fn = updates.params.create_grad_energy_update_param_fn(
         energy_data_val_and_grad,
