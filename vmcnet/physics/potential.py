@@ -129,18 +129,17 @@ def create_electron_electron_coulomb_potential(
         )
         if single_particle:
             nbatch = electron_electron_distances.shape[0]
+            all_coulomb = strength / electron_electron_distances
+            nondiag_coulomb = jnp.triu(all_coulomb, k=1) + jnp.tril(all_coulomb, k=-1)
+            particle_coulomb = nondiag_coulomb[jnp.arange(nbatch), ni, :]
             result = (
                 jnp.sum(
-                    jnp.delete(
-                        strength
-                        / electron_electron_distances[jnp.arange(nbatch), ni, :],
-                        ni,
-                        axis=-1,
-                    ),
+                    particle_coulomb,
                     axis=-1,
                 )
                 / 2
             )
+
             print(f"EE shape: {result.shape}")
             return result
         else:
