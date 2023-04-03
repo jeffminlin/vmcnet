@@ -84,9 +84,16 @@ def create_electron_ion_coulomb_potential(
             electron_ion_displacements, softening_term=softening_term
         )
         coulomb_attraction = ion_charges / electron_ion_distances
+        print(f"Coulomb shape: {coulomb_attraction.shape}")
 
         if single_particle:
-            return -strength * jnp.sum(coulomb_attraction[..., ni, :], axis=-1)
+            nbatch = coulomb_attraction.shape[0]
+            result = -strength * jnp.sum(
+                coulomb_attraction[jnp.arange(nbatch), ni, :],
+                axis=-1,
+            )
+            print(f"EI shape: {result.shape}")
+            return result
         else:
             return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
 
@@ -121,15 +128,21 @@ def create_electron_electron_coulomb_potential(
             electron_electron_displacements, softening_term=softening_term
         )
         if single_particle:
-            return (
+            nbatch = electron_electron_distances.shape[0]
+            result = (
                 jnp.sum(
                     jnp.delete(
-                        strength / electron_electron_distances[..., ni, :], ni, axis=-1
+                        strength
+                        / electron_electron_distances[jnp.arange(nbatch), ni, :],
+                        ni,
+                        axis=-1,
                     ),
                     axis=-1,
                 )
                 / 2
             )
+            print(f"EE shape: {result.shape}")
+            return result
         else:
             return jnp.sum(
                 jnp.triu(strength / electron_electron_distances, k=1), axis=(-1, -2)

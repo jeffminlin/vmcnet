@@ -134,7 +134,12 @@ def laplacian_psi_over_psi(
     length = n
 
     if ni is not None:
-        vecs = jnp.eye(n, M=3, k=-3 * ni).T
+        vecs = jax.lax.dynamic_slice(
+            vecs,
+            [3 * ni, 0],
+            [3, n],
+        )
+        print(f"Vecs shape: {vecs.shape}")
         length = 3
 
     def flattened_grad_log_psi_of_flat_x(flat_x_in):
@@ -156,6 +161,7 @@ def laplacian_psi_over_psi(
         ), None
 
     out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=length)
+    print(f"Kinetic out: {out[1].shape}")
     return out[1]
 
 
@@ -297,6 +303,7 @@ def create_value_and_grad_energy_fn(
             )
 
         local_energies_noclip = local_energy_fn(params, positions, i_particle)
+        print(local_energies_noclip.shape)
 
         if clipping_fn is not None:
             # For the unclipped metrics, which are not used in the gradient, don't
