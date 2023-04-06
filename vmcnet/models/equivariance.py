@@ -688,9 +688,10 @@ def _compute_exponential_envelopes_on_leaf(
     distances = jnp.linalg.norm(scale_out, axis=-1)
     inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
 
-    # Multiply elementwise and sum over final axis, returning (..., nelec, nion)
+    # Multiply elementwise over final two axes and sum over final axis, returning
+    # (..., nelec, norbitals)
     return jnp.sum(
-        ElementWiseMultiply(kernel_init=kernel_initializer_ion)(inv_exp_distances),
+        ElementWiseMultiply(k=2, kernel_init=kernel_initializer_ion)(inv_exp_distances),
         axis=-1,
     )
 
