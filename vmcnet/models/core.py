@@ -206,6 +206,21 @@ class Dense(Module):
         return y
 
 
+class ElementWiseMultiply(Module):
+    """Multiplies over the last 2 axes element-wise."""
+
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+
+    @flax.linen.compact
+    def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
+        """DOes stuff"""
+
+        kernel = self.param(
+            "kernel", self.kernel_init, (inputs.shape[-2], inputs.shape[-1])
+        )
+        return inputs * kernel
+
+
 class LogDomainDense(Module):
     """A linear transformation applied on the last axis of the input, in the log domain.
 
