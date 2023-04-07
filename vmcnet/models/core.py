@@ -207,17 +207,17 @@ class Dense(Module):
 
 
 class ElementWiseMultiply(Module):
-    """Multiplies over the last k axes element-wise.
+    """Multiplies over the last naxes axes element-wise.
 
     Attributes:
-        k (int): the number of axes to involve in the operation. For example, if k=1,
-            the kernel will be of shape (inputs.shape[-1],), whereas if k=2, the kerenl
-            will be of shape (inputs.shape[-2], inputs.shape[1]).
+        naxes (int): the number of axes to involve in the operation. For example,
+            if k=1, the kernel will be of shape (inputs.shape[-1],), whereas if k=2,
+            the kerenl will be of shape (inputs.shape[-2], inputs.shape[1]).
         kernel_init (WeightInitializer, optional): initializer function for the weight
             matrix. Defaults to orthogonal initialization.
     """
 
-    k: int
+    naxes: int
     kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
 
     @flax.linen.compact
@@ -230,7 +230,7 @@ class ElementWiseMultiply(Module):
         Returns:
             Array: the input array multiplied element-wise by the kernel.
         """
-        kernel_shape = [inputs.shape[-self.k + i] for i in range(self.k)]
+        kernel_shape = [inputs.shape[-self.naxes + i] for i in range(self.naxes)]
         kernel = self.param("kernel", self.kernel_init, kernel_shape)
         return inputs * kernel
 

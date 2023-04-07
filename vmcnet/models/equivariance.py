@@ -691,7 +691,9 @@ def _compute_exponential_envelopes_on_leaf(
     # Multiply elementwise over final two axes and sum over final axis, returning
     # (..., nelec, norbitals)
     return jnp.sum(
-        ElementWiseMultiply(k=2, kernel_init=kernel_initializer_ion)(inv_exp_distances),
+        ElementWiseMultiply(naxes=2, kernel_init=kernel_initializer_ion)(
+            inv_exp_distances
+        ),
         axis=-1,
     )
 
