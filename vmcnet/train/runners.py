@@ -410,6 +410,7 @@ def _setup_vmc(
 # TODO: update output type hints when _get_mcmc_fns is made more general
 def _setup_eval(
     eval_config: ConfigDict,
+    problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
@@ -420,10 +421,15 @@ def _setup_eval(
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
+    ei_softening = problem_config.ei_softening
+    ee_softening = problem_config.ee_softening
+
     local_energy_fn = _assemble_mol_local_energy_fn(
         eval_config.local_energy_type,
         ion_pos,
         ion_charges,
+        ei_softening,
+        ee_softening,
         log_psi_apply,
     )
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
@@ -628,6 +634,7 @@ def run_molecule() -> None:
 
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
         config.eval,
+        config.problem,
         ion_pos,
         ion_charges,
         log_psi_apply,
