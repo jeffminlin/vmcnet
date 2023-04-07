@@ -73,7 +73,7 @@ def make_hydrogen_like_local_energy(
     ion_location = jnp.zeros((1, d))
     ion_charge = jnp.array([charge])
 
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
+    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
     potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_location, ion_charge
     )

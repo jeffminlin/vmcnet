@@ -284,6 +284,7 @@ def get_default_vmc_config() -> Dict:
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
+        "local_energy_type": "standard",  # [standard, ibp]
         "checkpoint_every": 5000,
         "best_checkpoint_every": 100,
         "checkpoint_dir": "checkpoints",
@@ -351,6 +352,7 @@ def get_default_eval_config() -> Dict:
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,
         "std_move": 0.25,
+        "local_energy_type": "standard",  # [standard, ibp]
         # if use_data_from_training=True, nchains, nmoves_per_width_update, and
         # std_move are completely ignored, and the data output from training is
         # used as the initial positions instead
