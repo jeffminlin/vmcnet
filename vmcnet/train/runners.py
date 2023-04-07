@@ -214,14 +214,18 @@ def _get_mcmc_fns(
 def _assemble_mol_local_energy_fn(
     ion_pos: Array,
     ion_charges: Array,
+    ei_softening: chex.Scalar,
+    ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
     # Define parameter updates
     kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-        ion_pos, ion_charges
+        ion_pos, ion_charges, softening_term=ei_softening
     )
-    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential()
+    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
+        softening_term=ee_softening
+    )
     ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
         ion_pos, ion_charges
     )
@@ -277,11 +281,17 @@ def _get_clipping_fn(
 
 def _get_energy_fns(
     vmc_config: ConfigDict,
+    problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
 ) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
+    ei_softening = problem_config.ei_softening
+    ee_softening = problem_config.ee_softening
+
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        ion_pos, ion_charges, ei_softening, ee_softening, log_psi_apply
+    )
     clipping_fn = _get_clipping_fn(vmc_config)
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
@@ -346,7 +356,7 @@ def _setup_vmc(
     )
 
     local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi_apply
+        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
     )
 
     # Setup parameter updates
