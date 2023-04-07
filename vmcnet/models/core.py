@@ -206,6 +206,35 @@ class Dense(Module):
         return y
 
 
+class ElementWiseMultiply(Module):
+    """Multiplies over the last naxes axes element-wise.
+
+    Attributes:
+        naxes (int): the number of axes to involve in the operation. For example,
+            if k=1, the kernel will be of shape (inputs.shape[-1],), whereas if k=2,
+            the kerenl will be of shape (inputs.shape[-2], inputs.shape[1]).
+        kernel_init (WeightInitializer, optional): initializer function for the weight
+            matrix. Defaults to orthogonal initialization.
+    """
+
+    naxes: int
+    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
+
+    @flax.linen.compact
+    def __call__(self, inputs: Array) -> Array:  # type: ignore[override]
+        """Multiplies inputs element-wise by a kernel of parameters.
+
+        Args:
+            inputs (Array): Array of inputs.
+
+        Returns:
+            Array: the input array multiplied element-wise by the kernel.
+        """
+        kernel_shape = [inputs.shape[-self.naxes + i] for i in range(self.naxes)]
+        kernel = self.param("kernel", self.kernel_init, kernel_shape)
+        return inputs * kernel
+
+
 class LogDomainDense(Module):
     """A linear transformation applied on the last axis of the input, in the log domain.
 

@@ -12,6 +12,7 @@ from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
+    ElementWiseMultiply,
     Module,
     _split_mean,
     _valid_skip,
@@ -687,17 +688,14 @@ def _compute_exponential_envelopes_on_leaf(
     distances = jnp.linalg.norm(scale_out, axis=-1)
     inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
 
-    # norbitals parallel maps return shape [norbitals: (..., nelec, 1, 1)]
-    lin_comb_nion = SplitDense(
-        norbitals,
-        (1,) * norbitals,
-        kernel_initializer=kernel_initializer_ion,
-        use_bias=False,
-    )(inv_exp_distances)
-    # Concatenate to shape (..., nelec, norbitals, 1)
-    lin_comb_nion_concat = jnp.concatenate(lin_comb_nion, axis=-2)
-
-    return jnp.squeeze(lin_comb_nion_concat, axis=-1)  # (..., nelec, norbitals)
+    # Multiply elementwise over final two axes and sum over final axis, returning
+    # (..., nelec, norbitals)
+    return jnp.sum(
+        ElementWiseMultiply(naxes=2, kernel_init=kernel_initializer_ion)(
+            inv_exp_distances
+        ),
+        axis=-1,
+    )
 
 
 def _compute_exponential_envelopes_all_splits(
