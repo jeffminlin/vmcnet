@@ -48,7 +48,8 @@ def test_five_particle_ground_state_harmonic_oscillator():
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         omega, log_psi_model.apply
     )
-    local_energies = local_energy_fn(params, random_particle_positions)
+    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
+    local_energies = vmapped_local_e(params, random_particle_positions)
 
     np.testing.assert_allclose(
         local_energies, omega * (0.5 + 1.5 + 0.5 + 1.5 + 2.5) * jnp.ones(4), rtol=1e-5
@@ -107,6 +108,57 @@ def test_harmonic_oscillator_vmc(caplog):
     # Grab the one parameter and make sure it converged to sqrt(spring constant)
     np.testing.assert_allclose(
         jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=1e-6
+    )
+
+
+@pytest.mark.slow
+def test_harmonic_oscillator_vmc_ibp(caplog):
+    """Test that VMC loop runs without errors when using IBP gradient estimator."""
+    # Problem parameters
+    model_omega = 2.5
+    spring_constant = 1.5
+
+    # Training hyperparameters
+    nchains = 100 * jax.local_device_count()
+    nburn = 100
+    nepochs = 50
+    nsteps_per_param_update = 5
+    std_move = 0.25
+    learning_rate = 1e-2
+
+    # Initialize model and chains of walkers
+    (
+        log_psi_model,
+        params,
+        random_particle_positions,
+        amplitudes,
+        key,
+    ) = _make_initial_params_and_data(model_omega, nchains)
+    data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
+
+    # Local energy function
+    local_energy_fn = qho.make_harmonic_oscillator_local_energy(
+        spring_constant, log_psi_model.apply, use_ibp=True
+    )
+
+    _, params, _, _ = sgd_vmc_loop_with_logging(
+        caplog,
+        data,
+        params,
+        key,
+        nchains,
+        nburn,
+        nepochs,
+        nsteps_per_param_update,
+        std_move,
+        learning_rate,
+        log_psi_model,
+        local_energy_fn,
+    )
+
+    # Just verify that the parameter is within a rough ballpark of the correct answer.
+    np.testing.assert_allclose(
+        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=0.5
     )
 
 

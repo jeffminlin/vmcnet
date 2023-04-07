@@ -167,7 +167,7 @@ def harmonic_oscillator_potential(omega: chex.Scalar, x: Array) -> chex.Numeric:
 
 
 def make_harmonic_oscillator_local_energy(
-    omega: chex.Scalar, log_psi_apply: ModelApply[P]
+    omega: chex.Scalar, log_psi_apply: ModelApply[P], use_ibp: bool = False
 ) -> ModelApply[P]:
     """Factory to create a local energy fn for the harmonic oscillator log|psi|.
 
@@ -176,17 +176,22 @@ def make_harmonic_oscillator_local_energy(
         log_psi_apply (Callable): function which evaluates log|psi| for a harmonic
             oscillator model wavefunction psi. Has the signature
             (params, x) -> log|psi(x)|.
+        use_ibp (bool): whether to use integration by parts, i.e. replacing the
+            Laplacian kinetic energy with the gradient-squared kinetic energy.
 
     Returns:
         Callable: local energy function with the signature (params, x) -> local energy
         associated to the wavefunction psi
     """
-    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+    if use_ibp:
+        kinetic_fn = physics.kinetic.create_gradient_squared_kinetic_energy(
+            log_psi_apply
+        )
+    else:
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
 
     def potential_fn(params: P, x: Array):
         del params
         return harmonic_oscillator_potential(omega, x)
-
-    potential_fn = jax.vmap(potential_fn, in_axes=(None, 0), out_axes=0)
 
     return physics.core.combine_local_energy_terms([kinetic_fn, potential_fn])
