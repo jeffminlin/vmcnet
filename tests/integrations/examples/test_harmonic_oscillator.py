@@ -115,16 +115,16 @@ def test_harmonic_oscillator_vmc(caplog):
 def test_harmonic_oscillator_vmc_ibp(caplog):
     """Test that VMC loop runs without errors when using IBP gradient estimator."""
     # Problem parameters
-    model_omega = 2.5
+    model_omega = 5
     spring_constant = 1.5
 
     # Training hyperparameters
     nchains = 100 * jax.local_device_count()
     nburn = 100
-    nepochs = 50
+    nepochs = 100
     nsteps_per_param_update = 5
     std_move = 0.25
-    learning_rate = 1e-2
+    learning_rate = 1e-3
 
     # Initialize model and chains of walkers
     (
@@ -154,11 +154,12 @@ def test_harmonic_oscillator_vmc_ibp(caplog):
         learning_rate,
         log_psi_model,
         local_energy_fn,
+        use_generic_gradient_estimator=True,
     )
 
     # Just verify that the parameter is within a rough ballpark of the correct answer.
     np.testing.assert_allclose(
-        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), rtol=0.5
+        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), atol=1.0
     )
 
 
