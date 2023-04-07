@@ -9,7 +9,7 @@ def test_kinetic_energy_shape():
     _, log_f = make_dummy_log_f()
     x = make_dummy_x()
 
-    kinetic_energy_fn = physics.kinetic.create_continuous_kinetic_energy(log_f)
+    kinetic_energy_fn = physics.kinetic.create_laplacian_kinetic_energy(log_f)
     kinetic_energies = kinetic_energy_fn(None, x)
 
     assert kinetic_energies.shape == (x.shape[0],)

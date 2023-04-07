@@ -182,6 +182,7 @@ def get_statistics_from_local_energy(
 def get_clipped_energies_and_aux_data(
     local_energies_noclip: Array, nchains: int, clipping_fn: ClippingFn, nan_safe: bool
 ) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
+    """Clip local energies if requested and return auxiliary data."""
     if clipping_fn is not None:
         # For the unclipped metrics, which are not used in the gradient, don't
         # do these in a nan-safe way. This makes nans more visible and makes sure
@@ -300,7 +301,9 @@ def create_value_and_grad_energy_fn(
         return (energy, aux_data), grad_E
 
     def standard_energy_val_and_grad(params, positions):
-        local_energies_noclip = local_energy_fn(params, positions)
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0), out_axes=0
+        )(params, positions)
 
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
             local_energies_noclip, nchains, clipping_fn, nan_safe

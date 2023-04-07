@@ -237,7 +237,9 @@ def create_eval_update_param_fn(
     """
 
     def eval_update_param_fn(params, data, optimizer_state, key):
-        local_energies = local_energy_fn(params, get_position_fn(data))
+        local_energies = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)(
+            params, get_position_fn(data)
+        )
         energy, variance = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )

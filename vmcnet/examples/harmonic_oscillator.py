@@ -181,7 +181,7 @@ def make_harmonic_oscillator_local_energy(
         Callable: local energy function with the signature (params, x) -> local energy
         associated to the wavefunction psi
     """
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
+    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
 
     def potential_fn(params: P, x: Array):
         del params
