@@ -337,7 +337,7 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
             },
         },
-        "gradient_estimator": "standard",  # [standard, generic]
+        "use_generic_gradient_estimator": False,
         "local_energy_type": "standard",  # [standard, ibp, hutch, random_particle]
         "local_energy": {
             "hutch": {

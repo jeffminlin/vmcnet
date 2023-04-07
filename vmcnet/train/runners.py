@@ -299,6 +299,7 @@ def _get_energy_fns(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
+        use_generic_gradient_estimator=vmc_config.use_generic_gradient_estimator,
     )
 
     return local_energy_fn, energy_data_val_and_grad
