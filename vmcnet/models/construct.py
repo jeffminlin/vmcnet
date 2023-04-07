@@ -885,13 +885,16 @@ class FermiNet(Module):
         self.ion_pos=self.compute_input_streams.keywords['ion_pos']
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
         self.rcZ=self.mindist/8
-        self._rcZ=self.mindist/4
+
+        def bump1d(r):
+            return flax.linen.sigmoid(6-12*r)
+            #return 1-flax.linen.sigmoid(2*r2-1)
+            #return jnp.exp(-1/(1-r2))*(r2<1)
 
         def bumpfunction(X,supportwidth):
             X=X/supportwidth
-            r2=jnp.sum(X**2,axis=-1)
-            #return jnp.exp(-1/(1-r2))*(r2<1)
-            return 1-flax.linen.sigmoid(2*r2-1)
+            r=jnp.sqrt(jnp.sum(X**2,axis=-1))
+            return bump1d(r)
 
         def snap(X,ion_pos,rcZ):
             indiv_bumps=bumpfunction(X[None,:,...]-ion_pos[:,None,None,:],rcZ)
@@ -908,10 +911,10 @@ class FermiNet(Module):
 
 
         def localized(f,X):
-            return bumpfunction(X,self._rcZ)*f(X)
+            return bumpfunction(X,self.rcZ)*f(X)
 
-        self.snap=functools.partial(snap2,ion_pos=self.ion_pos,rcZ=self._rcZ)
-        self.localized=functools.partial(localized,self._rcZ)
+        self.snap=functools.partial(snap2,ion_pos=self.ion_pos,rcZ=self.rcZ)
+        self.localized=functools.partial(localized,self.rcZ)
 
         self._f_clZ=[f_clZ(),f_clZ(),f_clZ()]
         self.f_clZ=[functools.partial(localized,f) for f in self._f_clZ]
