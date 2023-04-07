@@ -163,6 +163,7 @@ def get_default_model_config() -> Dict:
         "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
+        "fastcore": False,
     }
 
     invariance_for_antieq = {

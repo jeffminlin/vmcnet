@@ -167,6 +167,7 @@ def get_model_from_config(
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
                 full_det=model_config.full_det,
+                fastcore=model_config.fastcore,
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -846,6 +847,7 @@ class FermiNet(Module):
     determinant_fn: Optional[DeterminantFn]
     determinant_fn_mode: DeterminantFnMode
     full_det: bool
+    fastcore: bool
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
@@ -885,14 +887,11 @@ class FermiNet(Module):
         self.rcZ=self.mindist/8
         self._rcZ=self.mindist/4
 
-        import flax.linen as nn
-        from functools import partial
-
         def bumpfunction(X,supportwidth):
             X=X/supportwidth
             r2=jnp.sum(X**2,axis=-1)
             #return jnp.exp(-1/(1-r2))*(r2<1)
-            return 1-nn.sigmoid(2*r2-1)
+            return 1-flax.linen.sigmoid(2*r2-1)
 
         def snap(X,ion_pos,rcZ):
             indiv_bumps=bumpfunction(X[None,:,...]-ion_pos[:,None,None,:],rcZ)
@@ -901,15 +900,26 @@ class FermiNet(Module):
             X=jnp.sum(ion_pos[:,None,None,:]*indiv_bumps[:,:,:,None],axis=0)+complement*X
             return X
 
+        def snap2(X,ion_pos,rcZ):
+            if len(X.shape)==2:
+                return snap(X[None,:,...],ion_pos,rcZ)[0]
+            else:
+                return snap(X,ion_pos,rcZ)
+
+
         def localized(f,X):
             return bumpfunction(X,self._rcZ)*f(X)
 
-        self.snap=partial(snap,ion_pos=self.ion_pos,rcZ=self._rcZ)
-        self.localized=partial(localized,self._rcZ)
+        self.snap=functools.partial(snap2,ion_pos=self.ion_pos,rcZ=self._rcZ)
+        self.localized=functools.partial(localized,self._rcZ)
 
         self._f_clZ=[f_clZ(),f_clZ(),f_clZ()]
-        self.f_clZ=[partial(localized,f) for f in self._f_clZ]
-        self.a_iIl=nn.Dense(features=2*self.spin_split[0])
+        self.f_clZ=[functools.partial(localized,f) for f in self._f_clZ]
+        self.a_iIl=flax.linen.Dense(features=2*self.spin_split[0])
+
+        #import sys 
+        #if 'f' in sys.argv:
+        #    self.fastcore=True
 
     def _calculate_psi_parallel_even(self, fn_inputs: ArrayList):
         """Calculate psi as an even fn. times products of corresponding determinants.
@@ -1002,7 +1012,7 @@ class FermiNet(Module):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos_og: Array) -> SLArray:  # type: ignore[override]
+    def __call__(self, elec_pos_og: Array, fastcoretest: bool=False) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
@@ -1017,7 +1027,11 @@ class FermiNet(Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
 
-        elec_pos=self.snap(elec_pos_og)
+        if self.fastcore or fastcoretest:
+            print('fastcore test')
+            elec_pos=self.snap(elec_pos_og)
+        else:
+            elec_pos=elec_pos_og
 
 
 
@@ -1059,19 +1073,22 @@ class FermiNet(Module):
             return array_to_slog(psi)
 
 
-        f_clZ=[[f(elec_pos_og-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
-        f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
+        #fastcoretest verifies that the backflow does not change near a nucleus
+        if self.fastcore and not fastcoretest:
+            f_clZ=[[f(elec_pos_og-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
+            f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
 
-
-        breakpoint()
-        orbitals[0]+=self.a_iIl(f_clZ)[:,...,:orbitals[0].shape[-1]]
+            term=self.a_iIl(f_clZ)
+            if len(elec_pos.shape)==2:
+                orbitals[0]+=term[None,:,:orbitals[0].shape[-1]]
+            else:
+                orbitals[0]+=term[None,:,:,:orbitals[0].shape[-1]]
 
 
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
-        out=slog_sum_over_axis(slog_det_prods)
-        return out
+        return slog_sum_over_axis(slog_det_prods)
 
 
 class EmbeddedParticleFermiNet(FermiNet):
