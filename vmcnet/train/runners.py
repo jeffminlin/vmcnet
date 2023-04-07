@@ -213,16 +213,12 @@ def _get_mcmc_fns(
 # TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
     local_energy_type: str,
-    local_energy_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
-    del local_energy_config
-
-    # TODO (ggoldsh): implement hutch and random_particle
     if local_energy_type == "standard":
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
     elif local_energy_type == "ibp":
@@ -305,7 +301,6 @@ def _get_energy_val_and_grad_fn(
 
     local_energy_fn = _assemble_mol_local_energy_fn(
         vmc_config.local_energy_type,
-        vmc_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,
@@ -427,7 +422,6 @@ def _setup_eval(
 ]:
     local_energy_fn = _assemble_mol_local_energy_fn(
         eval_config.local_energy_type,
-        eval_config.local_energy,
         ion_pos,
         ion_charges,
         log_psi_apply,
