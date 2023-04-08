@@ -225,6 +225,11 @@ def _assemble_mol_local_energy_fn(
         kinetic_fn = physics.kinetic.create_gradient_squared_kinetic_energy(
             log_psi_apply
         )
+    elif local_energy_type == "ibp_full":
+        local_energy_fn = physics.kinetic.create_ibp_energy(
+            log_psi_apply, ion_pos, ion_charges
+        )
+        return local_energy_fn
     else:
         raise ValueError(
             f"Requested local energy type {local_energy_type} is not supported"
