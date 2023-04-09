@@ -180,7 +180,7 @@ def get_statistics_from_local_energy(
 
 
 def get_clipped_energies_and_aux_data(
-    local_energies_noclip: Array, nchains: int, clipping_fn: ClippingFn, nan_safe: bool
+    local_energies_noclip: Array, nchains: int, clipping_fn: Optional[ClippingFn], nan_safe: bool
 ) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
     """Clip local energies if requested and return auxiliary data."""
     if clipping_fn is not None:
@@ -287,7 +287,7 @@ def create_value_and_grad_energy_fn(
         generic_contribution = jax.tree_map(mean_grad_fn, local_energy_grads)
 
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+            local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
         )
 
         centered_local_energies = local_energies - energy

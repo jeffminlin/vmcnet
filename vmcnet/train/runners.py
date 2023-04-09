@@ -226,8 +226,15 @@ def _assemble_mol_local_energy_fn(
             log_psi_apply
         )
     elif local_energy_type == "ibp_full":
-        local_energy_fn = physics.kinetic.create_ibp_energy(
+        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+            ion_pos, ion_charges
+        )
+        ibp_energy = physics.kinetic.create_ibp_energy(
             log_psi_apply, ion_pos, ion_charges
+        )
+
+        local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
+            [ibp_energy, ii_potential_fn]
         )
         return local_energy_fn
     else:
@@ -320,7 +327,10 @@ def _get_energy_val_and_grad_fn(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        use_generic_gradient_estimator=vmc_config.local_energy_type == "ibp",
+        use_generic_gradient_estimator=(
+            vmc_config.local_energy_type == "ibp"
+            or vmc_config.local_energy_type == "ibp_full"
+        ),
     )
 
     return energy_data_val_and_grad

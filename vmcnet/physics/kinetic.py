@@ -1,4 +1,5 @@
 """Kinetic energy terms."""
+from functools import partial
 from typing import Callable
 
 import chex
@@ -75,25 +76,37 @@ def _compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
     return jnp.expand_dims(x, axis=-2) - jnp.expand_dims(y, axis=-3)
 
 
-def _compute_soft_norm(
-    displacements: ArrayLike, softening_term: chex.Scalar = 0.0
-) -> Array:
+@jax.custom_vjp
+def _differentiable_norm(displacements: ArrayLike) -> Array:
     """Compute an (optionally softened) norm, sqrt((sum_i x_i^2) + softening_term^2).
 
     Args:
         displacements (Array): array of shape (..., d)
-        softening_term (chex.Scalar, optional): this amount squared is added to
-            sum_i x_i^2 before taking the sqrt. The smaller this term, the closer the
-            derivative gets to a step function (but the derivative is continuous except
-            for for softening term exactly equal to zero!). When zero, gives the usual
-            vector 2-norm. Defaults to 0.0.
 
     Returns:
         Array: array with shape displacements.shape[:-1]
     """
-    return jnp.sqrt(
-        jnp.sum(jnp.square(displacements), axis=-1) + jnp.square(softening_term)
+    return jnp.sqrt(jnp.sum(jnp.square(displacements), axis=-1))
+
+
+def f_fwd(displacements):
+    norm = _differentiable_norm(displacements)
+    return (
+        norm,
+        (
+            norm,
+            displacements,
+        ),
     )
+
+
+def f_bwd(res, g):
+    (norm, displacements) = res
+    norm = jnp.expand_dims(norm, axis=-1)
+    return (jnp.expand_dims(g, -1) * jnp.where(norm == 0, 0.0, displacements / norm),)
+
+
+_differentiable_norm.defvjp(f_fwd, f_bwd)
 
 
 def create_ibp_energy(
@@ -103,16 +116,25 @@ def create_ibp_energy(
 ) -> ModelApply[P]:
     def U(x: ArrayLike):
         electron_ion_displacements = _compute_displacements(x, ion_locations)
-        electron_ion_distances = _compute_soft_norm(electron_ion_displacements)
+        electron_ion_distances = jnp.linalg.norm(electron_ion_displacements, axis=-1)
         ei_coulomb_cone = ion_charges * electron_ion_distances / 2
-        ei_contribution = jnp.sum(ei_coulomb_cone, axis=(-1, -2))
+        print(f"ei cone: {ei_coulomb_cone.shape}")
+        ei_contribution = -jnp.sum(ei_coulomb_cone, axis=(-1, -2))
+        print(f"ei contribution: {ei_contribution.shape}")
 
         electron_electron_displacements = _compute_displacements(x, x)
-        electron_electron_distances = _compute_soft_norm(
+        electron_electron_distances = _differentiable_norm(
             electron_electron_displacements
         )
         ee_coulomb_cone = electron_electron_distances / 4
-        ee_contribution = jnp.sum(jnp.triu(ee_coulomb_cone, k=1), axis=(-1, -2))
+        print(f"ee cone: {ee_coulomb_cone.shape}")
+        ee_coulomb_cone = jnp.triu(ee_coulomb_cone, k=1)
+        print(f"ee cone: {ee_coulomb_cone.shape}")
+        ee_contribution = jnp.sum(
+            ee_coulomb_cone,
+            axis=(-1, -2),
+        )
+        print(f"ee contribution: {ee_contribution.shape}")
 
         return ei_contribution + ee_contribution
 
@@ -122,8 +144,8 @@ def create_ibp_energy(
     def local_energy_fn(params: P, x: Array) -> Array:
         grad_log_psi = grad_log_psi_apply(params, x)
         gradU = gradU_apply(x)
-        return 0.5 * jnp.linalg.norm(grad_log_psi) ** 2 - jnp.dot(
-            grad_log_psi_apply, gradU
-        )
+        print(f"Grad U: {gradU.shape}")
+        print(f"Grad log psi: {grad_log_psi.shape}")
+        return 0.5 * jnp.sum(grad_log_psi**2) - 2 * jnp.sum(grad_log_psi * gradU)
 
     return local_energy_fn
