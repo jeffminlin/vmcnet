@@ -184,9 +184,7 @@ def make_harmonic_oscillator_local_energy(
         associated to the wavefunction psi
     """
     if use_ibp:
-        kinetic_fn = physics.kinetic.create_gradient_squared_kinetic_energy(
-            log_psi_apply
-        )
+        kinetic_fn = physics.ibp.create_gradient_squared_kinetic_energy(log_psi_apply)
     else:
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
 

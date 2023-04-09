@@ -180,7 +180,10 @@ def get_statistics_from_local_energy(
 
 
 def get_clipped_energies_and_aux_data(
-    local_energies_noclip: Array, nchains: int, clipping_fn: Optional[ClippingFn], nan_safe: bool
+    local_energies_noclip: Array,
+    nchains: int,
+    clipping_fn: Optional[ClippingFn],
+    nan_safe: bool,
 ) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
     """Clip local energies if requested and return auxiliary data."""
     if clipping_fn is not None:

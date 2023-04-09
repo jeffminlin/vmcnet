@@ -21,7 +21,7 @@ def test_electron_electron_add_norm():
             [[13, 14, 15], [16, 17, 18]],
         ]
     )
-    target_input_2e = physics.potential._compute_displacements(elec_pos, elec_pos)
+    target_input_2e = physics.potential.compute_displacements(elec_pos, elec_pos)
     target_input_2e = jnp.concatenate(
         [target_input_2e, jnp.linalg.norm(target_input_2e, axis=-1, keepdims=True)],
         axis=-1,

@@ -219,24 +219,19 @@ def _assemble_mol_local_energy_fn(
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
-    if local_energy_type == "standard":
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
-    elif local_energy_type == "ibp":
-        kinetic_fn = physics.kinetic.create_gradient_squared_kinetic_energy(
-            log_psi_apply
-        )
-    elif local_energy_type == "ibp_full":
-        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-            ion_pos, ion_charges
-        )
-        ibp_energy = physics.kinetic.create_ibp_energy(
-            log_psi_apply, ion_pos, ion_charges
-        )
-
-        local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
-            [ibp_energy, ii_potential_fn]
+    if local_energy_type == "ibp_full":
+        local_energy_fn: ModelApply[P] = physics.ibp.create_ibp_local_energy(
+            log_psi_apply,
+            ion_pos,
+            ion_charges,
+            ei_softening,
+            ee_softening,
         )
         return local_energy_fn
+    elif local_energy_type == "standard":
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+    elif local_energy_type == "ibp":
+        kinetic_fn = physics.ibp.create_gradient_squared_kinetic_energy(log_psi_apply)
     else:
         raise ValueError(
             f"Requested local energy type {local_energy_type} is not supported"
@@ -252,7 +247,7 @@ def _assemble_mol_local_energy_fn(
         ion_pos, ion_charges
     )
 
-    local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
+    local_energy_fn = physics.core.combine_local_energy_terms(
         [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
     )
 
