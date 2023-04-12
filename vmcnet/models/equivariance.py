@@ -6,7 +6,7 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.physics.potential import _compute_displacements
+from vmcnet.physics.potential import compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
@@ -122,7 +122,7 @@ def compute_electron_ion(
     r_ei = None
     input_1e = elec_pos
     if ion_pos is not None:
-        r_ei = _compute_displacements(input_1e, ion_pos)
+        r_ei = compute_displacements(input_1e, ion_pos)
         input_1e = r_ei
         if include_ei_norm:
             input_norm = jnp.linalg.norm(input_1e, axis=-1, keepdims=True)
@@ -150,7 +150,7 @@ def compute_electron_electron(
 
         second output: two-electron displacements of shape (..., nelec, nelec, d)
     """
-    r_ee = _compute_displacements(elec_pos, elec_pos)
+    r_ee = compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
         r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)

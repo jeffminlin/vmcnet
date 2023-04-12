@@ -213,38 +213,45 @@ def _get_mcmc_fns(
 # TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
     local_energy_type: str,
+    local_energy_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
-    if local_energy_type == "standard":
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
-    elif local_energy_type == "ibp":
-        kinetic_fn = physics.kinetic.create_gradient_squared_kinetic_energy(
-            log_psi_apply
+    if local_energy_type == "ibp":
+        local_energy_fn: ModelApply[P] = physics.ibp.create_ibp_local_energy(
+            log_psi_apply,
+            ion_pos,
+            ion_charges,
+            local_energy_config.ibp.kinetic,
+            local_energy_config.ibp.ei,
+            ei_softening,
+            local_energy_config.ibp.ee,
+            ee_softening,
         )
+        return local_energy_fn
+    elif local_energy_type == "standard":
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+
+        ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+            ion_pos, ion_charges, softening_term=ei_softening
+        )
+        ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
+            softening_term=ee_softening
+        )
+        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+            ion_pos, ion_charges
+        )
+        local_energy_fn = physics.core.combine_local_energy_terms(
+            [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+        )
+        return local_energy_fn
     else:
         raise ValueError(
             f"Requested local energy type {local_energy_type} is not supported"
         )
-
-    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-        ion_pos, ion_charges, softening_term=ei_softening
-    )
-    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
-        softening_term=ee_softening
-    )
-    ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-        ion_pos, ion_charges
-    )
-
-    local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
-        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
-    )
-
-    return local_energy_fn
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -301,6 +308,7 @@ def _get_energy_val_and_grad_fn(
 
     local_energy_fn = _assemble_mol_local_energy_fn(
         vmc_config.local_energy_type,
+        vmc_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,
@@ -426,6 +434,7 @@ def _setup_eval(
 
     local_energy_fn = _assemble_mol_local_energy_fn(
         eval_config.local_energy_type,
+        eval_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,

@@ -2,12 +2,13 @@
 from typing import Tuple
 
 import chex
+import jax
 import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, ArrayLike, ModelApply, ModelParams
 
 
-def _compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
+def compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
     """Compute the pairwise displacements between x and y in the second-to-last dim.
 
     Args:
@@ -20,7 +21,13 @@ def _compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
     return jnp.expand_dims(x, axis=-2) - jnp.expand_dims(y, axis=-3)
 
 
-def _compute_soft_norm(
+# NOTE: the custom VJP on this method returns 0.0 for the gradient when the norm is
+# zero, even though technically the gradient is undefined in this case. This is
+# currently necessary to ensure that the EE potential energyd oesn't give nans when
+# using the IBP formulation.
+# TODO (ggoldsh): rewrite the EE term of the IBP method to avoid this issue.
+@jax.custom_vjp
+def compute_soft_norm(
     displacements: ArrayLike, softening_term: chex.Scalar = 0.0
 ) -> Array:
     """Compute an (optionally softened) norm, sqrt((sum_i x_i^2) + softening_term^2).
@@ -41,11 +48,36 @@ def _compute_soft_norm(
     )
 
 
+def _soft_norm_forward(displacements, softening_term):
+    norm = compute_soft_norm(displacements, softening_term)
+    return (
+        norm,
+        (
+            norm,
+            displacements,
+            softening_term,
+        ),
+    )
+
+
+def _soft_norm_bwd(res, g):
+    (norm, displacements, softening_term) = res
+    expanded_norm = jnp.expand_dims(norm, axis=-1)
+    return (
+        jnp.expand_dims(g, -1)
+        * jnp.where(expanded_norm == 0.0, 0.0, displacements / expanded_norm),
+        g * jnp.sum(softening_term / norm),
+    )
+
+
+compute_soft_norm.defvjp(_soft_norm_forward, _soft_norm_bwd)
+
+
 def _get_ion_ion_info(
     ion_locations: ArrayLike, ion_charges: ArrayLike
 ) -> Tuple[Array, Array]:
     """Get pairwise ion-ion displacements and charge-charge products."""
-    ion_ion_displacements = _compute_displacements(ion_locations, ion_locations)
+    ion_ion_displacements = compute_displacements(ion_locations, ion_locations)
     charge_charge_prods = jnp.expand_dims(ion_charges, axis=-1) * ion_charges
     return ion_ion_displacements, charge_charge_prods
 
@@ -78,8 +110,8 @@ def create_electron_ion_coulomb_potential(
 
     def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
         del params
-        electron_ion_displacements = _compute_displacements(x, ion_locations)
-        electron_ion_distances = _compute_soft_norm(
+        electron_ion_displacements = compute_displacements(x, ion_locations)
+        electron_ion_distances = compute_soft_norm(
             electron_ion_displacements, softening_term=softening_term
         )
         coulomb_attraction = ion_charges / electron_ion_distances
@@ -109,8 +141,8 @@ def create_electron_electron_coulomb_potential(
 
     def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
         del params
-        electron_electron_displacements = _compute_displacements(x, x)
-        electron_electron_distances = _compute_soft_norm(
+        electron_electron_displacements = compute_displacements(x, x)
+        electron_electron_distances = compute_soft_norm(
             electron_electron_displacements, softening_term=softening_term
         )
         return jnp.sum(
@@ -140,7 +172,7 @@ def create_ion_ion_coulomb_potential(
     ion_ion_displacements, charge_charge_prods = _get_ion_ion_info(
         ion_locations, ion_charges
     )
-    ion_ion_distances = _compute_soft_norm(ion_ion_displacements)
+    ion_ion_distances = compute_soft_norm(ion_ion_displacements)
     constant_potential = jnp.sum(
         jnp.triu(charge_charge_prods / ion_ion_distances, k=1), axis=(-1, -2)
     )

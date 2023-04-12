@@ -180,7 +180,10 @@ def get_statistics_from_local_energy(
 
 
 def get_clipped_energies_and_aux_data(
-    local_energies_noclip: Array, nchains: int, clipping_fn: ClippingFn, nan_safe: bool
+    local_energies_noclip: Array,
+    nchains: int,
+    clipping_fn: Optional[ClippingFn],
+    nan_safe: bool,
 ) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
     """Clip local energies if requested and return auxiliary data."""
     if clipping_fn is not None:
@@ -272,11 +275,17 @@ def create_value_and_grad_energy_fn(
     ) -> chex.Numeric:
         log_psi = log_psi_apply(params, positions)
         kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
-        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)
+        # NOTE: for the generic gradient estimator case it may be important to include
+        # the (nchains / nchains -1) factor here to make sure the standard and generic
+        # gradient terms aren't mismatched by a slight scale factor.
+        return (
+            2.0
+            * nchains
+            / (nchains - 1)
+            * mean_grad_fn(centered_local_energies * log_psi)
+        )
 
     def generic_energy_val_and_grad(params, positions):
-        # TODO (ggoldsh): think about whether there should be some type of
-        # clipping of the generic contribution to the gradient estimator.
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
             val_and_grad_local_energy, in_axes=(None, 0), out_axes=0
@@ -286,8 +295,11 @@ def create_value_and_grad_energy_fn(
         )
         generic_contribution = jax.tree_map(mean_grad_fn, local_energy_grads)
 
+        # Gradient clipping seems to make the optimization fail miserably when using
+        # the generic gradient estimator, so setting clipping_fn=None here.
+        # TODO (ggoldsh): investigate this phenomenon further.
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+            local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
         )
 
         centered_local_energies = local_energies - energy
