@@ -3,6 +3,7 @@ from typing import Callable
 
 import chex
 import flax
+import jax
 import jax.numpy as jnp
 
 import vmcnet.models as models

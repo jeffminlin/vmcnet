@@ -1,4 +1,5 @@
 """Core local energy and gradient construction routines."""
+import functools
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex
@@ -14,7 +15,7 @@ EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
 ]
 EnergyData = Tuple[chex.Numeric, EnergyAuxData]
-ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
+ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
@@ -223,6 +224,7 @@ def create_value_and_grad_energy_fn(
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
     use_generic_gradient_estimator: bool = False,
+    shuffle_particles: bool = False,
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -285,7 +287,9 @@ def create_value_and_grad_energy_fn(
             * mean_grad_fn(centered_local_energies * log_psi)
         )
 
-    def generic_energy_val_and_grad(params, positions):
+    def generic_energy_val_and_grad(params, key, positions):
+        del key
+
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
             val_and_grad_local_energy, in_axes=(None, 0), out_axes=0
@@ -312,7 +316,12 @@ def create_value_and_grad_energy_fn(
 
         return (energy, aux_data), grad_E
 
-    def standard_energy_val_and_grad(params, positions):
+    def standard_energy_val_and_grad(params, key, positions):
+        if shuffle_particles:
+            key = jax.random.split(key, positions.shape[0])
+            permute_fn = functools.partial(jax.random.permutation, axis=-2)
+            positions = jax.vmap(permute_fn)(key, positions)
+
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0), out_axes=0
         )(params, positions)

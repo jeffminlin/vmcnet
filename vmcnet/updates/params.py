@@ -104,7 +104,9 @@ def create_grad_energy_update_param_fn(
 
     def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
-        energy_data, grad_energy = energy_data_val_and_grad(params, position)
+        key, subkey = jax.random.split(key)
+
+        energy_data, grad_energy = energy_data_val_and_grad(params, subkey, position)
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
