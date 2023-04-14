@@ -1,5 +1,5 @@
 """Potential energy terms."""
-from typing import Tuple
+from typing import Optional, Tuple
 
 import chex
 import jax
@@ -87,6 +87,7 @@ def create_electron_ion_coulomb_potential(
     ion_charges: Array,
     strength: chex.Scalar = 1.0,
     softening_term: chex.Scalar = 0.0,
+    nparticles: Optional[int] = None,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential attraction between electron and ion.
 
@@ -100,6 +101,8 @@ def create_electron_ion_coulomb_potential(
         softening_term (chex.Scalar, optional): this amount squared is added to
             sum_i x_i^2 before taking the sqrt in the norm calculation. When zero, the
             usual vector 2-norm is used to compute distance. Defaults to 0.0.
+        nparticles (Optional): when specified, only the first nparticles particles are
+            used to calculate the electron ion potential. Defaults to None.
 
     Returns:
         Callable: function which computes the potential energy due to the attraction
@@ -108,20 +111,27 @@ def create_electron_ion_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
+    def potential_fn(params: ModelParams, x: Array) -> Array:
         del params
+        multiplier = 1.0
+        if nparticles is not None:
+            multiplier = x.shape[-2] / nparticles
+            x = x[..., :nparticles, :]
+
         electron_ion_displacements = compute_displacements(x, ion_locations)
         electron_ion_distances = compute_soft_norm(
             electron_ion_displacements, softening_term=softening_term
         )
         coulomb_attraction = ion_charges / electron_ion_distances
-        return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2))
+        return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2)) * multiplier
 
     return potential_fn
 
 
 def create_electron_electron_coulomb_potential(
-    strength: chex.Scalar = 1.0, softening_term: chex.Scalar = 0.0
+    strength: chex.Scalar = 1.0,
+    softening_term: chex.Scalar = 0.0,
+    nparticles: Optional[int] = None,
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential repulsion between pairs of electrons.
 
@@ -131,6 +141,12 @@ def create_electron_electron_coulomb_potential(
         softening_term (chex.Scalar, optional): this amount squared is added to
             sum_i x_i^2 before taking the sqrt in the norm calculation. When zero, the
             usual vector 2-norm is used to compute distance. Defaults to 0.0.
+        nparticles (int, Optional): when specified, the contribution of the first
+            nparticles particles to the electron electron potential is returned. This
+            means if i,j<=nparticles then the full coulomb repulsion 1/|r_i -r_j| is
+            included; if i<=nparticles but j>nparticles then half the coulomb repulsion
+            1/|r_i-r_j| is included, and if i,j>nparticles then the coulomb repulsion
+            1/|r_i-r_j| is neglected. Defaults to None.
 
     Returns:
         Callable: function which computes the potential energy due to the repulsion
@@ -145,9 +161,16 @@ def create_electron_electron_coulomb_potential(
         electron_electron_distances = compute_soft_norm(
             electron_electron_displacements, softening_term=softening_term
         )
-        return jnp.sum(
-            jnp.triu(strength / electron_electron_distances, k=1), axis=(-1, -2)
-        )
+        if nparticles is None:
+            ee_repulsion = jnp.triu(strength / electron_electron_distances, k=1)
+            return jnp.sum(ee_repulsion, axis=(-1, -2))
+        else:
+            multiplier = x.shape[-2] / nparticles
+            double_ee_repulsion = jnp.triu(
+                strength / electron_electron_distances, k=1
+            ) + jnp.tril(strength / electron_electron_distances, k=-1)
+            double_firstn_repulsion = double_ee_repulsion[..., :nparticles, :]
+            return jnp.sum(double_firstn_repulsion, axis=(-1, -2)) * multiplier / 2
 
     return potential_fn
 

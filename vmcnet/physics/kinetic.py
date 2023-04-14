@@ -1,5 +1,5 @@
 """Kinetic energy terms."""
-from typing import Callable
+from typing import Callable, Optional
 
 import jax
 
@@ -8,7 +8,8 @@ from vmcnet.utils.typing import Array, P, ModelApply
 
 
 def create_laplacian_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array]
+    log_psi_apply: Callable[[P, Array], Array],
+    nparticles: Optional[int] = None,
 ) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
@@ -17,6 +18,8 @@ def create_laplacian_kinetic_energy(
             inputs x. It is okay for it to produce batch outputs on batches of x as long
             as it produces a single number for single x. Has the signature
             (params, single_x_in) -> log|psi(single_x_in)|
+        nparticles (int, Optional): when specified, only the first nparticles particles
+            are used to calculate the kinetic energy. Defaults to None.
 
     Returns:
         Callable: function which computes the local kinetic energy for continuous
@@ -27,6 +30,8 @@ def create_laplacian_kinetic_energy(
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
     def kinetic_energy_fn(params: P, x: Array) -> Array:
-        return -0.5 * physics.core.laplacian_psi_over_psi(grad_log_psi_apply, params, x)
+        return -0.5 * physics.core.laplacian_psi_over_psi(
+            grad_log_psi_apply, params, x, nparticles
+        )
 
     return kinetic_energy_fn

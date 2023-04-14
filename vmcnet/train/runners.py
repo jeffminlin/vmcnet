@@ -233,17 +233,28 @@ def _assemble_mol_local_energy_fn(
         )
         return local_energy_fn
     elif local_energy_type == "standard":
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+        nsamples = local_energy_config.standard.nsamples
+        nkinetic = (
+            nsamples if "kinetic" in local_energy_config.standard.sample_parts else None
+        )
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(
+            log_psi_apply, nparticles=nkinetic
+        )
 
+        nei = nsamples if "ei" in local_energy_config.standard.sample_parts else None
         ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-            ion_pos, ion_charges, softening_term=ei_softening
+            ion_pos, ion_charges, softening_term=ei_softening, nparticles=nei
         )
+
+        nee = nsamples if "ee" in local_energy_config.standard.sample_parts else None
         ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
-            softening_term=ee_softening
+            softening_term=ee_softening, nparticles=nee
         )
+
         ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
             ion_pos, ion_charges
         )
+
         local_energy_fn = physics.core.combine_local_energy_terms(
             [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
         )
@@ -317,6 +328,12 @@ def _get_energy_val_and_grad_fn(
     )
 
     clipping_fn = _get_clipping_fn(vmc_config)
+
+    shuffle_particles = (
+        vmc_config.local_energy_type == "standard"
+        and len(vmc_config.local_energy.standard.sample_parts) > 0
+    )
+
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         local_energy_fn,
@@ -324,6 +341,7 @@ def _get_energy_val_and_grad_fn(
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
         use_generic_gradient_estimator=vmc_config.local_energy_type == "ibp",
+        shuffle_particles=shuffle_particles,
     )
 
     return energy_data_val_and_grad

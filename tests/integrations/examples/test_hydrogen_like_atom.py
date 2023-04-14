@@ -96,6 +96,7 @@ def test_hydrogen_like_sgd_vmc(caplog):
         jax.tree_util.tree_leaves(params)[0], nuclear_charge, rtol=1e-5
     )
 
+
 # TODO (ggoldsh): fix this test
 @pytest.mark.slow
 @pytest.mark.skip(

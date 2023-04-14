@@ -369,9 +369,14 @@ def get_default_local_energy_config() -> Dict:
     """Get a default local energy configuration."""
     local_energy_config = {
         "ibp": {
+            # TODO (ggoldsh): modify input format here to be like below
             "kinetic": True,
             "ei": True,
             "ee": True,
+        },
+        "standard": {
+            "sample_parts": (),  # '("kinetic","ei","ee")', or some subset.
+            "nsamples": 1,
         },
     }
     return local_energy_config
