@@ -284,7 +284,7 @@ def get_default_vmc_config() -> Dict:
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
-        "local_energy_type": "standard",  # [standard, ibp]
+        "local_energy_type": "standard",  # [standard, ibp, random_particle]
         "local_energy": get_default_local_energy_config(),
         "checkpoint_every": 5000,
         "best_checkpoint_every": 100,
@@ -353,7 +353,7 @@ def get_default_eval_config() -> Dict:
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,
         "std_move": 0.25,
-        "local_energy_type": "standard",  # [standard, ibp]
+        "local_energy_type": "standard",  # [standard, ibp, random_particle]
         "local_energy": get_default_local_energy_config(),
         # if use_data_from_training=True, nchains, nmoves_per_width_update, and
         # std_move are completely ignored, and the data output from training is
@@ -368,15 +368,16 @@ def get_default_eval_config() -> Dict:
 def get_default_local_energy_config() -> Dict:
     """Get a default local energy configuration."""
     local_energy_config = {
+        "standard": {},
         "ibp": {
             # TODO (ggoldsh): modify input format here to be like below
             "kinetic": True,
             "ei": True,
             "ee": True,
         },
-        "standard": {
+        "random_particle": {
             "sample_parts": (),  # '("kinetic","ei","ee")', or some subset.
-            "nsamples": 1,
+            "nparticles": 1,
         },
     }
     return local_energy_config

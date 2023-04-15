@@ -91,6 +91,7 @@ def laplacian_psi_over_psi(
     params: P,
     x: Array,
     nparticles: Optional[int] = None,
+    particle_perm: Optional[Array] = None,
 ) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -124,7 +125,10 @@ def laplacian_psi_over_psi(
         params (pytree): model parameters, passed as the first arg of grad_log_psi
         x (Array): second input to grad_log_psi
         nparticles (int, Optional): when specified, only the first nparticles particles
-            are used to calculate the Laplacian. Defaults to None.
+            of the particle_perm are used to calculate the laplacian. Defaults to None.
+        particle_perm (Array, Optional): permutation of the particle indices whose
+            ordering determines which particles' laplacians get evaluated, for use
+            in conjunction with the random particle method and the nparticles argument.
 
     Returns:
         Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
@@ -139,19 +143,32 @@ def laplacian_psi_over_psi(
         grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
         return jnp.reshape(grad_log_psi_out, (-1,))
 
+    length = n
+    multiplier = 1
+    vecs = identity_mat
+
+    if nparticles is not None and particle_perm is not None:
+        length = 3 * nparticles
+        multiplier = n / (3 * nparticles)
+
+        d = x_shape[-1]
+        triple_perm = jnp.stack([particle_perm * d + i for i in range(d)]).T.reshape(
+            (n,)
+        )
+        vecs = identity_mat[triple_perm, :]
+
     def step_fn(carry, unused):
         del unused
         i = carry[0]
         primals, tangents = jax.jvp(
-            flattened_grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
+            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
         )
-        return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
-
-    length = n
-    multiplier = 1
-    if nparticles is not None:
-        length = 3 * nparticles
-        multiplier = n / (3 * nparticles)
+        return (
+            i + 1,
+            carry[1]
+            + jnp.square(jnp.dot(primals, vecs[i]))
+            + jnp.dot(tangents, vecs[i]),
+        ), None
 
     out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=length)
     return out[1] * multiplier
@@ -232,8 +249,7 @@ def create_value_and_grad_energy_fn(
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
-    use_generic_gradient_estimator: bool = False,
-    shuffle_particles: bool = False,
+    local_energy_type: str = "standard",
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -262,14 +278,18 @@ def create_value_and_grad_energy_fn(
             used instead of jnp.mean and jnp.sum for the terms in the gradient
             calculation. Can be set to False when debugging if trying to find the source
             of unexpected nans. Defaults to True.
-        use_generic_gradient_estimator (bool, optional): Flag to turn on the use of the
-            "generic" VMC gradient estimator which does not depend on the local energy
-            having the form APsi/Psi for a Hermitian operator A. In practice this means
-            an extra term must be added to the gradient in which the local energy itself
-            is differentiated with respect to the model parameters. This is useful for
-            example when using integration by parts to represent the kinetic energy
-            as the squared norm of the gradient of Psi rather than its Laplacian.
-            Defaults to False.
+        local_energy_type (str): one of [standard, ibp, random_particle]. "standard"
+            implies the standard VMC local energy in which case we can apply the
+            traditional VMC gradient estimator described above. "ibp" means integration
+            by parts in which case we use the "generic" VMC gradient estimator which
+            does not depend on the local energy having the form APsi/Psi for a Hermitian
+            operator A. In practice this means an extra term must be added to the
+            gradient in which the local energy itself is differentiated with respect to
+            the model parameters. "random_particle" means that the local energy uses one
+            or more random particles for each walker, rather than using all the
+            particles. In this case the standard gradient estimator can be used but the
+            code is slightly modified to pass a distinct PRNGkey to each walker.
+            Defaults to standard.
 
     Returns:
         Callable: function which computes the clipped energy value and gradient. Has the
@@ -282,7 +302,9 @@ def create_value_and_grad_energy_fn(
     mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
     def standard_estimator_forward(
-        params: P, positions: Array, centered_local_energies: Array
+        params: P,
+        positions: Array,
+        centered_local_energies: Array,
     ) -> chex.Numeric:
         log_psi = log_psi_apply(params, positions)
         kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
@@ -295,6 +317,42 @@ def create_value_and_grad_energy_fn(
             / (nchains - 1)
             * mean_grad_fn(centered_local_energies * log_psi)
         )
+
+    def get_standard_contribution(local_energies_noclip, params, positions):
+        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+            local_energies_noclip, nchains, clipping_fn, nan_safe
+        )
+        centered_local_energies = local_energies - energy
+        grad_E = jax.grad(standard_estimator_forward, argnums=0)(
+            params, positions, centered_local_energies
+        )
+        return aux_data, energy, grad_E
+
+    def standard_energy_val_and_grad(params, key, positions):
+        del key
+
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0), out_axes=0
+        )(params, positions)
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
+        )
+
+        return (energy, aux_data), grad_E
+
+    def random_particle_energy_val_and_grad(params, key, positions):
+        nbatch = positions.shape[0]
+        key = jax.random.split(key, nbatch)
+
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0, 0), out_axes=0
+        )(params, positions, key)
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
+        )
+        return (energy, aux_data), grad_E
 
     def generic_energy_val_and_grad(params, key, positions):
         del key
@@ -325,29 +383,13 @@ def create_value_and_grad_energy_fn(
 
         return (energy, aux_data), grad_E
 
-    def standard_energy_val_and_grad(params, key, positions):
-        if shuffle_particles:
-            key = jax.random.split(key, positions.shape[0])
-            permute_fn = functools.partial(jax.random.permutation, axis=-2)
-            positions = jax.vmap(permute_fn)(key, positions)
-
-        local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0), out_axes=0
-        )(params, positions)
-
-        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
-        )
-
-        centered_local_energies = local_energies - energy
-
-        grad_E = jax.grad(standard_estimator_forward, argnums=0)(
-            params, positions, centered_local_energies
-        )
-
-        return (energy, aux_data), grad_E
-
-    if use_generic_gradient_estimator:
-        return generic_energy_val_and_grad
-    else:
+    if local_energy_type == "standard":
         return standard_energy_val_and_grad
+    elif local_energy_type == "ibp":
+        return generic_energy_val_and_grad
+    elif local_energy_type == "random_particle":
+        return random_particle_energy_val_and_grad
+    else:
+        raise ValueError(
+            f"Requested local energy type {local_energy_type} is not supported"
+        )

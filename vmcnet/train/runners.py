@@ -220,6 +220,21 @@ def _assemble_mol_local_energy_fn(
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> ModelApply[P]:
+    if local_energy_type == "standard":
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+        ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+            ion_pos, ion_charges, softening_term=ei_softening
+        )
+        ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
+            softening_term=ee_softening
+        )
+        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+            ion_pos, ion_charges
+        )
+        local_energy_fn = physics.core.combine_local_energy_terms(
+            [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+        )
+        return local_energy_fn
     if local_energy_type == "ibp":
         local_energy_fn: ModelApply[P] = physics.ibp.create_ibp_local_energy(
             log_psi_apply,
@@ -232,31 +247,19 @@ def _assemble_mol_local_energy_fn(
             ee_softening,
         )
         return local_energy_fn
-    elif local_energy_type == "standard":
-        nsamples = local_energy_config.standard.nsamples
-        nkinetic = (
-            nsamples if "kinetic" in local_energy_config.standard.sample_parts else None
-        )
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(
-            log_psi_apply, nparticles=nkinetic
-        )
-
-        nei = nsamples if "ei" in local_energy_config.standard.sample_parts else None
-        ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-            ion_pos, ion_charges, softening_term=ei_softening, nparticles=nei
-        )
-
-        nee = nsamples if "ee" in local_energy_config.standard.sample_parts else None
-        ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
-            softening_term=ee_softening, nparticles=nee
-        )
-
-        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-            ion_pos, ion_charges
-        )
-
-        local_energy_fn = physics.core.combine_local_energy_terms(
-            [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+    elif local_energy_type == "random_particle":
+        nparticles = local_energy_config.random_particle.nparticles
+        sample_parts = local_energy_config.random_particle.sample_parts
+        local_energy_fn = physics.random_particle.create_random_particle_local_energy(
+            log_psi_apply,
+            ion_pos,
+            ion_charges,
+            nparticles,
+            "kinetic" in sample_parts,
+            "ei" in sample_parts,
+            ei_softening,
+            "ee" in sample_parts,
+            ee_softening,
         )
         return local_energy_fn
     else:
@@ -329,19 +332,13 @@ def _get_energy_val_and_grad_fn(
 
     clipping_fn = _get_clipping_fn(vmc_config)
 
-    shuffle_particles = (
-        vmc_config.local_energy_type == "standard"
-        and len(vmc_config.local_energy.standard.sample_parts) > 0
-    )
-
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         local_energy_fn,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        use_generic_gradient_estimator=vmc_config.local_energy_type == "ibp",
-        shuffle_particles=shuffle_particles,
+        local_energy_type=vmc_config.local_energy_type,
     )
 
     return energy_data_val_and_grad

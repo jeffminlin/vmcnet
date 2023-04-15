@@ -138,7 +138,7 @@ def test_harmonic_oscillator_vmc_ibp(caplog):
 
     # Local energy function
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
-        spring_constant, log_psi_model.apply, use_ibp=True
+        spring_constant, log_psi_model.apply, local_energy_type="ibp"
     )
 
     _, params, _, _ = sgd_vmc_loop_with_logging(
@@ -154,7 +154,59 @@ def test_harmonic_oscillator_vmc_ibp(caplog):
         learning_rate,
         log_psi_model,
         local_energy_fn,
-        use_generic_gradient_estimator=True,
+        local_energy_type="ibp",
+    )
+
+    # Just verify that the parameter is within a rough ballpark of the correct answer.
+    np.testing.assert_allclose(
+        jax.tree_util.tree_leaves(params)[0], jnp.sqrt(spring_constant), atol=1.0
+    )
+
+
+@pytest.mark.slow
+def test_harmonic_oscillator_vmc_random_particle(caplog):
+    """Test that VMC loop succeeds when using random particle local energy."""
+    # Problem parameters
+    model_omega = 5
+    spring_constant = 1.5
+
+    # Training hyperparameters
+    nchains = 100 * jax.local_device_count()
+    nburn = 100
+    nepochs = 100
+    nsteps_per_param_update = 5
+    std_move = 0.25
+    learning_rate = 1e-3
+
+    # Initialize model and chains of walkers
+    (
+        log_psi_model,
+        params,
+        random_particle_positions,
+        amplitudes,
+        key,
+    ) = _make_initial_params_and_data(model_omega, nchains)
+    data = make_simple_position_amplitude_data(random_particle_positions, amplitudes)
+
+    # Local energy function
+    local_energy_fn = qho.make_harmonic_oscillator_local_energy(
+        spring_constant, log_psi_model.apply, local_energy_type="random_particle"
+    )
+
+    _, params, _, _ = sgd_vmc_loop_with_logging(
+        caplog,
+        data,
+        params,
+        key,
+        nchains,
+        nburn,
+        nepochs,
+        nsteps_per_param_update,
+        std_move,
+        learning_rate,
+        log_psi_model,
+        local_energy_fn,
+        local_energy_type="random_particle",
     )
 
     # Just verify that the parameter is within a rough ballpark of the correct answer.
@@ -249,4 +301,5 @@ def test_reload_reproduces_results(caplog, tmp_path):
         local_energy_fn,
         should_distribute_data=False,  # data has already been distributed
     )
+    print(first_run_final_state - reload_final_state)
     assert_pytree_allclose(first_run_final_state, reload_final_state)

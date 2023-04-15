@@ -136,7 +136,7 @@ def create_ibp_local_energy(
     ibp_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
 ):
-    """Create the full local energy for the integration by parts (IBP) method..
+    """Create the full local energy for the integration by parts (IBP) method.
 
     Args:
         log_psi_apply (Callable): a function which computes log|psi(x)| for single
@@ -161,7 +161,8 @@ def create_ibp_local_energy(
     Returns:
         Callable: function which computes the full local energy for the IBP method,
             with the requested terms integrated-by-parts and the other terms included
-            in their standard formulation.
+            in their standard formulation. Evaluates on only a single configuration
+            so must be externally vmapped to be applied to a batch of walkers.
     """
     ibp_energy = create_ibp_energy_term(
         log_psi_apply,
