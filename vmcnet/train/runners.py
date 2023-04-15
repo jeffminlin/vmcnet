@@ -467,6 +467,7 @@ def _setup_eval(
         record_local_energies=eval_config.record_local_energies,
         nan_safe=eval_config.nan_safe,
         apply_pmap=apply_pmap,
+        use_PRNGKey=eval_config.local_energy_type == "random_particle",
     )
     eval_burning_step, eval_walker_fn = _get_mcmc_fns(
         eval_config, log_psi_apply, apply_pmap=apply_pmap

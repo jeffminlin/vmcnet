@@ -215,6 +215,7 @@ def create_eval_update_param_fn(
     apply_pmap: bool = True,
     record_local_energies: bool = True,
     nan_safe: bool = False,
+    use_PRNGKey: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
@@ -239,9 +240,19 @@ def create_eval_update_param_fn(
     """
 
     def eval_update_param_fn(params, data, optimizer_state, key):
-        local_energies = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)(
-            params, get_position_fn(data)
-        )
+        positions = get_position_fn(data)
+
+        if use_PRNGKey:
+            nbatch = positions.shape[0]
+            key = jax.random.split(key, nbatch)
+            local_energies = jax.vmap(
+                local_energy_fn, in_axes=(None, 0, 0), out_axes=0
+            )(params, positions, key)
+        else:
+            local_energies = jax.vmap(
+                local_energy_fn, in_axes=(None, 0, None), out_axes=0
+            )(params, get_position_fn(data), None)
+
         energy, variance = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
