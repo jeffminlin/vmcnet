@@ -36,7 +36,7 @@ def test_total_energy_grad():
     nchains = x.shape[0]
     key = jax.random.PRNGKey(0)
 
-    def local_energy_fn(a, x):
+    def local_energy_fn(a, x, key):
         return jnp.sum(x)
 
     # Based on the specific values returned by make_dummy_x

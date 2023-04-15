@@ -17,7 +17,7 @@ from vmcnet.utils.typing import (
     Array,
     D,
     GetPositionFromData,
-    ModelApply,
+    LocalEnergyApply,
     OptimizerState,
     P,
     PRNGKey,
@@ -209,7 +209,7 @@ def create_kfac_update_param_fn(
 
 
 def create_eval_update_param_fn(
-    local_energy_fn: ModelApply[P],
+    local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,

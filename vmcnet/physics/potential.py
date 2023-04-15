@@ -155,7 +155,7 @@ def create_electron_electron_coulomb_potential(
         -> array of potential energies of shape electron_positions.shape[:-2]
     """
 
-    def potential_fn(params: ModelParams, x: ArrayLike) -> Array:
+    def potential_fn(params: ModelParams, x: Array) -> Array:
         del params
         electron_electron_displacements = compute_displacements(x, x)
         electron_electron_distances = compute_soft_norm(

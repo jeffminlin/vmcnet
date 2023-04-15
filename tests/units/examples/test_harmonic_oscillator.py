@@ -45,8 +45,10 @@ def test_make_harmonic_oscillator_local_energy_with_zero_omega():
     multichain_x = jnp.reshape(jnp.arange(12, dtype=jnp.float32), (4, 3, 1))
 
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(0.0, log_f)
-    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
-    kinetic = vmapped_local_e(None, multichain_x)  # kinetic only because omega = 0
+    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0, None), out_axes=0)
+    kinetic = vmapped_local_e(
+        None, multichain_x, None
+    )  # kinetic only because omega = 0
 
     # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
     # particles per sample we expect each sample x to have kinetic energy
@@ -65,8 +67,8 @@ def test_make_harmonic_oscillator_local_energy_with_nonzero_omega():
     omega = 2.0
 
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(omega, log_f)
-    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
-    local_energy = vmapped_local_e(None, multichain_x)
+    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0, None), out_axes=0)
+    local_energy = vmapped_local_e(None, multichain_x, None)
 
     # expect -(1/2) (nabla^2 f) / f, so because d^2f/dx_i^2 = 2 for all i, for 3
     # particles per sample we expect each sample x to have kinetic energy

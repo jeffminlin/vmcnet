@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Array, P, ModelApply
+from vmcnet.utils.typing import Array, LocalEnergyApply, ModelApply, P
 
 
 def make_hermite_polynomials(x: Array) -> Array:
@@ -170,7 +170,7 @@ def make_harmonic_oscillator_local_energy(
     omega: chex.Scalar,
     log_psi_apply: ModelApply[P],
     local_energy_type: str = "standard",
-) -> ModelApply[P]:
+) -> LocalEnergyApply[P]:
     """Factory to create a local energy fn for the harmonic oscillator log|psi|.
 
     Args:
@@ -186,18 +186,20 @@ def make_harmonic_oscillator_local_energy(
         associated to the wavefunction psi
     """
 
-    # Note: harmonic oscillator potential is smooth, no need to apply sampling or
-    # IBP here.
     def potential_fn(params: P, x: Array):
+        # Note: harmonic oscillator potential is smooth, no need to apply sampling or
+        # IBP here.
         del params
         return harmonic_oscillator_potential(omega, x)
 
     if local_energy_type == "random_particle":
-        kinetic_fn = physics.random_particle.create_random_particle_kinetic_energy(
-            log_psi_apply, nparticles=1
+        random_particle_kinetic_fn = (
+            physics.random_particle.create_random_particle_kinetic_energy(
+                log_psi_apply, nparticles=1
+            )
         )
         return physics.random_particle.assemble_random_particle_local_energy(
-            kinetic_fn, [potential_fn], sample_kinetic=True
+            random_particle_kinetic_fn, [potential_fn], sample_kinetic=True
         )
     elif local_energy_type == "standard":
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)

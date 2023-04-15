@@ -1,11 +1,11 @@
 """Energy terms related to the random particle approach."""
-from typing import Callable, Optional
+from typing import Callable, List
 
 import chex
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ModelApply, P
+from vmcnet.utils.typing import Array, LocalEnergyApply, ModelApply, P, PRNGKey
 
 from .core import laplacian_psi_over_psi
 from .kinetic import create_laplacian_kinetic_energy
@@ -15,28 +15,26 @@ from .potential import (
     create_ion_ion_coulomb_potential,
 )
 
+RandomParticleKineticEnergy = Callable[[P, Array, Array], Array]
+
 
 def create_random_particle_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array],
-    nparticles: Optional[int] = None,
-) -> ModelApply[P]:
-    """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
+    log_psi_apply: Callable[[P, Array], Array], nparticles: int = 1
+) -> RandomParticleKineticEnergy:
+    """Create a local kinetic energy which samples nparticles random particles.
 
     Args:
         log_psi_apply (Callable): a function which computes log|psi(x)| for single
             inputs x. It is okay for it to produce batch outputs on batches of x as long
             as it produces a single number for single x. Has the signature
             (params, single_x_in) -> log|psi(single_x_in)|
-        nparticles (int, Optional): when specified, only the first nparticles particles
-            of the particle_perm are used to calculate the kinetic energy.
-            Defaults to None.
-
+        nparticles (int, Optional): the number of random particles to evaluate the
+            kinetic energy of. Defaults to 1.
 
     Returns:
-        Callable: function which computes the local kinetic energy for continuous
-        problems (as opposed to discrete/lattice problems), i.e. -0.5 nabla^2 psi / psi.
-        Evaluates on only a single configuration so must be externally vmapped
-        to be applied to a batch of walkers.
+        Callable: function which computes a random particle estimator of the local
+        kinetic energy, i.e. -0.5 nabla^2 psi / psi. Evaluates on only a single
+        configuration so must be externally vmapped to be applied to a batch of walkers.
     """
     grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
@@ -49,9 +47,13 @@ def create_random_particle_kinetic_energy(
 
 
 def assemble_random_particle_local_energy(
-    kinetic_term, potential_terms, sample_kinetic
-):
-    def local_energy_fn(params, positions, key):
+    kinetic_term,
+    potential_terms: List[ModelApply[P]],
+    sample_kinetic: bool,
+) -> LocalEnergyApply[P]:
+    """Assembles the random particle local energy from kinetic and potential terms."""
+
+    def local_energy_fn(params: P, positions: Array, key: PRNGKey) -> Array:
         total_particles = positions.shape[-2]
         perm = jax.random.permutation(key, jnp.arange(total_particles))
         permuted_positions = positions[perm, :]
@@ -70,7 +72,7 @@ def assemble_random_particle_local_energy(
     return local_energy_fn
 
 
-def create_random_particle_local_energy(
+def create_molecular_random_particle_local_energy(
     log_psi_apply: Callable[[P, Array], Array],
     ion_locations: Array,
     ion_charges: Array,
@@ -80,8 +82,8 @@ def create_random_particle_local_energy(
     ei_softening: chex.Scalar = 0.0,
     sample_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
-):
-    """Create the full local energy for the random particle method.
+) -> LocalEnergyApply[P]:
+    """Create the full local energy for the random particle method for molecules.
 
     This method evaluates the local energy using a randomly selected subset of the
     particles for each walker, to obtain a cheaper but more noisy estimate of the
@@ -114,7 +116,6 @@ def create_random_particle_local_energy(
             with the requested terms integrated-by-parts and the other terms included
             in their standard formulation.
     """
-
     ii_potential_fn = create_ion_ion_coulomb_potential(ion_locations, ion_charges)
 
     ei_potential_fn = create_electron_ion_coulomb_potential(

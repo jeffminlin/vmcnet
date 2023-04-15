@@ -5,7 +5,7 @@ import chex
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ArrayLike, P, ModelApply
+from vmcnet.utils.typing import Array, ArrayLike, LocalEnergyApply, ModelApply, P
 
 from .potential import (
     compute_displacements,
@@ -135,7 +135,7 @@ def create_ibp_local_energy(
     ei_softening: chex.Scalar = 0.0,
     ibp_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
-):
+) -> LocalEnergyApply[P]:
     """Create the full local energy for the integration by parts (IBP) method.
 
     Args:
@@ -192,6 +192,6 @@ def create_ibp_local_energy(
             create_electron_electron_coulomb_potential(softening_term=ee_softening)
         )
 
-    local_energy_fn: ModelApply[P] = combine_local_energy_terms(energy_terms)
+    local_energy_fn: LocalEnergyApply[P] = combine_local_energy_terms(energy_terms)
 
     return local_energy_fn

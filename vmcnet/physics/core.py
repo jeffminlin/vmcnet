@@ -1,5 +1,4 @@
 """Core local energy and gradient construction routines."""
-import functools
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex
@@ -9,7 +8,14 @@ import kfac_jax
 
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import tree_sum
-from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
+from vmcnet.utils.typing import (
+    Array,
+    P,
+    ClippingFn,
+    PRNGKey,
+    LocalEnergyApply,
+    ModelApply,
+)
 
 EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
@@ -64,7 +70,7 @@ def initialize_molecular_pos(
 
 def combine_local_energy_terms(
     local_energy_terms: Sequence[ModelApply[P]],
-) -> ModelApply[P]:
+) -> LocalEnergyApply[P]:
     """Combine a sequence of local energy terms by adding them.
 
     Args:
@@ -77,7 +83,8 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params: P, x: Array) -> Array:
+    def local_energy_fn(params: P, x: Array, key: Optional[PRNGKey]) -> Array:
+        del key
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
             local_energy_sum = cast(Array, local_energy_sum + term(params, x))
@@ -144,7 +151,7 @@ def laplacian_psi_over_psi(
         return jnp.reshape(grad_log_psi_out, (-1,))
 
     length = n
-    multiplier = 1
+    multiplier = 1.0
     vecs = identity_mat
 
     if nparticles is not None and particle_perm is not None:
@@ -245,7 +252,7 @@ def get_clipped_energies_and_aux_data(
 
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
-    local_energy_fn: ModelApply[P],
+    local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
@@ -332,8 +339,8 @@ def create_value_and_grad_energy_fn(
         del key
 
         local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0), out_axes=0
-        )(params, positions)
+            local_energy_fn, in_axes=(None, 0, None), out_axes=0
+        )(params, positions, None)
 
         aux_data, energy, grad_E = get_standard_contribution(
             local_energies_noclip, params, positions
@@ -359,10 +366,10 @@ def create_value_and_grad_energy_fn(
 
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
-            val_and_grad_local_energy, in_axes=(None, 0), out_axes=0
+            val_and_grad_local_energy, in_axes=(None, 0, None), out_axes=0
         )
         local_energies_noclip, local_energy_grads = val_and_grad_local_energy_vmapped(
-            params, positions
+            params, positions, None
         )
         generic_contribution = jax.tree_map(mean_grad_fn, local_energy_grads)
 
