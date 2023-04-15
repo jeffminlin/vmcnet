@@ -237,14 +237,15 @@ def _assemble_mol_local_energy_fn(
         )
         return local_energy_fn
     if local_energy_type == "ibp":
+        ibp_parts = (local_energy_config.ibp.ibp_parts,)
         local_energy_fn = physics.ibp.create_ibp_local_energy(
             log_psi_apply,
             ion_pos,
             ion_charges,
-            local_energy_config.ibp.kinetic,
-            local_energy_config.ibp.ei,
+            "kinetic" in ibp_parts,
+            "ei" in ibp_parts,
             ei_softening,
-            local_energy_config.ibp.ee,
+            "ee" in ibp_parts,
             ee_softening,
         )
         return local_energy_fn

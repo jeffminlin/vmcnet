@@ -370,13 +370,12 @@ def get_default_local_energy_config() -> Dict:
     local_energy_config = {
         "standard": {},
         "ibp": {
-            # TODO (ggoldsh): modify input format here to be like below
-            "kinetic": True,
-            "ei": True,
-            "ee": True,
+            # '("kinetic","ei","ee")', or some subset.
+            "ibp_parts": ("kinetic", "ei", "ee")
         },
         "random_particle": {
-            "sample_parts": (),  # '("kinetic","ei","ee")', or some subset.
+            # '("kinetic","ei","ee")', or some subset.
+            "sample_parts": ("kinetic", "ei", "ee"),
             "nparticles": 1,
         },
     }
