@@ -5,7 +5,7 @@ import chex
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ArrayLike, P, ModelApply
+from vmcnet.utils.typing import Array, ArrayLike, LocalEnergyApply, ModelApply, P
 
 from .potential import (
     compute_displacements,
@@ -135,8 +135,8 @@ def create_ibp_local_energy(
     ei_softening: chex.Scalar = 0.0,
     ibp_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
-):
-    """Create the full local energy for the integration by parts (IBP) method..
+) -> LocalEnergyApply[P]:
+    """Create the full local energy for the integration by parts (IBP) method.
 
     Args:
         log_psi_apply (Callable): a function which computes log|psi(x)| for single
@@ -161,7 +161,8 @@ def create_ibp_local_energy(
     Returns:
         Callable: function which computes the full local energy for the IBP method,
             with the requested terms integrated-by-parts and the other terms included
-            in their standard formulation.
+            in their standard formulation. Evaluates on only a single configuration
+            so must be externally vmapped to be applied to a batch of walkers.
     """
     ibp_energy = create_ibp_energy_term(
         log_psi_apply,
@@ -191,6 +192,6 @@ def create_ibp_local_energy(
             create_electron_electron_coulomb_potential(softening_term=ee_softening)
         )
 
-    local_energy_fn: ModelApply[P] = combine_local_energy_terms(energy_terms)
+    local_energy_fn: LocalEnergyApply[P] = combine_local_energy_terms(energy_terms)
 
     return local_energy_fn

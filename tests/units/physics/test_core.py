@@ -34,8 +34,9 @@ def test_total_energy_grad():
     x = make_dummy_x()
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
     nchains = x.shape[0]
+    key = jax.random.PRNGKey(0)
 
-    def local_energy_fn(a, x):
+    def local_energy_fn(a, x, key):
         return jnp.sum(x)
 
     # Based on the specific values returned by make_dummy_x
@@ -52,7 +53,7 @@ def test_total_energy_grad():
         log_psi_apply, local_energy_fn, nchains
     )
 
-    energy_data, grad_energy = total_energy_value_and_grad(a, x)
+    energy_data, grad_energy = total_energy_value_and_grad(a, key, x)
     energy = energy_data[0]
     variance = energy_data[1][0]
     local_energies = energy_data[1][1]

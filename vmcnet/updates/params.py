@@ -17,7 +17,7 @@ from vmcnet.utils.typing import (
     Array,
     D,
     GetPositionFromData,
-    ModelApply,
+    LocalEnergyApply,
     OptimizerState,
     P,
     PRNGKey,
@@ -104,7 +104,9 @@ def create_grad_energy_update_param_fn(
 
     def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
-        energy_data, grad_energy = energy_data_val_and_grad(params, position)
+        key, subkey = jax.random.split(key)
+
+        energy_data, grad_energy = energy_data_val_and_grad(params, subkey, position)
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
@@ -207,12 +209,13 @@ def create_kfac_update_param_fn(
 
 
 def create_eval_update_param_fn(
-    local_energy_fn: ModelApply[P],
+    local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     get_position_fn: GetPositionFromData[D],
     apply_pmap: bool = True,
     record_local_energies: bool = True,
     nan_safe: bool = False,
+    use_PRNGKey: bool = False,
 ) -> UpdateParamFn[P, D, OptimizerState]:
     """No update/clipping/grad function which simply evaluates the local energies.
 
@@ -237,9 +240,19 @@ def create_eval_update_param_fn(
     """
 
     def eval_update_param_fn(params, data, optimizer_state, key):
-        local_energies = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)(
-            params, get_position_fn(data)
-        )
+        positions = get_position_fn(data)
+
+        if use_PRNGKey:
+            nbatch = positions.shape[0]
+            key = jax.random.split(key, nbatch)
+            local_energies = jax.vmap(
+                local_energy_fn, in_axes=(None, 0, 0), out_axes=0
+            )(params, positions, key)
+        else:
+            local_energies = jax.vmap(
+                local_energy_fn, in_axes=(None, 0, None), out_axes=0
+            )(params, get_position_fn(data), None)
+
         energy, variance = physics.core.get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )

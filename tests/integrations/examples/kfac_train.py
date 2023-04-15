@@ -59,6 +59,7 @@ def kfac_vmc_loop_with_logging(
         l2_reg=0.0,
         norm_constraint=0.001,
         value_func_has_aux=True,
+        value_func_has_rng=True,
         learning_rate_schedule=learning_rate_schedule,
         curvature_ema=0.95,
         inverse_update_period=1,

@@ -8,7 +8,7 @@ from vmcnet.utils.typing import Array, P, ModelApply
 
 
 def create_laplacian_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array]
+    log_psi_apply: Callable[[P, Array], Array],
 ) -> ModelApply[P]:
     """Create the local kinetic energy fn (params, x) -> -0.5 (nabla^2 psi(x) / psi(x)).
 
