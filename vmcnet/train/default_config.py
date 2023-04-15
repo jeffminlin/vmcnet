@@ -163,7 +163,28 @@ def get_default_model_config() -> Dict:
         "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
-        "fastcore": False,
+    }
+
+    base_fastcore_config={
+        "input_streams": input_streams,
+        "backflow": ferminet_backflow,
+        "ndeterminants": 1,
+        "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
+        "kernel_init_envelope_dim": {"type": "ones"},
+        "kernel_init_envelope_ion": {"type": "ones"},
+        "bias_init_orbital_linear": normal_init,
+        "orbitals_use_bias": True,
+        "isotropic_decay": True,
+        "use_det_resnet": False,
+        "det_resnet": determinant_resnet,
+        "determinant_fn_mode": "parallel_even",
+        "full_det": False,
+        "auto": dict(
+        orbitals_use_bias=True,
+        isotropic_decay=True,
+        full_det=False,
+        fc_ratio=1
+        )
     }
 
     invariance_for_antieq = {
@@ -192,6 +213,7 @@ def get_default_model_config() -> Dict:
     config = {
         "type": "ferminet",
         "ferminet": base_ferminet_config,
+        "fastcore": base_fastcore_config,
         "embedded_particle_ferminet": {
             # NOTE (ggoldsh): mypy throws error on following line; no idea why.
             **base_ferminet_config,  # type: ignore

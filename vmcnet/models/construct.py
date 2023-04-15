@@ -127,6 +127,7 @@ def get_model_from_config(
 
     ferminet_model_types = [
         "ferminet",
+        "fastcore",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
     ]
@@ -143,31 +144,49 @@ def get_model_from_config(
                 resnet_config.use_bias,
             )
 
+        standardargs=[
+            spin_split,
+            compute_input_streams,
+            backflow,
+            model_config.ndeterminants,
+        ]
+        standardkwargs=dict(
+            kernel_initializer_orbital_linear=kernel_init_constructor(
+                model_config.kernel_init_orbital_linear
+            ),
+            kernel_initializer_envelope_dim=kernel_init_constructor(
+                model_config.kernel_init_envelope_dim
+            ),
+            kernel_initializer_envelope_ion=kernel_init_constructor(
+                model_config.kernel_init_envelope_ion
+            ),
+            bias_initializer_orbital_linear=bias_init_constructor(
+                model_config.bias_init_orbital_linear
+            ),
+        )
+
+
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         if model_config.type == "ferminet":
+
+
             return FermiNet(
-                spin_split,
-                compute_input_streams,
-                backflow,
-                model_config.ndeterminants,
-                kernel_initializer_orbital_linear=kernel_init_constructor(
-                    model_config.kernel_init_orbital_linear
-                ),
-                kernel_initializer_envelope_dim=kernel_init_constructor(
-                    model_config.kernel_init_envelope_dim
-                ),
-                kernel_initializer_envelope_ion=kernel_init_constructor(
-                    model_config.kernel_init_envelope_ion
-                ),
-                bias_initializer_orbital_linear=bias_init_constructor(
-                    model_config.bias_init_orbital_linear
-                ),
+                *standardargs,
+                **standardkwargs,
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
                 full_det=model_config.full_det,
-                fastcore=model_config.fastcore,
+            )
+        if model_config.type == "fastcore":
+
+            return FastCore(
+                *standardargs,
+                **standardkwargs,
+                determinant_fn=determinant_fn,
+                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
+                **model_config.auto
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -189,22 +208,8 @@ def get_model_from_config(
             )
 
             return EmbeddedParticleFermiNet(
-                spin_split,
-                compute_input_streams,
-                backflow,
-                model_config.ndeterminants,
-                kernel_initializer_orbital_linear=kernel_init_constructor(
-                    model_config.kernel_init_orbital_linear
-                ),
-                kernel_initializer_envelope_dim=kernel_init_constructor(
-                    model_config.kernel_init_envelope_dim
-                ),
-                kernel_initializer_envelope_ion=kernel_init_constructor(
-                    model_config.kernel_init_envelope_ion
-                ),
-                bias_initializer_orbital_linear=bias_init_constructor(
-                    model_config.bias_init_orbital_linear
-                ),
+                *standardargs,
+                **standardkwargs,
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
@@ -232,22 +237,8 @@ def get_model_from_config(
             else:
                 invariance_backflow = None
             return ExtendedOrbitalMatrixFermiNet(
-                spin_split,
-                compute_input_streams,
-                backflow,
-                model_config.ndeterminants,
-                kernel_initializer_orbital_linear=kernel_init_constructor(
-                    model_config.kernel_init_orbital_linear
-                ),
-                kernel_initializer_envelope_dim=kernel_init_constructor(
-                    model_config.kernel_init_envelope_dim
-                ),
-                kernel_initializer_envelope_ion=kernel_init_constructor(
-                    model_config.kernel_init_envelope_ion
-                ),
-                bias_initializer_orbital_linear=bias_init_constructor(
-                    model_config.bias_init_orbital_linear
-                ),
+                *standardargs,
+                **standardkwargs,
                 orbitals_use_bias=model_config.orbitals_use_bias,
                 isotropic_decay=model_config.isotropic_decay,
                 determinant_fn=determinant_fn,
@@ -722,16 +713,6 @@ def _reshape_raw_ferminet_orbitals(
 
 
 
-class f_clZ(Module):
-    @flax.linen.compact
-    def __call__(self,X):
-        #cplus=jnp.squeeze(jnp.abs(flax.linen.Dense(features=1)(jnp.ones((1,)))))
-        c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
-        c=jnp.mean(c)
-        r=jnp.sqrt(jnp.sum(X**2,axis=-1))
-        return jnp.exp(-c*r)
-
-
 
 class FermiNet(Module):
     """FermiNet/generalized Slater determinant model.
@@ -847,7 +828,6 @@ class FermiNet(Module):
     determinant_fn: Optional[DeterminantFn]
     determinant_fn_mode: DeterminantFnMode
     full_det: bool
-    fastcore: bool
 
     def _get_bad_determinant_fn_mode_error(self) -> ValueError:
         raise ValueError(
@@ -881,49 +861,7 @@ class FermiNet(Module):
             else:
                 raise self._get_bad_determinant_fn_mode_error()
 
-        # NA: for fastcore
-        self.ion_pos=self.compute_input_streams.keywords['ion_pos']
-        self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
-        self.rcZ=self.mindist/8
-
-        def bump1d(r):
-            return flax.linen.sigmoid(6-12*r)
-            #return 1-flax.linen.sigmoid(2*r2-1)
-            #return jnp.exp(-1/(1-r2))*(r2<1)
-
-        def bumpfunction(X,supportwidth):
-            X=X/supportwidth
-            r=jnp.sqrt(jnp.sum(X**2,axis=-1))
-            return bump1d(r)
-
-        def snap(X,ion_pos,rcZ):
-            indiv_bumps=bumpfunction(X[None,:,...]-ion_pos[:,None,None,:],rcZ)
-            bumps=jnp.sum(indiv_bumps,axis=0)[:,...,None]
-            complement=1-bumps
-            X=jnp.sum(ion_pos[:,None,None,:]*indiv_bumps[:,:,:,None],axis=0)+complement*X
-            return X
-
-        def snap2(X,ion_pos,rcZ):
-            if len(X.shape)==2:
-                return snap(X[None,:,...],ion_pos,rcZ)[0]
-            else:
-                return snap(X,ion_pos,rcZ)
-
-
-        def localized(f,X):
-            return bumpfunction(X,self.rcZ)*f(X)
-
-        self.snap=functools.partial(snap2,ion_pos=self.ion_pos,rcZ=self.rcZ)
-        self.localized=functools.partial(localized,self.rcZ)
-
-        self._f_clZ=[f_clZ(),f_clZ(),f_clZ()]
-        self.f_clZ=[functools.partial(localized,f) for f in self._f_clZ]
-        self.a_iIl=flax.linen.Dense(features=2*self.spin_split[0])
-
-        #import sys 
-        #if 'f' in sys.argv:
-        #    self.fastcore=True
-
+        
     def _calculate_psi_parallel_even(self, fn_inputs: ArrayList):
         """Calculate psi as an even fn. times products of corresponding determinants.
 
@@ -1015,7 +953,7 @@ class FermiNet(Module):
         return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
 
     @flax.linen.compact
-    def __call__(self, elec_pos_og: Array, fastcoretest: bool=False) -> SLArray:  # type: ignore[override]
+    def __call__(self, elec_pos: Array, skipcore_test=False, get_orbitals=False) -> SLArray:  # type: ignore[override]
         """Compose FermiNet backflow -> orbitals -> logabs determinant product.
 
         Args:
@@ -1030,20 +968,29 @@ class FermiNet(Module):
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
 
-        if self.fastcore or fastcoretest:
-            print('fastcore test')
-            elec_pos=self.snap(elec_pos_og)
+        if self.fastcore:
+            og_elec_pos=elec_pos
+            snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.rcZ)
+            input_stream_1e, input_stream_2e, r_ei_trivial, _ = self._compute_input_streams(snapped_elec_pos)
+            _, _, r_ei, _ = self._compute_input_streams(og_elec_pos)
         else:
-            elec_pos=elec_pos_og
-
-
+            input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
 
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
-
-        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
-            elec_pos
-        )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        if self.fastcore:
+            f_clZ=[[f(og_elec_pos-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
+            f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
+
+            fastcorestream=self.a_i_Il(f_clZ)
+            assert(fastcorestream.shape==stream_1e.shape)
+
+            # skipcoretest is for testing and verifies that the backflow does not change near a nucleus,
+            if skipcore_test:
+                r_ei=r_ei_trivial
+            else:
+                stream_1e+=fastcorestream
 
         norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
         # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
@@ -1055,7 +1002,6 @@ class FermiNet(Module):
             stream_1e,
             r_ei,
         )
-
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
@@ -1075,23 +1021,127 @@ class FermiNet(Module):
                 raise self._get_bad_determinant_fn_mode_error()
             return array_to_slog(psi)
 
-
-        #fastcoretest verifies that the backflow does not change near a nucleus
-        if self.fastcore and not fastcoretest:
-            f_clZ=[[f(elec_pos_og-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
-            f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
-
-            term=self.a_iIl(f_clZ)
-            if len(elec_pos.shape)==2:
-                orbitals[0]+=term[None,:,:orbitals[0].shape[-1]]
-            else:
-                orbitals[0]+=term[None,:,:,:orbitals[0].shape[-1]]
-
-
+        if get_orbitals:
+            return orbitals
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
         return slog_sum_over_axis(slog_det_prods)
+
+
+
+
+class f_clZ(Module):
+    @flax.linen.compact
+    def __call__(self,X):
+        #cplus=jnp.squeeze(jnp.abs(flax.linen.Dense(features=1)(jnp.ones((1,)))))
+        c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
+        c=jnp.mean(c)
+        r=jnp.sqrt(jnp.sum(X**2,axis=-1))
+        return jnp.exp(-c*r)
+
+
+class FastCore(FermiNet):
+    fc_ratio: float
+
+    def setup(self):
+        super().setup()
+
+        # NA: for fastcore
+        self.ion_pos=self.compute_input_streams.keywords['ion_pos']
+        self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
+        self.rcZ=self.mindist*self.fc_ratio/2
+
+        #self.ft_clZ=[f_clZ(),f_clZ(),f_clZ()]
+        self.ft_clZ=[lambda x:0]
+        self.f_clZ=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.ft_clZ]
+
+        # NA, todo: extract this from backflow
+        self.backflowdim=256
+
+        self.a_i_Il=flax.linen.Dense(features=self.backflowdim)
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: Array, skipcore_test=False, get_orbitals=False) -> SLArray:  # type: ignore[override]
+        og_elec_pos=elec_pos
+        snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.rcZ)
+        input_stream_1e, input_stream_2e, r_ei_trivial, _ = self._compute_input_streams(snapped_elec_pos)
+        _, _, r_ei, _ = self._compute_input_streams(og_elec_pos)
+
+        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        f_clZ=[[f(og_elec_pos-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
+        f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
+
+        fastcorestream=self.a_i_Il(f_clZ)
+        assert(fastcorestream.shape==stream_1e.shape)
+
+        # skipcoretest is for testing and verifies that the backflow does not change near a nucleus,
+        if skipcore_test:
+            r_ei=r_ei_trivial
+        else:
+            stream_1e+=fastcorestream
+
+        norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
+        # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+        orbitals = self._eval_orbitals(
+            orbitals_split,
+            norbitals_per_split,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+            r_ei,
+        )
+
+        if self.full_det:
+            orbitals = [jnp.concatenate(orbitals, axis=-2)]
+
+        if get_orbitals:
+            return orbitals
+
+        # slog_det_prods is SLArray of shape (ndeterminants, ...)
+        slog_det_prods = slogdet_product(orbitals)
+        return slog_sum_over_axis(slog_det_prods)
+    
+
+    def bump1d(self,r):
+        return flax.linen.sigmoid(6-12*r)
+    
+    def bumpfunction(self,X,supportwidth):
+        X=X/supportwidth
+        r=jnp.sqrt(jnp.sum(X**2,axis=-1))
+        return self.bump1d(r)
+
+    # elec: j,3; ion_pos: I,3
+    def snap_walker(self,elec,ion_pos,rcZ):
+        # I,j
+        indiv_bumps_=self.bumpfunction(elec[None,:,:]-ion_pos[:,None,:],rcZ)
+
+        # j
+        complement_=jnp.prod(1-indiv_bumps_,axis=0)
+        denom=jnp.sum(indiv_bumps_,axis=0)+complement_
+
+        # I,j
+        indiv_bumps=indiv_bumps_/denom[None,:]
+        # j
+        complement=complement_/denom
+
+        return jnp.sum(ion_pos[:,None,:]*indiv_bumps[:,:,None],axis=0)+complement[:,None]*elec
+
+    def cond_vmap(self,f,elec,**kwargs):
+        if len(elec.shape)==2:
+            return f(elec,**kwargs)
+        else:
+            return jax.vmap(functools.partial(f,**kwargs))(elec)
+        
+    def snap(self,elec,ion_pos,rcZ):
+        return self.cond_vmap(self.snap_walker,elec,ion_pos=ion_pos,rcZ=rcZ)
+
+    def localized(self,f,X,rcZ):
+        return self.bumpfunction(X,rcZ)*f(X)
+
+
 
 
 class EmbeddedParticleFermiNet(FermiNet):
