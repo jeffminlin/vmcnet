@@ -15,7 +15,7 @@ import sys
 def test_fastcore():
     runtest()
 
-def runtest(resolution=25):
+def runtest(mode='test',resolution=50):
 
     config=default_config.get_default_config()
     config.model.type='fastcore'
@@ -36,22 +36,25 @@ def runtest(resolution=25):
     nelec=jnp.array(nelec)
     model=construct.get_model_from_config(modelconfig,nelec,ion_pos,ion_charges)
 
-    key=rnd.PRNGKey(0)
-    k1,k2=rnd.split(key)
-    elec_pos=rnd.normal(rnd.PRNGKey(1),(nelec[0]+nelec[1],3))
-    N=elec_pos.shape[0]
+    elec_pos=rnd.normal(rnd.PRNGKey(0),(nelec[0]+nelec[1],3))
 
-    R=1.5*np.max(ion_pos)
-    print(R)
+    R=np.max(ion_pos)
+    L=1.5*R
+    eps=2*L/resolution
 
-    eps=R/resolution
-    Y=jnp.arange(-R/2,R/2,eps)
-    Z=jnp.arange(-R,R,eps)
-    Y,Z=jnp.meshgrid(Y,Z)
-    a,b=Y.shape
+    if mode=='plot':
+        Y=jnp.arange(-L/2,L/2,eps)
+        Z=jnp.arange(-L,L,eps)
+        Y,Z=jnp.meshgrid(Y,Z)
+        a,b=Y.shape
 
-    Y,Z=jnp.ravel(Y),jnp.ravel(Z)
-    X=jnp.zeros_like(Y)
+        Y,Z=jnp.ravel(Y),jnp.ravel(Z)
+        X=jnp.zeros_like(Y)
+
+    else:
+        Z=jnp.arange(-L,L,eps)
+        Y=jnp.zeros_like(Z)
+        X=jnp.zeros_like(Z)
 
     Elec_pos=np.array(elec_pos)[None,:,:]*np.ones_like(Y)[:,None,None]
     Elec_pos[:,0,0]=X
@@ -59,24 +62,28 @@ def runtest(resolution=25):
     Elec_pos[:,0,2]=Z
     Elec_pos=jnp.array(Elec_pos)
 
+    """ This line is the slow one, even for a single sample (elec_pos instead of Elec_pos) """
+    #params=model.init(rnd.PRNGKey(0),elec_pos)
     params=model.init(rnd.PRNGKey(0),Elec_pos)
-    orbitals=model.apply(params,Elec_pos,get_orbitals=True)[0][0]
 
-    orbitals=orbitals.reshape((a,b,4,4))
+    orbitals=model.apply(params,Elec_pos,get_orbitals=True)[0][0] # first (typically only) pmap slice, spin up 
 
-    dx=jnp.linalg.norm(orbitals[1:]-orbitals[:-1],axis=-1)
+    if mode=='test':
+        radius=R*ratio/10
+        dists=[jnp.linalg.norm(Elec_pos[:,0,:]-pos[None,:],axis=-1) for pos in ion_pos]
+        core_regions=[jnp.where(dist<radius) for dist in dists]
+        for core in core_regions:
+            if isinstance(core,tuple):
+                (core,)=core
+            np.testing.assert_allclose(jnp.std(orbitals[core,1:],axis=-3)/jnp.std(orbitals),0,atol=1/1000)
+    else:
+        orbitals=orbitals.reshape((a,b,4,4))
 
-    dists=[jnp.linalg.norm(Elec_pos[:,0,:]-pos[None,:],axis=-1) for pos in ion_pos]
-    mindist=jnp.minimum(*dists).reshape((a,b))
-    core_region=jnp.where(mindist<np.max(ion_pos)*ratio/10)
-    I,J=core_region
-
-    assert(jnp.std(dx[I,J,1])/jnp.std(dx)<1/1000)
     return orbitals
 
 
 if __name__=='__main__':
-    orbitals=runtest(50)
+    orbitals=runtest(mode='plot',resolution=100)
     import matplotlib.pyplot as plt
 
     def PCA(X,k):
