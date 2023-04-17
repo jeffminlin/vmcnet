@@ -1010,9 +1010,13 @@ class FermiNet(Module):
 
 
 
-class core_orbital_fns(Module):
+class core_orbital_fn(Module):
+    l: int
+
     @flax.linen.compact
     def __call__(self,X):
+        # temporary simple core orbitals
+
         c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
         c=jnp.mean(c)
         r=jnp.sqrt(jnp.sum(X**2,axis=-1))
@@ -1021,21 +1025,23 @@ class core_orbital_fns(Module):
 
 class FastCore(FermiNet):
     fc_ratio: float
+    n_core_orbitals: int
 
     def setup(self):
         super().setup()
 
+
         self.ion_pos=self.compute_input_streams.keywords['ion_pos']
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
-        self.rcZ=self.mindist*self.fc_ratio/2
+        self.radius=self.mindist*self.fc_ratio/2
 
-        self.core_orbitals_nonlocal=[core_orbital_fns(),core_orbital_fns(),core_orbital_fns()]
-        self.core_orbital_fns=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.core_orbitals_nonlocal]
+        self.core_orbitals_nonlocal=[core_orbital_fn(l) for l in range(self.n_core_orbitals)]
+        self.core_orbital_fns=[functools.partial(self.localized,f,rcZ=self.radius) for f in self.core_orbitals_nonlocal]
 
     @flax.linen.compact
     def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:  # type: ignore[override]
         og_elec_pos=elec_pos
-        snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.rcZ)
+        snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.radius)
 
         input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(og_elec_pos)
         snapped_input_stream_1e, snapped_input_stream_2e, *_ = self._compute_input_streams(snapped_elec_pos)
@@ -1067,13 +1073,11 @@ class FastCore(FermiNet):
         if get_orbitals:
             return orbitals
 
-        # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
         return slog_sum_over_axis(slog_det_prods)
     
     def bump1d(self,r):
         return 1-flax.linen.sigmoid(5*jnp.log(2*r))
-        #return flax.linen.sigmoid(6-12*r)
     
     def bumpfunction(self,X,supportwidth):
         X=X/supportwidth
