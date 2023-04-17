@@ -163,30 +163,28 @@ def get_model_from_config(
             bias_initializer_orbital_linear=bias_init_constructor(
                 model_config.bias_init_orbital_linear
             ),
+            determinant_fn=determinant_fn,
+            determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
+            orbitals_use_bias=model_config.orbitals_use_bias,
+            isotropic_decay=model_config.isotropic_decay,
+            full_det=model_config.full_det,
         )
+        if 'auto' in model_config:
+            standardkwargs.update(model_config.auto)
 
 
         # TODO(Jeffmin): make interface more flexible w.r.t. different types of Jastrows
         if model_config.type == "ferminet":
 
-
             return FermiNet(
                 *standardargs,
                 **standardkwargs,
-                orbitals_use_bias=model_config.orbitals_use_bias,
-                isotropic_decay=model_config.isotropic_decay,
-                determinant_fn=determinant_fn,
-                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                full_det=model_config.full_det,
             )
         if model_config.type == "fastcore":
 
             return FastCore(
                 *standardargs,
                 **standardkwargs,
-                determinant_fn=determinant_fn,
-                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                **model_config.auto
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -210,11 +208,6 @@ def get_model_from_config(
             return EmbeddedParticleFermiNet(
                 *standardargs,
                 **standardkwargs,
-                orbitals_use_bias=model_config.orbitals_use_bias,
-                isotropic_decay=model_config.isotropic_decay,
-                determinant_fn=determinant_fn,
-                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                full_det=model_config.full_det,
                 nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_compute_input_streams=invariance_compute_input_streams,
                 invariance_backflow=invariance_backflow,
@@ -239,11 +232,6 @@ def get_model_from_config(
             return ExtendedOrbitalMatrixFermiNet(
                 *standardargs,
                 **standardkwargs,
-                orbitals_use_bias=model_config.orbitals_use_bias,
-                isotropic_decay=model_config.isotropic_decay,
-                determinant_fn=determinant_fn,
-                determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
-                full_det=model_config.full_det,
                 nhidden_fermions_per_spin=model_config.nhidden_fermions_per_spin,
                 invariance_backflow=invariance_backflow,
                 invariance_kernel_initializer=kernel_init_constructor(
@@ -1009,30 +997,32 @@ class FermiNet(Module):
 
 class core_orbital_fn(Module):
     l: int
+    orbitaltype: str
 
     @flax.linen.compact
     def __call__(self,X):
-        # temporary simple core orbitals
 
-        c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
-        c=jnp.mean(c)
-        r=jnp.sqrt(jnp.sum(X**2,axis=-1))
-        return jnp.exp(-c*r)
+        # temporary simple core orbitals
+        if self.orbitaltype=='exp':
+            c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
+            c=jnp.mean(c)
+            r=jnp.sqrt(jnp.sum(X**2,axis=-1))
+            return jnp.exp(-c*r)
 
 
 class FastCore(FermiNet):
     fc_ratio: float
     n_core_orbitals: int
+    core_orbital_type: str
 
     def setup(self):
         super().setup()
-
 
         self.ion_pos=self.compute_input_streams.keywords['ion_pos']
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
         self.radius=self.mindist*self.fc_ratio/2
 
-        self.core_orbitals_nonlocal=[core_orbital_fn(l) for l in range(self.n_core_orbitals)]
+        self.core_orbitals_nonlocal=[core_orbital_fn(l,self.core_orbital_type) for l in range(self.n_core_orbitals)]
         self.core_orbital_fns=[functools.partial(self.localized,f,radius=self.radius) for f in self.core_orbitals_nonlocal]
 
     @flax.linen.compact

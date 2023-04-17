@@ -163,30 +163,18 @@ def get_default_model_config() -> Dict:
         "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
         "full_det": False,
+        # NA: when adding a new hyperparam to model
+        # add its default value to model_config["auto"]
+        # to use model without modifying model.construct.get_model_from_config(...)
+        "auto": dict(),
     }
 
-    base_fastcore_config={
-        "input_streams": input_streams,
-        "backflow": ferminet_backflow,
-        "ndeterminants": 1,
-        "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-        "kernel_init_envelope_dim": {"type": "ones"},
-        "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init,
-        "orbitals_use_bias": True,
-        "isotropic_decay": True,
-        "use_det_resnet": False,
-        "det_resnet": determinant_resnet,
-        "determinant_fn_mode": "parallel_even",
-        "full_det": False,
-        "auto": dict(
-        orbitals_use_bias=True,
-        isotropic_decay=True,
-        full_det=False,
+    base_fastcore_config=_copy_all_dicts(base_ferminet_config)
+    base_fastcore_config['auto']=dict(
         fc_ratio=0.3,
         n_core_orbitals=5,
+        core_orbital_type='exp',
         )
-    }
 
     invariance_for_antieq = {
         "ndense_list": ((32,), (32,), (1,)),
