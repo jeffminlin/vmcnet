@@ -1033,7 +1033,7 @@ class FastCore(FermiNet):
         self.radius=self.mindist*self.fc_ratio/2
 
         self.core_orbitals_nonlocal=[core_orbital_fn(l) for l in range(self.n_core_orbitals)]
-        self.core_orbital_fns=[functools.partial(self.localized,f,rcZ=self.radius) for f in self.core_orbitals_nonlocal]
+        self.core_orbital_fns=[functools.partial(self.localized,f,radius=self.radius) for f in self.core_orbitals_nonlocal]
 
     @flax.linen.compact
     def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:  # type: ignore[override]
@@ -1106,8 +1106,8 @@ class FastCore(FermiNet):
     def snap(self,elec,ion_pos,rcZ):
         return self.cond_vmap(self.snap_walker,elec,ion_pos=ion_pos,rcZ=rcZ)
 
-    def localized(self,f,X,rcZ):
-        return self.bumpfunction(X,rcZ)*f(X)
+    def localized(self,f,X,radius):
+        return self.bumpfunction(X,radius)*f(X)
 
 
 
