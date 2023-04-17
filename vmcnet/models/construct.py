@@ -1010,7 +1010,7 @@ class FermiNet(Module):
 
 
 
-class core_orbitals(Module):
+class core_orbital_fns(Module):
     @flax.linen.compact
     def __call__(self,X):
         c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
@@ -1030,16 +1030,11 @@ class FastCore(FermiNet):
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
         self.rcZ=self.mindist*self.fc_ratio/2
 
-        self.core_orbitals_nonlocal=[core_orbitals(),core_orbitals(),core_orbitals()]
-        self.core_orbitals=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.core_orbitals_nonlocal]
-
-        # NA, todo: extract this from backflow
-        #self.backflowdim=256
-        #self.core_weight_A=
-        #self.core_weight_B=flax.linen.Dense(features=self.backflowdim)
+        self.core_orbitals_nonlocal=[core_orbital_fns(),core_orbital_fns(),core_orbital_fns()]
+        self.core_orbital_fns=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.core_orbitals_nonlocal]
 
     @flax.linen.compact
-    def __call__(self, elec_pos: Array, skipcore_test=False, get_orbitals=False) -> SLArray:  # type: ignore[override]
+    def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:  # type: ignore[override]
         og_elec_pos=elec_pos
         snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.rcZ)
 
@@ -1049,9 +1044,9 @@ class FastCore(FermiNet):
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
         snapped_stream_1e = self._backflow(snapped_input_stream_1e, snapped_input_stream_2e)
 
-        core_outputs=[[f(og_elec_pos-ion[None,...,:]) for f in self.core_orbitals] for ion in self.ion_pos]
-        core_outputs=jnp.stack([y for x in core_outputs for y in x],axis=-1)
-        snapped_stream_1e+=flax.linen.Dense(features=snapped_stream_1e.shape[-1])(core_outputs)
+        core_orbitals=[[f(og_elec_pos-ion[None,...,:]) for f in self.core_orbital_fns] for ion in self.ion_pos]
+        core_orbitals=jnp.stack([y for x in core_orbitals for y in x],axis=-1)
+        snapped_stream_1e+=flax.linen.Dense(features=snapped_stream_1e.shape[-1])(core_orbitals)
 
         norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
         orbitals = self._eval_orbitals(
@@ -1064,8 +1059,8 @@ class FastCore(FermiNet):
         )
 
         split=orbitals[0].shape[-2]
-        orbitals[0] += flax.linen.Dense(features=orbitals[0].shape[-1])(core_outputs[...,:split,:])
-        orbitals[1] += flax.linen.Dense(features=orbitals[1].shape[-1])(core_outputs[...,split:,:])
+        orbitals[0] += flax.linen.Dense(features=orbitals[0].shape[-1])(core_orbitals[...,:split,:])
+        orbitals[1] += flax.linen.Dense(features=orbitals[1].shape[-1])(core_orbitals[...,split:,:])
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
