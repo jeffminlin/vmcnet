@@ -15,7 +15,7 @@ import sys
 def test_fastcore():
     runtest()
 
-def runtest(mode='test',resolution=50):
+def runtest(mode='test',resolution=100):
 
     config=default_config.get_default_config()
     config.model.type='fastcore'
@@ -67,15 +67,16 @@ def runtest(mode='test',resolution=50):
     params=model.init(rnd.PRNGKey(0),Elec_pos)
 
     orbitals=model.apply(params,Elec_pos,get_orbitals=True)[0][0] # first (typically only) pmap slice, spin up 
+    change_rate=jnp.sum((orbitals[1:]-orbitals[:-1])**2,axis=-1)
 
     if mode=='test':
-        radius=R*ratio/10
+        radius=R*ratio/20
         dists=[jnp.linalg.norm(Elec_pos[:,0,:]-pos[None,:],axis=-1) for pos in ion_pos]
         core_regions=[jnp.where(dist<radius) for dist in dists]
         for core in core_regions:
             if isinstance(core,tuple):
                 (core,)=core
-            np.testing.assert_allclose(jnp.std(orbitals[core,1:],axis=-3)/jnp.std(orbitals),0,atol=1/1000)
+            np.testing.assert_allclose(jnp.mean(change_rate[core,1:])/jnp.mean(change_rate),0,atol=10**(-6))
     else:
         orbitals=orbitals.reshape((a,b,4,4))
 
