@@ -183,7 +183,7 @@ def get_default_model_config() -> Dict:
         orbitals_use_bias=True,
         isotropic_decay=True,
         full_det=False,
-        fc_ratio=1
+        fc_ratio=1.0
         )
     }
 
