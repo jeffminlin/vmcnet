@@ -712,8 +712,6 @@ def _reshape_raw_ferminet_orbitals(
     return [jnp.moveaxis(orb, -2, 0) for orb in orbitals]
 
 
-
-
 class FermiNet(Module):
     """FermiNet/generalized Slater determinant model.
 
@@ -861,7 +859,6 @@ class FermiNet(Module):
             else:
                 raise self._get_bad_determinant_fn_mode_error()
 
-        
     def _calculate_psi_parallel_even(self, fn_inputs: ArrayList):
         """Calculate psi as an even fn. times products of corresponding determinants.
 
@@ -967,12 +964,12 @@ class FermiNet(Module):
             particles across different spin splits. If the inputs have shape
             (batch_dims, nelec, d), then the output has shape (batch_dims,).
         """
-
-        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(elec_pos)
-
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
-        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
         norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
         # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
