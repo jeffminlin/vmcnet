@@ -1031,7 +1031,7 @@ class FermiNet(Module):
 
 
 
-class f_clZ(Module):
+class corefns_local(Module):
     @flax.linen.compact
     def __call__(self,X):
         #cplus=jnp.squeeze(jnp.abs(flax.linen.Dense(features=1)(jnp.ones((1,)))))
@@ -1047,14 +1047,12 @@ class FastCore(FermiNet):
     def setup(self):
         super().setup()
 
-        # NA: for fastcore
         self.ion_pos=self.compute_input_streams.keywords['ion_pos']
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
         self.rcZ=self.mindist*self.fc_ratio/2
 
-        #self.ft_clZ=[f_clZ(),f_clZ(),f_clZ()]
-        self.ft_clZ=[lambda x:0]
-        self.f_clZ=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.ft_clZ]
+        self.corefns_nonlocal=[corefns_local(),corefns_local(),corefns_local()]
+        self.corefns_local=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.corefns_nonlocal]
 
         # NA, todo: extract this from backflow
         self.backflowdim=256
@@ -1071,7 +1069,7 @@ class FastCore(FermiNet):
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
-        f_clZ=[[f(og_elec_pos-ion[None,...,:]) for f in self.f_clZ] for ion in self.ion_pos]
+        f_clZ=[[f(og_elec_pos-ion[None,...,:]) for f in self.corefns_local] for ion in self.ion_pos]
         f_clZ=jnp.stack([y for x in f_clZ for y in x],axis=-1)
 
         fastcorestream=self.a_i_Il(f_clZ)
@@ -1104,9 +1102,9 @@ class FastCore(FermiNet):
         slog_det_prods = slogdet_product(orbitals)
         return slog_sum_over_axis(slog_det_prods)
     
-
     def bump1d(self,r):
-        return flax.linen.sigmoid(6-12*r)
+        return 1-flax.linen.sigmoid(5*jnp.log(2*r))
+        #return flax.linen.sigmoid(6-12*r)
     
     def bumpfunction(self,X,supportwidth):
         X=X/supportwidth

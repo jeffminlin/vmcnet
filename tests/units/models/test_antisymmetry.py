@@ -42,8 +42,9 @@ def test_slogdet_product():
     matrix_pytree = {0: m1, 1: (m2, m1)}
     sign_prod, log_prod = models.antisymmetry.slogdet_product(matrix_pytree)
 
-    np.testing.assert_allclose(sign_prod, jnp.array([0, -1]))
-    np.testing.assert_allclose(log_prod, jnp.array([-jnp.inf, jnp.log(25)]))
+    np.testing.assert_allclose(sign_prod*jnp.exp(log_prod), jnp.array([0, -25]),atol=10**(-6))
+
+
 
 
 def test_lexicographic_order_of_perms():

@@ -15,7 +15,7 @@ import sys
 def test_fastcore():
     runtest()
 
-def runtest():
+def runtest(resolution=25):
 
     config=default_config.get_default_config()
     config.model.type='fastcore'
@@ -44,7 +44,7 @@ def runtest():
     R=1.5*np.max(ion_pos)
     print(R)
 
-    eps=R/50
+    eps=R/resolution
     Y=jnp.arange(-R/2,R/2,eps)
     Z=jnp.arange(-R,R,eps)
     Y,Z=jnp.meshgrid(Y,Z)
@@ -71,12 +71,12 @@ def runtest():
     core_region=jnp.where(mindist<np.max(ion_pos)*ratio/10)
     I,J=core_region
 
-    assert(jnp.std(dx[I,J,1])/jnp.std(dx)<.01)
+    assert(jnp.std(dx[I,J,1])/jnp.std(dx)<1/1000)
     return orbitals
 
 
 if __name__=='__main__':
-    orbitals=runtest()
+    orbitals=runtest(50)
     import matplotlib.pyplot as plt
 
     def PCA(X,k):
