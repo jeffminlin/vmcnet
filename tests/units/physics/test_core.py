@@ -34,23 +34,26 @@ def test_total_energy_grad():
     x = make_dummy_x()
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
     nchains = x.shape[0]
+    key = jax.random.PRNGKey(0)
 
-    target_local_energies = jnp.array([3.0, 1.0, -1.0])
-    target_energy = 1.0
-    target_variance = 4.0
-    target_grad_energy = 2.0 * jnp.mean(
-        (target_local_energies - target_energy) * log_psi_grad_x
+    def local_energy_fn(a, x, key):
+        return jnp.sum(x)
+
+    # Based on the specific values returned by make_dummy_x
+    target_local_energies = jnp.array([3.0, 7.0, 11.0])
+    target_energy = 7.0
+    target_variance = 16.0
+    target_grad_energy = (
+        2.0
+        * jnp.mean((target_local_energies - target_energy) * log_psi_grad_x)
+        * (nchains / (nchains - 1))
     )
-
-    def local_energy_fn(a, x):
-        del a
-        return target_local_energies
 
     total_energy_value_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply, local_energy_fn, nchains
     )
 
-    energy_data, grad_energy = total_energy_value_and_grad(a, x)
+    energy_data, grad_energy = total_energy_value_and_grad(a, key, x)
     energy = energy_data[0]
     variance = energy_data[1][0]
     local_energies = energy_data[1][1]

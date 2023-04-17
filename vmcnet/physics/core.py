@@ -7,13 +7,21 @@ import jax.numpy as jnp
 import kfac_jax
 
 import vmcnet.utils as utils
-from vmcnet.utils.typing import Array, P, ClippingFn, PRNGKey, ModelApply
+from vmcnet.utils.pytree_helpers import tree_sum
+from vmcnet.utils.typing import (
+    Array,
+    P,
+    ClippingFn,
+    PRNGKey,
+    LocalEnergyApply,
+    ModelApply,
+)
 
 EnergyAuxData = Tuple[
     chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
 ]
 EnergyData = Tuple[chex.Numeric, EnergyAuxData]
-ValueGradEnergyFn = Callable[[P, Array], Tuple[EnergyData, P]]
+ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
 
 
 def initialize_molecular_pos(
@@ -62,7 +70,7 @@ def initialize_molecular_pos(
 
 def combine_local_energy_terms(
     local_energy_terms: Sequence[ModelApply[P]],
-) -> ModelApply[P]:
+) -> LocalEnergyApply[P]:
     """Combine a sequence of local energy terms by adding them.
 
     Args:
@@ -75,7 +83,8 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params: P, x: Array) -> Array:
+    def local_energy_fn(params: P, x: Array, key: Optional[PRNGKey]) -> Array:
+        del key
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
             local_energy_sum = cast(Array, local_energy_sum + term(params, x))
@@ -88,6 +97,8 @@ def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
     x: Array,
+    nparticles: Optional[int] = None,
+    particle_perm: Optional[Array] = None,
 ) -> Array:
     """Compute (nabla^2 psi) / psi at x given a function which evaluates psi'(x)/psi.
 
@@ -120,6 +131,11 @@ def laplacian_psi_over_psi(
             be over the second arg, x, and the output shape should be the same as x
         params (pytree): model parameters, passed as the first arg of grad_log_psi
         x (Array): second input to grad_log_psi
+        nparticles (int, Optional): when specified, only the first nparticles particles
+            of the particle_perm are used to calculate the laplacian. Defaults to None.
+        particle_perm (Array, Optional): permutation of the particle indices whose
+            ordering determines which particles' laplacians get evaluated, for use
+            in conjunction with the random particle method and the nparticles argument.
 
     Returns:
         Array: "local" laplacian calculation, i.e. (nabla^2 psi) / psi
@@ -134,16 +150,35 @@ def laplacian_psi_over_psi(
         grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
         return jnp.reshape(grad_log_psi_out, (-1,))
 
+    length = n
+    multiplier = 1.0
+    vecs = identity_mat
+
+    if nparticles is not None and particle_perm is not None:
+        length = 3 * nparticles
+        multiplier = n / (3 * nparticles)
+
+        d = x_shape[-1]
+        triple_perm = jnp.stack([particle_perm * d + i for i in range(d)]).T.reshape(
+            (n,)
+        )
+        vecs = identity_mat[triple_perm, :]
+
     def step_fn(carry, unused):
         del unused
         i = carry[0]
         primals, tangents = jax.jvp(
-            flattened_grad_log_psi_of_flat_x, (flat_x,), (identity_mat[i],)
+            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
         )
-        return (i + 1, carry[1] + jnp.square(primals[i]) + tangents[i]), None
+        return (
+            i + 1,
+            carry[1]
+            + jnp.square(jnp.dot(primals, vecs[i]))
+            + jnp.dot(tangents, vecs[i]),
+        ), None
 
-    out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=n)
-    return out[1]
+    out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=length)
+    return out[1] * multiplier
 
 
 def get_statistics_from_local_energy(
@@ -178,55 +213,50 @@ def get_statistics_from_local_energy(
     return energy, variance
 
 
-def get_default_energy_bwd(
-    log_psi_apply: ModelApply[P],
-    mean_grad_fn: Callable[[Array], Array],
-):
-    """Use a standard variance reduction formula to get the bwd pass of the energy.
+def get_clipped_energies_and_aux_data(
+    local_energies_noclip: Array,
+    nchains: int,
+    clipping_fn: Optional[ClippingFn],
+    nan_safe: bool,
+) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
+    """Clip local energies if requested and return auxiliary data."""
+    if clipping_fn is not None:
+        # For the unclipped metrics, which are not used in the gradient, don't
+        # do these in a nan-safe way. This makes nans more visible and makes sure
+        # nans checkpointing will work properly.
+        energy_noclip, variance_noclip = get_statistics_from_local_energy(
+            local_energies_noclip, nchains, nan_safe=False
+        )
 
-    The formula is 2 * E_p[(local_e - E_p[local_e]) * grad_log_psi], where the
-    symbol E_p[] refers to the expectation over the probability distribution p defined
-    by p(x) = |psi(x)|^2 / <psi | psi>. This is an unbiased estimator of the gradient
-    of E_p[local_e], and has a lower variance than directly differentiating E_p[local_e]
-    with respect to the parameters.
+        local_energies = clipping_fn(local_energies_noclip, energy_noclip)
+        energy, variance = get_statistics_from_local_energy(
+            local_energies_noclip, nchains, nan_safe=nan_safe
+        )
 
-    Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        mean_grad_fn (Callable): function which is used to average the local gradient
-            terms over all local devices. Has the signature local_grads -> avg_grad / 2,
-            and should only average over the batch axis 0.
+        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
+    else:
+        local_energies = local_energies_noclip
+        energy, variance = get_statistics_from_local_energy(
+            local_energies_noclip, nchains, nan_safe=nan_safe
+        )
 
-    Returns:
-        Callable: function which computes the backward pass in the custom vjp of the
-        total energy. Has the signature (res, cotangents) -> (gradients, None)
-    """
-
-    def scaled_by_local_e(
-        params: P, positions: Array, centered_local_energies: Array
-    ) -> chex.Numeric:
-        log_psi = log_psi_apply(params, positions)
-        kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
-        return 2.0 * mean_grad_fn(centered_local_energies * log_psi)
-
-    _get_energy_grad = jax.grad(scaled_by_local_e, argnums=0)
-
-    def energy_bwd(res, cotangents) -> Tuple[P, None]:
-        energy, local_energies, params, positions = res
-        centered_local_energies = local_energies - energy
-        gradient = _get_energy_grad(params, positions, centered_local_energies)
-        return jax.tree_map(lambda x: x * cotangents[0], gradient), None
-
-    return energy_bwd
+        # Even though there's no clipping function, still record noclip metrics
+        # without nan-safety so that checkpointing epochs with nans can be
+        # supported.
+        energy_noclip, variance_noclip = get_statistics_from_local_energy(
+            local_energies_noclip, nchains, nan_safe=False
+        )
+        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
+    return energy, local_energies, aux_data
 
 
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
-    local_energy_fn: ModelApply[P],
+    local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
-    get_energy_bwd: Callable = get_default_energy_bwd,
+    local_energy_type: str = "standard",
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -255,10 +285,18 @@ def create_value_and_grad_energy_fn(
             used instead of jnp.mean and jnp.sum for the terms in the gradient
             calculation. Can be set to False when debugging if trying to find the source
             of unexpected nans. Defaults to True.
-        get_energy_bwd (Callable): function which returns a custom backward pass for the
-            total energy calculation. Has the signature
-                (log_psi_apply, mean_grad_fn) -> energy_bwd.
-            Defaults to get_default_energy_bwd, which computes the formula above.
+        local_energy_type (str): one of [standard, ibp, random_particle]. "standard"
+            implies the standard VMC local energy in which case we can apply the
+            traditional VMC gradient estimator described above. "ibp" means integration
+            by parts in which case we use the "generic" VMC gradient estimator which
+            does not depend on the local energy having the form APsi/Psi for a Hermitian
+            operator A. In practice this means an extra term must be added to the
+            gradient in which the local energy itself is differentiated with respect to
+            the model parameters. "random_particle" means that the local energy uses one
+            or more random particles for each walker, rather than using all the
+            particles. In this case the standard gradient estimator can be used but the
+            code is slightly modified to pass a distinct PRNGkey to each walker.
+            Defaults to standard.
 
     Returns:
         Callable: function which computes the clipped energy value and gradient. Has the
@@ -268,51 +306,97 @@ def create_value_and_grad_energy_fn(
         where auxiliary_energy_data is the tuple
         (expected_variance, local_energies, unclipped_energy, unclipped_variance)
     """
-
-    @jax.custom_vjp
-    def compute_energy_data(params: P, positions: Array) -> EnergyData:
-        local_energies_noclip = local_energy_fn(params, positions)
-        if clipping_fn is not None:
-            # For the unclipped metrics, which are not used in the gradient, don't
-            # do these in a nan-safe way. This makes nans more visible and makes sure
-            # nans checkpointing will work properly.
-            energy_noclip, variance_noclip = get_statistics_from_local_energy(
-                local_energies_noclip, nchains, nan_safe=False
-            )
-
-            local_energies = clipping_fn(local_energies_noclip, energy_noclip)
-            energy, variance = get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=nan_safe
-            )
-
-            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
-        else:
-            local_energies = local_energies_noclip
-            energy, variance = get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=nan_safe
-            )
-
-            # Even though there's no clipping function, still record noclip metrics
-            # without nan-safety so that checkpointing epochs with nans can be
-            # supported.
-            energy_noclip, variance_noclip = get_statistics_from_local_energy(
-                local_energies, nchains, nan_safe=False
-            )
-            aux_data = (variance, local_energies, energy_noclip, variance_noclip)
-        return energy, aux_data
-
-    def energy_fwd(params: P, positions: Array):
-        output = compute_energy_data(params, positions)
-        energy = output[0]
-        local_energies = output[1][1]
-        return output, (energy, local_energies, params, positions)
-
     mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
-    energy_bwd = get_energy_bwd(log_psi_apply, mean_grad_fn)
 
-    compute_energy_data.defvjp(energy_fwd, energy_bwd)
+    def standard_estimator_forward(
+        params: P,
+        positions: Array,
+        centered_local_energies: Array,
+    ) -> chex.Numeric:
+        log_psi = log_psi_apply(params, positions)
+        kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
+        # NOTE: for the generic gradient estimator case it may be important to include
+        # the (nchains / nchains -1) factor here to make sure the standard and generic
+        # gradient terms aren't mismatched by a slight scale factor.
+        return (
+            2.0
+            * nchains
+            / (nchains - 1)
+            * mean_grad_fn(centered_local_energies * log_psi)
+        )
 
-    energy_data_val_and_grad = jax.value_and_grad(
-        compute_energy_data, argnums=0, has_aux=True
-    )
-    return energy_data_val_and_grad
+    def get_standard_contribution(local_energies_noclip, params, positions):
+        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+            local_energies_noclip, nchains, clipping_fn, nan_safe
+        )
+        centered_local_energies = local_energies - energy
+        grad_E = jax.grad(standard_estimator_forward, argnums=0)(
+            params, positions, centered_local_energies
+        )
+        return aux_data, energy, grad_E
+
+    def standard_energy_val_and_grad(params, key, positions):
+        del key
+
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0, None), out_axes=0
+        )(params, positions, None)
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
+        )
+
+        return (energy, aux_data), grad_E
+
+    def random_particle_energy_val_and_grad(params, key, positions):
+        nbatch = positions.shape[0]
+        key = jax.random.split(key, nbatch)
+
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0, 0), out_axes=0
+        )(params, positions, key)
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
+        )
+        return (energy, aux_data), grad_E
+
+    def generic_energy_val_and_grad(params, key, positions):
+        del key
+
+        val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
+        val_and_grad_local_energy_vmapped = jax.vmap(
+            val_and_grad_local_energy, in_axes=(None, 0, None), out_axes=0
+        )
+        local_energies_noclip, local_energy_grads = val_and_grad_local_energy_vmapped(
+            params, positions, None
+        )
+        generic_contribution = jax.tree_map(mean_grad_fn, local_energy_grads)
+
+        # Gradient clipping seems to make the optimization fail miserably when using
+        # the generic gradient estimator, so setting clipping_fn=None here.
+        # TODO (ggoldsh): investigate this phenomenon further.
+        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+            local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
+        )
+
+        centered_local_energies = local_energies - energy
+
+        standard_contribution = jax.grad(standard_estimator_forward, argnums=0)(
+            params, positions, centered_local_energies
+        )
+
+        grad_E = tree_sum(standard_contribution, generic_contribution)
+
+        return (energy, aux_data), grad_E
+
+    if local_energy_type == "standard":
+        return standard_energy_val_and_grad
+    elif local_energy_type == "ibp":
+        return generic_energy_val_and_grad
+    elif local_energy_type == "random_particle":
+        return random_particle_energy_val_and_grad
+    else:
+        raise ValueError(
+            f"Requested local energy type {local_energy_type} is not supported"
+        )

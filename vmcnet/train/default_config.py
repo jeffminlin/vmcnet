@@ -293,6 +293,8 @@ def get_default_molecular_config() -> Dict:
         "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
         "ion_charges": (1.0, 3.0),
         "nelec": (2, 2),
+        "ei_softening": 0.0,
+        "ee_softening": 0.0,
     }
     return problem_config
 
@@ -306,6 +308,8 @@ def get_default_vmc_config() -> Dict:
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
+        "local_energy_type": "standard",  # [standard, ibp, random_particle]
+        "local_energy": get_default_local_energy_config(),
         "checkpoint_every": 5000,
         "best_checkpoint_every": 100,
         "checkpoint_dir": "checkpoints",
@@ -373,6 +377,8 @@ def get_default_eval_config() -> Dict:
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,
         "std_move": 0.25,
+        "local_energy_type": "standard",  # [standard, ibp, random_particle]
+        "local_energy": get_default_local_energy_config(),
         # if use_data_from_training=True, nchains, nmoves_per_width_update, and
         # std_move are completely ignored, and the data output from training is
         # used as the initial positions instead
@@ -381,3 +387,20 @@ def get_default_eval_config() -> Dict:
         "nan_safe": False,
     }
     return eval_config
+
+
+def get_default_local_energy_config() -> Dict:
+    """Get a default local energy configuration."""
+    local_energy_config = {
+        "standard": {},
+        "ibp": {
+            # '("kinetic","ei","ee")', or some subset.
+            "ibp_parts": ("kinetic", "ei", "ee")
+        },
+        "random_particle": {
+            # '("kinetic","ei","ee")', or some subset.
+            "sample_parts": ("kinetic", "ei", "ee"),
+            "nparticles": 1,
+        },
+    }
+    return local_energy_config

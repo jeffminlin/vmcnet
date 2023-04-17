@@ -6,12 +6,13 @@ import flax
 import jax
 import jax.numpy as jnp
 
-from vmcnet.physics.potential import _compute_displacements
+from vmcnet.physics.potential import compute_displacements
 from vmcnet.utils.pytree_helpers import tree_prod, tree_sum
 from vmcnet.utils.typing import Array, ArrayList, InputStreams, ParticleSplit
 from .core import (
     Activation,
     Dense,
+    ElementWiseMultiply,
     Module,
     _split_mean,
     _valid_skip,
@@ -121,7 +122,7 @@ def compute_electron_ion(
     r_ei = None
     input_1e = elec_pos
     if ion_pos is not None:
-        r_ei = _compute_displacements(input_1e, ion_pos)
+        r_ei = compute_displacements(input_1e, ion_pos)
         input_1e = r_ei
         if include_ei_norm:
             input_norm = jnp.linalg.norm(input_1e, axis=-1, keepdims=True)
@@ -149,7 +150,7 @@ def compute_electron_electron(
 
         second output: two-electron displacements of shape (..., nelec, nelec, d)
     """
-    r_ee = _compute_displacements(elec_pos, elec_pos)
+    r_ee = compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
         r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
@@ -687,17 +688,14 @@ def _compute_exponential_envelopes_on_leaf(
     distances = jnp.linalg.norm(scale_out, axis=-1)
     inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
 
-    # norbitals parallel maps return shape [norbitals: (..., nelec, 1, 1)]
-    lin_comb_nion = SplitDense(
-        norbitals,
-        (1,) * norbitals,
-        kernel_initializer=kernel_initializer_ion,
-        use_bias=False,
-    )(inv_exp_distances)
-    # Concatenate to shape (..., nelec, norbitals, 1)
-    lin_comb_nion_concat = jnp.concatenate(lin_comb_nion, axis=-2)
-
-    return jnp.squeeze(lin_comb_nion_concat, axis=-1)  # (..., nelec, norbitals)
+    # Multiply elementwise over final two axes and sum over final axis, returning
+    # (..., nelec, norbitals)
+    return jnp.sum(
+        ElementWiseMultiply(naxes=2, kernel_init=kernel_initializer_ion)(
+            inv_exp_distances
+        ),
+        axis=-1,
+    )
 
 
 def _compute_exponential_envelopes_all_splits(

@@ -35,6 +35,7 @@ def sgd_vmc_loop_with_logging(
     logdir=None,
     checkpoint_every=None,
     checkpoint_dir=None,
+    local_energy_type: str = "standard",
 ):
     """Run a VMC test with a very simple SGD optimizer and given model."""
     # Setup metropolis step
@@ -54,7 +55,10 @@ def sgd_vmc_loop_with_logging(
         )
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_model.apply, local_energy_fn, nchains
+        log_psi_model.apply,
+        local_energy_fn,
+        nchains,
+        local_energy_type=local_energy_type,
     )
     update_param_fn = updates.params.create_grad_energy_update_param_fn(
         energy_data_val_and_grad,

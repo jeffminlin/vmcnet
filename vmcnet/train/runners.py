@@ -32,6 +32,7 @@ from vmcnet.utils.typing import (
     S,
     GetPositionFromData,
     GetAmplitudeFromData,
+    LocalEnergyApply,
     ModelApply,
     OptimizerState,
 )
@@ -212,25 +213,63 @@ def _get_mcmc_fns(
 
 # TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
+    local_energy_type: str,
+    local_energy_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
+    ei_softening: chex.Scalar,
+    ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
-) -> ModelApply[P]:
-    # Define parameter updates
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
-    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-        ion_pos, ion_charges
-    )
-    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential()
-    ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-        ion_pos, ion_charges
-    )
-
-    local_energy_fn: ModelApply[P] = physics.core.combine_local_energy_terms(
-        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
-    )
-
-    return local_energy_fn
+) -> LocalEnergyApply[P]:
+    if local_energy_type == "standard":
+        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+        ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+            ion_pos, ion_charges, softening_term=ei_softening
+        )
+        ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
+            softening_term=ee_softening
+        )
+        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+            ion_pos, ion_charges
+        )
+        local_energy_fn: LocalEnergyApply[P] = physics.core.combine_local_energy_terms(
+            [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+        )
+        return local_energy_fn
+    if local_energy_type == "ibp":
+        ibp_parts = (local_energy_config.ibp.ibp_parts,)
+        local_energy_fn = physics.ibp.create_ibp_local_energy(
+            log_psi_apply,
+            ion_pos,
+            ion_charges,
+            "kinetic" in ibp_parts,
+            "ei" in ibp_parts,
+            ei_softening,
+            "ee" in ibp_parts,
+            ee_softening,
+        )
+        return local_energy_fn
+    elif local_energy_type == "random_particle":
+        nparticles = local_energy_config.random_particle.nparticles
+        sample_parts = local_energy_config.random_particle.sample_parts
+        local_energy_fn = (
+            physics.random_particle.create_molecular_random_particle_local_energy(
+                log_psi_apply,
+                ion_pos,
+                ion_charges,
+                nparticles,
+                "kinetic" in sample_parts,
+                "ei" in sample_parts,
+                ei_softening,
+                "ee" in sample_parts,
+                ee_softening,
+            )
+        )
+        return local_energy_fn
+    else:
+        raise ValueError(
+            f"Requested local energy type {local_energy_type} is not supported"
+        )
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -275,23 +314,38 @@ def _get_clipping_fn(
     return clipping_fn
 
 
-def _get_energy_fns(
+def _get_energy_val_and_grad_fn(
     vmc_config: ConfigDict,
+    problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
-) -> Tuple[ModelApply[P], physics.core.ValueGradEnergyFn[P]]:
-    local_energy_fn = _assemble_mol_local_energy_fn(ion_pos, ion_charges, log_psi_apply)
+) -> physics.core.ValueGradEnergyFn[P]:
+    ei_softening = problem_config.ei_softening
+    ee_softening = problem_config.ee_softening
+
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        vmc_config.local_energy_type,
+        vmc_config.local_energy,
+        ion_pos,
+        ion_charges,
+        ei_softening,
+        ee_softening,
+        log_psi_apply,
+    )
+
     clipping_fn = _get_clipping_fn(vmc_config)
+
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         local_energy_fn,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
+        local_energy_type=vmc_config.local_energy_type,
     )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return energy_data_val_and_grad
 
 
 # TODO: don't forget to update type hint to be more general when
@@ -308,7 +362,6 @@ def _setup_vmc(
     ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
-    ModelApply[flax.core.FrozenDict],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     GetAmplitudeFromData[dwpa.DWPAData],
     flax.core.FrozenDict,
@@ -345,8 +398,8 @@ def _setup_vmc(
         config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
-    local_energy_fn, energy_data_val_and_grad = _get_energy_fns(
-        config.vmc, ion_pos, ion_charges, log_psi_apply
+    energy_data_val_and_grad = _get_energy_val_and_grad_fn(
+        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
     )
 
     # Setup parameter updates
@@ -372,7 +425,6 @@ def _setup_vmc(
         log_psi_apply,
         burning_step,
         walker_fn,
-        local_energy_fn,
         update_param_fn,
         get_amplitude_fn,
         params,
@@ -384,9 +436,11 @@ def _setup_vmc(
 
 # TODO: update output type hints when _get_mcmc_fns is made more general
 def _setup_eval(
-    config: ConfigDict,
+    eval_config: ConfigDict,
+    problem_config: ConfigDict,
+    ion_pos: Array,
+    ion_charges: Array,
     log_psi_apply: ModelApply[P],
-    local_energy_fn: ModelApply[P],
     get_position_fn: GetPositionFromData[dwpa.DWPAData],
     apply_pmap: bool = True,
 ) -> Tuple[
@@ -394,16 +448,29 @@ def _setup_eval(
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
+    ei_softening = problem_config.ei_softening
+    ee_softening = problem_config.ee_softening
+
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        eval_config.local_energy_type,
+        eval_config.local_energy,
+        ion_pos,
+        ion_charges,
+        ei_softening,
+        ee_softening,
+        log_psi_apply,
+    )
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn,
-        config.eval.nchains,
+        eval_config.nchains,
         get_position_fn,
-        record_local_energies=config.eval.record_local_energies,
-        nan_safe=config.eval.nan_safe,
+        record_local_energies=eval_config.record_local_energies,
+        nan_safe=eval_config.nan_safe,
         apply_pmap=apply_pmap,
+        use_PRNGKey=eval_config.local_energy_type == "random_particle",
     )
     eval_burning_step, eval_walker_fn = _get_mcmc_fns(
-        config.eval, log_psi_apply, apply_pmap=apply_pmap
+        eval_config, log_psi_apply, apply_pmap=apply_pmap
     )
     return eval_update_param_fn, eval_burning_step, eval_walker_fn
 
@@ -530,7 +597,6 @@ def run_molecule() -> None:
         log_psi_apply,
         burning_step,
         walker_fn,
-        local_energy_fn,
         update_param_fn,
         get_amplitude_fn,
         params,
@@ -596,9 +662,11 @@ def run_molecule() -> None:
     eval_logdir = os.path.join(logdir, "eval")
 
     eval_update_param_fn, eval_burning_step, eval_walker_fn = _setup_eval(
-        config,
+        config.eval,
+        config.problem,
+        ion_pos,
+        ion_charges,
         log_psi_apply,
-        local_energy_fn,
         pacore.get_position_from_data,
         apply_pmap=config.distribute,
     )

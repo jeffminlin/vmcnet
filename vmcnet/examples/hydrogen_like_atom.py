@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 import vmcnet.models as models
 import vmcnet.physics as physics
-from vmcnet.utils.typing import Array, P, ModelApply
+from vmcnet.utils.typing import Array, P, LocalEnergyApply
 
 
 class HydrogenLikeWavefunction(models.core.Module):
@@ -53,7 +53,7 @@ def make_hydrogen_like_local_energy(
     log_psi_apply: Callable[[P, Array], Array],
     charge: chex.Scalar,
     d: int = 3,
-) -> ModelApply[P]:
+) -> LocalEnergyApply[P]:
     """Local energy calculation for the hydrogen-like atom in general dimension d.
 
     Args:
@@ -73,7 +73,7 @@ def make_hydrogen_like_local_energy(
     ion_location = jnp.zeros((1, d))
     ion_charge = jnp.array([charge])
 
-    kinetic_fn = physics.kinetic.create_continuous_kinetic_energy(log_psi_apply)
+    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
     potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_location, ion_charge
     )
