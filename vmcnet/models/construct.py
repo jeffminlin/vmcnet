@@ -1010,13 +1010,14 @@ class FermiNet(Module):
 
 
 
-class corefns_local(Module):
+class core_orbitals(Module):
     @flax.linen.compact
     def __call__(self,X):
         c=self.param('c',flax.linen.initializers.uniform(1.0),(1,))
         c=jnp.mean(c)
         r=jnp.sqrt(jnp.sum(X**2,axis=-1))
-        return jnp.exp(-c*r)
+        #return jnp.exp(-c*r)
+        return 0
 
 
 class FastCore(FermiNet):
@@ -1029,12 +1030,13 @@ class FastCore(FermiNet):
         self.mindist=min([jnp.sqrt(jnp.sum((x-y)**2)) for i,x in enumerate(self.ion_pos) for y in self.ion_pos[:i]])
         self.rcZ=self.mindist*self.fc_ratio/2
 
-        self.corefns_nonlocal=[corefns_local(),corefns_local(),corefns_local()]
-        self.corefns_local=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.corefns_nonlocal]
+        self.core_orbitals_nonlocal=[core_orbitals(),core_orbitals(),core_orbitals()]
+        self.core_orbitals=[functools.partial(self.localized,f,rcZ=self.rcZ) for f in self.core_orbitals_nonlocal]
 
         # NA, todo: extract this from backflow
-        self.backflowdim=256
-        self.core_weight=flax.linen.Dense(features=self.backflowdim)
+        #self.backflowdim=256
+        #self.core_weight_A=
+        #self.core_weight_B=flax.linen.Dense(features=self.backflowdim)
 
     @flax.linen.compact
     def __call__(self, elec_pos: Array, skipcore_test=False, get_orbitals=False) -> SLArray:  # type: ignore[override]
@@ -1042,25 +1044,16 @@ class FastCore(FermiNet):
         snapped_elec_pos=self.snap(elec_pos,self.ion_pos,self.rcZ)
 
         input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(og_elec_pos)
-        snapped_input_stream_1e, snapped_input_stream_2e, snapped_r_ei, _ = self._compute_input_streams(snapped_elec_pos)
+        snapped_input_stream_1e, snapped_input_stream_2e, *_ = self._compute_input_streams(snapped_elec_pos)
 
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
         snapped_stream_1e = self._backflow(snapped_input_stream_1e, snapped_input_stream_2e)
 
-        core_outputs=[[f(og_elec_pos-ion[None,...,:]) for f in self.corefns_local] for ion in self.ion_pos]
+        core_outputs=[[f(og_elec_pos-ion[None,...,:]) for f in self.core_orbitals] for ion in self.ion_pos]
         core_outputs=jnp.stack([y for x in core_outputs for y in x],axis=-1)
-
-        fastcorestream=self.core_weight(core_outputs)
-        assert(fastcorestream.shape==snapped_stream_1e.shape)
-
-        # skipcoretest verifies that the backflow does not change near a nucleus,
-        if skipcore_test:
-            r_ei=snapped_r_ei
-        else:
-            snapped_stream_1e+=fastcorestream
+        snapped_stream_1e+=flax.linen.Dense(features=snapped_stream_1e.shape[-1])(core_outputs)
 
         norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
-        # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
         orbitals = self._eval_orbitals(
             orbitals_split,
             norbitals_per_split,
@@ -1069,6 +1062,10 @@ class FastCore(FermiNet):
             snapped_stream_1e,
             r_ei,
         )
+
+        split=orbitals[0].shape[-2]
+        orbitals[0] += flax.linen.Dense(features=orbitals[0].shape[-1])(core_outputs[...,:split,:])
+        orbitals[1] += flax.linen.Dense(features=orbitals[1].shape[-1])(core_outputs[...,split:,:])
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
