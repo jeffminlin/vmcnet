@@ -377,7 +377,7 @@ def create_value_and_grad_energy_fn(
         # the generic gradient estimator, so setting clipping_fn=None here.
         # TODO (ggoldsh): investigate this phenomenon further.
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
+            local_energies_noclip, nchains, clipping_fn, nan_safe=nan_safe
         )
 
         centered_local_energies = local_energies - energy
