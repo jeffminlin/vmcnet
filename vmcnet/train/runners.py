@@ -237,7 +237,7 @@ def _assemble_mol_local_energy_fn(
         )
         return local_energy_fn
     if local_energy_type == "ibp":
-        ibp_parts = (local_energy_config.ibp.ibp_parts,)
+        ibp_parts = local_energy_config.ibp.ibp_parts
         local_energy_fn = physics.ibp.create_ibp_local_energy(
             log_psi_apply,
             ion_pos,
