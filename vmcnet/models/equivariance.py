@@ -686,7 +686,7 @@ def _compute_exponential_envelopes_on_leaf(
         )
     # scale_out has shape (..., nelec, norbitals, nion, d)
     distances = jnp.linalg.norm(scale_out, axis=-1)
-    inv_exp_distances = jnp.exp(-distances)  # (..., nelec, norbitals, nion)
+    inv_exp_distances = jnp.exp(-(distances**2))  # (..., nelec, norbitals, nion)
 
     # Multiply elementwise over final two axes and sum over final axis, returning
     # (..., nelec, norbitals)
