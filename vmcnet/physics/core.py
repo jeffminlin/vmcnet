@@ -253,6 +253,7 @@ def get_clipped_energies_and_aux_data(
 def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: LocalEnergyApply[P],
+    standard_local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
@@ -364,6 +365,14 @@ def create_value_and_grad_energy_fn(
     def generic_energy_val_and_grad(params, key, positions):
         del key
 
+        standard_local_energies = jax.vmap(
+            standard_local_energy_fn, in_axes=(None, 0, None), out_axes=0
+        )(params, positions, None)
+
+        standard_energy, _, _ = get_clipped_energies_and_aux_data(
+            standard_local_energies, nchains, clipping_fn, nan_safe
+        )
+
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
         val_and_grad_local_energy_vmapped = jax.vmap(
             val_and_grad_local_energy, in_axes=(None, 0, None), out_axes=0
@@ -380,7 +389,7 @@ def create_value_and_grad_energy_fn(
             local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
         )
 
-        centered_local_energies = local_energies - energy
+        centered_local_energies = local_energies - standard_energy
 
         standard_contribution = jax.grad(standard_estimator_forward, argnums=0)(
             params, positions, centered_local_energies
@@ -388,7 +397,7 @@ def create_value_and_grad_energy_fn(
 
         grad_E = tree_sum(standard_contribution, generic_contribution)
 
-        return (energy, aux_data), grad_E
+        return (standard_energy, aux_data), grad_E
 
     if local_energy_type == "standard":
         return standard_energy_val_and_grad

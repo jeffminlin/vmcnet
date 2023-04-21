@@ -333,12 +333,22 @@ def _get_energy_val_and_grad_fn(
         ee_softening,
         log_psi_apply,
     )
+    standard_local_energy_fn = _assemble_mol_local_energy_fn(
+        "standard",
+        vmc_config.local_energy,
+        ion_pos,
+        ion_charges,
+        ei_softening,
+        ee_softening,
+        log_psi_apply,
+    )
 
     clipping_fn = _get_clipping_fn(vmc_config)
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         local_energy_fn,
+        standard_local_energy_fn,
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
