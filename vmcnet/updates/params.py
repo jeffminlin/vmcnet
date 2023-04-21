@@ -49,10 +49,17 @@ def _make_traced_fn_with_single_metrics(
 
     pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
 
-    def pmapped_update_param_fn_with_single_metrics(params, data, optimizer_state, key):
-        params, data, optimizer_state, metrics, key = pmapped_update_param_fn(
-            params, data, optimizer_state, key
-        )
+    def pmapped_update_param_fn_with_single_metrics(
+        params, data, optimizer_state, key, running_energy
+    ):
+        (
+            params,
+            data,
+            optimizer_state,
+            metrics,
+            key,
+            running_energy,
+        ) = pmapped_update_param_fn(params, data, optimizer_state, key, running_energy)
         if metrics_to_get_first is None:
             metrics = utils.distribute.get_first(metrics)
         else:
@@ -61,7 +68,7 @@ def _make_traced_fn_with_single_metrics(
                 if distributed_metric is not None:
                     metrics[metric] = utils.distribute.get_first(distributed_metric)
 
-        return params, data, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key, running_energy
 
     return pmapped_update_param_fn_with_single_metrics
 
@@ -102,12 +109,14 @@ def create_grad_energy_update_param_fn(
         False.
     """
 
-    def update_param_fn(params, data, optimizer_state, key):
+    def update_param_fn(params, data, optimizer_state, key, running_energy):
         position = get_position_fn(data)
         key, subkey = jax.random.split(key)
 
-        energy_data, grad_energy = energy_data_val_and_grad(params, subkey, position)
-        energy, aux_energy_data = energy_data
+        energy_data, grad_energy = energy_data_val_and_grad(
+            params, subkey, position, running_energy
+        )
+        energy, running_energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(
@@ -115,13 +124,17 @@ def create_grad_energy_update_param_fn(
         )
         data = update_data_fn(data, params)
 
-        metrics = {"energy": energy, "variance": aux_energy_data[0]}
+        metrics = {
+            "energy": energy,
+            "running_energy": running_energy,
+            "variance": aux_energy_data[0],
+        }
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
         )
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": tree_reduce_l1(params)})
-        return params, data, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key, running_energy
 
     traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
 
@@ -239,7 +252,7 @@ def create_eval_update_param_fn(
         updating the parameters
     """
 
-    def eval_update_param_fn(params, data, optimizer_state, key):
+    def eval_update_param_fn(params, data, optimizer_state, key, running_energy):
         positions = get_position_fn(data)
 
         if use_PRNGKey:
@@ -259,7 +272,7 @@ def create_eval_update_param_fn(
         metrics = {"energy": energy, "variance": variance}
         if record_local_energies:
             metrics.update({"local_energies": local_energies})
-        return params, data, optimizer_state, metrics, key
+        return params, data, optimizer_state, metrics, key, running_energy
 
     traced_fn = _make_traced_fn_with_single_metrics(
         eval_update_param_fn, apply_pmap, {"energy", "variance"}

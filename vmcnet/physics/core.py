@@ -361,7 +361,7 @@ def create_value_and_grad_energy_fn(
         )
         return (energy, aux_data), grad_E
 
-    def generic_energy_val_and_grad(params, key, positions):
+    def generic_energy_val_and_grad(params, key, positions, running_energy):
         del key
 
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
@@ -379,8 +379,11 @@ def create_value_and_grad_energy_fn(
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
             local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
         )
+        new_running_energy = jnp.where(
+            jnp.isnan(running_energy), energy, 0.01 * energy + 0.99 * running_energy
+        )
 
-        centered_local_energies = local_energies - energy
+        centered_local_energies = local_energies - new_running_energy
 
         standard_contribution = jax.grad(standard_estimator_forward, argnums=0)(
             params, positions, centered_local_energies
@@ -388,7 +391,7 @@ def create_value_and_grad_energy_fn(
 
         grad_E = tree_sum(standard_contribution, generic_contribution)
 
-        return (energy, aux_data), grad_E
+        return (energy, running_energy, aux_data), grad_E
 
     if local_energy_type == "standard":
         return standard_energy_val_and_grad

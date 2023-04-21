@@ -2,6 +2,7 @@
 from typing import Tuple, Optional
 
 import jax
+import jax.numpy as jnp
 
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
@@ -97,6 +98,8 @@ def vmc_loop(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
     nans_detected = False
+    running_energy = jnp.nan
+    running_energy = utils.distribute.replicate_all_local_devices(running_energy)
 
     with CheckpointWriter(
         is_pmapped
@@ -115,9 +118,14 @@ def vmc_loop(
 
             accept_ratio, data, key = walker_fn(params, data, key)
 
-            params, data, optimizer_state, metrics, key = update_param_fn(
-                params, data, optimizer_state, key
-            )
+            (
+                params,
+                data,
+                optimizer_state,
+                metrics,
+                key,
+                running_energy,
+            ) = update_param_fn(params, data, optimizer_state, key, running_energy)
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
