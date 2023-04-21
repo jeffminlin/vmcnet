@@ -391,7 +391,7 @@ def create_value_and_grad_energy_fn(
 
         grad_E = tree_sum(standard_contribution, generic_contribution)
 
-        return (energy, running_energy, aux_data), grad_E
+        return (energy, new_running_energy, aux_data), grad_E
 
     if local_energy_type == "standard":
         return standard_energy_val_and_grad
