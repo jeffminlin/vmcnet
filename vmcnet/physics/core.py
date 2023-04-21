@@ -370,7 +370,7 @@ def create_value_and_grad_energy_fn(
         )(params, positions, None)
 
         standard_energy, _, _ = get_clipped_energies_and_aux_data(
-            standard_local_energies, nchains, clipping_fn=None, nan_safe
+            standard_local_energies, nchains, clipping_fn=None, nan_safe=nan_safe
         )
 
         val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
