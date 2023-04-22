@@ -50,7 +50,7 @@ def _make_traced_fn_with_single_metrics(
     pmapped_update_param_fn = utils.distribute.pmap(update_param_fn)
 
     def pmapped_update_param_fn_with_single_metrics(
-        params, data, optimizer_state, key, running_energy
+        params, data, optimizer_state, key, running_energy, use_running_energy
     ):
         (
             params,
@@ -59,7 +59,9 @@ def _make_traced_fn_with_single_metrics(
             metrics,
             key,
             running_energy,
-        ) = pmapped_update_param_fn(params, data, optimizer_state, key, running_energy)
+        ) = pmapped_update_param_fn(
+            params, data, optimizer_state, key, running_energy, use_running_energy
+        )
         if metrics_to_get_first is None:
             metrics = utils.distribute.get_first(metrics)
         else:
@@ -109,12 +111,14 @@ def create_grad_energy_update_param_fn(
         False.
     """
 
-    def update_param_fn(params, data, optimizer_state, key, running_energy):
+    def update_param_fn(
+        params, data, optimizer_state, key, running_energy, use_running_energy
+    ):
         position = get_position_fn(data)
         key, subkey = jax.random.split(key)
 
         energy_data, grad_energy = energy_data_val_and_grad(
-            params, subkey, position, running_energy
+            params, subkey, position, running_energy, use_running_energy
         )
         energy, running_energy, aux_energy_data = energy_data
 
@@ -252,7 +256,9 @@ def create_eval_update_param_fn(
         updating the parameters
     """
 
-    def eval_update_param_fn(params, data, optimizer_state, key, running_energy):
+    def eval_update_param_fn(
+        params, data, optimizer_state, key, running_energy, use_running_energy
+    ):
         positions = get_position_fn(data)
 
         if use_PRNGKey:

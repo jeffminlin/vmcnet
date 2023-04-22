@@ -100,11 +100,15 @@ def vmc_loop(
     nans_detected = False
     running_energy = jnp.nan
     running_energy = utils.distribute.replicate_all_local_devices(running_energy)
+    use_running_energy = utils.distribute.replicate_all_local_devices(False)
 
     with CheckpointWriter(
         is_pmapped
     ) as checkpoint_writer, MetricsWriter() as metrics_writer:
         for epoch in range(nepochs):
+            if epoch == 1000:
+                use_running_energy = utils.distribute.replicate_all_local_devices(True)
+
             # Save state for checkpointing at the start of the epoch for two reasons:
             # 1. To save the model that generates the best energy and variance metrics,
             # rather than the model one parameter UPDATE after the best metrics.
@@ -125,7 +129,9 @@ def vmc_loop(
                 metrics,
                 key,
                 running_energy,
-            ) = update_param_fn(params, data, optimizer_state, key, running_energy)
+            ) = update_param_fn(
+                params, data, optimizer_state, key, running_energy, use_running_energy
+            )
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
