@@ -169,12 +169,12 @@ def get_default_model_config() -> Dict:
         "auto": dict(),
     }
 
-    base_fastcore_config=_copy_all_dicts(base_ferminet_config)
-    base_fastcore_config['auto']=dict(
+    base_fastcore_config = _copy_all_dicts(base_ferminet_config)
+    base_fastcore_config["auto"] = dict(
         fc_ratio=0.3,
         n_core_orbitals=5,
-        core_orbital_type='exp',
-        )
+        core_orbital_type="exp",
+    )
 
     invariance_for_antieq = {
         "ndense_list": ((32,), (32,), (1,)),
