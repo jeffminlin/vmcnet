@@ -1018,8 +1018,7 @@ class core_orbital_fn(Module):
         """
         # temporary simple core orbitals
         if self.orbitaltype == "exp":
-            c = self.param("c", flax.linen.initializers.uniform(1.0), (1,))
-            c = jnp.mean(c)
+            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
             r = jnp.sqrt(jnp.sum(X**2, axis=-1))
             return jnp.exp(-c * r)
 
