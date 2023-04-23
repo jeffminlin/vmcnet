@@ -3,6 +3,7 @@ Flexible, general-purpose VMC framework, built on [JAX](https://github.com/googl
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+
 ## Installation
 
 Python 3.9 is required, and a virtual environment is recommended. After cloning, use `pip install -e .` to install the package in editable/develop mode, or `pip install -e .[testing]` if planning on running tests.
