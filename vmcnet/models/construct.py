@@ -1132,6 +1132,13 @@ class FastCore(FermiNet):
             jnp.sum(ion_pos[:, None, :] * indiv_bumps[:, :, None], axis=0)
             + complement[:, None] * elec
         )
+    
+    def getcomplement_walker(self,elec,ion_pos,rcZ):
+        # I,j
+        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
+
+        # j
+        return jnp.prod(1 - indiv_bumps_, axis=0)
 
     def cond_vmap(self, f, elec, **kwargs):
         if len(elec.shape) == 2:
@@ -1142,6 +1149,9 @@ class FastCore(FermiNet):
     def snap(self, elec, ion_pos, rcZ):
         return self.cond_vmap(self.snap_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
 
+    def getcomplement(self, elec, ion_pos, rcZ):
+        return self.cond_vmap(self.getcomplement_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
+    
     def localized(self, f, X, radius):
         return self.bumpfunction(X, radius) * f(X)
 
