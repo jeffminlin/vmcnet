@@ -434,6 +434,67 @@ def _setup_vmc(
     )
 
 
+def _get_surrogate_update_fn(
+    vmc_config,
+    log_psi_apply,
+    params,
+    data,
+    ion_pos: Array,
+    ion_charges: Array,
+    key: PRNGKey,
+    apply_pmap: bool = True,
+):
+    surrogate_energy = (
+        physics.random_particle.create_molecular_random_particle_surrogate_energy(
+            log_psi_apply,
+            utils.distribute.get_first(params),
+            ion_pos,
+            ion_charges,
+        )
+    )
+
+    local_energy_fn = (
+        physics.random_particle.create_molecular_random_particle_local_energy(
+            log_psi_apply,
+            ion_pos,
+            ion_charges,
+            nparticles=1,
+            surrogate=surrogate_energy,
+        )
+    )
+
+    clipping_fn = _get_clipping_fn(vmc_config)
+
+    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+        log_psi_apply,
+        local_energy_fn,
+        vmc_config.nchains,
+        clipping_fn,
+        nan_safe=vmc_config.nan_safe,
+        local_energy_type=vmc_config.local_energy_type,
+    )
+
+    update_data_fn = pacore.get_update_data_fn(log_psi_apply)
+
+    (
+        update_param_fn,
+        optimizer_state,
+        key,
+    ) = updates.parse_config.get_update_fn_and_init_optimizer(
+        log_psi_apply,
+        vmc_config,
+        params,
+        data,
+        pacore.get_position_from_data,
+        update_data_fn,
+        energy_data_val_and_grad,
+        key,
+        apply_pmap=apply_pmap,
+    )
+
+    return update_param_fn
+
+
 # TODO: update output type hints when _get_mcmc_fns is made more general
 def _setup_eval(
     eval_config: ConfigDict,
@@ -649,6 +710,44 @@ def run_molecule() -> None:
         is_eval=False,
         is_pmapped=config.distribute,
     )
+
+    if nans_detected:
+        logging.info("VMC terminated due to Nans! Aborting.")
+        return
+    else:
+        logging.info("Completed VMC! Starting surrogate VMC.")
+
+    surrogate_update_param_fn = _get_surrogate_update_fn(
+        config.vmc,
+        log_psi_apply,
+        params,
+        data,
+        ion_pos,
+        ion_charges,
+        key,
+        apply_pmap=config.distribute,
+    )
+
+    params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
+        config.vmc,
+        logdir,
+        params,
+        optimizer_state,
+        data,
+        burning_step,
+        walker_fn,
+        surrogate_update_param_fn,
+        get_amplitude_fn,
+        key,
+        is_eval=False,
+        is_pmapped=config.distribute,
+    )
+
+    if nans_detected:
+        logging.info("Surrogate VMC terminated due to Nans! Aborting.")
+        return
+    else:
+        logging.info("Completed Surrogate VMC! Evaluating")
 
     if nans_detected:
         logging.info("VMC terminated due to Nans! Aborting.")
