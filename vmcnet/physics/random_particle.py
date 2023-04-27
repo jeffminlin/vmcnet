@@ -7,15 +7,28 @@ import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, LocalEnergyApply, ModelApply, P, PRNGKey
 
-from .core import laplacian_psi_over_psi
+from .core import laplacian_psi_over_psi, per_particle_laplace
 from .kinetic import create_laplacian_kinetic_energy
 from .potential import (
     create_electron_electron_coulomb_potential,
+    create_electron_electron_per_particle_potential,
     create_electron_ion_coulomb_potential,
+    create_electron_ion_per_particle_potential,
     create_ion_ion_coulomb_potential,
 )
 
 RandomParticleKineticEnergy = Callable[[P, Array, Array], Array]
+
+
+def create_per_particle_kinetic_energy(
+    log_psi_apply: Callable[[P, Array], Array], surrogate_params
+) -> RandomParticleKineticEnergy:
+    grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
+
+    def kinetic_energy_fn(x: Array) -> Array:
+        return -0.5 * per_particle_laplace(grad_log_psi_apply, surrogate_params, x)
+
+    return kinetic_energy_fn
 
 
 def create_random_particle_kinetic_energy(
@@ -50,24 +63,53 @@ def assemble_random_particle_local_energy(
     kinetic_term,
     potential_terms: List[ModelApply[P]],
     sample_kinetic: bool,
+    surrogate=None,
+    nparticles: int = 1,
 ) -> LocalEnergyApply[P]:
     """Assembles the random particle local energy from kinetic and potential terms."""
 
     def local_energy_fn(params: P, positions: Array, key: PRNGKey) -> Array:
-        total_particles = positions.shape[-2]
-        perm = jax.random.permutation(key, jnp.arange(total_particles))
-        permuted_positions = positions[perm, :]
+        if surrogate is None:
+            total_particles = positions.shape[-2]
+            perm = jax.random.permutation(key, jnp.arange(total_particles))
+            permuted_positions = positions[perm, :]
 
-        result = (
-            kinetic_term(params, positions, perm)
-            if sample_kinetic
-            else kinetic_term(params, positions)
-        )
+            result = (
+                kinetic_term(params, positions, perm)
+                if sample_kinetic
+                else kinetic_term(params, positions)
+            )
 
-        for potential_term in potential_terms:
-            result += potential_term(params, permuted_positions)
+            for potential_term in potential_terms:
+                result += potential_term(params, permuted_positions)
 
-        return result
+            return result
+
+        else:
+            total_particles = positions.shape[-2]
+            # (nelec,)
+            surrogate_energies = surrogate(positions)
+            # Center them
+            surrogate_corrections = (
+                jnp.mean(surrogate_energies, axis=-1, keepdims=True)
+                - surrogate_energies
+            )
+
+            perm = jax.random.permutation(key, jnp.arange(total_particles))
+            permuted_positions = positions[perm, :]
+            permuted_corrections = surrogate_corrections[perm]
+            surrogate_correction = jnp.sum(permuted_corrections[:nparticles])
+
+            result = (
+                kinetic_term(params, positions, perm)
+                if sample_kinetic
+                else kinetic_term(params, positions)
+            )
+
+            for potential_term in potential_terms:
+                result += potential_term(params, permuted_positions)
+
+            return result + surrogate_correction
 
     return local_energy_fn
 
@@ -82,6 +124,7 @@ def create_molecular_random_particle_local_energy(
     ei_softening: chex.Scalar = 0.0,
     sample_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
+    surrogate=None,
 ) -> LocalEnergyApply[P]:
     """Create the full local energy for the random particle method for molecules.
 
@@ -139,4 +182,49 @@ def create_molecular_random_particle_local_energy(
         kinetic_energy,
         [ii_potential_fn, ei_potential_fn, ee_potential_fn],
         sample_kinetic,
+        surrogate,
+        nparticles,
+    )
+
+
+def assemble_random_particle_surrogate_energy(
+    terms: List[ModelApply[P]],
+) -> LocalEnergyApply[P]:
+    """Assembles the random particle surrogate energy from kinetic and potential terms."""
+
+    def local_energy_fn(positions: Array) -> Array:
+        result = terms[0](positions)
+
+        for term in terms[1:]:
+            result += term(positions)
+
+        return result
+
+    return local_energy_fn
+
+
+def create_molecular_random_particle_surrogate_energy(
+    surrogate_log_psi_apply: Callable[[Array], Array],
+    surrogate_params,
+    ion_locations: Array,
+    ion_charges: Array,
+    ei_softening: chex.Scalar = 0.0,
+    ee_softening: chex.Scalar = 0.0,
+) -> LocalEnergyApply[P]:
+    ei_potential_fn = create_electron_ion_per_particle_potential(
+        ion_locations,
+        ion_charges,
+        softening_term=ei_softening,
+    )
+
+    ee_potential_fn = create_electron_electron_per_particle_potential(
+        softening_term=ee_softening
+    )
+
+    kinetic_energy = create_per_particle_kinetic_energy(
+        surrogate_log_psi_apply, surrogate_params
+    )
+
+    return assemble_random_particle_surrogate_energy(
+        [ei_potential_fn, ee_potential_fn, kinetic_energy]
     )
