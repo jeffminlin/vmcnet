@@ -129,7 +129,7 @@ def per_particle_laplace(
         out, _ = jax.lax.scan(step_fn, (3 * p, jnp.array(0.0)), xs=None, length=3)
         results.append(out[1])
 
-    return -0.5 * jnp.array(results)
+    return jnp.array(results)
 
 
 def laplacian_psi_over_psi(

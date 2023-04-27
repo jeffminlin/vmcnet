@@ -87,9 +87,8 @@ def assemble_random_particle_local_energy(
 
         else:
             total_particles = positions.shape[-2]
-            # (nelec,)
+
             surrogate_energies = surrogate(positions)
-            # Center them
             surrogate_corrections = (
                 jnp.mean(surrogate_energies, axis=-1, keepdims=True)
                 - surrogate_energies
@@ -98,7 +97,7 @@ def assemble_random_particle_local_energy(
             perm = jax.random.permutation(key, jnp.arange(total_particles))
             permuted_positions = positions[perm, :]
             permuted_corrections = surrogate_corrections[perm]
-            surrogate_correction = jnp.sum(permuted_corrections[:nparticles])
+            total_correction = jnp.sum(permuted_corrections[:nparticles])
 
             result = (
                 kinetic_term(params, positions, perm)
@@ -109,7 +108,7 @@ def assemble_random_particle_local_energy(
             for potential_term in potential_terms:
                 result += potential_term(params, permuted_positions)
 
-            return result + surrogate_correction
+            return result + total_correction
 
     return local_energy_fn
 
