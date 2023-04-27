@@ -749,12 +749,6 @@ def run_molecule() -> None:
     else:
         logging.info("Completed Surrogate VMC! Evaluating")
 
-    if nans_detected:
-        logging.info("VMC terminated due to Nans! Aborting.")
-        return
-    else:
-        logging.info("Completed VMC! Evaluating")
-
     # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
     # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post
     # evaluation
