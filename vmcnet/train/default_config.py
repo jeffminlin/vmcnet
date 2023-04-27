@@ -172,7 +172,7 @@ def get_default_model_config() -> Dict:
     base_fastcore_config = _copy_all_dicts(base_ferminet_config)
     base_fastcore_config["auto"] = dict(
         fc_ratio=0.3,
-        n_core_orbitals=5,
+        n_core_orbitals=100,
         core_orbital_type="exp",
     )
 
