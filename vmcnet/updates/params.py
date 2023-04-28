@@ -113,9 +113,14 @@ def create_grad_energy_update_param_fn(
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
         )
-        data = update_data_fn(data, params)
+        data = update_data_fn(data, params["wf"])
 
-        metrics = {"energy": energy, "variance": aux_energy_data[0]}
+        metrics = {
+            "energy": energy,
+            "variance": aux_energy_data[0],
+            "sg_error": aux_energy_data[4],
+        }
+
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
         )

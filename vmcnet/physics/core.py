@@ -385,20 +385,35 @@ def create_value_and_grad_energy_fn(
             local_energies_noclip, params, positions
         )
 
+        aux_data = (*aux_data, 0.0)
+
         return (energy, aux_data), grad_E
+
+    def local_energies_and_surrogate_sq_errors(wf_params, sg_params, positions, key):
+        local_energies_noclip, surrogate_sq_errors = jax.vmap(
+            local_energy_fn, in_axes=(None, None, 0, 0), out_axes=0
+        )(wf_params, sg_params, positions, key)
+
+        sg_error = jnp.sum(mean_grad_fn(surrogate_sq_errors))
+        return sg_error, (local_energies_noclip, sg_error)
 
     def random_particle_energy_val_and_grad(params, key, positions):
         nbatch = positions.shape[0]
         key = jax.random.split(key, nbatch)
 
-        local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0, 0), out_axes=0
-        )(params, positions, key)
+        wf_params = params["wf"]
+        sg_params = params["sg"]
+
+        grad_sg, (local_energies_noclip, sg_error) = jax.grad(
+            local_energies_and_surrogate_sq_errors, argnums=1, has_aux=True
+        )(wf_params, sg_params, positions, key)
 
         aux_data, energy, grad_E = get_standard_contribution(
-            local_energies_noclip, params, positions
+            local_energies_noclip, wf_params, positions
         )
-        return (energy, aux_data), grad_E
+        aux_data = (*aux_data, sg_error)
+
+        return (energy, aux_data), {"wf": grad_E, "sg": grad_sg}
 
     def generic_energy_val_and_grad(params, key, positions):
         del key

@@ -64,6 +64,7 @@ def get_default_config() -> ConfigDict:
             {
                 "problem": get_default_molecular_config(),
                 "model": get_default_model_config(),
+                "surrogate": get_default_surrogate_config(),
                 "vmc": get_default_vmc_config(),
                 "eval": get_default_eval_config(),
                 "logdir": os.path.join(
@@ -135,7 +136,7 @@ def get_default_model_config() -> Dict:
     }
 
     ferminet_backflow = {
-        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
+        "ndense_list": ((16, 4), (16, 4), (16,)),
         **base_backflow_config,
     }
 
@@ -261,6 +262,48 @@ def get_default_model_config() -> Dict:
         },
     }
     return config
+
+
+def get_default_surrogate_config() -> Dict:
+    """Get a default model configuration from a model type."""
+    orthogonal_init = {"type": "orthogonal", "scale": 1.0}
+    normal_init = {"type": "normal"}
+
+    # tie together the values of ferminet_backflow.cyclic_spins and
+    # invariance.cyclic_spins
+    cyclic_spins = FieldReference(False)
+
+    input_streams = {
+        "include_2e_stream": True,
+        "include_ei_norm": True,
+        "include_ee_norm": True,
+    }
+
+    backflow_config = {
+        "ndense_list": ((16, 4), (16, 4), (16,)),
+        "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
+        "kernel_init_mixed": orthogonal_init,
+        "kernel_init_transformer": orthogonal_init,
+        "kernel_init_2e_1e_stream": orthogonal_init,
+        "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
+        "bias_init_1e_stream": normal_init,
+        "bias_init_2e_stream": normal_init,
+        "bias_init_transformer": normal_init,
+        "activation_fn": "tanh",
+        "use_bias": True,
+        "one_electron_skip": True,
+        "one_electron_skip_scale": 1.0,
+        "two_electron_skip": True,
+        "two_electron_skip_scale": 1.0,
+        "cyclic_spins": cyclic_spins,
+        "use_transformer": False,
+        "num_heads": 1,
+    }
+
+    return {
+        "input_streams": input_streams,
+        "backflow": backflow_config,
+    }
 
 
 def get_default_molecular_config() -> Dict:
