@@ -138,7 +138,7 @@ def get_default_model_config() -> Dict:
     }
 
     ferminet_backflow = {
-        "ndense_list": ((16, 4), (16, 4), (16,)),
+        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
         **base_backflow_config,
     }
 
@@ -283,7 +283,7 @@ def get_default_surrogate_config() -> Dict:
     }
 
     backflow_config = {
-        "ndense_list": ((16, 4), (16, 4), (16,)),
+        "ndense_list": ((256, 16), (256, 16), (256, 16), (1,)),
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
         "kernel_init_transformer": orthogonal_init,
@@ -325,8 +325,8 @@ def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
         "nchains": 2000,
-        "nepochs": 100,
-        "nburn": 1000,
+        "nepochs": 20000,
+        "nburn": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
