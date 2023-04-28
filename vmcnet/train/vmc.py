@@ -30,6 +30,7 @@ def vmc_loop(
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
     is_pmapped=True,
+    is_sg=False,
 ) -> Tuple[P, P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
@@ -116,14 +117,19 @@ def vmc_loop(
 
             accept_ratio, data, key = walker_fn(params, data, key)
 
-            all_params = {"wf": params, "sg": surrogate_params}
+            if is_sg:
+                all_params = {"wf": params, "sg": surrogate_params}
 
-            all_params, data, optimizer_state, metrics, key = update_param_fn(
-                all_params, data, optimizer_state, key
-            )
+                all_params, data, optimizer_state, metrics, key = update_param_fn(
+                    all_params, data, optimizer_state, key
+                )
 
-            params = all_params["wf"]
-            surrogate_params = all_params["sg"]
+                params = all_params["wf"]
+                surrogate_params = all_params["sg"]
+            else:
+                params, data, optimizer_state, metrics, key = update_param_fn(
+                    params, data, optimizer_state, key
+                )
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
@@ -160,7 +166,7 @@ def vmc_loop(
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
-            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str, is_sg)
 
             if nans_detected:
                 break

@@ -61,7 +61,9 @@ def create_random_particle_kinetic_energy(
 
 def assemble_random_particle_local_energy(
     kinetic_term,
-    potential_terms: List[ModelApply[P]],
+    ii_potential_fn,
+    ei_potential_fn,
+    ee_potential_fn,
     sample_kinetic: bool,
     surrogate=None,
     nparticles: int = 1,
@@ -72,6 +74,7 @@ def assemble_random_particle_local_energy(
         wf_params: P, surrogate_params: P, positions: Array, key: PRNGKey
     ):
         if surrogate is None:
+            potential_terms = [ii_potential_fn, ei_potential_fn, ee_potential_fn]
             total_particles = positions.shape[-2]
             perm = jax.random.permutation(key, jnp.arange(total_particles))
             permuted_positions = positions[perm, :]
@@ -102,17 +105,24 @@ def assemble_random_particle_local_energy(
             permuted_positions = positions[perm, :]
             total_correction = jnp.sum(surrogate_corrections[:nparticles])
 
-            wf_energy = (
+            wf_particle_energy = (
                 kinetic_term(wf_params, positions, perm)
                 if sample_kinetic
                 else kinetic_term(wf_params, positions)
             )
 
-            for potential_term in potential_terms:
-                wf_energy += potential_term(wf_params, permuted_positions)
+            for potential_term in [ei_potential_fn, ee_potential_fn]:
+                wf_particle_energy += potential_term(wf_params, permuted_positions)
+
+            wf_total_energy = wf_particle_energy + ii_potential_fn(
+                wf_params, permuted_positions
+            )
 
             sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
-            return wf_energy + total_correction, jnp.square(wf_energy - sg_energy)
+
+            return wf_total_energy + total_correction, jnp.square(
+                wf_particle_energy - sg_energy
+            )
 
     return local_energy_fn
 
@@ -184,51 +194,10 @@ def create_molecular_random_particle_local_energy(
 
     return assemble_random_particle_local_energy(
         kinetic_energy,
-        [ii_potential_fn, ei_potential_fn, ee_potential_fn],
+        ii_potential_fn,
+        ei_potential_fn,
+        ee_potential_fn,
         sample_kinetic,
         surrogate,
         nparticles,
-    )
-
-
-def assemble_random_particle_surrogate_energy(
-    terms: List[ModelApply[P]],
-) -> LocalEnergyApply[P]:
-    """Assembles the random particle surrogate energy from kinetic and potential terms."""
-
-    def local_energy_fn(positions: Array) -> Array:
-        result = terms[0](positions)
-
-        for term in terms[1:]:
-            result += term(positions)
-
-        return result
-
-    return local_energy_fn
-
-
-def create_molecular_random_particle_surrogate_energy(
-    surrogate_log_psi_apply: Callable[[Array], Array],
-    surrogate_params,
-    ion_locations: Array,
-    ion_charges: Array,
-    ei_softening: chex.Scalar = 0.0,
-    ee_softening: chex.Scalar = 0.0,
-) -> LocalEnergyApply[P]:
-    ei_potential_fn = create_electron_ion_per_particle_potential(
-        ion_locations,
-        ion_charges,
-        softening_term=ei_softening,
-    )
-
-    ee_potential_fn = create_electron_electron_per_particle_potential(
-        softening_term=ee_softening
-    )
-
-    kinetic_energy = create_per_particle_kinetic_energy(
-        surrogate_log_psi_apply, surrogate_params
-    )
-
-    return assemble_random_particle_surrogate_energy(
-        [ei_potential_fn, ee_potential_fn, kinetic_energy]
     )

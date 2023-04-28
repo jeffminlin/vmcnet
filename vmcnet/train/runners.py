@@ -514,6 +514,7 @@ def _setup_eval(
         ei_softening,
         ee_softening,
         log_psi_apply,
+        None,
     )
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn,
@@ -617,6 +618,7 @@ def _burn_and_run_vmc(
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
         is_pmapped=is_pmapped,
+        is_sg=not is_eval,
     )
 
 
@@ -757,6 +759,7 @@ def run_molecule() -> None:
         config.eval,
         eval_logdir,
         params,
+        None,
         optimizer_state,
         data,
         eval_burning_step,

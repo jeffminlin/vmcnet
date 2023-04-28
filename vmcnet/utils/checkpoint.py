@@ -623,7 +623,9 @@ def save_metrics_and_regular_checkpoint(
     return checkpoint_str, nans_detected
 
 
-def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
+def log_vmc_loop_state(
+    epoch: int, metrics: Dict, checkpoint_str: str, is_sg: bool
+) -> None:
     """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
     epoch_str = "Epoch %(epoch)5d"
     energy_str = "Energy: %(energy).5e"
@@ -641,16 +643,17 @@ def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     if "amplitude_min" in metrics:
         amplitude_str = "Min/max amplitude: %(amplitude_min).2f/%(amplitude_max).2f"
 
-    info_out = ", ".join(
-        [
-            epoch_str,
-            energy_str,
-            variance_str,
-            sg_error_str,
-            accept_ratio_str,
-            amplitude_str,
-        ]
-    )
+    msg_strs = [
+        epoch_str,
+        energy_str,
+        variance_str,
+        accept_ratio_str,
+        amplitude_str,
+    ]
+    if is_sg:
+        msg_strs.append(sg_error_str)
+
+    info_out = ", ".join(msg_strs)
     info_out = info_out + checkpoint_str
 
     logged_metrics = {"epoch": epoch + 1}
