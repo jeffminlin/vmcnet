@@ -1022,6 +1022,48 @@ class FermiNet(Module):
         return slog_sum_over_axis(slog_det_prods)
 
 
+class FermiNetSurrogate(Module):
+    spin_split: ParticleSplit
+    compute_input_streams: ComputeInputStreams
+    backflow: Backflow
+
+    def setup(self):
+        """Setup backflow and symmetrized determinant function."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
+        self._backflow = self.backflow
+
+    def _get_elec_pos_and_orbitals_split(
+        self, elec_pos: Array
+    ) -> Tuple[Array, ParticleSplit]:
+        return elec_pos, self.spin_split
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: Array) -> Array:  # type: ignore[override]
+        """Compose FermiNet backflow -> orbitals -> logabs determinant product.
+
+        Args:
+            elec_pos (Array): array of particle positions (..., nelec, d)
+
+        Returns:
+            Array: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
+        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        return jnp.sum(stream_1e, axis=-1)
+
+
 class EmbeddedParticleFermiNet(FermiNet):
     """Model that expands its inputs with extra hidden particles, then applies FermiNet.
 

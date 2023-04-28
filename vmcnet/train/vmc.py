@@ -12,6 +12,7 @@ from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKey, S
 
 def vmc_loop(
     params: P,
+    surrogate_params: P,
     optimizer_state: S,
     data: D,
     nchains: int,
@@ -29,7 +30,7 @@ def vmc_loop(
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
     is_pmapped=True,
-) -> Tuple[P, S, D, PRNGKey, bool]:
+) -> Tuple[P, P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -115,9 +116,14 @@ def vmc_loop(
 
             accept_ratio, data, key = walker_fn(params, data, key)
 
-            params, data, optimizer_state, metrics, key = update_param_fn(
-                params, data, optimizer_state, key
+            all_params = {"wf": params, "sg": surrogate_params}
+
+            all_params, data, optimizer_state, metrics, key = update_param_fn(
+                all_params, data, optimizer_state, key
             )
+
+            params = all_params["wf"]
+            surrogate_params = all_params["sg"]
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
@@ -163,4 +169,4 @@ def vmc_loop(
             checkpoint_writer, best_checkpoint_data, logdir
         )
 
-    return params, optimizer_state, data, key, nans_detected
+    return params, surrogate_params, optimizer_state, data, key, nans_detected

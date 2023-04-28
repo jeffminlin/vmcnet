@@ -68,53 +68,58 @@ def assemble_random_particle_local_energy(
 ) -> LocalEnergyApply[P]:
     """Assembles the random particle local energy from kinetic and potential terms."""
 
-    def local_energy_fn(params: P, positions: Array, key: PRNGKey) -> Array:
+    def local_energy_fn(
+        wf_params: P, surrogate_params: P, positions: Array, key: PRNGKey
+    ):
         if surrogate is None:
             total_particles = positions.shape[-2]
             perm = jax.random.permutation(key, jnp.arange(total_particles))
             permuted_positions = positions[perm, :]
 
-            result = (
-                kinetic_term(params, positions, perm)
+            wf_energy = (
+                kinetic_term(wf_params, positions, perm)
                 if sample_kinetic
-                else kinetic_term(params, positions)
+                else kinetic_term(wf_params, positions)
             )
 
             for potential_term in potential_terms:
-                result += potential_term(params, permuted_positions)
+                wf_energy += potential_term(wf_params, permuted_positions)
 
-            return result
+            return wf_energy
 
         else:
             total_particles = positions.shape[-2]
-
-            surrogate_energies = surrogate(positions)
-            surrogate_corrections = (
-                jnp.mean(surrogate_energies, axis=-1, keepdims=True)
-                - surrogate_energies
-            )
+            surrogate_energies = surrogate(surrogate_params, positions)
 
             perm = jax.random.permutation(key, jnp.arange(total_particles))
-            permuted_positions = positions[perm, :]
-            permuted_corrections = surrogate_corrections[perm]
-            total_correction = jnp.sum(permuted_corrections[:nparticles])
 
-            result = (
-                kinetic_term(params, positions, perm)
+            permuted_surrogate_energies = surrogate_energies[perm]
+            surrogate_corrections = (
+                jnp.mean(permuted_surrogate_energies, axis=-1, keepdims=True)
+                - permuted_surrogate_energies
+            )
+
+            permuted_positions = positions[perm, :]
+            total_correction = jnp.sum(surrogate_corrections[:nparticles])
+
+            wf_energy = (
+                kinetic_term(wf_params, positions, perm)
                 if sample_kinetic
-                else kinetic_term(params, positions)
+                else kinetic_term(wf_params, positions)
             )
 
             for potential_term in potential_terms:
-                result += potential_term(params, permuted_positions)
+                wf_energy += potential_term(wf_params, permuted_positions)
 
-            return result + total_correction
+            sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
+            return wf_energy + total_correction, jnp.square(wf_energy - sg_energy)
 
     return local_energy_fn
 
 
 def create_molecular_random_particle_local_energy(
     log_psi_apply: Callable[[P, Array], Array],
+    surrogate: Callable[[P, Array], Array],
     ion_locations: Array,
     ion_charges: Array,
     nparticles: int = 1,
@@ -123,7 +128,6 @@ def create_molecular_random_particle_local_energy(
     ei_softening: chex.Scalar = 0.0,
     sample_ee: bool = True,
     ee_softening: chex.Scalar = 0.0,
-    surrogate=None,
 ) -> LocalEnergyApply[P]:
     """Create the full local energy for the random particle method for molecules.
 
@@ -136,6 +140,7 @@ def create_molecular_random_particle_local_energy(
            inputs x. It is okay for it to produce batch outputs on batches of x as long
            as it produces a single number for single x. Has the signature
            (params, single_x_in) -> log|psi(single_x_in)|
+        surrogate (Callable): Surrogate.
         ion_locations (Array): an (n, d) array of ion positions, where n is the
             number of ion positions and d is the dimension of the space they live in
         ion_charges (Array): an (n,) array of ion charges, in units of one
