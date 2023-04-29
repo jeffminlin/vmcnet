@@ -184,13 +184,14 @@ def create_kfac_update_param_fn(
             momentum=momentum,
             damping=damping,
         )
-        data = update_data_fn(data, params)
+        data = update_data_fn(data, params["wf"])
 
         energy = stats["loss"]
         variance = stats["aux"][0]
         energy_noclip = stats["aux"][2]
         variance_noclip = stats["aux"][3]
-        picked_stats = (energy, variance, energy_noclip, variance_noclip)
+        sg_error = stats["aux"][4]
+        picked_stats = (energy, variance, energy_noclip, variance_noclip, sg_error)
 
         if record_param_l1_norm:
             param_l1_norm = traced_compute_param_norm(params)
@@ -200,7 +201,11 @@ def create_kfac_update_param_fn(
         if optimizer.multi_device:
             stats_to_save = [utils.distribute.get_first(stat) for stat in picked_stats]
 
-        metrics = {"energy": stats_to_save[0], "variance": stats_to_save[1]}
+        metrics = {
+            "energy": stats_to_save[0],
+            "variance": stats_to_save[1],
+            "sg_error": stats_to_save[4],
+        }
         metrics = _update_metrics_with_noclip(
             stats_to_save[2], stats_to_save[3], metrics
         )
