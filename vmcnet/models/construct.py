@@ -1020,6 +1020,7 @@ class core_orbital_fn(Module):
         if self.orbitaltype == "exp":
             c = self.param("c", flax.linen.initializers.uniform(1.0), ())
             soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
+            soften = 1 #temp
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
             return jnp.exp(-jnp.abs(c) * r)
 
@@ -1090,13 +1091,16 @@ class FastCore(FermiNet):
             r_ei,
         )
 
+        # temp testing
+        mask=self.getcomplement(og_elec_pos,self.ion_pos,self.radius)
         split = orbitals[0].shape[-2]
-        orbitals[0] += flax.linen.Dense(features=orbitals[0].shape[-1])(
+        orbitals[0] = orbitals[0]*mask[...,:split,None]+flax.linen.Dense(features=orbitals[0].shape[-1])(
             core_orbitals[..., :split, :]
         )
-        orbitals[1] += flax.linen.Dense(features=orbitals[1].shape[-1])(
+        orbitals[1] = orbitals[1]*mask[...,split:,None]+flax.linen.Dense(features=orbitals[1].shape[-1])(
             core_orbitals[..., split:, :]
         )
+        # temp testing
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
