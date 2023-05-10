@@ -1,35 +1,21 @@
 """Energy terms related to the random particle approach."""
-from typing import Callable, List
+from typing import Callable
 
 import chex
 import jax
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, LocalEnergyApply, ModelApply, P, PRNGKey
+from vmcnet.utils.typing import Array, LocalEnergyApply, P, PRNGKey
 
-from .core import laplacian_psi_over_psi, per_particle_laplace
+from .core import laplacian_psi_over_psi
 from .kinetic import create_laplacian_kinetic_energy
 from .potential import (
     create_electron_electron_coulomb_potential,
-    create_electron_electron_per_particle_potential,
     create_electron_ion_coulomb_potential,
-    create_electron_ion_per_particle_potential,
     create_ion_ion_coulomb_potential,
 )
 
 RandomParticleKineticEnergy = Callable[[P, Array, Array], Array]
-
-
-def create_per_particle_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array], surrogate_params
-) -> RandomParticleKineticEnergy:
-    grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
-
-    def kinetic_energy_fn(x: Array) -> Array:
-        return -0.5 * per_particle_laplace(grad_log_psi_apply, surrogate_params, x)
-
-    return kinetic_energy_fn
-
 
 def create_random_particle_kinetic_energy(
     log_psi_apply: Callable[[P, Array], Array], nparticles: int = 1
