@@ -128,23 +128,6 @@ def create_electron_ion_coulomb_potential(
     return potential_fn
 
 
-def create_electron_ion_per_particle_potential(
-    ion_locations: Array,
-    ion_charges: Array,
-    strength: chex.Scalar = 1.0,
-    softening_term: chex.Scalar = 0.0,
-) -> ModelApply[ModelParams]:
-    def potential_fn(x: Array) -> Array:
-        electron_ion_displacements = compute_displacements(x, ion_locations)
-        electron_ion_distances = compute_soft_norm(
-            electron_ion_displacements, softening_term=softening_term
-        )
-        coulomb_attraction = ion_charges / electron_ion_distances
-        return -strength * jnp.sum(coulomb_attraction, axis=-1)
-
-    return potential_fn
-
-
 def create_electron_electron_coulomb_potential(
     strength: chex.Scalar = 1.0,
     softening_term: chex.Scalar = 0.0,
@@ -188,24 +171,6 @@ def create_electron_electron_coulomb_potential(
             ) + jnp.tril(strength / electron_electron_distances, k=-1)
             double_firstn_repulsion = double_ee_repulsion[..., :nparticles, :]
             return jnp.sum(double_firstn_repulsion, axis=(-1, -2)) * multiplier / 2
-
-    return potential_fn
-
-
-def create_electron_electron_per_particle_potential(
-    strength: chex.Scalar = 1.0,
-    softening_term: chex.Scalar = 0.0,
-) -> ModelApply[ModelParams]:
-    def potential_fn(x: Array) -> Array:
-        electron_electron_displacements = compute_displacements(x, x)
-        electron_electron_distances = compute_soft_norm(
-            electron_electron_displacements, softening_term=softening_term
-        )
-        double_ee_repulsion = jnp.triu(
-            strength / electron_electron_distances, k=1
-        ) + jnp.tril(strength / electron_electron_distances, k=-1)
-
-        return jnp.sum(double_ee_repulsion, axis=-1) / 2
 
     return potential_fn
 

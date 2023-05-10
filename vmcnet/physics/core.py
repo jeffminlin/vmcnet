@@ -93,45 +93,6 @@ def combine_local_energy_terms(
     return local_energy_fn
 
 
-def per_particle_laplace(
-    grad_log_psi_apply: ModelApply,
-    params: P,
-    x: Array,
-) -> Array:
-    x_shape = x.shape
-    flat_x = jnp.reshape(x, (-1,))
-    n = flat_x.shape[0]
-    identity_mat = jnp.eye(n)
-
-    def flattened_grad_log_psi_of_flat_x(flat_x_in):
-        """Flattened input to flattened output version of grad_log_psi."""
-        grad_log_psi_out = grad_log_psi_apply(params, jnp.reshape(flat_x_in, x_shape))
-        return jnp.reshape(grad_log_psi_out, (-1,))
-
-    vecs = identity_mat
-
-    def step_fn(carry, unused):
-        del unused
-        i = carry[0]
-        primals, tangents = jax.jvp(
-            flattened_grad_log_psi_of_flat_x, (flat_x,), (vecs[i],)
-        )
-        return (
-            i + 1,
-            carry[1]
-            + jnp.square(jnp.dot(primals, vecs[i]))
-            + jnp.dot(tangents, vecs[i]),
-        ), None
-
-    results = []
-
-    for p in range(n // 3):
-        out, _ = jax.lax.scan(step_fn, (3 * p, jnp.array(0.0)), xs=None, length=3)
-        results.append(out[1])
-
-    return jnp.array(results)
-
-
 def laplacian_psi_over_psi(
     grad_log_psi_apply: ModelApply,
     params: P,
