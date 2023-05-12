@@ -1016,15 +1016,169 @@ class core_orbital_fn(Module):
             evaluated at the input points.
 
         """
-        # temporary simple core orbitals
-        if self.orbitaltype == "exp":
-            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
-            soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
-            soften = 1 #temp
+        # slater orbitals 
+#        if self.orbitaltype == "exp":
+#            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
+#            # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
+#            # purely exponential function
+#            soften = 0.0
+#            r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
+#            return jnp.exp(-jnp.abs(c) * r)	
+
+        # gaussian orbitals, STO-3G basis for 1s
+        if self.orbitaltype == "gauss":
+            # params from: https://www.basissetexchange.org/basis/sto-3g/format/nwchem/?version=1&elements=1
+            gHSexp1 = 3.425250914	# gaussian H S orbital sto-3G exponent #1 
+            gHSexp2 = 0.6239137298
+            gHSexp3 = 0.1688554040
+
+            gHScoeff1 = 0.1543289673	# gaussian H orbital sto-3G coefficient #1
+            gHScoeff2 = 0.5353281423
+            gHScoeff3 = 0.4446345422
+
+            # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
+            # gaussian function
+            soften = 0.0
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
-            return jnp.exp(-jnp.abs(c) * r)
+
+            orb1s = gHScoeff1 * jnp.exp(- gHSexp1 * r**2) + gHScoeff2 * jnp.exp(-gHSexp2 * r**2) + gHScoeff3 * jnp.exp(-gHSexp3 * r**2) 
+            return orb1s   
 
 
+#"""
+#class FastCore(FermiNet):
+#    fc_ratio: float
+#    n_core_orbitals: int
+#    core_orbital_type: str
+#
+#    def setup(self):
+#        super().setup()
+#
+#        self.ion_pos = self.compute_input_streams.keywords["ion_pos"]
+#        self.mindist = min(
+#            [
+#                jnp.sqrt(jnp.sum((x - y) ** 2))
+#                for i, x in enumerate(self.ion_pos)
+#                for y in self.ion_pos[:i]
+#            ]
+#        )
+#        self.radius = self.mindist * self.fc_ratio / 2
+#
+#        self.core_orbitals_nonlocal = [
+#            core_orbital_fn(core_orbital, self.core_orbital_type)
+#            for core_orbital in range(self.n_core_orbitals)
+#        ]
+#        self.core_orbital_fns = [
+#            functools.partial(self.localized, f, radius=self.radius)
+#            for f in self.core_orbitals_nonlocal
+#        ]
+#
+#    @flax.linen.compact
+#    # type: ignore[override]
+#    def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:
+#        og_elec_pos = elec_pos
+#        snapped_elec_pos = self.snap(elec_pos, self.ion_pos, self.radius)
+#
+#        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+#            og_elec_pos
+#        )
+#        (
+#            snapped_input_stream_1e,
+#            snapped_input_stream_2e,
+#            *_,
+#        ) = self._compute_input_streams(snapped_elec_pos)
+#
+#        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+#        snapped_stream_1e = self._backflow(
+#            snapped_input_stream_1e, snapped_input_stream_2e
+#        )
+#
+#        core_orbitals = [
+#            [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns]
+#            for ion in self.ion_pos
+#        ]
+#        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)
+#        snapped_stream_1e += flax.linen.Dense(features=snapped_stream_1e.shape[-1])(
+#            core_orbitals
+#        )
+#
+#        norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
+#        orbitals = self._eval_orbitals(
+#            orbitals_split,
+#            norbitals_per_split,
+#            input_stream_1e,
+#            input_stream_2e,
+#            snapped_stream_1e,
+#            r_ei,
+#        )
+#
+#        split = orbitals[0].shape[-2]
+#        orbitals[0] += flax.linen.Dense(features=orbitals[0].shape[-1])(core_orbitals[..., :split, :])
+#        orbitals[1] += flax.linen.Dense(features=orbitals[1].shape[-1])(
+#            core_orbitals[..., split:, :]
+#        )
+#
+#        if self.full_det:
+#            orbitals = [jnp.concatenate(orbitals, axis=-2)]
+#
+#        if get_orbitals:
+#            return orbitals
+#
+#        slog_det_prods = slogdet_product(orbitals)
+#
+#        return slog_sum_over_axis(slog_det_prods)
+#
+#    def bump1d(self, r):
+#        return 1 - flax.linen.sigmoid(5 * jnp.log(2 * r))
+#
+#    def bumpfunction(self, X, supportwidth):
+#        X = X / supportwidth
+#        r = jnp.sqrt(jnp.sum(X**2, axis=-1))
+#        return self.bump1d(r)
+#
+#    # elec: j,3; ion_pos: I,3
+#    def snap_walker(self, elec, ion_pos, rcZ):
+#        # I,j
+#        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
+#
+#        # j
+#        complement_ = jnp.prod(1 - indiv_bumps_, axis=0)
+#        denom = jnp.sum(indiv_bumps_, axis=0) + complement_
+#
+#        # I,j
+#        indiv_bumps = indiv_bumps_ / denom[None, :]
+#        # j
+#        complement = complement_ / denom
+#
+#        return (
+#            jnp.sum(ion_pos[:, None, :] * indiv_bumps[:, :, None], axis=0)
+#            + complement[:, None] * elec
+#        )
+#    
+#    def getcomplement_walker(self,elec,ion_pos,rcZ):
+#        # I,j
+#        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
+#
+#        # j
+#        return jnp.prod(1 - indiv_bumps_, axis=0)
+#
+#    def cond_vmap(self, f, elec, **kwargs):
+#        if len(elec.shape) == 2:
+#            return f(elec, **kwargs)
+#        else:
+#            return jax.vmap(functools.partial(f, **kwargs))(elec)
+#
+#    def snap(self, elec, ion_pos, rcZ):
+#        return self.cond_vmap(self.snap_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
+#
+#    def getcomplement(self, elec, ion_pos, rcZ):
+#        return self.cond_vmap(self.getcomplement_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
+#    
+#    def localized(self, f, X, radius):
+#        return self.bumpfunction(X, radius) * f(X)
+#"""
+
+# Lins simplified FastCore
 class FastCore(FermiNet):
     fc_ratio: float
     n_core_orbitals: int
@@ -1052,113 +1206,50 @@ class FastCore(FermiNet):
             for f in self.core_orbitals_nonlocal
         ]
 
+
     @flax.linen.compact
     # type: ignore[override]
     def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:
         og_elec_pos = elec_pos
-        snapped_elec_pos = self.snap(elec_pos, self.ion_pos, self.radius)
+        nelec = elec_pos.shape[-2]
 
-        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
-            og_elec_pos
-        )
-        (
-            snapped_input_stream_1e,
-            snapped_input_stream_2e,
-            *_,
-        ) = self._compute_input_streams(snapped_elec_pos)
+        core_orbitals = [ [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns] for ion in self.ion_pos ]
+        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)   # reformat to [[], []]
+        #print("CORE ORBITALS after", core_orbitals)
 
-        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
-        snapped_stream_1e = self._backflow(
-            snapped_input_stream_1e, snapped_input_stream_2e
-        )
+        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())
+        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
+        #print("------------ C1 and C2 : ", c1, c2)
+        mo_orbitals = jnp.dot(core_orbitals, jnp.array([c1, c2]))                       # with coeff optimization
+        
+        #mo_orbitals = jnp.dot(core_orbitals, 1./jnp.sqrt(2)*jnp.array([1.0,1.0]) )     # no coeff optimization
 
-        core_orbitals = [
-            [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns]
-            for ion in self.ion_pos
-        ]
-        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)
-        snapped_stream_1e += flax.linen.Dense(features=snapped_stream_1e.shape[-1])(
-            core_orbitals
-        )
+        orbitals = [0]*2
+        orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
+        orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
+        # FIXME: hard code the dimension
+        # split = 1
+        # nfeature=nelec
+        # orbitals = [0]*2
+        #orbitals[0] += flax.linen.Dense(features=nfeature)(core_orbitals[..., :split, :])[None]
+        #orbitals[1] += flax.linen.Dense(features=nfeature)(core_orbitals[..., split:, :])[None]
+        # orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
-        norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
-        orbitals = self._eval_orbitals(
-            orbitals_split,
-            norbitals_per_split,
-            input_stream_1e,
-            input_stream_2e,
-            snapped_stream_1e,
-            r_ei,
-        )
-
-        # temp testing
-        mask=self.getcomplement(og_elec_pos,self.ion_pos,self.radius)
-        split = orbitals[0].shape[-2]
-        orbitals[0] = orbitals[0]*mask[...,:split,None]+flax.linen.Dense(features=orbitals[0].shape[-1])(
-            core_orbitals[..., :split, :]
-        )
-        orbitals[1] = orbitals[1]*mask[...,split:,None]+flax.linen.Dense(features=orbitals[1].shape[-1])(
-            core_orbitals[..., split:, :]
-        )
-        # temp testing
-
-        if self.full_det:
-            orbitals = [jnp.concatenate(orbitals, axis=-2)]
+        # not full determinant
+        # orbitals = [core_orbitals[None]]
 
         if get_orbitals:
             return orbitals
 
         slog_det_prods = slogdet_product(orbitals)
+
+
         return slog_sum_over_axis(slog_det_prods)
 
-    def bump1d(self, r):
-        return 1 - flax.linen.sigmoid(5 * jnp.log(2 * r))
-
-    def bumpfunction(self, X, supportwidth):
-        X = X / supportwidth
-        r = jnp.sqrt(jnp.sum(X**2, axis=-1))
-        return self.bump1d(r)
-
-    # elec: j,3; ion_pos: I,3
-    def snap_walker(self, elec, ion_pos, rcZ):
-        # I,j
-        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
-
-        # j
-        complement_ = jnp.prod(1 - indiv_bumps_, axis=0)
-        denom = jnp.sum(indiv_bumps_, axis=0) + complement_
-
-        # I,j
-        indiv_bumps = indiv_bumps_ / denom[None, :]
-        # j
-        complement = complement_ / denom
-
-        return (
-            jnp.sum(ion_pos[:, None, :] * indiv_bumps[:, :, None], axis=0)
-            + complement[:, None] * elec
-        )
-    
-    def getcomplement_walker(self,elec,ion_pos,rcZ):
-        # I,j
-        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
-
-        # j
-        return jnp.prod(1 - indiv_bumps_, axis=0)
-
-    def cond_vmap(self, f, elec, **kwargs):
-        if len(elec.shape) == 2:
-            return f(elec, **kwargs)
-        else:
-            return jax.vmap(functools.partial(f, **kwargs))(elec)
-
-    def snap(self, elec, ion_pos, rcZ):
-        return self.cond_vmap(self.snap_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
-
-    def getcomplement(self, elec, ion_pos, rcZ):
-        return self.cond_vmap(self.getcomplement_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
-    
     def localized(self, f, X, radius):
-        return self.bumpfunction(X, radius) * f(X)
+        # return self.bumpfunction(X, radius) * f(X)
+        # no localization
+        return f(X)
 
 
 class EmbeddedParticleFermiNet(FermiNet):
@@ -1708,3 +1799,4 @@ class GenericAntisymmetry(Module):
         )
 
         return sign_psi, log_antisym + jastrow_part
+
