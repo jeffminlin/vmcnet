@@ -1016,16 +1016,15 @@ class core_orbital_fn(Module):
             evaluated at the input points.
 
         """
-        # slater orbitals 
-#        if self.orbitaltype == "exp":
-#            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
-#            # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
-#            # purely exponential function
-#            soften = 0.0
-#            r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
-#            return jnp.exp(-jnp.abs(c) * r)	
+        # temporary simple core orbitals 
+        if self.orbitaltype == "exp":
+            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
+            # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
+            # purely exponential function
+            soften = 0.0
+            r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
+            return jnp.exp(-jnp.abs(c) * r)	
 
-        # gaussian orbitals, STO-3G basis for 1s
         if self.orbitaltype == "gauss":
             # params from: https://www.basissetexchange.org/basis/sto-3g/format/nwchem/?version=1&elements=1
             gHSexp1 = 3.425250914	# gaussian H S orbital sto-3G exponent #1 
@@ -1041,8 +1040,8 @@ class core_orbital_fn(Module):
             soften = 0.0
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
 
-            orb1s = gHScoeff1 * jnp.exp(- gHSexp1 * r**2) + gHScoeff2 * jnp.exp(-gHSexp2 * r**2) + gHScoeff3 * jnp.exp(-gHSexp3 * r**2) 
-            return orb1s   
+            orb1s = gHScoeff1 * jnp.exp(- gHSexp1 * r**2) + gHScoeff2 * jnp.exp(-gHSexp2 * r**2) + gHScoeff3 * jnp.exp(-gHSexp3 * r**2)
+            return orb1s 
 
 
 #"""
@@ -1214,16 +1213,14 @@ class FastCore(FermiNet):
         nelec = elec_pos.shape[-2]
 
         core_orbitals = [ [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns] for ion in self.ion_pos ]
-        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)   # reformat to [[], []]
-        #print("CORE ORBITALS after", core_orbitals)
+
+        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)
 
         c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())
         c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-        #print("------------ C1 and C2 : ", c1, c2)
-        mo_orbitals = jnp.dot(core_orbitals, jnp.array([c1, c2]))                       # with coeff optimization
-        
-        #mo_orbitals = jnp.dot(core_orbitals, 1./jnp.sqrt(2)*jnp.array([1.0,1.0]) )     # no coeff optimization
-
+        mo_orbitals = jnp.dot(core_orbitals, jnp.array([c1, c2]))
+        #mo_orbitals = jnp.dot(core_orbitals, 1./jnp.sqrt(2)*jnp.array([1.0,1.0]))
+        #print("MO_ORBITALS: ", mo_orbitals)
         orbitals = [0]*2
         orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
         orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
