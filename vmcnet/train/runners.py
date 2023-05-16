@@ -9,6 +9,7 @@ from typing import Any, Optional, Tuple
 
 import chex
 import flax
+import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -404,8 +405,7 @@ def _setup_vmc(
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     GetAmplitudeFromData[dwpa.DWPAData],
-    flax.core.FrozenDict,
-    flax.core.FrozenDict,
+    Any,
     dwpa.DWPAData,
     OptimizerState,
     PRNGKey,
@@ -481,8 +481,7 @@ def _setup_vmc(
         walker_fn,
         update_param_fn,
         get_amplitude_fn,
-        wf_params,
-        sg_params,
+        params,
         data,
         optimizer_state,
         key,
@@ -569,7 +568,6 @@ def _burn_and_run_vmc(
     run_config: ConfigDict,
     logdir: str,
     params: P,
-    surrogate_params: P,
     optimizer_state: S,
     data: D,
     burning_step: mcmc.metropolis.BurningStep[P, D],
@@ -579,7 +577,7 @@ def _burn_and_run_vmc(
     key: PRNGKey,
     is_eval: bool,
     is_pmapped: bool,
-) -> Tuple[P, P, S, D, PRNGKey, bool]:
+) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
         best_checkpoint_every = run_config.best_checkpoint_every
@@ -595,12 +593,13 @@ def _burn_and_run_vmc(
         nhistory_max = 0
         check_for_nans = False
 
+    burn_params = params if is_eval else params["wf"]
     data, key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, params, data, key
+        burning_step, run_config.nburn, burn_params, data, key
     )
+
     return train.vmc.vmc_loop(
         params,
-        surrogate_params,
         optimizer_state,
         data,
         run_config.nchains,
@@ -618,7 +617,7 @@ def _burn_and_run_vmc(
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
         is_pmapped=is_pmapped,
-        is_sg=not is_eval,
+        is_eval=is_eval,
     )
 
 
@@ -660,7 +659,6 @@ def run_molecule() -> None:
         update_param_fn,
         get_amplitude_fn,
         params,
-        surrogate_params,
         data,
         optimizer_state,
         key,
@@ -698,7 +696,6 @@ def run_molecule() -> None:
 
     (
         params,
-        surrogate_params,
         optimizer_state,
         data,
         key,
@@ -707,7 +704,6 @@ def run_molecule() -> None:
         config.vmc,
         logdir,
         params,
-        surrogate_params,
         optimizer_state,
         data,
         burning_step,
@@ -746,7 +742,7 @@ def run_molecule() -> None:
         key, data = _make_new_data_for_eval(
             config,
             log_psi_apply,
-            params,
+            params["wf"],
             ion_pos,
             ion_charges,
             nelec,
@@ -758,8 +754,7 @@ def run_molecule() -> None:
     _burn_and_run_vmc(
         config.eval,
         eval_logdir,
-        params,
-        None,
+        params["wf"],
         optimizer_state,
         data,
         eval_burning_step,
