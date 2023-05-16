@@ -624,7 +624,7 @@ def save_metrics_and_regular_checkpoint(
 
 
 def log_vmc_loop_state(
-    epoch: int, metrics: Dict, checkpoint_str: str, is_sg: bool
+    epoch: int, metrics: Dict, checkpoint_str: str, is_eval: bool
 ) -> None:
     """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
     epoch_str = "Epoch %(epoch)5d"
@@ -650,7 +650,7 @@ def log_vmc_loop_state(
         accept_ratio_str,
         amplitude_str,
     ]
-    if is_sg:
+    if not is_eval:
         msg_strs.append(sg_error_str)
 
     info_out = ", ".join(msg_strs)

@@ -12,7 +12,6 @@ from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKey, S
 
 def vmc_loop(
     params: P,
-    surrogate_params: P,
     optimizer_state: S,
     data: D,
     nchains: int,
@@ -30,8 +29,8 @@ def vmc_loop(
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
     is_pmapped=True,
-    is_sg=False,
-) -> Tuple[P, P, S, D, PRNGKey, bool]:
+    is_eval=False,
+) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
     Variational Monte Carlo (VMC) can be generically viewed as minimizing a
@@ -115,21 +114,12 @@ def vmc_loop(
             old_data = data.copy()
             old_key = key.copy()
 
-            accept_ratio, data, key = walker_fn(params, data, key)
+            data_params = params if is_eval else params["wf"]
+            accept_ratio, data, key = walker_fn(data_params, data, key)
 
-            if is_sg:
-                all_params = {"wf": params, "sg": surrogate_params}
-
-                all_params, data, optimizer_state, metrics, key = update_param_fn(
-                    all_params, data, optimizer_state, key
-                )
-
-                params = all_params["wf"]
-                surrogate_params = all_params["sg"]
-            else:
-                params, data, optimizer_state, metrics, key = update_param_fn(
-                    params, data, optimizer_state, key
-                )
+            params, data, optimizer_state, metrics, key = update_param_fn(
+                params, data, optimizer_state, key
+            )
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
@@ -166,7 +156,7 @@ def vmc_loop(
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
-            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str, is_sg)
+            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str, is_eval)
 
             if nans_detected:
                 break
@@ -175,4 +165,4 @@ def vmc_loop(
             checkpoint_writer, best_checkpoint_data, logdir
         )
 
-    return params, surrogate_params, optimizer_state, data, key, nans_detected
+    return params, optimizer_state, data, key, nans_detected

@@ -280,7 +280,7 @@ def get_default_surrogate_config() -> Dict:
     }
 
     backflow_config = {
-        "ndense_list": ((256, 16), (256, 16), (256, 16), (1,)),
+        "ndense_list": ((16, 4), (16, 4), (16, 4), (16,)),
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
         "kernel_init_transformer": orthogonal_init,
@@ -327,7 +327,7 @@ def get_default_vmc_config() -> Dict:
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
-        "local_energy_type": "standard",  # [standard, ibp, random_particle]
+        "local_energy_type": "random_particle",  # [standard, ibp, random_particle]
         "local_energy": get_default_local_energy_config(),
         "checkpoint_every": 5000,
         "best_checkpoint_every": 100,
