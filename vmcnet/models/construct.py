@@ -1040,8 +1040,12 @@ class core_orbital_fn(Module):
             soften = 0.0
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
 
-            orb1s = gHScoeff1 * jnp.exp(- gHSexp1 * r**2) + gHScoeff2 * jnp.exp(-gHSexp2 * r**2) + gHScoeff3 * jnp.exp(-gHSexp3 * r**2)
-            return orb1s 
+            g1 = jnp.power(2 * gHSexp1 / jnp.pi, 0.75) * jnp.exp(-gHSexp1 * r ** 2)
+            g2 = jnp.power(2 * gHSexp2 / jnp.pi, 0.75) * jnp.exp(-gHSexp2 * r ** 2)
+            g3 = jnp.power(2 * gHSexp3 / jnp.pi, 0.75) * jnp.exp(-gHSexp3 * r ** 2)
+
+            orb1s = gHScoeff1 * g1 + gHScoeff2 * g2 + gHScoeff3 * g3
+            return orb1s
 
 
 #"""

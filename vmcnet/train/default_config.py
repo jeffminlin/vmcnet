@@ -359,8 +359,8 @@ def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
         "nchains": 2000,
-        "nburn": 0, #5000,
-        "nepochs": 10,
+        "nburn": 1000, #5000,
+        "nepochs": 1000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,
