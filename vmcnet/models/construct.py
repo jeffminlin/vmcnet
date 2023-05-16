@@ -1025,6 +1025,7 @@ class core_orbital_fn(Module):
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
             return jnp.exp(-jnp.abs(c) * r)	
 
+        # gaussian function
         if self.orbitaltype == "gauss":
             # params from: https://www.basissetexchange.org/basis/sto-3g/format/nwchem/?version=1&elements=1
             gHSexp1 = 3.425250914	# gaussian H S orbital sto-3G exponent #1 
@@ -1036,7 +1037,6 @@ class core_orbital_fn(Module):
             gHScoeff3 = 0.4446345422
 
             # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
-            # gaussian function
             soften = 0.0
             r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
 
@@ -1213,17 +1213,17 @@ class FastCore(FermiNet):
         nelec = elec_pos.shape[-2]
 
         core_orbitals = [ [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns] for ion in self.ion_pos ]
+        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)       # dimensions (..., nelec, n_AO)
 
-        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)
+        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2 
 
-        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())
-        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-        mo_orbitals = jnp.dot(core_orbitals, jnp.array([c1, c2]))
-        #mo_orbitals = jnp.dot(core_orbitals, 1./jnp.sqrt(2)*jnp.array([1.0,1.0]))
-        #print("MO_ORBITALS: ", mo_orbitals)
+        scaled_core_orbitals = core_orbitals * c1 
+        mo_orbitals = jnp.dot(scaled_core_orbitals, jnp.array([1.0,1.0]))
+
         orbitals = [0]*2
         orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
         orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
+
         # FIXME: hard code the dimension
         # split = 1
         # nfeature=nelec
@@ -1239,7 +1239,6 @@ class FastCore(FermiNet):
             return orbitals
 
         slog_det_prods = slogdet_product(orbitals)
-
 
         return slog_sum_over_axis(slog_det_prods)
 

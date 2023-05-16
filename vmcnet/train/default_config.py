@@ -291,8 +291,8 @@ def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
         "nchains": 2000,
-        "nepochs": 200000,
-        "nburn": 5000,
+        "nepochs": 0, #200000,
+        "nburn": 0, #5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
@@ -359,8 +359,8 @@ def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
         "nchains": 2000,
-        "nburn": 5000,
-        "nepochs": 20000,
+        "nburn": 0, #5000,
+        "nepochs": 10,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,
