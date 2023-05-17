@@ -641,6 +641,9 @@ def run_molecule() -> None:
             data, params, optimizer_state, key
         )
 
+    print(params)
+
+
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,

@@ -1001,6 +1001,7 @@ class core_orbital_fn(Module):
         __call__(X): Computes the value of the core orbital function at the given points.
 
     """
+
     l: int
     orbitaltype: str
 
@@ -1016,40 +1017,40 @@ class core_orbital_fn(Module):
             evaluated at the input points.
 
         """
-        # temporary simple core orbitals 
+        # temporary simple core orbitals
         if self.orbitaltype == "exp":
             c = self.param("c", flax.linen.initializers.uniform(1.0), ())
             # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
             # purely exponential function
             soften = 0.0
-            r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
-            return jnp.exp(-jnp.abs(c) * r)	
+            r = jnp.sqrt(jnp.abs(soften) + jnp.sum(X**2, axis=-1))
+            return jnp.exp(-jnp.abs(c) * r)
 
         # gaussian function
         if self.orbitaltype == "gauss":
             # params from: https://www.basissetexchange.org/basis/sto-3g/format/nwchem/?version=1&elements=1
-            gHSexp1 = 3.425250914	# gaussian H S orbital sto-3G exponent #1 
+            gHSexp1 = 3.425250914  # gaussian H S orbital sto-3G exponent #1
             gHSexp2 = 0.6239137298
             gHSexp3 = 0.1688554040
 
-            gHScoeff1 = 0.1543289673	# gaussian H orbital sto-3G coefficient #1
+            gHScoeff1 = 0.1543289673  # gaussian H orbital sto-3G coefficient #1
             gHScoeff2 = 0.5353281423
             gHScoeff3 = 0.4446345422
 
             # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
             soften = 0.0
-            r = jnp.sqrt(jnp.abs(soften)+jnp.sum(X**2, axis=-1))
+            r = jnp.sqrt(jnp.abs(soften) + jnp.sum(X**2, axis=-1))
 
-            g1 = jnp.power(2 * gHSexp1 / jnp.pi, 0.75) * jnp.exp(-gHSexp1 * r ** 2)
-            g2 = jnp.power(2 * gHSexp2 / jnp.pi, 0.75) * jnp.exp(-gHSexp2 * r ** 2)
-            g3 = jnp.power(2 * gHSexp3 / jnp.pi, 0.75) * jnp.exp(-gHSexp3 * r ** 2)
+            g1 = jnp.power(2 * gHSexp1 / jnp.pi, 0.75) * jnp.exp(-gHSexp1 * r**2)
+            g2 = jnp.power(2 * gHSexp2 / jnp.pi, 0.75) * jnp.exp(-gHSexp2 * r**2)
+            g3 = jnp.power(2 * gHSexp3 / jnp.pi, 0.75) * jnp.exp(-gHSexp3 * r**2)
 
             orb1s = gHScoeff1 * g1 + gHScoeff2 * g2 + gHScoeff3 * g3
             return orb1s
 
 
-#"""
-#class FastCore(FermiNet):
+# """
+# class FastCore(FermiNet):
 #    fc_ratio: float
 #    n_core_orbitals: int
 #    core_orbital_type: str
@@ -1157,7 +1158,7 @@ class core_orbital_fn(Module):
 #            jnp.sum(ion_pos[:, None, :] * indiv_bumps[:, :, None], axis=0)
 #            + complement[:, None] * elec
 #        )
-#    
+#
 #    def getcomplement_walker(self,elec,ion_pos,rcZ):
 #        # I,j
 #        indiv_bumps_ = self.bumpfunction(elec[None, :, :] - ion_pos[:, None, :], rcZ)
@@ -1176,10 +1177,11 @@ class core_orbital_fn(Module):
 #
 #    def getcomplement(self, elec, ion_pos, rcZ):
 #        return self.cond_vmap(self.getcomplement_walker, elec, ion_pos=ion_pos, rcZ=rcZ)
-#    
+#
 #    def localized(self, f, X, radius):
 #        return self.bumpfunction(X, radius) * f(X)
-#"""
+# """
+
 
 # Lins simplified FastCore
 class FastCore(FermiNet):
@@ -1209,66 +1211,73 @@ class FastCore(FermiNet):
             for f in self.core_orbitals_nonlocal
         ]
 
-
     @flax.linen.compact
     # type: ignore[override]
     def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:
         og_elec_pos = elec_pos
         nelec = elec_pos.shape[-2]
-        nelec_per_spin = nelec // 2
-        n_mo = nelec_per_spin   # for restricted case
+        nelec_up, nelec_down = get_nelec_per_split(self.spin_split, nelec)
+        nmo_up, nmo_down = nelec_up, nelec_down
 
         # X matrix
-        core_orbitals = [ [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns] for ion in self.ion_pos ]
-        core_orbitals = jnp.stack([y for x in core_orbitals for y in x], axis=-1)       # dimensions (..., nelec, n_AO)
-        n_ao = core_orbitals.shape[-1]
-        X_up, X_down = jnp.split(core_orbitals, 2, axis=-2) #(..., nelec/2,n_A))
+        core_orbitals = [
+            [f(og_elec_pos - ion[None, ..., :]) for f in self.core_orbital_fns]
+            for ion in self.ion_pos
+        ]
+        core_orbitals = jnp.stack(
+            [y for x in core_orbitals for y in x], axis=-1
+        )  # dimensions (...,nelec,n_AO)
+        X_up, X_down = jnp.split(
+            core_orbitals, self.spin_split, axis=-2
+        )  # [spin: (...,nelec_spin,n_AO))]
 
-        # params should be (n_AO x n_mo): C matrix
-        C = self.param("C", flax.linen.initializers.uniform(1.0), (n_ao, n_mo))
-        XC_up = X_up @ C
-        XC_down = X_down @ C
-    #    sup, lup = jnp.linalg.slogdet(XC_up)
-    #    sdown, ldown = jnp.linalg.slogdet(XC_down)
+        # params should be (n_AO,n_mo): C matrix
+        n_ao = core_orbitals.shape[-1]
+        C_up = self.param("C_up", flax.linen.initializers.uniform(1.0), (n_ao, nmo_up))
+        C_down = self.param(
+            "C_down", flax.linen.initializers.uniform(1.0), (n_ao, nmo_down)
+        )
+        XC_up = X_up @ C_up
+        XC_down = X_down @ C_down
 
         return slogdet_product([XC_up, XC_down])
 
-# UHF hardcoded
-#        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2 
-#        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ()) 
-#        c3 = self.param("c3", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2 
-#        c4 = self.param("c4", flax.linen.initializers.uniform(1.0), ()) 
-#        c = jnp.array([[c1, c2],[c3, c4]]) # dimensions (nelec, n_AO)
-#        weighted_core_orbitals = core_orbitals * c     # (..., nelec)
-#        mo_orbitals = jnp.sum(weighted_core_orbitals, axis=-1)
-# RHF hardoded
-#        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2 
-#        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ()) 
-#        c = jnp.array([c1, c2]) # dimensions (2, )
-#        #scaled_core_orbitals = core_orbitals * c1 
-#        mo_orbitals = core_orbitals @ c     # (..., nelec)
+    # UHF hardcoded
+    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
+    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
+    #        c3 = self.param("c3", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
+    #        c4 = self.param("c4", flax.linen.initializers.uniform(1.0), ())
+    #        c = jnp.array([[c1, c2],[c3, c4]]) # dimensions (nelec, n_AO)
+    #        weighted_core_orbitals = core_orbitals * c     # (..., nelec)
+    #        mo_orbitals = jnp.sum(weighted_core_orbitals, axis=-1)
+    # RHF hardoded
+    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
+    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
+    #        c = jnp.array([c1, c2]) # dimensions (2, )
+    #        #scaled_core_orbitals = core_orbitals * c1
+    #        mo_orbitals = core_orbitals @ c     # (..., nelec)
 
-        # orbitals = [0]*2
-        # orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
-        # orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
+    # orbitals = [0]*2
+    # orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
+    # orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
 
-        # # FIXME: hard code the dimension
-        # # split = 1
-        # # nfeature=nelec
-        # # orbitals = [0]*2
-        # #orbitals[0] += flax.linen.Dense(features=nfeature)(core_orbitals[..., :split, :])[None]
-        # #orbitals[1] += flax.linen.Dense(features=nfeature)(core_orbitals[..., split:, :])[None]
-        # # orbitals = [jnp.concatenate(orbitals, axis=-2)]
+    # # FIXME: hard code the dimension
+    # # split = 1
+    # # nfeature=nelec
+    # # orbitals = [0]*2
+    # #orbitals[0] += flax.linen.Dense(features=nfeature)(core_orbitals[..., :split, :])[None]
+    # #orbitals[1] += flax.linen.Dense(features=nfeature)(core_orbitals[..., split:, :])[None]
+    # # orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
-        # # not full determinant
-        # # orbitals = [core_orbitals[None]]
+    # # not full determinant
+    # # orbitals = [core_orbitals[None]]
 
-        # if get_orbitals:
-        #     return orbitals
+    # if get_orbitals:
+    #     return orbitals
 
-        # slog_det_prods = slogdet_product(orbitals)
+    # slog_det_prods = slogdet_product(orbitals)
 
-        # return slog_sum_over_axis(slog_det_prods) 
+    # return slog_sum_over_axis(slog_det_prods)
 
     def localized(self, f, X, radius):
         # return self.bumpfunction(X, radius) * f(X)
@@ -1823,4 +1832,3 @@ class GenericAntisymmetry(Module):
         )
 
         return sign_psi, log_antisym + jastrow_part
-
