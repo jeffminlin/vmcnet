@@ -272,8 +272,8 @@ def get_default_molecular_config() -> Dict:
         "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
         "ion_charges": (1.0, 3.0),
         "nelec": (2, 2),
-        "ei_softening": 1.0,
-        "ee_softening": 1.0,
+        "ei_softening": 0.0,
+        "ee_softening": 0.0,
     }
     return problem_config
 
