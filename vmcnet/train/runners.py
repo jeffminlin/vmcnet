@@ -107,13 +107,13 @@ def _get_and_init_model(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
     key, subkey = jax.random.split(key)
-    params = { 'params': {
-        'c1': 0.54893404, 
-        #'c2': 1.21146407, 
-        #'c2': 0.54893404, 
-        #'c4': -1.21146407, 
-        }
-    } # slog_psi.init(subkey, init_pos[0:1])       # hard code params here
+    #params = { 'params': {
+    #    'c1': 0.54893404, 
+    #    'c2': 0.54893404,
+    #    'c3': 1.21146407,  
+    #    'c4': -1.21146407, 
+    #    }}
+    params = slog_psi.init(subkey, init_pos[0:1])       # hard code params here
     if apply_pmap:  
         params = utils.distribute.replicate_all_local_devices(params)
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
@@ -661,6 +661,9 @@ def run_molecule() -> None:
         return
     else:
         logging.info("Completed VMC! Evaluating")
+
+
+    print(params)
 
     # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
     # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post
