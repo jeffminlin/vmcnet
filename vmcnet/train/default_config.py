@@ -111,7 +111,9 @@ def get_default_model_config() -> Dict:
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
+        "ei_norm_softening": 0.0,
         "include_ee_norm": True,
+        "ee_norm_softening": 0.0,
     }
 
     base_backflow_config = {
@@ -156,6 +158,7 @@ def get_default_model_config() -> Dict:
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
+        "envelope_softening": 0.0,
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,

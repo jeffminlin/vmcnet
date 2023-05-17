@@ -163,6 +163,7 @@ def _make_ferminets():
             models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
+            0.0,
             models.weights.get_bias_initializer("uniform"),
             orbitals_use_bias=True,
             isotropic_decay=True,
@@ -208,6 +209,7 @@ def _make_embedded_particle_ferminets():
             models.weights.get_kernel_initializer("he_normal"),
             models.weights.get_kernel_initializer("lecun_normal"),
             models.weights.get_kernel_initializer("ones"),
+            0.0,
             models.weights.get_bias_initializer("uniform"),
             orbitals_use_bias=True,
             isotropic_decay=True,
@@ -271,6 +273,7 @@ def _make_extended_orbital_matrix_ferminets():
             kernel_initializer_envelope_ion=models.weights.get_kernel_initializer(
                 "ones"
             ),
+            envelope_softening=0.0,
             bias_initializer_orbital_linear=models.weights.get_bias_initializer(
                 "uniform"
             ),

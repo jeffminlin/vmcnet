@@ -2,6 +2,7 @@
 import functools
 from typing import Callable, Optional, Sequence, Tuple
 
+import chex
 import flax
 import jax
 import jax.numpy as jnp
@@ -38,7 +39,9 @@ def compute_input_streams(
     ion_pos: Optional[Array] = None,
     include_2e_stream: bool = True,
     include_ei_norm: bool = True,
+    ei_norm_softening: chex.Scalar = 0.0,
     include_ee_norm: bool = True,
+    ee_norm_softening: chex.Scalar = 0.0,
 ) -> InputStreams:
     """Create input streams with electron and optionally ion data.
 
@@ -60,8 +63,12 @@ def compute_input_streams(
             displacements/distances. Defaults to True.
         include_ei_norm (bool, optional): whether to include electron-ion distances in
             the one-electron input. Defaults to True.
+        ei_norm_softening (float, optional): constant used to soften the cusp of the ei
+            norm. If set to c, then an ei norm of r is replaced by sqrt(r^2 + c^2) - c.
         include_ee_norm (bool, optional): whether to include electron-electron distances
             in the two-electron input. Defaults to True.
+        ee_norm_softening (float, optional): constant used to soften the cusp of the ee
+            norm. If set to c, then an ee norm of r is replaced by sqrt(r^2 + c^2) - c.
 
     Returns:
         (
@@ -87,16 +94,23 @@ def compute_input_streams(
         If `include_2e_stream` is False, then the second and fourth outputs are None. If
         `ion_pos` is None, then the third output is None.
     """
-    input_1e, r_ei = compute_electron_ion(elec_pos, ion_pos, include_ei_norm)
+    input_1e, r_ei = compute_electron_ion(
+        elec_pos, ion_pos, include_ei_norm, ei_norm_softening
+    )
     input_2e = None
     r_ee = None
     if include_2e_stream:
-        input_2e, r_ee = compute_electron_electron(elec_pos, include_ee_norm)
+        input_2e, r_ee = compute_electron_electron(
+            elec_pos, include_ee_norm, ee_norm_softening
+        )
     return input_1e, input_2e, r_ei, r_ee
 
 
 def compute_electron_ion(
-    elec_pos: Array, ion_pos: Optional[Array] = None, include_ei_norm: bool = True
+    elec_pos: Array,
+    ion_pos: Optional[Array] = None,
+    include_ei_norm: bool = True,
+    ei_norm_softening: chex.Scalar = 0.0,
 ) -> Tuple[Array, Optional[Array]]:
     """Compute electron-ion displacements and optionally add on the distances.
 
@@ -106,6 +120,8 @@ def compute_electron_ion(
             relative electron positions, 2-d array of shape (nion, d). Defaults to None.
         include_ei_norm (bool, optional): whether to include electron-ion distances in
             the one-electron input. Defaults to True.
+        ei_norm_softening (float, optional): constant used to soften the cusp of the ei
+            norm. If set to c, then an ei norm of r is replaced by sqrt(r^2 + c^2) - c.
 
     Returns:
         (Array, Optional[Array]):
@@ -125,16 +141,19 @@ def compute_electron_ion(
         r_ei = compute_displacements(input_1e, ion_pos)
         input_1e = r_ei
         if include_ei_norm:
-            input_norm = (
-                jnp.sqrt(jnp.linalg.norm(input_1e, axis=-1, keepdims=True) ** 2 + 1) - 1
+            input_norm = jnp.linalg.norm(input_1e, axis=-1, keepdims=True)
+            softened_input_norm = (
+                jnp.sqrt(input_norm**2 + ei_norm_softening**2) - ei_norm_softening
             )
-            input_with_norm = jnp.concatenate([input_1e, input_norm], axis=-1)
+            input_with_norm = jnp.concatenate([input_1e, softened_input_norm], axis=-1)
             input_1e = jnp.reshape(input_with_norm, input_with_norm.shape[:-2] + (-1,))
     return input_1e, r_ei
 
 
 def compute_electron_electron(
-    elec_pos: Array, include_ee_norm: bool = True
+    elec_pos: Array,
+    include_ee_norm: bool = True,
+    ee_norm_softening: chex.Scalar = 0.0,
 ) -> Tuple[Array, Array]:
     """Compute electron-electron displacements and optionally add on the distances.
 
@@ -142,6 +161,8 @@ def compute_electron_electron(
         elec_pos (Array): electron positions of shape (..., nelec, d)
         include_ee_norm (bool, optional): whether to include electron-electron distances
             in the two-electron input. Defaults to True.
+        ee_norm_softening (float, optional): constant used to soften the cusp of the ee
+            norm. If set to c, then an ee norm of r is replaced by sqrt(r^2 + c^2) - c.
 
     Returns:
         (Array, Array):
@@ -155,8 +176,11 @@ def compute_electron_electron(
     r_ee = compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
-        r_ee_norm = jnp.sqrt(compute_ee_norm_with_safe_diag(r_ee) ** 2 + 1) - 1
-        input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
+        r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
+        softened_ee_norm = (
+            jnp.sqrt(r_ee_norm**2 + ee_norm_softening**2) - ee_norm_softening
+        )
+        input_2e = jnp.concatenate([input_2e, softened_ee_norm], axis=-1)
     return input_2e, r_ee
 
 
@@ -672,6 +696,7 @@ def _compute_exponential_envelopes_on_leaf(
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
+    envelope_softening: chex.Scalar = 0.0,
 ) -> Array:
     """Calculate exponential envelopes for orbitals of a single split."""
     if isotropic:
@@ -688,9 +713,10 @@ def _compute_exponential_envelopes_on_leaf(
         )
     # scale_out has shape (..., nelec, norbitals, nion, d)
     distances = jnp.linalg.norm(scale_out, axis=-1)
-    inv_exp_distances = jnp.exp(
-        -(jnp.sqrt(distances**2 + 1) - 1)
-    )  # (..., nelec, norbitals, nion)
+    softened_distances = (
+        jnp.sqrt(distances**2 + envelope_softening**2) - envelope_softening
+    )
+    inv_exp_distances = jnp.exp(-softened_distances)  # (..., nelec, norbitals, nion)
 
     # Multiply elementwise over final two axes and sum over final axis, returning
     # (..., nelec, norbitals)
@@ -709,6 +735,7 @@ def _compute_exponential_envelopes_all_splits(
     kernel_initializer_dim: WeightInitializer,
     kernel_initializer_ion: WeightInitializer,
     isotropic: bool = False,
+    envelope_softening: chex.Scalar = 0.0,
 ) -> ArrayList:
     """Calculate exponential envelopes for all splits."""
     r_ei_split = split(r_ei, orbitals_split, axis=-3)
@@ -718,6 +745,7 @@ def _compute_exponential_envelopes_all_splits(
             kernel_initializer_dim=kernel_initializer_dim,
             kernel_initializer_ion=kernel_initializer_ion,
             isotropic=isotropic,
+            envelope_softening=envelope_softening,
         ),
         r_ei_split,
         list(norbitals_per_spin),
@@ -752,6 +780,9 @@ class FermiNetOrbitalLayer(Module):
             (key, shape, dtype) -> Array
         bias_initializer_linear (WeightInitializer): bias initializer for the linear
             part of the orbitals. Has signature (key, shape, dtype) -> Array
+        envelope_softening (float): amount by which to soften the cusp of the
+            exponential envelope. If set to c, then an ei distance of r is replaced by
+            sqrt(r^2 + c^2) - c. Defaults to 0.0
         use_bias (bool, optional): whether to add a bias term to the linear part of the
             orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should be
@@ -766,6 +797,7 @@ class FermiNetOrbitalLayer(Module):
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
     bias_initializer_linear: WeightInitializer
+    envelope_softening: chex.Scalar = 0.0
     use_bias: bool = True
     isotropic_decay: bool = False
 
@@ -810,6 +842,7 @@ class FermiNetOrbitalLayer(Module):
                 self._kernel_initializer_envelope_dim,
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
+                self.envelope_softening,
             )
             orbs = tree_prod(orbs, exp_envelopes)
         return orbs
