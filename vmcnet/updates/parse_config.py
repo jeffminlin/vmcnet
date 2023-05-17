@@ -1,7 +1,6 @@
 """Get update functions from ConfigDicts."""
-from typing import Callable, Optional, Tuple
+from typing import Tuple
 
-import chex
 from kfac_jax import Optimizer as kfac_Optimizer
 import optax
 from ml_collections import ConfigDict
@@ -15,6 +14,7 @@ import vmcnet.utils.curvature_tags_and_blocks as curvature_tags_and_blocks
 from vmcnet.utils.typing import (
     D,
     GetPositionFromData,
+    LearningRateSchedule,
     ModelApply,
     OptimizerState,
     P,
@@ -33,7 +33,7 @@ from .sr import SRMode, get_fisher_inverse_fn
 
 def _get_learning_rate_schedule(
     optimizer_config: ConfigDict,
-) -> Callable[[chex.Array], Optional[chex.Array]]:
+) -> LearningRateSchedule:
     if optimizer_config.schedule_type == "constant":
 
         def learning_rate_schedule(t):
@@ -179,7 +179,7 @@ def get_kfac_update_fn_and_state(
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
-    learning_rate_schedule: Callable[[chex.Array], Optional[chex.Array]],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -251,7 +251,7 @@ def get_kfac_update_fn_and_state(
 
 
 def _get_adam_optax_optimizer(
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
 ) -> optax.GradientTransformation:
     return optax.adam(
@@ -264,7 +264,7 @@ def _get_adam_optax_optimizer(
 
 
 def _get_sgd_optax_optimizer(
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
 ) -> optax.GradientTransformation:
     return optax.sgd(
@@ -318,7 +318,7 @@ def get_adam_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -368,7 +368,7 @@ def get_sgd_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
@@ -419,7 +419,7 @@ def get_sr_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    learning_rate_schedule: Callable[[int], chex.Numeric],
+    learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     descent_config: ConfigDict,
     record_param_l1_norm: bool = False,

@@ -41,6 +41,8 @@ S = TypeVar("S", bound=PyTree)
 # TODO: Figure out how to make kfac_opt.State not be interpreted by mypy as Any
 OptimizerState = Union[kfac_jax.optimizer.OptimizerState, optax.OptState]
 
+LearningRateSchedule = Callable[[Array], Array]
+
 ModelParams = Union[frozen_dict.FrozenDict, Dict[str, Any]]
 
 # VMC state needed for a checkpoint. Values are:
