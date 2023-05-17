@@ -65,10 +65,12 @@ def compute_input_streams(
             the one-electron input. Defaults to True.
         ei_norm_softening (float, optional): constant used to soften the cusp of the ei
             norm. If set to c, then an ei norm of r is replaced by sqrt(r^2 + c^2) - c.
+            Defaults to 0.
         include_ee_norm (bool, optional): whether to include electron-electron distances
             in the two-electron input. Defaults to True.
         ee_norm_softening (float, optional): constant used to soften the cusp of the ee
             norm. If set to c, then an ee norm of r is replaced by sqrt(r^2 + c^2) - c.
+            Defaults to 0.
 
     Returns:
         (
@@ -122,6 +124,7 @@ def compute_electron_ion(
             the one-electron input. Defaults to True.
         ei_norm_softening (float, optional): constant used to soften the cusp of the ei
             norm. If set to c, then an ei norm of r is replaced by sqrt(r^2 + c^2) - c.
+            Defaults to 0.
 
     Returns:
         (Array, Optional[Array]):
@@ -163,6 +166,7 @@ def compute_electron_electron(
             in the two-electron input. Defaults to True.
         ee_norm_softening (float, optional): constant used to soften the cusp of the ee
             norm. If set to c, then an ee norm of r is replaced by sqrt(r^2 + c^2) - c.
+            Defaults to 0.
 
     Returns:
         (Array, Array):
@@ -782,7 +786,7 @@ class FermiNetOrbitalLayer(Module):
             part of the orbitals. Has signature (key, shape, dtype) -> Array
         envelope_softening (float): amount by which to soften the cusp of the
             exponential envelope. If set to c, then an ei distance of r is replaced by
-            sqrt(r^2 + c^2) - c. Defaults to 0.0
+            sqrt(r^2 + c^2) - c. Defaults to 0.
         use_bias (bool, optional): whether to add a bias term to the linear part of the
             orbitals. Defaults to True.
         isotropic_decay (bool, optional): whether the decay for each ion should be
