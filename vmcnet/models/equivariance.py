@@ -125,7 +125,9 @@ def compute_electron_ion(
         r_ei = compute_displacements(input_1e, ion_pos)
         input_1e = r_ei
         if include_ei_norm:
-            input_norm = jnp.linalg.norm(input_1e, axis=-1, keepdims=True)
+            input_norm = (
+                jnp.sqrt(jnp.linalg.norm(input_1e, axis=-1, keepdims=True) ** 2 + 1) - 1
+            )
             input_with_norm = jnp.concatenate([input_1e, input_norm], axis=-1)
             input_1e = jnp.reshape(input_with_norm, input_with_norm.shape[:-2] + (-1,))
     return input_1e, r_ei
@@ -153,7 +155,7 @@ def compute_electron_electron(
     r_ee = compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
-        r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
+        r_ee_norm = jnp.sqrt(compute_ee_norm_with_safe_diag(r_ee) ** 2 + 1) - 1
         input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
     return input_2e, r_ee
 
@@ -687,7 +689,7 @@ def _compute_exponential_envelopes_on_leaf(
     # scale_out has shape (..., nelec, norbitals, nion, d)
     distances = jnp.linalg.norm(scale_out, axis=-1)
     inv_exp_distances = jnp.exp(
-        -jnp.sqrt(distances**2 + 1)
+        -(jnp.sqrt(distances**2 + 1) - 1)
     )  # (..., nelec, norbitals, nion)
 
     # Multiply elementwise over final two axes and sum over final axis, returning
