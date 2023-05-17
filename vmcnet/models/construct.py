@@ -1191,24 +1191,11 @@ class FastCore(FermiNet):
 
     def setup(self):
         super().setup()
-
         self.ion_pos = self.compute_input_streams.keywords["ion_pos"]
-        self.mindist = min(
-            [
-                jnp.sqrt(jnp.sum((x - y) ** 2))
-                for i, x in enumerate(self.ion_pos)
-                for y in self.ion_pos[:i]
-            ]
-        )
-        self.radius = self.mindist * self.fc_ratio / 2
 
-        self.core_orbitals_nonlocal = [
+        self.core_orbital_fns = [
             core_orbital_fn(core_orbital, self.core_orbital_type)
             for core_orbital in range(self.n_core_orbitals)
-        ]
-        self.core_orbital_fns = [
-            functools.partial(self.localized, f, radius=self.radius)
-            for f in self.core_orbitals_nonlocal
         ]
 
     @flax.linen.compact
