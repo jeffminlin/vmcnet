@@ -103,7 +103,9 @@ def _get_and_init_model(
     key: PRNGKey,
     dtype=jnp.float32,
     apply_pmap: bool = True,
-) -> Tuple[ModelApply[flax.core.FrozenDict], Any, PRNGKey]:
+) -> Tuple[
+    ModelApply[flax.core.FrozenDict], ModelApply[flax.core.FrozenDict], Any, PRNGKey
+]:
     slog_psi = models.construct.get_model_from_config(
         model_config, nelec, ion_pos, ion_charges, dtype=dtype
     )
@@ -111,8 +113,10 @@ def _get_and_init_model(
     params = slog_psi.init(subkey, init_pos[0:1])
     if apply_pmap:
         params = utils.distribute.replicate_all_local_devices(params)
+
+    sign_psi_apply = models.construct.slog_psi_to_sign_psi_apply(slog_psi.apply)
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
-    return log_psi_apply, params, key
+    return sign_psi_apply, log_psi_apply, params, key
 
 
 def _get_and_init_surrogate(
@@ -255,6 +259,7 @@ def _assemble_mol_local_energy_fn(
     ion_charges: Array,
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
+    sign_psi_apply,
     log_psi_apply: ModelApply[P],
     surrogate: ModelApply[P],
 ) -> LocalEnergyApply[P]:
@@ -291,6 +296,7 @@ def _assemble_mol_local_energy_fn(
         sample_parts = local_energy_config.random_particle.sample_parts
         local_energy_fn = (
             physics.random_particle.create_molecular_random_particle_local_energy(
+                sign_psi_apply,
                 log_psi_apply,
                 surrogate,
                 ion_pos,
@@ -357,6 +363,7 @@ def _get_energy_val_and_grad_fn(
     problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
+    sign_psi_apply,
     log_psi_apply: ModelApply[P],
     surrogate: ModelApply[P],
 ) -> physics.core.ValueGradEnergyFn[P]:
@@ -370,6 +377,7 @@ def _get_energy_val_and_grad_fn(
         ion_charges,
         ei_softening,
         ee_softening,
+        sign_psi_apply,
         log_psi_apply,
         surrogate,
     )
@@ -401,6 +409,7 @@ def _setup_vmc(
 ) -> Tuple[
     ModelApply[flax.core.FrozenDict],
     ModelApply[flax.core.FrozenDict],
+    ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
@@ -416,7 +425,7 @@ def _setup_vmc(
     )
 
     # Make the model
-    log_psi_apply, wf_params, key = _get_and_init_model(
+    sign_psi_apply, log_psi_apply, wf_params, key = _get_and_init_model(
         config.model,
         ion_pos,
         ion_charges,
@@ -450,7 +459,13 @@ def _setup_vmc(
     )
 
     energy_data_val_and_grad = _get_energy_val_and_grad_fn(
-        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply, surrogate
+        config.vmc,
+        config.problem,
+        ion_pos,
+        ion_charges,
+        sign_psi_apply,
+        log_psi_apply,
+        surrogate,
     )
 
     params = {"wf": wf_params, "sg": sg_params}
@@ -475,6 +490,7 @@ def _setup_vmc(
     )
 
     return (
+        sign_psi_apply,
         log_psi_apply,
         surrogate,
         burning_step,
@@ -494,6 +510,7 @@ def _setup_eval(
     problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
+    sign_psi_apply,
     log_psi_apply: ModelApply[P],
     get_position_fn: GetPositionFromData[dwpa.DWPAData],
     apply_pmap: bool = True,
@@ -512,6 +529,7 @@ def _setup_eval(
         ion_charges,
         ei_softening,
         ee_softening,
+        sign_psi_apply,
         log_psi_apply,
         None,
     )
@@ -652,6 +670,7 @@ def run_molecule() -> None:
     key = jax.random.PRNGKey(config.initial_seed)
 
     (
+        sign_psi_apply,
         log_psi_apply,
         surrogate,
         burning_step,
@@ -731,6 +750,7 @@ def run_molecule() -> None:
         config.problem,
         ion_pos,
         ion_charges,
+        sign_psi_apply,
         log_psi_apply,
         pacore.get_position_from_data,
         apply_pmap=config.distribute,

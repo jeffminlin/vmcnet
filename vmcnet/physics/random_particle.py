@@ -17,6 +17,7 @@ from .potential import (
 
 RandomParticleKineticEnergy = Callable[[P, Array, Array], Array]
 
+
 def create_random_particle_kinetic_energy(
     log_psi_apply: Callable[[P, Array], Array], nparticles: int = 1
 ) -> RandomParticleKineticEnergy:
@@ -46,6 +47,8 @@ def create_random_particle_kinetic_energy(
 
 
 def assemble_random_particle_local_energy(
+    sign_psi_apply,
+    log_psi_apply,
     kinetic_term,
     ii_potential_fn,
     ei_potential_fn,
@@ -55,6 +58,8 @@ def assemble_random_particle_local_energy(
     nparticles: int = 1,
 ) -> LocalEnergyApply[P]:
     """Assembles the random particle local energy from kinetic and potential terms."""
+
+    grad_log_psi_apply = jax.grad(log_psi_apply, argnums=1)
 
     def local_energy_fn(
         wf_params: P, surrogate_params: P, positions: Array, key: PRNGKey
@@ -78,18 +83,24 @@ def assemble_random_particle_local_energy(
 
         else:
             total_particles = positions.shape[-2]
-            surrogate_energies = surrogate(surrogate_params, positions)
+            surrogate_outputs = surrogate(surrogate_params, positions)
+            sign_psi = sign_psi_apply(wf_params, positions)
+            grad_log_psi = grad_log_psi_apply(wf_params, positions)
+            grad_log_psi_norm = jnp.sqrt(jnp.sum(grad_log_psi**2))
 
             perm = jax.random.permutation(key, jnp.arange(total_particles))
 
-            permuted_surrogate_energies = surrogate_energies[perm]
-            surrogate_corrections = (
-                jnp.mean(permuted_surrogate_energies, axis=-1, keepdims=True)
-                - permuted_surrogate_energies
+            permuted_surrogate_outputs = surrogate_outputs[perm]
+            raw_sg_corrections = (
+                jnp.mean(permuted_surrogate_outputs, axis=-1, keepdims=True)
+                - permuted_surrogate_outputs
+            )
+            scaled_sg_corrections = (
+                raw_sg_corrections * (grad_log_psi_norm + 1) * sign_psi
             )
 
             permuted_positions = positions[perm, :]
-            total_correction = jnp.sum(surrogate_corrections[:nparticles])
+            total_correction = jnp.sum(scaled_sg_corrections[:nparticles])
 
             wf_particle_energy = (
                 kinetic_term(wf_params, positions, perm)
@@ -104,16 +115,18 @@ def assemble_random_particle_local_energy(
                 wf_params, permuted_positions
             )
 
-            sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
+            raw_sg_sum = jnp.sum(permuted_surrogate_outputs[:nparticles])
+            sg_target = wf_particle_energy / (grad_log_psi_norm + 1) * sign_psi
 
             return wf_total_energy + total_correction, jnp.square(
-                wf_particle_energy - sg_energy
+                sg_target - raw_sg_sum
             )
 
     return local_energy_fn
 
 
 def create_molecular_random_particle_local_energy(
+    sign_psi_apply: Callable[[P, Array], Array],
     log_psi_apply: Callable[[P, Array], Array],
     surrogate: Callable[[P, Array], Array],
     ion_locations: Array,
@@ -179,6 +192,8 @@ def create_molecular_random_particle_local_energy(
     )
 
     return assemble_random_particle_local_energy(
+        sign_psi_apply,
+        log_psi_apply,
         kinetic_energy,
         ii_potential_fn,
         ei_potential_fn,

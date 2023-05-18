@@ -104,6 +104,15 @@ def slog_psi_to_log_psi_apply(slog_psi_apply) -> Callable[..., Array]:
     return log_psi_apply
 
 
+def slog_psi_to_sign_psi_apply(slog_psi_apply) -> Callable[..., Array]:
+    """Get a log|psi| model apply callable from a sign(psi), log|psi| apply callable."""
+
+    def log_psi_apply(*args) -> Array:
+        return slog_psi_apply(*args)[0]
+
+    return log_psi_apply
+
+
 def get_model_from_config(
     model_config: ConfigDict,
     nelec: Array,
