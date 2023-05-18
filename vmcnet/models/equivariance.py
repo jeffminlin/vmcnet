@@ -180,11 +180,10 @@ def compute_electron_electron(
     r_ee = compute_displacements(elec_pos, elec_pos)
     input_2e = r_ee
     if include_ee_norm:
-        r_ee_norm = compute_ee_norm_with_safe_diag(r_ee)
-        softened_ee_norm = (
-            jnp.sqrt(r_ee_norm**2 + ee_norm_softening**2) - ee_norm_softening
+        r_ee_norm = compute_ee_norm_with_safe_diag(
+            r_ee, softening_term=ee_norm_softening
         )
-        input_2e = jnp.concatenate([input_2e, softened_ee_norm], axis=-1)
+        input_2e = jnp.concatenate([input_2e, r_ee_norm], axis=-1)
     return input_2e, r_ee
 
 
