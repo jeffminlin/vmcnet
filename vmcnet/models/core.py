@@ -42,7 +42,7 @@ def _split_mean(
     return split_x_mean
 
 
-def compute_ee_norm_with_safe_diag(r_ee):
+def compute_ee_norm_with_safe_diag(r_ee, softening_term=0.0):
     """Get electron-electron distances with a safe derivative along the diagonal.
 
     Avoids computing norm(x - x) along the diagonal, since autograd will be unhappy
@@ -51,6 +51,9 @@ def compute_ee_norm_with_safe_diag(r_ee):
 
     Args:
         r_ee (Array): electron-electron displacements wth shape (..., n, n, d)
+        softening_term (float, optional): constant used to soften the cusp of the ee
+            norm. If set to c, then an ee norm of r is replaced by sqrt(r^2 + c^2) - c.
+            Defaults to 0.
 
     Returns:
         Array: electron-electrondists with shape (..., n, n, 1)
@@ -58,7 +61,9 @@ def compute_ee_norm_with_safe_diag(r_ee):
     n = r_ee.shape[-2]
     eye_n = jnp.expand_dims(jnp.eye(n), axis=-1)
     r_ee_diag_ones = r_ee + eye_n
-    return jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True) * (1.0 - eye_n)
+    ee_norms = jnp.linalg.norm(r_ee_diag_ones, axis=-1, keepdims=True)
+    softened_norms = jnp.sqrt(ee_norms**2 + softening_term**2) - softening_term
+    return softened_norms * (1.0 - eye_n)
 
 
 def is_tuple_of_arrays(x: PyTree) -> bool:

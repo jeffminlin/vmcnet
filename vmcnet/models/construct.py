@@ -4,6 +4,7 @@ from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple, cast
 
+import chex
 import flax
 import jax
 import jax.numpy as jnp
@@ -159,6 +160,7 @@ def get_model_from_config(
                 kernel_initializer_envelope_ion=kernel_init_constructor(
                     model_config.kernel_init_envelope_ion
                 ),
+                envelope_softening=model_config.envelope_softening,
                 bias_initializer_orbital_linear=bias_init_constructor(
                     model_config.bias_init_orbital_linear
                 ),
@@ -201,6 +203,7 @@ def get_model_from_config(
                 kernel_initializer_envelope_ion=kernel_init_constructor(
                     model_config.kernel_init_envelope_ion
                 ),
+                envelope_softening=model_config.envelope_softening,
                 bias_initializer_orbital_linear=bias_init_constructor(
                     model_config.bias_init_orbital_linear
                 ),
@@ -244,6 +247,7 @@ def get_model_from_config(
                 kernel_initializer_envelope_ion=kernel_init_constructor(
                     model_config.kernel_init_envelope_ion
                 ),
+                envelope_softening=model_config.envelope_softening,
                 bias_initializer_orbital_linear=bias_init_constructor(
                     model_config.bias_init_orbital_linear
                 ),
@@ -766,6 +770,9 @@ class FermiNet(Module):
         kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
             linear combination over the ions of exponential envelopes. Has signature
             (key, shape, dtype) -> Array
+        envelope_softening (float): amount by which to soften the cusp of the
+            exponential envelope. If set to c, then an ei distance of r is replaced by
+            sqrt(r^2 + c^2) - c.
         bias_initializer_orbital_linear (WeightInitializer): bias initializer for the
             linear part of the orbitals. Has signature
             (key, shape, dtype) -> Array
@@ -828,6 +835,7 @@ class FermiNet(Module):
     kernel_initializer_orbital_linear: WeightInitializer
     kernel_initializer_envelope_dim: WeightInitializer
     kernel_initializer_envelope_ion: WeightInitializer
+    envelope_softening: chex.Scalar
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool
     isotropic_decay: bool
@@ -951,6 +959,7 @@ class FermiNet(Module):
             kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
             kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
             bias_initializer_linear=self.bias_initializer_orbital_linear,
+            envelope_softening=self.envelope_softening,
             use_bias=self.orbitals_use_bias,
             isotropic_decay=self.isotropic_decay,
         )(stream_1e, r_ei)

@@ -17,10 +17,8 @@ from vmcnet.utils.typing import (
     ModelApply,
 )
 
-EnergyAuxData = Tuple[
-    chex.Numeric, Array, Optional[chex.Numeric], Optional[chex.Numeric]
-]
-EnergyData = Tuple[chex.Numeric, EnergyAuxData]
+EnergyAuxData = Tuple[Array, Array, Optional[Array], Optional[Array]]
+EnergyData = Tuple[Array, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
 
 
@@ -183,7 +181,7 @@ def laplacian_psi_over_psi(
 
 def get_statistics_from_local_energy(
     local_energies: Array, nchains: int, nan_safe: bool = True
-) -> Tuple[chex.Numeric, chex.Numeric]:
+) -> Tuple[Array, Array]:
     """Collectively reduce local energies to an average energy and variance.
 
     Args:
@@ -218,7 +216,7 @@ def get_clipped_energies_and_aux_data(
     nchains: int,
     clipping_fn: Optional[ClippingFn],
     nan_safe: bool,
-) -> Tuple[chex.Numeric, Array, EnergyAuxData]:
+) -> Tuple[Array, Array, EnergyAuxData]:
     """Clip local energies if requested and return auxiliary data."""
     if clipping_fn is not None:
         # For the unclipped metrics, which are not used in the gradient, don't
