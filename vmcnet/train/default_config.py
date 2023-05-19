@@ -297,6 +297,7 @@ def get_default_vmc_config() -> Dict:
         "nhistory_max": 200,
         "record_amplitudes": False,
         "record_param_l1_norm": False,
+        "use_clipping": True,
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,

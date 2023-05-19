@@ -305,7 +305,7 @@ def _get_clipping_fn(
     vmc_config: ConfigDict,
 ) -> Optional[ClippingFn]:
     clipping_fn = None
-    if vmc_config.clip_threshold > 0.0:
+    if vmc_config.use_clipping and vmc_config.clip_threshold > 0.0:
         clipping_fn = functools.partial(
             total_variation_clipping_fn,
             threshold=vmc_config.clip_threshold,
