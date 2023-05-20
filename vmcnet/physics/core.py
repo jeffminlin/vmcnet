@@ -228,7 +228,7 @@ def get_clipped_energies_and_aux_data(
 
         local_energies = clipping_fn(local_energies_noclip, energy_noclip)
         energy, variance = get_statistics_from_local_energy(
-            local_energies_noclip, nchains, nan_safe=nan_safe
+            local_energies, nchains, nan_safe=nan_safe
         )
 
         aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
