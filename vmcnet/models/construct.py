@@ -1109,12 +1109,12 @@ class core_orbital_fns(Module):
 class FastCore(FermiNet):
     fc_ratio: float
     n_core_orbitals: int
-    core_orbital_type: str
+    core_orbital_types: List[str]
 
     def setup(self):
         super().setup()
         self.ion_pos = self.compute_input_streams.keywords["ion_pos"]
-        self.core_orbital_fns = core_orbital_fns(self.n_core_orbitals, self.core_orbital_type)
+        self.core_orbital_fns = [core_orbital_fns(self.n_core_orbitals,typ) for typ in self.core_orbital_types]
 
     @flax.linen.compact
     # type: ignore[override]
@@ -1125,7 +1125,7 @@ class FastCore(FermiNet):
         nmo_up, nmo_down = nelec_up, nelec_down
 
         # X matrix
-        core_orbitals=[self.core_orbital_fns(og_elec_pos - ion) for ion in self.ion_pos]
+        core_orbitals=[orbital_fn(og_elec_pos - ion) for ion,orbital_fn in zip(self.ion_pos,self.core_orbital_fns)]
         core_orbitals = jnp.concatenate(core_orbitals, axis=-1) # dimensions (...,nelec,n_AO)
 
         X_up, X_down = jnp.split(

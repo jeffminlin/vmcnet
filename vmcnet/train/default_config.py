@@ -173,7 +173,7 @@ def get_default_model_config() -> Dict:
     base_fastcore_config["auto"] = dict(
         fc_ratio=0.3,
         n_core_orbitals=1,
-        core_orbital_type="sto-3g_Li",  #"exp",
+        core_orbital_types=["sto-3g_Li","sto-3g_Li"]
     )
 
     invariance_for_antieq = {
