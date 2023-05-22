@@ -173,7 +173,7 @@ def get_default_model_config() -> Dict:
     base_fastcore_config["auto"] = dict(
         fc_ratio=0.3,
         n_core_orbitals=1,
-        core_orbital_type="gauss",  #"exp",
+        core_orbital_type="sto-3g_Li",  #"exp",
     )
 
     invariance_for_antieq = {
@@ -291,7 +291,7 @@ def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
         "nchains": 1000,
-        "nepochs": 500,
+        "nepochs": 5000,
         "nburn": 2000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
@@ -360,7 +360,7 @@ def get_default_eval_config() -> Dict:
     eval_config = {
         "nchains": 1000,
         "nburn": 5000,
-        "nepochs": 200,
+        "nepochs": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,

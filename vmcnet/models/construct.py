@@ -1027,7 +1027,7 @@ class core_orbital_fns(Module):
             return jnp.exp(-jnp.abs(c) * r)[...,None]
 
         # gaussian function
-        if self.orbitaltype == "gauss":
+        if self.orbitaltype == "sto-3g_H":
             # params from: https://www.basissetexchange.org/basis/sto-3g/format/nwchem/?version=1&elements=1
             gHSexp1 = 3.425250914  # gaussian H S orbital sto-3G exponent #1
             gHSexp2 = 0.6239137298
@@ -1045,9 +1045,65 @@ class core_orbital_fns(Module):
             g2 = jnp.power(2 * gHSexp2 / jnp.pi, 0.75) * jnp.exp(-gHSexp2 * r**2)
             g3 = jnp.power(2 * gHSexp3 / jnp.pi, 0.75) * jnp.exp(-gHSexp3 * r**2)
 
-            orb1s = gHScoeff1 * g1 + gHScoeff2 * g2 + gHScoeff3 * g3
-            return orb1s[...,None]
+            orb = gHScoeff1 * g1 + gHScoeff2 * g2 + gHScoeff3 * g3
+            return orb[...,None]
 
+        if self.orbitaltype == "sto-3g_Li":
+            exp_1s=jnp.array([
+                            0.1611957475E+02,
+                            0.2936200663E+01,
+                            0.7946504870E+00
+                        ])
+            coeff_1s=jnp.array([
+                            0.1543289673E+00,
+                            0.5353281423E+00,
+                            0.4446345422E+00
+                        ])
+            
+            exp_sp=jnp.array([
+                            0.6362897469E+00,
+                            0.1478600533E+00,
+                            0.4808867840E-01
+                        ])
+            coeff_2s=jnp.array([
+                            -0.9996722919E-01,
+                            0.3995128261E+00,
+                            0.7001154689E+00
+                        ])
+            coeff_2p=jnp.array([
+                            0.1559162750E+00,
+                            0.6076837186E+00,
+                            0.3919573931E+00
+                        ])
+            
+            r2=jnp.sum(X**2,axis=-1)
+
+            def g(a):
+                return a**(1/4)*jnp.exp(-a*r2[...,None])
+            
+            
+
+            _1s=jnp.sum(jnp.multiply(jnp.power(2 * exp_1s / jnp.pi, 0.75) * jnp.exp(-exp_1s * r2[...,None]), coeff_1s), axis=-1)
+            #_1s=jnp.sum(coeff_1s * g(exp_1s), axis=-1) # jnp.exp(-exp_1s * r2[...,None]), axis=-1)
+            _2s=jnp.sum(jnp.multiply(jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp*r2[...,None]), coeff_2s), axis=-1)
+
+            _2px = jnp.sum( jnp.multiply( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,0, None], coeff_2p), axis=-1)
+
+            # def g(a,x,r2,i):
+            #     return a**(3/4) * x*jnp.exp(-a*r2)
+
+            # def _p(x,r2):
+            #     c=coeff_p
+            #     a=exp_p
+            #     return jnp.sum(c*g(a,x[...,None],r2[...,None]),axis=-1)
+
+            # _px=_p(X[...,0],r2)
+            # _py=_p(X[...,1],r2)
+            # _pz=_p(X[...,2],r2)
+
+            orbs=[_1s, _2s, _2px]   #,_px,_py,_pz]
+            orbs=jnp.stack(orbs,axis=-1)
+            return orbs
 
 # Lins simplified FastCore
 class FastCore(FermiNet):
