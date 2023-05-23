@@ -29,7 +29,7 @@ def initialize_molecular_pos(
     ion_charges: Array,
     nelec_total: int,
     init_width: float = 1.0,
-    dtype=chex.Numeric,
+    dtype=jnp.float32,
 ) -> Tuple[PRNGKey, Array]:
     """Initialize a set of plausible initial electron positions.
 
