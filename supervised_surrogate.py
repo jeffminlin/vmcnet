@@ -17,7 +17,6 @@ from ml_collections import ConfigDict
 _, d, all_p, _, _ = io.reload_vmc_state(dir, "checkpoint.npz")
 
 p_wf = all_p["wf"]
-p_sg = all_p["sg"]
 
 
 with open(dir + "/config.json", "r") as f:
@@ -47,6 +46,9 @@ backflow = construct.get_backflow_from_config(
 from vmcnet.models.construct import FermiNetSurrogate
 
 surrogate = FermiNetSurrogate(spin_split, compute_input_streams, backflow)
+key = jax.random.PRNGKey(0)
+
+key, subkey = jax.random.split(key)
 
 sg_apply = surrogate.apply
 
@@ -60,7 +62,6 @@ burning_step = mcmc.metropolis.make_jitted_burning_step(
 )
 walker_fn = mcmc.metropolis.make_jitted_walker_fn(10, metrop_step_fn, apply_pmap=False)
 
-key = jax.random.PRNGKey(0)
 
 nelec_total = int(jnp.sum(nelec))
 
@@ -72,6 +73,9 @@ key, position = physics.core.initialize_molecular_pos(
     ion_charges,
     nelec_total,
 )
+
+p_sg = surrogate.init(subkey, position[0:1])
+
 
 amplitudes = log_psi_apply(p_wf, position)
 data = dwpa.make_dynamic_width_position_amplitude_data(
@@ -108,33 +112,28 @@ def SPLE_apply(params, pos, perm):
 SPLE_apply = jax.jit(jax.vmap(SPLE_apply, in_axes=(None, 0, None), out_axes=0))
 
 
-def msqe_loss(param_sg, position):
+def msqe_loss(param_wf, param_sg, position):
     sg_predic = sg_apply(param_sg, position)
-    return jnp.sum(sg_predic)
-    # print(sg_predic.shape)
-    # sg_predic_1 = sg_predic[...,0]
-    #
-    # sple_1 = SPLE_apply(param_wf, position, [0, 1, 2, 3])
-    # print(sple_1.shape)
-    # print(sg_predic_1.shape)
-    #
-    # return jnp.mean((sg_predic_1 - sple_1) ** 2)
+    sg_predic_1 = sg_predic[..., 0]
+
+    sple_1 = SPLE_apply(param_wf, position, [0, 1, 2, 3])
+
+    return jnp.mean((sg_predic_1 - sple_1) ** 2)
 
 
-val_grad_msqe = jax.grad(msqe_loss, argnums=0)
+val_grad_msqe = jax.value_and_grad(msqe_loss, argnums=1)
 
 print(f"# params in sg: {jax.flatten_util.ravel_pytree(p_sg)[0].shape[0]}")
 print("Burning!")
 data, key = mcmc.metropolis.burn_data(burning_step, 100, p_wf, data, key)
 
-breakpoint()
 print("Learning!")
-LR = 1
+LR = 0.001
+
 for i in range(1000):
     print(f"Epoch {i}")
-    # accept_ratio, data, key = walker_fn(p_wf, data, key)
+    accept_ratio, data, key = walker_fn(p_wf, data, key)
     position = data["walker_data"]["position"]
-    grad_p_sg = val_grad_msqe(p_sg, position)
-    print(grad_p_sg)
+    msqe, grad_p_sg = val_grad_msqe(p_wf, p_sg, position)
     p_sg = jax.tree_map(lambda x, y: x - LR * y, p_sg, grad_p_sg)
-    # print(f"MSQE: {msqe}")
+    print(f"MSQE: {msqe}")
