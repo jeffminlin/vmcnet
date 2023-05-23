@@ -1,9 +1,8 @@
 import sys
 
-import numpy as np
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
+from ml_collections import ConfigDict, FieldReference
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 import vmcnet.mcmc as mcmc
 import vmcnet.physics as physics
@@ -31,7 +30,48 @@ import vmcnet.models.construct as construct
 slog_psi = construct.get_model_from_config(config.model, nelec, ion_pos, ion_charges)
 log_psi_apply = construct.slog_psi_to_log_psi_apply(slog_psi.apply)
 
-surrogate_config = config.surrogate
+"""Get a default model configuration from a model type."""
+orthogonal_init = {"type": "orthogonal", "scale": 1.0}
+normal_init = {"type": "normal"}
+
+# tie together the values of ferminet_backflow.cyclic_spins and
+# invariance.cyclic_spins
+cyclic_spins = FieldReference(False)
+
+input_streams = {
+    "include_2e_stream": True,
+    "include_ei_norm": True,
+    "include_ee_norm": True,
+}
+
+backflow_config = {
+    "ndense_list": ((16, 4), (16, 4), (16, 4), (16,)),
+    "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
+    "kernel_init_mixed": orthogonal_init,
+    "kernel_init_transformer": orthogonal_init,
+    "kernel_init_2e_1e_stream": orthogonal_init,
+    "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
+    "bias_init_1e_stream": normal_init,
+    "bias_init_2e_stream": normal_init,
+    "bias_init_transformer": normal_init,
+    "activation_fn": "tanh",
+    "use_bias": True,
+    "one_electron_skip": True,
+    "one_electron_skip_scale": 1.0,
+    "two_electron_skip": True,
+    "two_electron_skip_scale": 1.0,
+    "cyclic_spins": cyclic_spins,
+    "use_transformer": False,
+    "num_heads": 1,
+}
+
+surrogate_config = ConfigDict(
+    {
+        "input_streams": input_streams,
+        "backflow": backflow_config,
+    }
+)
+
 spin_split = construct.get_spin_split(nelec)
 
 compute_input_streams = construct.get_compute_input_streams_from_config(
@@ -128,7 +168,7 @@ print("Burning!")
 data, key = mcmc.metropolis.burn_data(burning_step, 100, p_wf, data, key)
 
 print("Learning!")
-LR = 0.001
+LR = 0.01
 
 for i in range(1000):
     print(f"Epoch {i}")
