@@ -1087,6 +1087,8 @@ class core_orbital_fns(Module):
             _2s=jnp.inner(jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp*r2[...,None]), coeff_2s)
 
             _2px = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,0, None], coeff_2p)
+            _2py = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,1, None], coeff_2p)
+            _2pz = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,2, None], coeff_2p)
 
             # def g(a,x,r2,i):
             #     return a**(3/4) * x*jnp.exp(-a*r2)
@@ -1100,7 +1102,7 @@ class core_orbital_fns(Module):
             # _py=_p(X[...,1],r2)
             # _pz=_p(X[...,2],r2)
 
-            orbs=[_1s, _2s, _2px]   #,_px,_py,_pz]
+            orbs=[_1s, _2s, _2px, _2py, _2pz]
             orbs=jnp.stack(orbs,axis=-1)
             return orbs
 
