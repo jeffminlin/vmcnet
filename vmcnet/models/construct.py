@@ -1090,18 +1090,6 @@ class core_orbital_fns(Module):
             _2py = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,1, None], coeff_2p)
             _2pz = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,2, None], coeff_2p)
 
-            # def g(a,x,r2,i):
-            #     return a**(3/4) * x*jnp.exp(-a*r2)
-
-            # def _p(x,r2):
-            #     c=coeff_p
-            #     a=exp_p
-            #     return jnp.sum(c*g(a,x[...,None],r2[...,None]),axis=-1)
-
-            # _px=_p(X[...,0],r2)
-            # _py=_p(X[...,1],r2)
-            # _pz=_p(X[...,2],r2)
-
             orbs=[_1s, _2s, _2px, _2py, _2pz]
             orbs=jnp.stack(orbs,axis=-1)
             return orbs
@@ -1164,7 +1152,9 @@ class HF(FermiNet):
 class HF_and_BF(HF):
     def get_backflow(self,elec_pos):
         input_stream_1e, input_stream_2e, *_ = self._compute_input_streams(elec_pos)
-        return self._backflow(input_stream_1e, input_stream_2e)
+        bf=self._backflow(input_stream_1e, input_stream_2e)
+        envelope=jnp.exp(-jnp.sum((elec_pos/10)**2,axis=(-2,-1)))
+        return bf*envelope[...,None,None]
 
 class FastCore1(HF_and_BF):
     def sub_backflow(self,bf,XC_up,XC_down):
@@ -1177,11 +1167,11 @@ class FastCore2(HF_and_BF):
     def add_backflow(self,core_orbitals,bf):
         return jnp.concatenate([core_orbitals,bf],axis=-1)
 
-#FastCore=HF
+FastCore=HF
 #FastCore=FastCore1
 #FastCore=FastCore2
 
-FastCore=HF
+#FastCore=HF
 
 
 # """

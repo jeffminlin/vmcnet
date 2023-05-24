@@ -175,6 +175,11 @@ def get_default_model_config() -> Dict:
         n_core_orbitals=1,
         core_orbital_types=["sto-3g_Li","sto-3g_Li"]
     )
+    base_fastcore_config['backflow']={
+        "ndense_list": ((64, 8), (64, 8), (64,)),
+        **base_backflow_config,
+    }
+
 
     invariance_for_antieq = {
         "ndense_list": ((32,), (32,), (1,)),
