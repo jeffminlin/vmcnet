@@ -458,6 +458,17 @@ def run_molecule() -> None:
     for i in range(config.vmc.nepochs):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
+
+        for j in range(config.surrogate.nsteps_per_wf_update):
+            key, subkey = jax.random.split(key)
+            _, grad = surrogate_energy_data_val_and_grad(params, key, position)
+
+            updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
+            sg_params = optax.apply_updates(sg_params, updates)
+
+            params = {"wf": wf_params, "sg": sg_params}
+            data = update_data_fn(data, params["wf"])
+
         key, subkey = jax.random.split(key)
         (energy, aux_data), grad = surrogate_energy_data_val_and_grad(
             params, key, position
@@ -465,9 +476,6 @@ def run_molecule() -> None:
 
         updates, wf_opt_state = wf_opt.update(grad["wf"], wf_opt_state)
         wf_params = optax.apply_updates(wf_params, updates)
-
-        updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
-        sg_params = optax.apply_updates(sg_params, updates)
 
         params = {"wf": wf_params, "sg": sg_params}
         data = update_data_fn(data, params["wf"])

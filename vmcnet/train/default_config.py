@@ -306,7 +306,8 @@ def get_default_surrogate_config() -> Dict:
     return {
         "input_streams": input_streams,
         "backflow": backflow_config,
-        "learning_rate": .05
+        "learning_rate": .05,
+        "nsteps_per_wf_update": 3,
     }
 
 
