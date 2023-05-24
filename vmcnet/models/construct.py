@@ -1083,11 +1083,10 @@ class core_orbital_fns(Module):
             
             
 
-            _1s=jnp.sum(jnp.multiply(jnp.power(2 * exp_1s / jnp.pi, 0.75) * jnp.exp(-exp_1s * r2[...,None]), coeff_1s), axis=-1)
-            #_1s=jnp.sum(coeff_1s * g(exp_1s), axis=-1) # jnp.exp(-exp_1s * r2[...,None]), axis=-1)
-            _2s=jnp.sum(jnp.multiply(jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp*r2[...,None]), coeff_2s), axis=-1)
+            _1s=jnp.inner(jnp.power(2 * exp_1s / jnp.pi, 0.75) * jnp.exp(-exp_1s * r2[...,None]), coeff_1s)
+            _2s=jnp.inner(jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp*r2[...,None]), coeff_2s)
 
-            _2px = jnp.sum( jnp.multiply( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,0, None], coeff_2p), axis=-1)
+            _2px = jnp.inner( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,0, None], coeff_2p)
 
             # def g(a,x,r2,i):
             #     return a**(3/4) * x*jnp.exp(-a*r2)
@@ -1106,7 +1105,7 @@ class core_orbital_fns(Module):
             return orbs
 
 # Lins simplified FastCore
-class FastCore(FermiNet):
+class HF(FermiNet):
     fc_ratio: float
     n_core_orbitals: int
     core_orbital_types: List[str]
@@ -1119,14 +1118,16 @@ class FastCore(FermiNet):
     @flax.linen.compact
     # type: ignore[override]
     def __call__(self, elec_pos: Array, get_orbitals=False) -> SLArray:
-        og_elec_pos = elec_pos
         nelec = elec_pos.shape[-2]
         nelec_up, nelec_down = get_nelec_per_split(self.spin_split, nelec)
         nmo_up, nmo_down = nelec_up, nelec_down
 
         # X matrix
-        core_orbitals=[orbital_fn(og_elec_pos - ion) for ion,orbital_fn in zip(self.ion_pos,self.core_orbital_fns)]
+        core_orbitals=[orbital_fn(elec_pos - ion) for ion,orbital_fn in zip(self.ion_pos,self.core_orbital_fns)]
         core_orbitals = jnp.concatenate(core_orbitals, axis=-1) # dimensions (...,nelec,n_AO)
+
+        bf=self.get_backflow(elec_pos)
+        core_orbitals=self.add_backflow(core_orbitals,bf)
 
         X_up, X_down = jnp.split(
             core_orbitals, self.spin_split, axis=-2
@@ -1141,49 +1142,46 @@ class FastCore(FermiNet):
         XC_up = X_up @ C_up
         XC_down = X_down @ C_down
 
+        XC_up,XC_down=self.sub_backflow(bf,XC_up,XC_down)
+
         return slogdet_product([XC_up, XC_down])
+    
 
-    # UHF hardcoded
-    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-    #        c3 = self.param("c3", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c4 = self.param("c4", flax.linen.initializers.uniform(1.0), ())
-    #        c = jnp.array([[c1, c2],[c3, c4]]) # dimensions (nelec, n_AO)
-    #        weighted_core_orbitals = core_orbitals * c     # (..., nelec)
-    #        mo_orbitals = jnp.sum(weighted_core_orbitals, axis=-1)
-    # RHF hardoded
-    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-    #        c = jnp.array([c1, c2]) # dimensions (2, )
-    #        #scaled_core_orbitals = core_orbitals * c1
-    #        mo_orbitals = core_orbitals @ c     # (..., nelec)
+    # to be extended by inheritance
+    def get_backflow(self,elec_pos):
+        return None
 
-    # orbitals = [0]*2
-    # orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
-    # orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
+    # to be extended by inheritance
+    def add_backflow(self,core_orbitals,bf):
+        return core_orbitals
 
-    # # FIXME: hard code the dimension
-    # # split = 1
-    # # nfeature=nelec
-    # # orbitals = [0]*2
-    # #orbitals[0] += flax.linen.Dense(features=nfeature)(core_orbitals[..., :split, :])[None]
-    # #orbitals[1] += flax.linen.Dense(features=nfeature)(core_orbitals[..., split:, :])[None]
-    # # orbitals = [jnp.concatenate(orbitals, axis=-2)]
+    # to be extended by inheritance
+    def sub_backflow(self,bf,*XCs):
+        return XCs
 
-    # # not full determinant
-    # # orbitals = [core_orbitals[None]]
+class HF_and_BF(HF):
+    def get_backflow(self,elec_pos):
+        input_stream_1e, input_stream_2e, *_ = self._compute_input_streams(elec_pos)
+        return self._backflow(input_stream_1e, input_stream_2e)
 
-    # if get_orbitals:
-    #     return orbitals
+class FastCore1(HF_and_BF):
+    def sub_backflow(self,bf,XC_up,XC_down):
+        k=1
+        cat=lambda A,B: jnp.concatenate([A[...,:-k],flax.linen.Dense(features=k)(B)],axis=-1)
+        bf_up,bf_down=jnp.split(bf,self.spin_split,axis=-2)
+        return cat(XC_up,bf_up),cat(XC_down,bf_down)
+    
+class FastCore2(HF_and_BF):
+    def add_backflow(self,core_orbitals,bf):
+        return jnp.concatenate([core_orbitals,bf],axis=-1)
 
-    # slog_det_prods = slogdet_product(orbitals)
+#FastCore=HF
+#FastCore=FastCore1
+#FastCore=FastCore2
 
-    # return slog_sum_over_axis(slog_det_prods)
+FastCore=HF
 
-    def localized(self, f, X, radius):
-        # return self.bumpfunction(X, radius) * f(X)
-        # no localization
-        return f(X)
+
 # """
 # class FastCore(FermiNet):
 #    fc_ratio: float
