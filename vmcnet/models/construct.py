@@ -1088,6 +1088,8 @@ class core_orbital_fns(Module):
             _2s=jnp.sum(jnp.multiply(jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp*r2[...,None]), coeff_2s), axis=-1)
 
             _2px = jnp.sum( jnp.multiply( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,0, None], coeff_2p), axis=-1)
+            _2py = jnp.sum( jnp.multiply( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,1, None], coeff_2p), axis=-1)
+            _2pz = jnp.sum( jnp.multiply( jnp.power(2 * exp_sp / jnp.pi, 0.75) * jnp.exp(-exp_sp * r2[...,None]) * jnp.sqrt(4*exp_sp) * X[...,2, None], coeff_2p), axis=-1)
 
             # def g(a,x,r2,i):
             #     return a**(3/4) * x*jnp.exp(-a*r2)
@@ -1101,7 +1103,7 @@ class core_orbital_fns(Module):
             # _py=_p(X[...,1],r2)
             # _pz=_p(X[...,2],r2)
 
-            orbs=[_1s, _2s, _2px]   #,_px,_py,_pz]
+            orbs=[_1s, _2s, _2px, _2py, _2pz]
             orbs=jnp.stack(orbs,axis=-1)
             return orbs
 
@@ -1142,43 +1144,6 @@ class FastCore(FermiNet):
         XC_down = X_down @ C_down
 
         return slogdet_product([XC_up, XC_down])
-
-    # UHF hardcoded
-    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-    #        c3 = self.param("c3", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c4 = self.param("c4", flax.linen.initializers.uniform(1.0), ())
-    #        c = jnp.array([[c1, c2],[c3, c4]]) # dimensions (nelec, n_AO)
-    #        weighted_core_orbitals = core_orbitals * c     # (..., nelec)
-    #        mo_orbitals = jnp.sum(weighted_core_orbitals, axis=-1)
-    # RHF hardoded
-    #        c1 = self.param("c1", flax.linen.initializers.uniform(1.0), ())         # all coeffs equal for HF/STO-3G on H2
-    #        c2 = self.param("c2", flax.linen.initializers.uniform(1.0), ())
-    #        c = jnp.array([c1, c2]) # dimensions (2, )
-    #        #scaled_core_orbitals = core_orbitals * c1
-    #        mo_orbitals = core_orbitals @ c     # (..., nelec)
-
-    # orbitals = [0]*2
-    # orbitals[0] = jnp.expand_dims(mo_orbitals[...,:1],axis=-1)[None]
-    # orbitals[1] = jnp.expand_dims(mo_orbitals[...,1:],axis=-1)[None]
-
-    # # FIXME: hard code the dimension
-    # # split = 1
-    # # nfeature=nelec
-    # # orbitals = [0]*2
-    # #orbitals[0] += flax.linen.Dense(features=nfeature)(core_orbitals[..., :split, :])[None]
-    # #orbitals[1] += flax.linen.Dense(features=nfeature)(core_orbitals[..., split:, :])[None]
-    # # orbitals = [jnp.concatenate(orbitals, axis=-2)]
-
-    # # not full determinant
-    # # orbitals = [core_orbitals[None]]
-
-    # if get_orbitals:
-    #     return orbitals
-
-    # slog_det_prods = slogdet_product(orbitals)
-
-    # return slog_sum_over_axis(slog_det_prods)
 
     def localized(self, f, X, radius):
         # return self.bumpfunction(X, radius) * f(X)

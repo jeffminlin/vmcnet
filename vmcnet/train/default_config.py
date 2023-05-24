@@ -292,7 +292,7 @@ def get_default_vmc_config() -> Dict:
     vmc_config = {
         "nchains": 1000,
         "nepochs": 5000,
-        "nburn": 2000,
+        "nburn": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
