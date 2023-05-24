@@ -391,7 +391,8 @@ def run_molecule() -> None:
 
     pretrain_nepochs = config.vmc.npretrain_wf
     LR = config.vmc.optimizer.sgd.learning_rate
-    sg_LR = LR * 5
+    sg_LR = config.surrogate.learning_rate
+
     logging.info(f"Learning rate {LR}")
 
     data, key = mcmc.metropolis.burn_data(
@@ -431,7 +432,7 @@ def run_molecule() -> None:
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
         (_, aux_data), grad = surrogate_energy_data_val_and_grad(params, key, position)
-        sg_params = jax.tree_map(lambda x, y: x - LR * y, params["sg"], grad["sg"])
+        sg_params = jax.tree_map(lambda x, y: x - sg_LR * y, params["sg"], grad["sg"])
         params = {"wf": wf_params, "sg": sg_params}
 
         energy_noclip = aux_data[2]

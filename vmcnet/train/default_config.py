@@ -283,7 +283,7 @@ def get_default_surrogate_config() -> Dict:
     }
 
     backflow_config = {
-        "ndense_list": ((16, 4), (16, 4), (16, 4), (16,)),
+        "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
         "kernel_init_transformer": orthogonal_init,
@@ -306,6 +306,7 @@ def get_default_surrogate_config() -> Dict:
     return {
         "input_streams": input_streams,
         "backflow": backflow_config,
+        "learning_rate": 0.001
     }
 
 

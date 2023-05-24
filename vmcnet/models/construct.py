@@ -1063,6 +1063,9 @@ class FermiNetSurrogate(Module):
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
         return jnp.sum(stream_1e, axis=-1)
+        # out_predense = jnp.sum(stream_1e, axis=-1, keepdims=True)
+        # return jnp.squeeze(Dense(1)(out_predense), axis=-1)
+
         # return jnp.squeeze(Dense(1)(stream_1e), axis=-1)
 
 
