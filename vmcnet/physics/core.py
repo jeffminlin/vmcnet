@@ -348,6 +348,19 @@ def create_value_and_grad_energy_fn(
 
         return (energy, aux_data), grad_E
 
+    def random_particle_energy_val_and_grad(params, key, positions):
+        nbatch = positions.shape[0]
+        key = jax.random.split(key, nbatch)
+
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0, 0), out_axes=0
+        )(params, positions, key)
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
+        )
+        return (energy, aux_data), grad_E
+
     def local_energies_and_surrogate_sq_errors(wf_params, sg_params, positions, key):
         local_energies_noclip, surrogate_sq_errors = jax.vmap(
             local_energy_fn, in_axes=(None, None, 0, 0), out_axes=0
@@ -356,7 +369,7 @@ def create_value_and_grad_energy_fn(
         sg_error = jnp.sum(mean_grad_fn(surrogate_sq_errors))
         return sg_error, (local_energies_noclip, sg_error)
 
-    def random_particle_energy_val_and_grad(params, key, positions):
+    def surrogate_energy_val_and_grad(params, key, positions):
         nbatch = positions.shape[0]
         key = jax.random.split(key, nbatch)
 
@@ -409,6 +422,8 @@ def create_value_and_grad_energy_fn(
         return generic_energy_val_and_grad
     elif local_energy_type == "random_particle":
         return random_particle_energy_val_and_grad
+    elif local_energy_type == "surrogate":
+        return surrogate_energy_val_and_grad
     else:
         raise ValueError(
             f"Requested local energy type {local_energy_type} is not supported"

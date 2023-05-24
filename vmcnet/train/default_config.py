@@ -74,7 +74,7 @@ def get_default_config() -> ConfigDict:
                 # if save_to_current_datetime_subfolder=True, will log into a subfolder
                 # named according to the datetime at start
                 "save_to_current_datetime_subfolder": True,
-                "logging_level": "WARNING",
+                "logging_level": "INFO",
                 "dtype": "float32",
                 "distribute": True,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
@@ -324,7 +324,8 @@ def get_default_molecular_config() -> Dict:
 def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
-        "nchains": 2000,
+        "nchains": 100,
+        "npretrain": 200,
         "nepochs": 20000,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
@@ -371,7 +372,7 @@ def get_default_vmc_config() -> Dict:
                 "momentum": 0.0,
                 "nesterov": False,
                 "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,
+                "learning_rate": 1e-2,
                 "learning_decay_rate": 1e-4,
             },
             "sr": {

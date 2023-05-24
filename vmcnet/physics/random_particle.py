@@ -17,6 +17,7 @@ from .potential import (
 
 RandomParticleKineticEnergy = Callable[[P, Array, Array], Array]
 
+
 def create_random_particle_kinetic_energy(
     log_psi_apply: Callable[[P, Array], Array], nparticles: int = 1
 ) -> RandomParticleKineticEnergy:
@@ -47,6 +48,32 @@ def create_random_particle_kinetic_energy(
 
 def assemble_random_particle_local_energy(
     kinetic_term,
+    potential_terms,
+    sample_kinetic: bool,
+) -> LocalEnergyApply[P]:
+    """Assembles the random particle local energy from kinetic and potential terms."""
+
+    def local_energy_fn(params: P, positions: Array, key: PRNGKey) -> Array:
+        total_particles = positions.shape[-2]
+        perm = jax.random.permutation(key, jnp.arange(total_particles))
+        permuted_positions = positions[perm, :]
+
+        result = (
+            kinetic_term(params, positions, perm)
+            if sample_kinetic
+            else kinetic_term(params, positions)
+        )
+
+        for potential_term in potential_terms:
+            result += potential_term(params, permuted_positions)
+
+        return result
+
+    return local_energy_fn
+
+
+def assemble_surrogate_local_energy(
+    kinetic_term,
     ii_potential_fn,
     ei_potential_fn,
     ee_potential_fn,
@@ -59,61 +86,43 @@ def assemble_random_particle_local_energy(
     def local_energy_fn(
         wf_params: P, surrogate_params: P, positions: Array, key: PRNGKey
     ):
-        if surrogate is None:
-            potential_terms = [ii_potential_fn, ei_potential_fn, ee_potential_fn]
-            total_particles = positions.shape[-2]
-            perm = jax.random.permutation(key, jnp.arange(total_particles))
-            permuted_positions = positions[perm, :]
+        total_particles = positions.shape[-2]
+        surrogate_energies = surrogate(surrogate_params, positions)
 
-            wf_energy = (
-                kinetic_term(wf_params, positions, perm)
-                if sample_kinetic
-                else kinetic_term(wf_params, positions)
-            )
+        perm = jax.random.permutation(key, jnp.arange(total_particles))
 
-            for potential_term in potential_terms:
-                wf_energy += potential_term(wf_params, permuted_positions)
+        permuted_surrogate_energies = surrogate_energies[perm]
+        surrogate_corrections = (
+            jnp.mean(permuted_surrogate_energies, axis=-1, keepdims=True)
+            - permuted_surrogate_energies
+        )
 
-            return wf_energy
+        permuted_positions = positions[perm, :]
+        total_correction = jnp.sum(surrogate_corrections[:nparticles])
 
-        else:
-            total_particles = positions.shape[-2]
-            surrogate_energies = surrogate(surrogate_params, positions)
+        wf_particle_energy = (
+            kinetic_term(wf_params, positions, perm)
+            if sample_kinetic
+            else kinetic_term(wf_params, positions)
+        )
 
-            perm = jax.random.permutation(key, jnp.arange(total_particles))
+        for potential_term in [ei_potential_fn, ee_potential_fn]:
+            wf_particle_energy += potential_term(wf_params, permuted_positions)
 
-            permuted_surrogate_energies = surrogate_energies[perm]
-            surrogate_corrections = (
-                jnp.mean(permuted_surrogate_energies, axis=-1, keepdims=True)
-                - permuted_surrogate_energies
-            )
+        wf_total_energy = wf_particle_energy + ii_potential_fn(
+            wf_params, permuted_positions
+        )
 
-            permuted_positions = positions[perm, :]
-            total_correction = jnp.sum(surrogate_corrections[:nparticles])
+        sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
 
-            wf_particle_energy = (
-                kinetic_term(wf_params, positions, perm)
-                if sample_kinetic
-                else kinetic_term(wf_params, positions)
-            )
-
-            for potential_term in [ei_potential_fn, ee_potential_fn]:
-                wf_particle_energy += potential_term(wf_params, permuted_positions)
-
-            wf_total_energy = wf_particle_energy + ii_potential_fn(
-                wf_params, permuted_positions
-            )
-
-            sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
-
-            return wf_total_energy + total_correction, jnp.square(
-                wf_particle_energy - sg_energy
-            )
+        return wf_total_energy + total_correction, jnp.square(
+            wf_particle_energy - sg_energy
+        )
 
     return local_energy_fn
 
 
-def create_molecular_random_particle_local_energy(
+def create_molecular_surrogate_local_energy(
     log_psi_apply: Callable[[P, Array], Array],
     surrogate: Callable[[P, Array], Array],
     ion_locations: Array,
@@ -178,7 +187,7 @@ def create_molecular_random_particle_local_energy(
         else create_laplacian_kinetic_energy(log_psi_apply)
     )
 
-    return assemble_random_particle_local_energy(
+    return assemble_surrogate_local_energy(
         kinetic_energy,
         ii_potential_fn,
         ei_potential_fn,
@@ -186,4 +195,74 @@ def create_molecular_random_particle_local_energy(
         sample_kinetic,
         surrogate,
         nparticles,
+    )
+
+
+def create_molecular_random_particle_local_energy(
+    log_psi_apply: Callable[[P, Array], Array],
+    ion_locations: Array,
+    ion_charges: Array,
+    nparticles: int = 1,
+    sample_kinetic: bool = True,
+    sample_ei: bool = True,
+    ei_softening: chex.Scalar = 0.0,
+    sample_ee: bool = True,
+    ee_softening: chex.Scalar = 0.0,
+) -> LocalEnergyApply[P]:
+    """Create the full local energy for the random particle method for molecules.
+
+    This method evaluates the local energy using a randomly selected subset of the
+    particles for each walker, to obtain a cheaper but more noisy estimate of the
+    local energy.
+
+    Args:
+        log_psi_apply (Callable): a function which computes log|psi(x)| for single
+           inputs x. It is okay for it to produce batch outputs on batches of x as long
+           as it produces a single number for single x. Has the signature
+           (params, single_x_in) -> log|psi(single_x_in)|
+        ion_locations (Array): an (n, d) array of ion positions, where n is the
+            number of ion positions and d is the dimension of the space they live in
+        ion_charges (Array): an (n,) array of ion charges, in units of one
+            elementary charge (the charge of one electron).
+        nparticles (int): the number of particles to select to estimate the local
+            energy. Defaults to 1.
+        sample_kinetic (bool): whether to sample the kinetic energy. Defaults to
+            True.
+        sample_ei (bool): whether to sample the electron-ion Coulomb interaction.
+            Defaults to True.
+        ei_softening (chex.Scalar): softening term to add to the electron-ion
+            interaction to smooth out the singularity. Defaults to 0.0.
+        sample_ee (bool): whether to sample the electron-electron Coulomb interaction.
+            Defaults to True.
+        ee_softening (chex.Scalar): softening term to add to the electron-electron
+            interaction to smooth out the singularity. Defaults to 0.0.
+
+    Returns:
+        Callable: function which computes the full local energy for the IBP method,
+            with the requested terms integrated-by-parts and the other terms included
+            in their standard formulation.
+    """
+    ii_potential_fn = create_ion_ion_coulomb_potential(ion_locations, ion_charges)
+
+    ei_potential_fn = create_electron_ion_coulomb_potential(
+        ion_locations,
+        ion_charges,
+        softening_term=ei_softening,
+        nparticles=nparticles if sample_ei else None,
+    )
+
+    ee_potential_fn = create_electron_electron_coulomb_potential(
+        softening_term=ee_softening, nparticles=nparticles if sample_ee else None
+    )
+
+    kinetic_energy = (
+        create_random_particle_kinetic_energy(log_psi_apply, nparticles)
+        if sample_kinetic
+        else create_laplacian_kinetic_energy(log_psi_apply)
+    )
+
+    return assemble_random_particle_local_energy(
+        kinetic_energy,
+        [ii_potential_fn, ei_potential_fn, ee_potential_fn],
+        sample_kinetic,
     )
