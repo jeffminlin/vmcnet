@@ -283,7 +283,7 @@ def get_default_surrogate_config() -> Dict:
     }
 
     backflow_config = {
-        "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
+        "ndense_list": ((64,16),(64,16),(64,16),(64,)),
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
         "kernel_init_transformer": orthogonal_init,
@@ -306,7 +306,7 @@ def get_default_surrogate_config() -> Dict:
     return {
         "input_streams": input_streams,
         "backflow": backflow_config,
-        "learning_rate": 0.001
+        "learning_rate": .05
     }
 
 
@@ -326,7 +326,7 @@ def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
         "nchains": 100,
-        "npretrain_wf": 50,
+        "npretrain_wf": 200,
         "npretrain_sg": 200,
         "nepochs": 20000,
         "nburn": 5000,

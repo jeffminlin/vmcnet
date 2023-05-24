@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 import chex
 import jax
 import jax.numpy as jnp
+import optax
 from absl import flags
 from ml_collections import ConfigDict
 
@@ -393,12 +394,15 @@ def run_molecule() -> None:
     LR = config.vmc.optimizer.sgd.learning_rate
     sg_LR = config.surrogate.learning_rate
 
-    logging.info(f"Learning rate {LR}")
+    logging.info(f"WF LR {LR}, SG LR {sg_LR}")
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
     )
     update_data_fn = jax.jit(pacore.get_update_data_fn(log_psi_apply))
+
+    wf_opt = optax.sgd(LR)
+    wf_opt_state = wf_opt.init(wf_params)
 
     logging.info("Pretraining WF")
     for i in range(pretrain_nepochs):
@@ -408,13 +412,14 @@ def run_molecule() -> None:
         (_, aux_data), grad_e = random_particle_energy_data_val_and_grad(
             wf_params, subkey, position
         )
-        wf_params = jax.tree_map(lambda x, y: x - LR * y, wf_params, grad_e)
+        updates, wf_opt_state = wf_opt.update(grad_e, wf_opt_state)
+        wf_params = optax.apply_updates(wf_params, updates)
         data = update_data_fn(data, wf_params)
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
         print(
-            f" Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   Accept ratio: {accept_ratio:3f}"
+            f" Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
     logging.info("Done pretraining WF! Now pretraining surrogate")
@@ -425,6 +430,9 @@ def run_molecule() -> None:
         )
     )
 
+    sg_opt = optax.adam(sg_LR)
+    sg_opt_state = sg_opt.init(sg_params)
+
     pretrain_nepochs = config.vmc.npretrain_sg
     params = {"wf": wf_params, "sg": sg_params}
     for i in range(pretrain_nepochs):
@@ -432,13 +440,15 @@ def run_molecule() -> None:
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
         (_, aux_data), grad = surrogate_energy_data_val_and_grad(params, key, position)
-        sg_params = jax.tree_map(lambda x, y: x - sg_LR * y, params["sg"], grad["sg"])
+
+        updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
+        sg_params = optax.apply_updates(sg_params, updates)
         params = {"wf": wf_params, "sg": sg_params}
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
         print(
-            f"Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
+            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {aux_data[4]:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
@@ -453,13 +463,11 @@ def run_molecule() -> None:
             params, key, position
         )
 
-        wf_params = params["wf"]
-        wf_grad = grad["wf"]
-        wf_params = jax.tree_map(lambda x, y: x - LR * y, wf_params, wf_grad)
+        updates, wf_opt_state = wf_opt.update(grad["wf"], wf_opt_state)
+        wf_params = optax.apply_updates(wf_params, updates)
 
-        sg_params = params["sg"]
-        sg_grad = grad["sg"]
-        sg_params = jax.tree_map(lambda x, y: x - sg_LR * y, sg_params, sg_grad)
+        updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
+        sg_params = optax.apply_updates(sg_params, updates)
 
         params = {"wf": wf_params, "sg": sg_params}
         data = update_data_fn(data, params["wf"])
@@ -467,7 +475,7 @@ def run_molecule() -> None:
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
         print(
-            f"Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
+            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {aux_data[4]:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
     logging.info("Completed VMC! Evaluation not implemented yet")
