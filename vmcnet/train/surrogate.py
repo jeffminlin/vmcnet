@@ -15,6 +15,7 @@ from ml_collections import ConfigDict
 
 import vmcnet.mcmc as mcmc
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
+import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
@@ -341,7 +342,7 @@ def run_molecule() -> None:
     key, subkey = jax.random.split(key)
     wf_params = slog_psi.init(subkey, init_pos[0:1])
 
-    log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
+    log_psi_apply = jax.jit(models.construct.slog_psi_to_log_psi_apply(slog_psi.apply))
 
     spin_split = models.construct.get_spin_split(nelec)
 
@@ -382,53 +383,64 @@ def run_molecule() -> None:
         apply_pmap=False,
     )
 
-    energy_data_val_and_grad = jax.jit(
+    random_particle_energy_data_val_and_grad = jax.jit(
         _get_random_particle_energy_val_and_grad_fn(
             config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
         )
     )
 
-    pretrain_nepochs = config.vmc.npretrain
+    pretrain_nepochs = config.vmc.npretrain_wf
     LR = config.vmc.optimizer.sgd.learning_rate
+    sg_LR = LR * 5
+    logging.info(f"Learning rate {LR}")
 
-    logging.info("Burning data in.")
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
     )
+    update_data_fn = jax.jit(pacore.get_update_data_fn(log_psi_apply))
 
-    logging.info("Pretraining WF.")
-
+    logging.info("Pretraining WF")
     for i in range(pretrain_nepochs):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
-        (energy, aux_data), grad_e = energy_data_val_and_grad(
+        (_, aux_data), grad_e = random_particle_energy_data_val_and_grad(
             wf_params, subkey, position
         )
         wf_params = jax.tree_map(lambda x, y: x - LR * y, wf_params, grad_e)
-        print(f" Epoch {i:5d}   Energy {energy:4f}   Accept ratio: {accept_ratio:3f}")
+        data = update_data_fn(data, wf_params)
 
-    logging.info("Done pretraining WF! Now pretraining surrogate.")
+        energy_noclip = aux_data[2]
+        variance_noclip = aux_data[3]
+        print(
+            f" Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   Accept ratio: {accept_ratio:3f}"
+        )
 
-    energy_data_val_and_grad = jax.jit(
+    logging.info("Done pretraining WF! Now pretraining surrogate")
+
+    surrogate_energy_data_val_and_grad = jax.jit(
         _get_surrogate_energy_val_and_grad_fn(
             config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply, surrogate
         )
     )
 
+    pretrain_nepochs = config.vmc.npretrain_sg
     params = {"wf": wf_params, "sg": sg_params}
     for i in range(pretrain_nepochs):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
-        (energy, aux_data), grad = energy_data_val_and_grad(params, key, position)
+        (_, aux_data), grad = surrogate_energy_data_val_and_grad(params, key, position)
         sg_params = jax.tree_map(lambda x, y: x - LR * y, params["sg"], grad["sg"])
         params = {"wf": wf_params, "sg": sg_params}
+
+        energy_noclip = aux_data[2]
+        variance_noclip = aux_data[3]
         print(
-            f"Epoch {i:5d}   Energy {energy:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
+            f"Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
         )
 
-    logging.info("Done pretraining surrogate! Running main VMC optimization.")
+    logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
 
     params = {"wf": wf_params, "sg": sg_params}
@@ -436,10 +448,25 @@ def run_molecule() -> None:
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
-        (energy, aux_data), grad = energy_data_val_and_grad(params, key, position)
-        params = jax.tree_map(lambda x, y: x - LR * y, params, grad)
-        print(
-            f"Epoch {i:5d}   Energy {energy:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
+        (energy, aux_data), grad = surrogate_energy_data_val_and_grad(
+            params, key, position
         )
 
-    logging.info("Completed VMC! Evaluation not implemented yet.")
+        wf_params = params["wf"]
+        wf_grad = grad["wf"]
+        wf_params = jax.tree_map(lambda x, y: x - LR * y, wf_params, wf_grad)
+
+        sg_params = params["sg"]
+        sg_grad = grad["sg"]
+        sg_params = jax.tree_map(lambda x, y: x - sg_LR * y, sg_params, sg_grad)
+
+        params = {"wf": wf_params, "sg": sg_params}
+        data = update_data_fn(data, params["wf"])
+
+        energy_noclip = aux_data[2]
+        variance_noclip = aux_data[3]
+        print(
+            f"Epoch {i:5d}   Energy {energy_noclip:4f}   Variance {variance_noclip:4f}   MSQE {aux_data[4]:4f}   Accept ratio: {accept_ratio:3f}"
+        )
+
+    logging.info("Completed VMC! Evaluation not implemented yet")

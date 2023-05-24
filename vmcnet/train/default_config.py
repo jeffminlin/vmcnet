@@ -325,7 +325,8 @@ def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
         "nchains": 100,
-        "npretrain": 200,
+        "npretrain_wf": 50,
+        "npretrain_sg": 200,
         "nepochs": 20000,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
@@ -372,7 +373,7 @@ def get_default_vmc_config() -> Dict:
                 "momentum": 0.0,
                 "nesterov": False,
                 "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 1e-2,
+                "learning_rate": 5e-2,
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
@@ -393,7 +394,7 @@ def get_default_vmc_config() -> Dict:
 def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
-        "nchains": 2000,
+        "nchains": 100,
         "nburn": 5000,
         "nepochs": 20000,
         "nsteps_per_param_update": 10,
