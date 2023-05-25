@@ -312,7 +312,7 @@ def _get_surrogate_energy_val_and_grad_fn(
         local_energy_type="surrogate",
     )
 
-    return energy_data_val_and_grad
+    return local_energy_fn, energy_data_val_and_grad
 
 
 def run_molecule() -> None:
@@ -343,7 +343,7 @@ def run_molecule() -> None:
     key, subkey = jax.random.split(key)
     wf_params = slog_psi.init(subkey, init_pos[0:1])
 
-    log_psi_apply = jax.jit(models.construct.slog_psi_to_log_psi_apply(slog_psi.apply))
+    log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
 
     spin_split = models.construct.get_spin_split(nelec)
 
@@ -424,66 +424,85 @@ def run_molecule() -> None:
 
     logging.info("Done pretraining WF! Now pretraining surrogate")
 
-    surrogate_energy_data_val_and_grad = jax.jit(
-        _get_surrogate_energy_val_and_grad_fn(
-            config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply, surrogate
-        )
+    wf_energies_and_perms_fn = physics.random_particle.create_wf_energies_and_perms_fn(
+        log_psi_apply, ion_pos, ion_charges
     )
+    wf_energies_and_perms_fn = jax.jit(wf_energies_and_perms_fn)
+
+    sg_val_and_grad_fn = physics.random_particle.create_sg_val_and_grad_fn(surrogate)
+    sg_val_and_grad_fn = jax.jit(sg_val_and_grad_fn)
+
+    clipping_fn = _get_clipping_fn(config.vmc)
+
+    wf_energy_val_and_grad_fn = physics.core.create_surrogate_value_and_grad_energy_fn(
+        log_psi_apply,
+        surrogate,
+        config.vmc.nchains,
+        clipping_fn,
+        nan_safe=config.vmc.nan_safe,
+    )
+    wf_energy_val_and_grad_fn = jax.jit(wf_energy_val_and_grad_fn)
 
     sg_opt = optax.adam(sg_LR)
     sg_opt_state = sg_opt.init(sg_params)
 
     pretrain_nepochs = config.vmc.npretrain_sg
-    params = {"wf": wf_params, "sg": sg_params}
     for i in range(pretrain_nepochs):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
-        key, subkey = jax.random.split(key)
-        (_, aux_data), grad = surrogate_energy_data_val_and_grad(params, key, position)
-
-        updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
-        sg_params = optax.apply_updates(sg_params, updates)
-        params = {"wf": wf_params, "sg": sg_params}
-
-        energy_noclip = aux_data[2]
-        variance_noclip = aux_data[3]
-        print(
-            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {aux_data[4]:3e}   Accept ratio: {accept_ratio:3f}"
+        key = jax.random.split(key, config.vmc.nchains + 1)
+        subkey = key[1:]
+        key = key[0]
+        (
+            local_energies_noclip,
+            single_particle_energies,
+            perms,
+        ) = wf_energies_and_perms_fn(wf_params, position, subkey)
+        msqe, grad_sg = sg_val_and_grad_fn(
+            sg_params, position, single_particle_energies, perms
         )
+
+        updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
+        sg_params = optax.apply_updates(sg_params, updates)
+
+        print(f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}")
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
 
-    params = {"wf": wf_params, "sg": sg_params}
     for i in range(config.vmc.nepochs):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
 
-        for j in range(config.surrogate.nsteps_per_wf_update):
-            key, subkey = jax.random.split(key)
-            _, grad = surrogate_energy_data_val_and_grad(params, key, position)
+        key = jax.random.split(key, config.vmc.nchains + 1)
+        subkey = key[1:]
+        key = key[0]
+        (
+            local_energies_noclip,
+            single_particle_energies,
+            perms,
+        ) = wf_energies_and_perms_fn(wf_params, position, subkey)
 
-            updates, sg_opt_state = sg_opt.update(grad["sg"], sg_opt_state)
+        msqe = 0.0
+        for j in range(config.surrogate.nsteps_per_wf_update):
+            msqe, grad_sg = sg_val_and_grad_fn(
+                sg_params, position, single_particle_energies, perms
+            )
+            updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
             sg_params = optax.apply_updates(sg_params, updates)
 
-            params = {"wf": wf_params, "sg": sg_params}
-            data = update_data_fn(data, params["wf"])
-
-        key, subkey = jax.random.split(key)
-        (energy, aux_data), grad = surrogate_energy_data_val_and_grad(
-            params, key, position
+        (energy, aux_data), grad_wf = wf_energy_val_and_grad_fn(
+            wf_params, sg_params, local_energies_noclip, position, perms
         )
 
-        updates, wf_opt_state = wf_opt.update(grad["wf"], wf_opt_state)
+        updates, wf_opt_state = wf_opt.update(grad_wf, wf_opt_state)
         wf_params = optax.apply_updates(wf_params, updates)
-
-        params = {"wf": wf_params, "sg": sg_params}
-        data = update_data_fn(data, params["wf"])
+        data = update_data_fn(data, wf_params)
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
         print(
-            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {aux_data[4]:3e}   Accept ratio: {accept_ratio:3f}"
+            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
     logging.info("Completed VMC! Evaluation not implemented yet")

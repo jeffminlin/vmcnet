@@ -122,6 +122,111 @@ def assemble_surrogate_local_energy(
     return local_energy_fn
 
 
+def get_local_energies_and_sg_err_fn(
+    kinetic_term,
+    ii_potential_fn,
+    ei_potential_fn,
+    ee_potential_fn,
+    sample_kinetic: bool,
+    surrogate=None,
+    nparticles: int = 1,
+) -> LocalEnergyApply[P]:
+    """Assembles the random particle local energy from kinetic and potential terms."""
+
+    def local_energy_and_sq_error_fn_fn(
+        wf_params: P, surrogate_params: P, positions: Array, key: PRNGKey
+    ):
+        total_particles = positions.shape[-2]
+        surrogate_energies = surrogate(surrogate_params, positions)
+
+        perm = jax.random.permutation(key, jnp.arange(total_particles))
+
+        permuted_surrogate_energies = surrogate_energies[perm]
+        surrogate_corrections = (
+            jnp.mean(permuted_surrogate_energies, axis=-1, keepdims=True)
+            - permuted_surrogate_energies
+        )
+
+        permuted_positions = positions[perm, :]
+        total_correction = jnp.sum(surrogate_corrections[:nparticles])
+
+        wf_particle_energy = (
+            kinetic_term(wf_params, positions, perm)
+            if sample_kinetic
+            else kinetic_term(wf_params, positions)
+        )
+
+        for potential_term in [ei_potential_fn, ee_potential_fn]:
+            wf_particle_energy += potential_term(wf_params, permuted_positions)
+
+        wf_total_energy = wf_particle_energy + ii_potential_fn(
+            wf_params, permuted_positions
+        )
+
+        sg_energy = jnp.sum(permuted_surrogate_energies[:nparticles])
+
+        return wf_total_energy + total_correction, jnp.square(
+            wf_particle_energy - sg_energy
+        )
+
+    return local_energy_and_sq_error_fn_fn
+
+
+def create_wf_energies_and_perms_fn(
+    log_psi_apply: Callable[[P, Array], Array],
+    ion_locations: Array,
+    ion_charges: Array,
+):
+    ii_potential_fn = create_ion_ion_coulomb_potential(ion_locations, ion_charges)
+
+    ei_potential_fn = create_electron_ion_coulomb_potential(
+        ion_locations,
+        ion_charges,
+        nparticles=1,
+    )
+
+    ee_potential_fn = create_electron_electron_coulomb_potential(
+        nparticles=1,
+    )
+
+    kinetic_term = create_random_particle_kinetic_energy(log_psi_apply, 1)
+
+    def wf_energies_and_perms_fn(wf_params: P, positions: Array, key: PRNGKey):
+        total_particles = positions.shape[-2]
+        perm = jax.random.permutation(key, jnp.arange(total_particles))
+
+        permuted_positions = positions[perm, :]
+
+        wf_particle_energy = kinetic_term(wf_params, positions, perm)
+
+        for potential_term in [ei_potential_fn, ee_potential_fn]:
+            wf_particle_energy += potential_term(wf_params, permuted_positions)
+
+        wf_total_energy = wf_particle_energy + ii_potential_fn(
+            wf_params, permuted_positions
+        )
+
+        return wf_total_energy, wf_particle_energy, perm
+
+    return jax.vmap(wf_energies_and_perms_fn, in_axes=(None, 0, 0), out_axes=(0, 0, 0))
+
+
+def create_sg_val_and_grad_fn(surrogate):
+    def permute_sg_energies(surrogate_energies, perm):
+        return surrogate_energies[perm]
+
+    permute_sg_energies = jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
+
+    def sg_msqe(sg_params, position, single_particle_energies, perms):
+        surrogate_energies = surrogate(sg_params, position)
+        permuted_surrogate_energies = permute_sg_energies(surrogate_energies, perms)
+        sg_single_particle_energies = permuted_surrogate_energies[:, 0]
+        return jnp.mean((sg_single_particle_energies - single_particle_energies) ** 2)
+
+    sg_val_and_grad_fn = jax.value_and_grad(sg_msqe, argnums=0)
+    return sg_val_and_grad_fn
+
+
 def create_molecular_surrogate_local_energy(
     log_psi_apply: Callable[[P, Array], Array],
     surrogate: Callable[[P, Array], Array],

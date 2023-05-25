@@ -361,32 +361,6 @@ def create_value_and_grad_energy_fn(
         )
         return (energy, aux_data), grad_E
 
-    def local_energies_and_surrogate_sq_errors(wf_params, sg_params, positions, key):
-        local_energies_noclip, surrogate_sq_errors = jax.vmap(
-            local_energy_fn, in_axes=(None, None, 0, 0), out_axes=0
-        )(wf_params, sg_params, positions, key)
-
-        sg_error = jnp.sum(mean_grad_fn(surrogate_sq_errors))
-        return sg_error, (local_energies_noclip, sg_error)
-
-    def surrogate_energy_val_and_grad(params, key, positions):
-        nbatch = positions.shape[0]
-        key = jax.random.split(key, nbatch)
-
-        wf_params = params["wf"]
-        sg_params = params["sg"]
-
-        grad_sg, (local_energies_noclip, sg_error) = jax.grad(
-            local_energies_and_surrogate_sq_errors, argnums=1, has_aux=True
-        )(wf_params, sg_params, positions, key)
-
-        aux_data, energy, grad_E = get_standard_contribution(
-            local_energies_noclip, wf_params, positions
-        )
-        aux_data = (*aux_data, sg_error)
-
-        return (energy, aux_data), {"wf": grad_E, "sg": grad_sg}
-
     def generic_energy_val_and_grad(params, key, positions):
         del key
 
@@ -422,9 +396,70 @@ def create_value_and_grad_energy_fn(
         return generic_energy_val_and_grad
     elif local_energy_type == "random_particle":
         return random_particle_energy_val_and_grad
-    elif local_energy_type == "surrogate":
-        return surrogate_energy_val_and_grad
     else:
         raise ValueError(
             f"Requested local energy type {local_energy_type} is not supported"
         )
+
+
+def create_surrogate_value_and_grad_energy_fn(
+    log_psi_apply: ModelApply[P],
+    surrogate,
+    nchains: int,
+    clipping_fn: Optional[ClippingFn] = None,
+    nan_safe: bool = True,
+) -> ValueGradEnergyFn[P]:
+    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
+
+    def standard_estimator_forward(
+        params: P,
+        positions: Array,
+        centered_local_energies: Array,
+    ) -> chex.Numeric:
+        log_psi = log_psi_apply(params, positions)
+        kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
+        # NOTE: for the generic gradient estimator case it may be important to include
+        # the (nchains / nchains -1) factor here to make sure the standard and generic
+        # gradient terms aren't mismatched by a slight scale factor.
+        return (
+            2.0
+            * nchains
+            / (nchains - 1)
+            * mean_grad_fn(centered_local_energies * log_psi)
+        )
+
+    def get_standard_contribution(local_energies_noclip, params, positions):
+        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+            local_energies_noclip, nchains, clipping_fn, nan_safe
+        )
+        centered_local_energies = local_energies - energy
+        grad_E = jax.grad(standard_estimator_forward, argnums=0)(
+            params, positions, centered_local_energies
+        )
+        return aux_data, energy, grad_E
+
+    def permute_sg_energies(surrogate_energies, perm):
+        return surrogate_energies[perm]
+
+    permute_sg_energies = jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
+
+    def surrogate_energy_val_and_grad(
+        wf_params, sg_params, local_energies_noclip, positions, perms
+    ):
+        surrogate_energies = surrogate(sg_params, positions)
+        permuted_surrogate_energies = permute_sg_energies(surrogate_energies, perms)
+
+        surrogate_corrections = (
+            jnp.mean(permuted_surrogate_energies, axis=-1)
+            - permuted_surrogate_energies[..., 0]
+        )
+
+        local_energies_noclip = local_energies_noclip + surrogate_corrections
+
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, wf_params, positions
+        )
+
+        return (energy, aux_data), grad_E
+
+    return surrogate_energy_val_and_grad
