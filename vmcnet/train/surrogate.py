@@ -14,6 +14,7 @@ import optax
 from absl import flags
 from ml_collections import ConfigDict
 
+import vmcnet.utils.io as io
 import vmcnet.mcmc as mcmc
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 import vmcnet.mcmc.position_amplitude_core as pacore
@@ -506,3 +507,8 @@ def run_molecule() -> None:
         )
 
     logging.info("Completed VMC! Evaluation not implemented yet")
+    io.save_vmc_state(
+        config.logdir,
+        "checkpoint.npz",
+        (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
+    )
