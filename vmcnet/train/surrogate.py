@@ -404,8 +404,12 @@ def run_molecule() -> None:
     wf_opt = optax.sgd(LR)
     wf_opt_state = wf_opt.init(wf_params)
 
-    logging.info("Pretraining WF")
-    for i in range(pretrain_nepochs):
+    def wf_pretrain_iteration(
+        data,
+        key,
+        wf_opt_state,
+        wf_params,
+    ):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
@@ -415,6 +419,25 @@ def run_molecule() -> None:
         updates, wf_opt_state = wf_opt.update(grad_e, wf_opt_state)
         wf_params = optax.apply_updates(wf_params, updates)
         data = update_data_fn(data, wf_params)
+        return accept_ratio, aux_data, data, key, wf_opt_state, wf_params
+
+    wf_pretrain_iteration = jax.jit(wf_pretrain_iteration)
+
+    logging.info("Pretraining WF")
+    for i in range(pretrain_nepochs):
+        (
+            accept_ratio,
+            aux_data,
+            data,
+            key,
+            wf_opt_state,
+            wf_params,
+        ) = wf_pretrain_iteration(
+            data,
+            key,
+            wf_opt_state,
+            wf_params,
+        )
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
@@ -446,8 +469,12 @@ def run_molecule() -> None:
     sg_opt = optax.adam(sg_LR)
     sg_opt_state = sg_opt.init(sg_params)
 
-    pretrain_nepochs = config.vmc.npretrain_sg
-    for i in range(pretrain_nepochs):
+    def surrogate_pretrain_iteration(
+        data,
+        key,
+        sg_opt_state,
+        sg_params,
+    ):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key = jax.random.split(key, config.vmc.nchains + 1)
@@ -461,19 +488,43 @@ def run_molecule() -> None:
         msqe, grad_sg = sg_val_and_grad_fn(
             sg_params, position, single_particle_energies, perms
         )
-
         updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
         sg_params = optax.apply_updates(sg_params, updates)
+        return accept_ratio, data, key, msqe, sg_opt_state, sg_params
+
+    surrogate_pretrain_iteration = jax.jit(surrogate_pretrain_iteration)
+
+    pretrain_nepochs = config.vmc.npretrain_sg
+    for i in range(pretrain_nepochs):
+        (
+            accept_ratio,
+            data,
+            key,
+            msqe,
+            sg_opt_state,
+            sg_params,
+        ) = surrogate_pretrain_iteration(
+            data,
+            key,
+            sg_opt_state,
+            sg_params,
+        )
 
         logging.info(f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}")
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
 
-    for i in range(config.vmc.nepochs):
+    def vmc_iteration(
+        data,
+        key,
+        sg_opt_state,
+        sg_params,
+        wf_opt_state,
+        wf_params,
+    ):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
-
         key = jax.random.split(key, config.vmc.nchains + 1)
         subkey = key[1:]
         key = key[0]
@@ -482,7 +533,6 @@ def run_molecule() -> None:
             single_particle_energies,
             perms,
         ) = wf_energies_and_perms_fn(wf_params, position, subkey)
-
         msqe = 0.0
         for j in range(config.surrogate.nsteps_per_wf_update):
             msqe, grad_sg = sg_val_and_grad_fn(
@@ -490,14 +540,45 @@ def run_molecule() -> None:
             )
             updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
             sg_params = optax.apply_updates(sg_params, updates)
-
         (energy, aux_data), grad_wf = wf_energy_val_and_grad_fn(
             wf_params, sg_params, local_energies_noclip, position, perms
         )
-
         updates, wf_opt_state = wf_opt.update(grad_wf, wf_opt_state)
         wf_params = optax.apply_updates(wf_params, updates)
         data = update_data_fn(data, wf_params)
+        return (
+            accept_ratio,
+            aux_data,
+            data,
+            key,
+            sg_opt_state,
+            msqe,
+            sg_params,
+            wf_opt_state,
+            wf_params,
+        )
+
+    vmc_iteration = jax.jit(vmc_iteration)
+
+    for i in range(config.vmc.nepochs):
+        (
+            accept_ratio,
+            aux_data,
+            data,
+            key,
+            sg_opt_state,
+            msqe,
+            sg_params,
+            wf_opt_state,
+            wf_params,
+        ) = vmc_iteration(
+            data,
+            key,
+            sg_opt_state,
+            sg_params,
+            wf_opt_state,
+            wf_params,
+        )
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
@@ -534,7 +615,12 @@ def run_molecule() -> None:
     energy_sum = 0.0
     variance_sum = 0.0
 
-    for i in range(config.eval.nepochs):
+    def eval_iteration(
+        data,
+        energy_sum,
+        key,
+        variance_sum,
+    ):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         local_energies = standard_local_energy_fn(wf_params, position, None)
@@ -542,8 +628,27 @@ def run_molecule() -> None:
         variance = jnp.mean(local_energies**2 - jnp.mean(local_energies) ** 2)
         energy_sum += energy
         variance_sum += variance
+        return accept_ratio, energy, energy_sum, variance, variance_sum, key, data
+
+    eval_iteration = jax.jit(eval_iteration)
+
+    for i in range(config.eval.nepochs):
+        (
+            accept_ratio,
+            energy,
+            energy_sum,
+            variance,
+            variance_sum,
+            key,
+            data,
+        ) = eval_iteration(
+            data,
+            energy_sum,
+            key,
+            variance_sum,
+        )
         logging.info(
-            f"Epoch {i:5d}   Energy {energy:3e}   Variance {variance:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
+            f"Epoch {i:5d}   Energy {energy:3e}   Variance {variance:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
     energy_mean = energy_sum / config.eval.nepochs
