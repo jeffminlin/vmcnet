@@ -280,26 +280,25 @@ def _get_random_particle_energy_val_and_grad_fn(
     return energy_data_val_and_grad
 
 
-def _get_surrogate_energy_val_and_grad_fn(
+def _get_standard_val_and_grad_fn(
     vmc_config: ConfigDict,
     problem_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
-    surrogate: ModelApply[P],
 ) -> physics.core.ValueGradEnergyFn[P]:
     ei_softening = problem_config.ei_softening
     ee_softening = problem_config.ee_softening
 
     local_energy_fn = _assemble_mol_local_energy_fn(
-        "surrogate",
+        "standard",
         vmc_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,
         ee_softening,
         log_psi_apply,
-        surrogate,
+        None,
     )
 
     clipping_fn = _get_clipping_fn(vmc_config)
@@ -310,10 +309,10 @@ def _get_surrogate_energy_val_and_grad_fn(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        local_energy_type="surrogate",
+        local_energy_type="standard",
     )
 
-    return local_energy_fn, energy_data_val_and_grad
+    return energy_data_val_and_grad
 
 
 def run_molecule() -> None:
@@ -506,9 +505,57 @@ def run_molecule() -> None:
             f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
-    logging.info("Completed VMC! Evaluation not implemented yet")
     io.save_vmc_state(
         config.logdir,
         "checkpoint.npz",
         (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
+    )
+
+    logging.info("Completed VMC! Running evaluation.")
+
+    standard_local_energy_fn = _assemble_mol_local_energy_fn(
+        "standard",
+        config.vmc.local_energy,
+        ion_pos,
+        ion_charges,
+        0.0,
+        0.0,
+        log_psi_apply,
+        None,
+    )
+    standard_local_energy_fn = jax.jit(
+        jax.vmap(standard_local_energy_fn, in_axes=(None, 0, None), out_axes=0)
+    )
+
+    data, key = mcmc.metropolis.burn_data(
+        burning_step, config.vmc.nburn, wf_params, data, key
+    )
+
+    energy_sum = 0.0
+    variance_sum = 0.0
+
+    for i in range(config.eval.nepochs):
+        accept_ratio, data, key = walker_fn(wf_params, data, key)
+        position = data["walker_data"]["position"]
+        local_energies = standard_local_energy_fn(wf_params, position, None)
+        energy = jnp.mean(local_energies)
+        variance = jnp.mean(local_energies**2 - jnp.mean(local_energies) ** 2)
+        energy_sum += energy
+        variance_sum += variance
+        print(
+            f"Epoch {i:5d}   Energy {energy:3e}   Variance {variance:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
+        )
+
+    energy_mean = energy_sum / config.eval.nepochs
+    variance_mean = variance_sum / config.eval.nepochs
+    utils.io.save_dict_to_json(
+        {
+            "energy": float(energy_mean),
+            "variance": float(variance_mean),
+            "stderr": float(
+                jnp.sqrt(variance_mean / (config.eval.nepochs * config.vmc.nchains))
+            ),
+        },
+        config.logdir,
+        "eval_statistics",
     )
