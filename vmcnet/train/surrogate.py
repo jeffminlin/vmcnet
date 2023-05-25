@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 import chex
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import optax
 from absl import flags
 from ml_collections import ConfigDict
@@ -560,6 +561,36 @@ def run_molecule() -> None:
 
     vmc_iteration = jax.jit(vmc_iteration)
 
+    step = 0.1
+    offset = step / 2
+    leftX = -2.5
+    rightX = 2.5
+
+    grid_pos = jnp.arange(leftX - offset, rightX + 2 * offset, step)
+    ngrid = grid_pos.shape[0]
+
+    x_1_pos = jnp.expand_dims(grid_pos, -1)
+    y_1_pos = jnp.zeros((ngrid, 1))
+    z_1_pos = jnp.zeros((ngrid, 1))
+    pos_1 = jnp.concatenate([x_1_pos, y_1_pos, z_1_pos], axis=-1)
+
+    npos = ngrid
+
+    pos_2 = jnp.expand_dims(jnp.array([1.0, 0.5, 0.0]), 0)
+    pos_2 = jnp.repeat(pos_2, npos, axis=0)
+
+    pos_3 = jnp.expand_dims(jnp.array([-1.0, 0.5, 0.0]), 0)
+    pos_3 = jnp.repeat(pos_3, npos, axis=0)
+    plot_pos = jnp.stack([pos_1, pos_2, pos_3], axis=1)
+    nplot = plot_pos.shape[0]
+
+    def permute_sg_energies(surrogate_energies, perm):
+        return surrogate_energies[perm]
+
+    permute_sg_energies = jax.jit(
+        jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
+    )
+
     for i in range(config.vmc.nepochs):
         (
             accept_ratio,
@@ -579,6 +610,30 @@ def run_molecule() -> None:
             wf_opt_state,
             wf_params,
         )
+
+        if i % 100== 0:
+            key = jax.random.split(key, nplot+1)
+            subkey = key[1:]
+            key = key[0]
+
+            (
+                _,
+                SPLE_1,
+                perms,
+            ) = wf_energies_and_perms_fn(wf_params, plot_pos, subkey)
+
+            sg_raw = surrogate(sg_params, plot_pos)
+            permuted_surrogate_energies = permute_sg_energies(sg_raw, perms)
+            sg_predic = permuted_surrogate_energies[:, 0]
+
+            fig, ax = plt.subplots()
+            ax.set_title("Particle 1, true energy vs surrogate")
+            ax.plot(x_1_pos, SPLE_1, label="Single particle energy")
+            ax.plot(x_1_pos, sg_predic, label="Surrogate")
+            ax.legend()
+            ax.grid()
+            ax.set_ylim([-30, 30])
+            plt.savefig(config.logdir + f'/plot_{i}')
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
