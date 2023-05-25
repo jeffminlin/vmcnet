@@ -418,7 +418,7 @@ def run_molecule() -> None:
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
-        print(
+        logging.info(
             f" Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
@@ -465,7 +465,7 @@ def run_molecule() -> None:
         updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
         sg_params = optax.apply_updates(sg_params, updates)
 
-        print(f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}")
+        logging.info(f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}")
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
@@ -501,7 +501,7 @@ def run_molecule() -> None:
 
         energy_noclip = aux_data[2]
         variance_noclip = aux_data[3]
-        print(
+        logging.info(
             f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
@@ -542,7 +542,7 @@ def run_molecule() -> None:
         variance = jnp.mean(local_energies**2 - jnp.mean(local_energies) ** 2)
         energy_sum += energy
         variance_sum += variance
-        print(
+        logging.info(
             f"Epoch {i:5d}   Energy {energy:3e}   Variance {variance:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
         )
 
