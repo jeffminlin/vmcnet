@@ -404,6 +404,7 @@ def create_value_and_grad_energy_fn(
 
 def create_surrogate_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
+    psi_inverse_apply: ModelApply[P],
     surrogate,
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
@@ -446,7 +447,8 @@ def create_surrogate_value_and_grad_energy_fn(
     def surrogate_energy_val_and_grad(
         wf_params, sg_params, local_energies_noclip, positions, perms
     ):
-        surrogate_energies = surrogate(sg_params, positions)
+        psi_inverse = psi_inverse_apply(wf_params, positions)
+        surrogate_energies = surrogate(sg_params, positions, psi_inverse)
         permuted_surrogate_energies = permute_sg_energies(surrogate_energies, perms)
 
         surrogate_corrections = (
