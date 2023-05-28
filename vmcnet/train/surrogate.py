@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 import chex
 import jax
 import jax.numpy as jnp
+
 # import matplotlib.pyplot as plt
 import optax
 from absl import flags
@@ -620,7 +621,7 @@ def run_molecule() -> None:
 
     io.save_vmc_state(
         config.logdir,
-        "checkpoint.npz",
+        "train_checkpoint.npz",
         (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
     )
 
@@ -649,6 +650,11 @@ def run_molecule() -> None:
             )
             f.write(f"{msqe}\n")
 
+    io.save_vmc_state(
+        config.logdir,
+        "posttrain_checkpoint.npz",
+        (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
+    )
     logging.info(
         "Completed posttraining of surrogate! Running evaluation of WF energy."
     )
