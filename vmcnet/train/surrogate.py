@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import chex
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import optax
 from absl import flags
 from ml_collections import ConfigDict
@@ -150,19 +150,6 @@ def _assemble_mol_local_energy_fn(
             [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
         )
         return local_energy_fn
-    if local_energy_type == "ibp":
-        ibp_parts = local_energy_config.ibp.ibp_parts
-        local_energy_fn = physics.ibp.create_ibp_local_energy(
-            log_psi_apply,
-            ion_pos,
-            ion_charges,
-            "kinetic" in ibp_parts,
-            "ei" in ibp_parts,
-            ei_softening,
-            "ee" in ibp_parts,
-            ee_softening,
-        )
-        return local_energy_fn
     elif local_energy_type == "random_particle":
         nparticles = local_energy_config.random_particle.nparticles
         sample_parts = local_energy_config.random_particle.sample_parts
@@ -204,8 +191,6 @@ def _assemble_mol_local_energy_fn(
         )
 
 
-# TODO: figure out where this should go -- the act of clipping energies is kind of just
-# a training trick rather than a physics thing, so maybe this stays here
 def total_variation_clipping_fn(
     local_energies: Array,
     energy_noclip: chex.Numeric,
@@ -231,8 +216,6 @@ def total_variation_clipping_fn(
     return clipped_local_e
 
 
-# TODO: possibly include other types of clipping functions? e.g. using std deviation
-# instead of total variation
 def _get_clipping_fn(
     vmc_config: ConfigDict,
 ) -> Optional[ClippingFn]:
@@ -276,41 +259,6 @@ def _get_random_particle_energy_val_and_grad_fn(
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
         local_energy_type="random_particle",
-    )
-
-    return energy_data_val_and_grad
-
-
-def _get_standard_val_and_grad_fn(
-    vmc_config: ConfigDict,
-    problem_config: ConfigDict,
-    ion_pos: Array,
-    ion_charges: Array,
-    log_psi_apply: ModelApply[P],
-) -> physics.core.ValueGradEnergyFn[P]:
-    ei_softening = problem_config.ei_softening
-    ee_softening = problem_config.ee_softening
-
-    local_energy_fn = _assemble_mol_local_energy_fn(
-        "standard",
-        vmc_config.local_energy,
-        ion_pos,
-        ion_charges,
-        ei_softening,
-        ee_softening,
-        log_psi_apply,
-        None,
-    )
-
-    clipping_fn = _get_clipping_fn(vmc_config)
-
-    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_apply,
-        local_energy_fn,
-        vmc_config.nchains,
-        clipping_fn,
-        nan_safe=vmc_config.nan_safe,
-        local_energy_type="standard",
     )
 
     return energy_data_val_and_grad
@@ -388,7 +336,11 @@ def run_molecule() -> None:
 
     random_particle_energy_data_val_and_grad = jax.jit(
         _get_random_particle_energy_val_and_grad_fn(
-            config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
+            config.vmc,
+            config.problem,
+            ion_pos,
+            ion_charges,
+            log_psi_apply,
         )
     )
 
@@ -460,17 +412,6 @@ def run_molecule() -> None:
     sg_val_and_grad_fn = physics.random_particle.create_sg_val_and_grad_fn(surrogate)
     sg_val_and_grad_fn = jax.jit(sg_val_and_grad_fn)
 
-    clipping_fn = _get_clipping_fn(config.vmc)
-
-    wf_energy_val_and_grad_fn = physics.core.create_surrogate_value_and_grad_energy_fn(
-        log_psi_apply,
-        surrogate,
-        config.vmc.nchains,
-        clipping_fn,
-        nan_safe=config.vmc.nan_safe,
-    )
-    wf_energy_val_and_grad_fn = jax.jit(wf_energy_val_and_grad_fn)
-
     sg_opt = optax.adam(sg_LR)
     sg_opt_state = sg_opt.init(sg_params)
 
@@ -528,6 +469,16 @@ def run_molecule() -> None:
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
+    clipping_fn = _get_clipping_fn(config.vmc)
+
+    wf_energy_val_and_grad_fn = physics.core.create_surrogate_value_and_grad_energy_fn(
+        log_psi_apply,
+        surrogate,
+        config.vmc.nchains,
+        clipping_fn,
+        nan_safe=config.vmc.nan_safe,
+    )
+    wf_energy_val_and_grad_fn = jax.jit(wf_energy_val_and_grad_fn)
 
     def wf_iteration_with_surrogate(
         data,
@@ -565,6 +516,7 @@ def run_molecule() -> None:
 
     wf_iteration_with_surrogate = jax.jit(wf_iteration_with_surrogate)
 
+    # Create array of fixed particle positions for making plots.
     # step = 0.01
     # offset = step / 2
     # leftX = -2.5
@@ -642,6 +594,7 @@ def run_molecule() -> None:
             )
             f.write(f"{energy_noclip} {variance_noclip} {msqe}\n")
 
+            # Every so often, make a plot of real energy vs SG energy.
             # if i % 20 == 0:
             #     key, subkey = jax.random.split(key)
             #     subkey = jnp.broadcast_to(subkey, (nplot, 2))
@@ -696,6 +649,9 @@ def run_molecule() -> None:
             )
             f.write(f"{msqe}\n")
 
+    logging.info(
+        "Completed posttraining of surrogate! Running evaluation of WF energy."
+    )
     standard_local_energy_fn = _assemble_mol_local_energy_fn(
         "standard",
         config.vmc.local_energy,
@@ -752,6 +708,8 @@ def run_molecule() -> None:
         logging.info(
             f"Epoch {i:5d}   Energy {energy:3e}   Variance {variance:3e}   Accept ratio: {accept_ratio:3f}"
         )
+
+    logging.info("Completed evaluation run! Saving statistics and terminating.")
 
     energy_mean = energy_sum / config.eval.nepochs
     variance_mean = variance_sum / config.eval.nepochs
