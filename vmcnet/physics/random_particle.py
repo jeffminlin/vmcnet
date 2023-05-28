@@ -221,8 +221,8 @@ def create_sg_val_and_grad_fn(surrogate):
 
     permute_sg_energies = jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
 
-    def sg_msqe(sg_params, position, single_particle_energies, perms, psi_inverse):
-        surrogate_energies = surrogate(sg_params, position, psi_inverse)
+    def sg_msqe(sg_params, position, single_particle_energies, perms):
+        surrogate_energies = surrogate(sg_params, position)
         permuted_surrogate_energies = permute_sg_energies(surrogate_energies, perms)
         sg_single_particle_energies = permuted_surrogate_energies[:, 0]
         return jnp.mean((sg_single_particle_energies - single_particle_energies) ** 2)

@@ -346,10 +346,6 @@ def run_molecule() -> None:
 
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
 
-    def psi_inverse_apply(wf_params, pos):
-        s, l = slog_psi.apply(wf_params, pos)
-        return s * jnp.exp(-l)
-
     spin_split = models.construct.get_spin_split(nelec)
 
     compute_input_streams = models.construct.get_compute_input_streams_from_config(
@@ -367,8 +363,7 @@ def run_molecule() -> None:
     )
     key, subkey = jax.random.split(key)
 
-    psi_inverse = psi_inverse_apply(wf_params, init_pos[0:1])
-    sg_params = surrogate_module.init(subkey, init_pos[0:1], psi_inverse)
+    sg_params = surrogate_module.init(subkey, init_pos[0:1])
     surrogate = surrogate_module.apply
 
     # Make initial data
@@ -430,27 +425,30 @@ def run_molecule() -> None:
 
     wf_pretrain_iteration = jax.jit(wf_pretrain_iteration)
 
-    logging.info("Pretraining WF")
-    for i in range(pretrain_nepochs):
-        (
-            accept_ratio,
-            aux_data,
-            data,
-            key,
-            wf_opt_state,
-            wf_params,
-        ) = wf_pretrain_iteration(
-            data,
-            key,
-            wf_opt_state,
-            wf_params,
-        )
+    fpath = os.path.join(logdir, "pretrain_wf.txt")
+    with open(fpath, "w") as f:
+        logging.info("Pretraining WF")
+        for i in range(pretrain_nepochs):
+            (
+                accept_ratio,
+                aux_data,
+                data,
+                key,
+                wf_opt_state,
+                wf_params,
+            ) = wf_pretrain_iteration(
+                data,
+                key,
+                wf_opt_state,
+                wf_params,
+            )
 
-        energy_noclip = aux_data[2]
-        variance_noclip = aux_data[3]
-        logging.info(
-            f" Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   Accept ratio: {accept_ratio:3f}"
-        )
+            energy_noclip = aux_data[2]
+            variance_noclip = aux_data[3]
+            logging.info(
+                f" Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   Accept ratio: {accept_ratio:3f}"
+            )
+            f.write(f"{energy_noclip} {variance_noclip}\n")
 
     logging.info("Done pretraining WF! Now pretraining surrogate")
 
@@ -466,7 +464,6 @@ def run_molecule() -> None:
 
     wf_energy_val_and_grad_fn = physics.core.create_surrogate_value_and_grad_energy_fn(
         log_psi_apply,
-        psi_inverse_apply,
         surrogate,
         config.vmc.nchains,
         clipping_fn,
@@ -494,9 +491,9 @@ def run_molecule() -> None:
             single_particle_energies,
             perms,
         ) = wf_energies_and_perms_fn(wf_params, position, subkey)
-        psi_inverse = psi_inverse_apply(wf_params, position)
+
         msqe, grad_sg = sg_val_and_grad_fn(
-            sg_params, position, single_particle_energies, perms, psi_inverse
+            sg_params, position, single_particle_energies, perms
         )
         updates, sg_opt_state = sg_opt.update(grad_sg, sg_opt_state)
         sg_params = optax.apply_updates(sg_params, updates)
@@ -504,24 +501,30 @@ def run_molecule() -> None:
 
     sg_train_iteration = jax.jit(sg_train_iteration)
 
-    pretrain_nepochs = config.vmc.npretrain_sg
-    for i in range(pretrain_nepochs):
-        (
-            accept_ratio,
-            data,
-            key,
-            msqe,
-            sg_opt_state,
-            sg_params,
-        ) = sg_train_iteration(
-            data,
-            key,
-            sg_opt_state,
-            sg_params,
-            wf_params,
-        )
+    fpath = os.path.join(logdir, "pretrain_sg.txt")
 
-        logging.info(f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}")
+    pretrain_nepochs = config.vmc.npretrain_sg
+    with open(fpath, "w") as f:
+        for i in range(pretrain_nepochs):
+            (
+                accept_ratio,
+                data,
+                key,
+                msqe,
+                sg_opt_state,
+                sg_params,
+            ) = sg_train_iteration(
+                data,
+                key,
+                sg_opt_state,
+                sg_params,
+                wf_params,
+            )
+
+            logging.info(
+                f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
+            )
+            f.write(f"{msqe}\n")
 
     logging.info("Done pretraining surrogate! Running main VMC optimization")
     time.sleep(3)
@@ -562,102 +565,105 @@ def run_molecule() -> None:
 
     wf_iteration_with_surrogate = jax.jit(wf_iteration_with_surrogate)
 
-    step = 0.01
-    offset = step / 2
-    leftX = -2.5
-    rightX = 2.5
+    # step = 0.01
+    # offset = step / 2
+    # leftX = -2.5
+    # rightX = 2.5
+    #
+    # grid_pos = jnp.arange(leftX - offset, rightX + 2 * offset, step)
+    # ngrid = grid_pos.shape[0]
+    #
+    # x_1_pos = jnp.expand_dims(grid_pos, -1)
+    # y_1_pos = jnp.zeros((ngrid, 1))
+    # z_1_pos = jnp.zeros((ngrid, 1))
+    # pos_1 = jnp.concatenate([x_1_pos, y_1_pos, z_1_pos], axis=-1)
+    #
+    # npos = ngrid
+    #
+    # pos_2 = jnp.expand_dims(jnp.array([1.0, 0.5, 0.0]), 0)
+    # pos_2 = jnp.repeat(pos_2, npos, axis=0)
+    #
+    # pos_3 = jnp.expand_dims(jnp.array([-1.0, 0.5, 0.0]), 0)
+    # pos_3 = jnp.repeat(pos_3, npos, axis=0)
+    # plot_pos = jnp.stack([pos_1, pos_2, pos_3], axis=1)
+    # nplot = plot_pos.shape[0]
 
-    grid_pos = jnp.arange(leftX - offset, rightX + 2 * offset, step)
-    ngrid = grid_pos.shape[0]
+    # def permute_sg_energies(surrogate_energies, perm):
+    #     return surrogate_energies[perm]
 
-    x_1_pos = jnp.expand_dims(grid_pos, -1)
-    y_1_pos = jnp.zeros((ngrid, 1))
-    z_1_pos = jnp.zeros((ngrid, 1))
-    pos_1 = jnp.concatenate([x_1_pos, y_1_pos, z_1_pos], axis=-1)
+    # permute_sg_energies = jax.jit(
+    #     jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
+    # )
 
-    npos = ngrid
+    # fixed_wf_energies_and_perms_fn = (
+    #     physics.random_particle.create_wf_energies_and_perms_fn(
+    #         log_psi_apply, ion_pos, ion_charges, no_perm=True
+    #     )
+    # )
+    # fixed_wf_energies_and_perms_fn = jax.jit(fixed_wf_energies_and_perms_fn)
 
-    pos_2 = jnp.expand_dims(jnp.array([1.0, 0.5, 0.0]), 0)
-    pos_2 = jnp.repeat(pos_2, npos, axis=0)
-
-    pos_3 = jnp.expand_dims(jnp.array([-1.0, 0.5, 0.0]), 0)
-    pos_3 = jnp.repeat(pos_3, npos, axis=0)
-    plot_pos = jnp.stack([pos_1, pos_2, pos_3], axis=1)
-    nplot = plot_pos.shape[0]
-
-    def permute_sg_energies(surrogate_energies, perm):
-        return surrogate_energies[perm]
-
-    permute_sg_energies = jax.jit(
-        jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
-    )
-
-    fixed_wf_energies_and_perms_fn = (
-        physics.random_particle.create_wf_energies_and_perms_fn(
-            log_psi_apply, ion_pos, ion_charges, no_perm=True
-        )
-    )
-    fixed_wf_energies_and_perms_fn = jax.jit(fixed_wf_energies_and_perms_fn)
-
-    for i in range(config.vmc.nepochs):
-        (
-            accept_ratio,
-            data,
-            key,
-            msqe,
-            sg_opt_state,
-            sg_params,
-        ) = sg_train_iteration(
-            data,
-            key,
-            sg_opt_state,
-            sg_params,
-            wf_params,
-        )
-
-        (
-            accept_ratio,
-            aux_data,
-            data,
-            key,
-            wf_opt_state,
-            wf_params,
-        ) = wf_iteration_with_surrogate(
-            data,
-            key,
-            sg_params,
-            wf_opt_state,
-            wf_params,
-        )
-
-        energy_noclip = aux_data[2]
-        variance_noclip = aux_data[3]
-        logging.info(
-            f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
-        )
-
-        if i % 20 == 0:
-            key, subkey = jax.random.split(key)
-            subkey = jnp.broadcast_to(subkey, (nplot, 2))
+    fpath = os.path.join(logdir, "train.txt")
+    with open(fpath, "w") as f:
+        for i in range(config.vmc.nepochs):
             (
-                _,
-                SPLE_1,
-                perms,
-            ) = fixed_wf_energies_and_perms_fn(wf_params, plot_pos, subkey)
+                accept_ratio,
+                data,
+                key,
+                msqe,
+                sg_opt_state,
+                sg_params,
+            ) = sg_train_iteration(
+                data,
+                key,
+                sg_opt_state,
+                sg_params,
+                wf_params,
+            )
 
-            psi_inverse = psi_inverse_apply(wf_params, plot_pos)
-            sg_raw = surrogate(sg_params, plot_pos, psi_inverse)
-            permuted_surrogate_energies = permute_sg_energies(sg_raw, perms)
-            sg_predic = permuted_surrogate_energies[:, 0]
+            (
+                accept_ratio,
+                aux_data,
+                data,
+                key,
+                wf_opt_state,
+                wf_params,
+            ) = wf_iteration_with_surrogate(
+                data,
+                key,
+                sg_params,
+                wf_opt_state,
+                wf_params,
+            )
 
-            fig, ax = plt.subplots()
-            ax.set_title("Particle 1, true energy vs surrogate")
-            ax.plot(x_1_pos, SPLE_1, label="Single particle energy")
-            ax.plot(x_1_pos, sg_predic, label="Surrogate")
-            ax.legend()
-            ax.grid()
-            ax.set_ylim([-30, 30])
-            plt.savefig(config.logdir + f"/plot_{i}")
+            energy_noclip = aux_data[2]
+            variance_noclip = aux_data[3]
+            logging.info(
+                f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
+            )
+            f.write(f"{energy_noclip} {variance_noclip} {msqe}\n")
+
+            # if i % 20 == 0:
+            #     key, subkey = jax.random.split(key)
+            #     subkey = jnp.broadcast_to(subkey, (nplot, 2))
+            #     (
+            #         _,
+            #         SPLE_1,
+            #         perms,
+            #     ) = fixed_wf_energies_and_perms_fn(wf_params, plot_pos, subkey)
+            #
+            #     psi_inverse = psi_inverse_apply(wf_params, plot_pos)
+            #     sg_raw = surrogate(sg_params, plot_pos, psi_inverse)
+            #     permuted_surrogate_energies = permute_sg_energies(sg_raw, perms)
+            #     sg_predic = permuted_surrogate_energies[:, 0]
+            #
+            #     fig, ax = plt.subplots()
+            #     ax.set_title("Particle 1, true energy vs surrogate")
+            #     ax.plot(x_1_pos, SPLE_1, label="Single particle energy")
+            #     ax.plot(x_1_pos, sg_predic, label="Surrogate")
+            #     ax.legend()
+            #     ax.grid()
+            #     ax.set_ylim([-30, 30])
+            #     plt.savefig(config.logdir + f"/plot_{i}")
 
     io.save_vmc_state(
         config.logdir,
@@ -665,7 +671,30 @@ def run_molecule() -> None:
         (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
     )
 
-    logging.info("Completed VMC! Running evaluation.")
+    logging.info("Completed VMC! Running postraining of surrogate only.")
+    fpath = os.path.join(logdir, "posttrain.txt")
+    posttrain_epochs = config.vmc.nposttrain_sg
+    with open(fpath, "w") as f:
+        for i in range(posttrain_epochs):
+            (
+                accept_ratio,
+                data,
+                key,
+                msqe,
+                sg_opt_state,
+                sg_params,
+            ) = sg_train_iteration(
+                data,
+                key,
+                sg_opt_state,
+                sg_params,
+                wf_params,
+            )
+
+            logging.info(
+                f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
+            )
+            f.write(f"{msqe}\n")
 
     standard_local_energy_fn = _assemble_mol_local_energy_fn(
         "standard",
