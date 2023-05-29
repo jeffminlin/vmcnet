@@ -112,9 +112,9 @@ def get_default_model_config() -> Dict:
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
-        "ei_norm_softening": 0.0,
+        "ei_norm_softening": 0.1,
         "include_ee_norm": True,
-        "ee_norm_softening": 0.0,
+        "ee_norm_softening": 0.1,
     }
 
     base_backflow_config = {
@@ -159,7 +159,7 @@ def get_default_model_config() -> Dict:
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "envelope_softening": 0.0,
+        "envelope_softening": 0.1,
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
@@ -280,6 +280,8 @@ def get_default_surrogate_config() -> Dict:
         "include_2e_stream": True,
         "include_ei_norm": True,
         "include_ee_norm": True,
+        "ei_norm_softening": 0.1,
+        "ee_norm_softening": 0.1,
     }
 
     backflow_config = {
@@ -318,8 +320,8 @@ def get_default_molecular_config() -> Dict:
         "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
         "ion_charges": (1.0, 3.0),
         "nelec": (2, 2),
-        "ei_softening": 0.0,
-        "ee_softening": 0.0,
+        "ei_softening": 0.1,
+        "ee_softening": 0.1,
     }
     return problem_config
 
@@ -331,7 +333,7 @@ def get_default_vmc_config() -> Dict:
         "npretrain_wf": 200,
         "npretrain_sg": 200,
         "nepochs": 20000,
-        "nposttrain_sg": 10000,
+        "nposttrain_sg": 0,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
@@ -399,8 +401,8 @@ def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
         "nchains": 100,
-        "nburn": 0,
-        "nepochs": 0,
+        "nburn": 5000,
+        "nepochs": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,

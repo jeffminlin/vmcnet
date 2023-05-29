@@ -137,3 +137,6 @@ dmypy.json
 
 # VS Code settings
 .vscode/
+
+# Jupyter notebooks
+analyses

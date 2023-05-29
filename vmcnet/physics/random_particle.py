@@ -176,6 +176,8 @@ def create_wf_energies_and_perms_fn(
     log_psi_apply: Callable[[P, Array], Array],
     ion_locations: Array,
     ion_charges: Array,
+    ei_softening,
+    ee_softening,
     no_perm=False,
 ):
     ii_potential_fn = create_ion_ion_coulomb_potential(ion_locations, ion_charges)
@@ -183,10 +185,12 @@ def create_wf_energies_and_perms_fn(
     ei_potential_fn = create_electron_ion_coulomb_potential(
         ion_locations,
         ion_charges,
+        softening_term=ei_softening,
         nparticles=1,
     )
 
     ee_potential_fn = create_electron_electron_coulomb_potential(
+        softening_term=ee_softening,
         nparticles=1,
     )
 

@@ -406,7 +406,11 @@ def run_molecule() -> None:
     logging.info("Done pretraining WF! Now pretraining surrogate")
 
     wf_energies_and_perms_fn = physics.random_particle.create_wf_energies_and_perms_fn(
-        log_psi_apply, ion_pos, ion_charges
+        log_psi_apply,
+        ion_pos,
+        config.problem.ei_softening,
+        config.problem.ee_softening,
+        ion_charges,
     )
     wf_energies_and_perms_fn = jax.jit(wf_energies_and_perms_fn)
 
@@ -663,8 +667,8 @@ def run_molecule() -> None:
         config.vmc.local_energy,
         ion_pos,
         ion_charges,
-        0.0,
-        0.0,
+        config.problem.ei_softening,
+        config.problem.ee_softening,
         log_psi_apply,
         None,
     )
