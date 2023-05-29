@@ -408,9 +408,9 @@ def run_molecule() -> None:
     wf_energies_and_perms_fn = physics.random_particle.create_wf_energies_and_perms_fn(
         log_psi_apply,
         ion_pos,
+        ion_charges,
         config.problem.ei_softening,
         config.problem.ee_softening,
-        ion_charges,
     )
     wf_energies_and_perms_fn = jax.jit(wf_energies_and_perms_fn)
 
