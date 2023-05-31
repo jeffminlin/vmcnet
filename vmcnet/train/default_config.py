@@ -173,7 +173,7 @@ def get_default_model_config() -> Dict:
     base_fastcore_config["auto"] = dict(
         fc_ratio=0.3,
         n_core_orbitals=1,
-        core_orbital_types=["sto-3g_Li","sto-3g_Li"]
+        core_orbital_types="sto-3g_Li+sto-3g_Li"
     )
     base_fastcore_config['backflow']={
         "ndense_list": ((64, 8), (64, 8), (64,)),
