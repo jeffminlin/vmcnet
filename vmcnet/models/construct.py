@@ -428,7 +428,9 @@ def get_compute_input_streams_from_config(
         ion_pos=ion_pos,
         include_2e_stream=input_streams_config.include_2e_stream,
         include_ei_norm=input_streams_config.include_ei_norm,
+        ei_norm_softening=input_streams_config.ei_norm_softening,
         include_ee_norm=input_streams_config.include_ee_norm,
+        ee_norm_softening=input_streams_config.ee_norm_softening,
     )
 
 

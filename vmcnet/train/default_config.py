@@ -111,9 +111,9 @@ def get_default_model_config() -> Dict:
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
-        "ei_norm_softening": 0.0,
+        "ei_norm_softening": 1.0,
         "include_ee_norm": True,
-        "ee_norm_softening": 0.0,
+        "ee_norm_softening": 1.0,
     }
 
     base_backflow_config = {
@@ -158,7 +158,7 @@ def get_default_model_config() -> Dict:
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "envelope_softening": 0.0,
+        "envelope_softening": 1.0,
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
@@ -272,8 +272,8 @@ def get_default_molecular_config() -> Dict:
         "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
         "ion_charges": (1.0, 3.0),
         "nelec": (2, 2),
-        "ei_softening": 0.0,
-        "ee_softening": 0.0,
+        "ei_softening": 1.0,
+        "ee_softening": 1.0,
     }
     return problem_config
 
