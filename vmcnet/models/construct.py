@@ -1002,26 +1002,33 @@ class FermiNet(Module):
         )
 
         if self.full_det:
-            orbitals = [jnp.concatenate(orbitals, axis=-2)]
+            orbitals = jnp.concatenate(orbitals, axis=-2)  # (ndets, ..., elecs, orbs)
+            prod_over_elecs = jnp.prod(orbitals, axis=-2)  # (ndets..., orbs)
+            sum_over_orbs_and_dets = jnp.sum(prod_over_elecs, axis=(0, -1))  # (...,)
+            return jnp.sign(sum_over_orbs_and_dets), jnp.log(
+                jnp.abs(sum_over_orbs_and_dets)
+            )
 
-        if self._symmetrized_det_fn is not None:
-            # dets is ArrayList of shape [norb_splits: (ndeterminants, ...)]
-            dets = jax.tree_map(jnp.linalg.det, orbitals)
-            # Move axis to get shape [norb_splits: (..., ndeterminants)]
-            fn_inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, -1), dets)
-            if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
-                psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
-            elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
-                psi = self._calculate_psi_parallel_even(fn_inputs)
-            elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
-                psi = self._calculate_psi_pairwise_even(fn_inputs)
-            else:
-                raise self._get_bad_determinant_fn_mode_error()
-            return array_to_slog(psi)
+        raise Exception("Only full det is supported!")
+        #
+        # if self._symmetrized_det_fn is not None:
+        #     # dets is ArrayList of shape [norb_splits: (ndeterminants, ...)]
+        #     dets = jax.tree_map(jnp.linalg.det, orbitals)
+        #     # Move axis to get shape [norb_splits: (..., ndeterminants)]
+        #     fn_inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, -1), dets)
+        #     if self.determinant_fn_mode == DeterminantFnMode.SIGN_COVARIANCE:
+        #         psi = jnp.squeeze(self._symmetrized_det_fn(fn_inputs), -1)
+        #     elif self.determinant_fn_mode == DeterminantFnMode.PARALLEL_EVEN:
+        #         psi = self._calculate_psi_parallel_even(fn_inputs)
+        #     elif self.determinant_fn_mode == DeterminantFnMode.PAIRWISE_EVEN:
+        #         psi = self._calculate_psi_pairwise_even(fn_inputs)
+        #     else:
+        #         raise self._get_bad_determinant_fn_mode_error()
+        #     return array_to_slog(psi)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
-        slog_det_prods = slogdet_product(orbitals)
-        return slog_sum_over_axis(slog_det_prods)
+        # slog_det_prods = slogdet_product(orbitals)
+        # return slog_sum_over_axis(slog_det_prods)
 
 
 class EmbeddedParticleFermiNet(FermiNet):
