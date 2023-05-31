@@ -171,8 +171,8 @@ def get_default_model_config() -> Dict:
 
     base_fastcore_config = _copy_all_dicts(base_ferminet_config)
     base_fastcore_config["auto"] = dict(
-        fc_ratio=0.3,
-        n_core_orbitals=1,
+        #fc_ratio=0.3,
+        #n_core_orbitals=1,
         core_orbital_types="sto-3g_Li+sto-3g_Li"
     )
     base_fastcore_config['backflow']={

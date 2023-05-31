@@ -15,11 +15,14 @@ class core_orbital_fns(Module):
 
     """
 
-    n: int
     orbitaltype: str
+    ion: jnp.array
 
     @flax.linen.compact
     def __call__(self, X):
+        return self.centered(X-self.ion)
+
+    def centered(self, X):
         """Computes the value of the core orbital function at the given points.
 
         Args:
@@ -30,14 +33,6 @@ class core_orbital_fns(Module):
             evaluated at the input points.
 
         """
-        # temporary simple core orbitals
-        if self.orbitaltype == "exp":
-            c = self.param("c", flax.linen.initializers.uniform(1.0), ())
-            # soften = self.param("soften", flax.linen.initializers.uniform(1.0), ())
-            # purely exponential function
-            soften = 0.0
-            r = jnp.sqrt(jnp.abs(soften) + jnp.sum(X**2, axis=-1))
-            return jnp.exp(-jnp.abs(c) * r)[...,None]
 
         # gaussian function
         if self.orbitaltype == "sto-3g_H":

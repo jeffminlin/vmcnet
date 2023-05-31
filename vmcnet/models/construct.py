@@ -995,15 +995,13 @@ class FermiNet(Module):
 
 # Lins simplified FastCore
 class HF(FermiNet):
-    fc_ratio: float
-    n_core_orbitals: int
     core_orbital_types: str
 
     def setup(self):
         super().setup()
         self.ion_pos = self.compute_input_streams.keywords["ion_pos"]
         core_orbital_types=self.core_orbital_types.split('+')
-        self.core_orbital_fns = [core_orbital_fns(self.n_core_orbitals,typ) for typ in core_orbital_types]
+        self.core_orbital_fns = [core_orbital_fns(typ,ion) for typ,ion in zip(core_orbital_types,self.ion_pos)]
 
     @flax.linen.compact
     # type: ignore[override]
@@ -1013,7 +1011,7 @@ class HF(FermiNet):
         nmo_up, nmo_down = nelec_up, nelec_down
 
         # X matrix
-        core_orbitals=[orbital_fn(elec_pos - ion) for ion,orbital_fn in zip(self.ion_pos,self.core_orbital_fns)]
+        core_orbitals=[orbital_fn(elec_pos) for orbital_fn in self.core_orbital_fns]
         core_orbitals = jnp.concatenate(core_orbitals, axis=-1) # dimensions (...,nelec,n_AO)
 
         bf=self.get_backflow(elec_pos)
