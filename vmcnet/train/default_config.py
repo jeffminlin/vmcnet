@@ -112,9 +112,9 @@ def get_default_model_config() -> Dict:
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
-        "ei_norm_softening": 0.0,
+        "ei_norm_softening": 1.0,
         "include_ee_norm": True,
-        "ee_norm_softening": 0.0,
+        "ee_norm_softening": 1.0,
     }
 
     base_backflow_config = {
@@ -193,8 +193,9 @@ def get_default_model_config() -> Dict:
     }
 
     config = {
-        "type": "ferminet",
+        "type": "bosenet",
         "ferminet": base_ferminet_config,
+        "bosenet": base_ferminet_config,
         "embedded_particle_ferminet": {
             # NOTE (ggoldsh): mypy throws error on following line; no idea why.
             **base_ferminet_config,  # type: ignore
@@ -280,8 +281,8 @@ def get_default_surrogate_config() -> Dict:
         "include_2e_stream": True,
         "include_ei_norm": True,
         "include_ee_norm": True,
-        "ei_norm_softening": 0.0,
-        "ee_norm_softening": 0.0,
+        "ei_norm_softening": 1.0,
+        "ee_norm_softening": 1.0,
     }
 
     backflow_config = {
@@ -320,8 +321,8 @@ def get_default_molecular_config() -> Dict:
         "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
         "ion_charges": (1.0, 3.0),
         "nelec": (2, 2),
-        "ei_softening": 0.0,
-        "ee_softening": 0.0,
+        "ei_softening": 1.0,
+        "ee_softening": 1.0,
     }
     return problem_config
 
@@ -402,7 +403,7 @@ def get_default_eval_config() -> Dict:
     eval_config = {
         "nchains": 100,
         "nburn": 5000,
-        "nepochs": 5000,
+        "nepochs": 2000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,

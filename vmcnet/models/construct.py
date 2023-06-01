@@ -128,6 +128,7 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     ferminet_model_types = [
+        "bosenet",
         "ferminet",
         "embedded_particle_ferminet",
         "extended_orbital_matrix_ferminet",
@@ -170,6 +171,28 @@ def get_model_from_config(
                 determinant_fn=determinant_fn,
                 determinant_fn_mode=DeterminantFnMode[resnet_config.mode.upper()],
                 full_det=model_config.full_det,
+            )
+        if model_config.type == "bosenet":
+            return BoseNet(
+                spin_split,
+                compute_input_streams,
+                backflow,
+                model_config.ndeterminants,
+                kernel_initializer_orbital_linear=kernel_init_constructor(
+                    model_config.kernel_init_orbital_linear
+                ),
+                kernel_initializer_envelope_dim=kernel_init_constructor(
+                    model_config.kernel_init_envelope_dim
+                ),
+                kernel_initializer_envelope_ion=kernel_init_constructor(
+                    model_config.kernel_init_envelope_ion
+                ),
+                envelope_softening=model_config.envelope_softening,
+                bias_initializer_orbital_linear=bias_init_constructor(
+                    model_config.bias_init_orbital_linear
+                ),
+                orbitals_use_bias=model_config.orbitals_use_bias,
+                isotropic_decay=model_config.isotropic_decay,
             )
         elif model_config.type == "embedded_particle_ferminet":
             total_nelec = jnp.array(model_config.nhidden_fermions_per_spin) + nelec
@@ -1023,6 +1046,120 @@ class FermiNet(Module):
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
         return slog_sum_over_axis(slog_det_prods)
+
+
+class BoseNet(Module):
+    """Like FermiNet but for bosons."""
+
+    spin_split: ParticleSplit
+    compute_input_streams: ComputeInputStreams
+    backflow: Backflow
+    ndeterminants: int
+    kernel_initializer_orbital_linear: WeightInitializer
+    kernel_initializer_envelope_dim: WeightInitializer
+    kernel_initializer_envelope_ion: WeightInitializer
+    envelope_softening: chex.Scalar
+    bias_initializer_orbital_linear: WeightInitializer
+    orbitals_use_bias: bool
+    isotropic_decay: bool
+
+    def setup(self):
+        """Setup backflow and symmetrized determinant function."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
+        self._backflow = self.backflow
+
+    def _get_elec_pos_and_orbitals_split(
+        self, elec_pos: Array
+    ) -> Tuple[Array, ParticleSplit]:
+        return elec_pos, self.spin_split
+
+    def _get_norbitals_per_split(
+        self, elec_pos: Array, orbitals_split: ParticleSplit
+    ) -> Tuple[int, ...]:
+        nelec_total = elec_pos.shape[-2]
+
+        nsplits = get_nsplits(orbitals_split)
+        return (nelec_total,) * nsplits
+
+    def _eval_orbitals(
+        self,
+        orbitals_split: ParticleSplit,
+        norbitals_per_split: Sequence[int],
+        input_stream_1e: Array,
+        input_stream_2e: Optional[Array],
+        stream_1e: Array,
+        r_ei: Optional[Array],
+    ) -> ArrayList:
+        # Input streams unused in orbitals for regular FermiNet
+        del input_stream_1e
+        del input_stream_2e
+        # Multiply norbitals by ndeterminants to generate all orbitals in one go.
+        norbitals_per_split = [n * self.ndeterminants for n in norbitals_per_split]
+        # orbitals is shape [norb_splits: (..., nelec[i], norbitals[i] * ndeterminants)]
+        orbitals = FermiNetOrbitalLayer(
+            orbitals_split=orbitals_split,
+            norbitals_per_split=norbitals_per_split,
+            kernel_initializer_linear=self.kernel_initializer_orbital_linear,
+            kernel_initializer_envelope_dim=self.kernel_initializer_envelope_dim,
+            kernel_initializer_envelope_ion=self.kernel_initializer_envelope_ion,
+            bias_initializer_linear=self.bias_initializer_orbital_linear,
+            envelope_softening=self.envelope_softening,
+            use_bias=self.orbitals_use_bias,
+            isotropic_decay=self.isotropic_decay,
+        )(stream_1e, r_ei)
+        # Reshape to [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+        return _reshape_raw_ferminet_orbitals(orbitals, self.ndeterminants)
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: Array) -> SLArray:  # type: ignore[override]
+        """Compose FermiNet backflow -> orbitals -> logabs determinant product.
+
+        Args:
+            elec_pos (Array): array of particle positions (..., nelec, d)
+
+        Returns:
+            Array: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
+        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        norbitals_per_split = self._get_norbitals_per_split(elec_pos, orbitals_split)
+        # orbitals is [norb_splits: (ndeterminants, ..., nelec[i], norbitals[i])]
+        orbitals = self._eval_orbitals(
+            orbitals_split,
+            norbitals_per_split,
+            input_stream_1e,
+            input_stream_2e,
+            stream_1e,
+            r_ei,
+        )
+
+        orbitals = jnp.concatenate(orbitals, axis=-2)  # (ndets, ..., elecs, orbs)
+        # print(jnp.count_nonzero(jnp.where(orbitals == 0, True, False)))
+
+        result = jnp.sum(jnp.prod(orbitals, axis=-2), axis=(0, -1))
+        return jnp.sign(result), jnp.log(jnp.abs(result))
+
+        # Calculation in slog space seems to result in nans in second derivative.
+        # s_orbitals = jnp.sign(orbitals)
+        # l_orbitals = jnp.log(jnp.abs(orbitals))
+        # slog_prod_over_elecs = jnp.prod(s_orbitals, axis=-2), jnp.sum(
+        #     l_orbitals, axis=-2
+        # )
+        # slog_sum_orbs = slog_sum_over_axis(slog_prod_over_elecs, axis=-1)
+        # slog_sum_orbs_and_dets = slog_sum_over_axis(slog_sum_orbs, axis=0)
+        # return slog_sum_orbs_and_dets
 
 
 class FermiNetSurrogate(Module):
