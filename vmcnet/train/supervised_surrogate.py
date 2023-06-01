@@ -46,7 +46,7 @@ input_streams = {
 }
 
 backflow_config = {
-    "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
+    "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
     "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
     "kernel_init_mixed": orthogonal_init,
     "kernel_init_transformer": orthogonal_init,
@@ -104,6 +104,25 @@ burning_step = mcmc.metropolis.make_jitted_burning_step(
 walker_fn = mcmc.metropolis.make_jitted_walker_fn(10, metrop_step_fn, apply_pmap=False)
 
 
+def smooth_log_psi_apply(params, pos):
+    x = log_psi_apply(params, pos)
+    tanhx = jnp.tanh(x)
+    return x * (1 - tanhx) / 2 + x / 4 * (1 + tanhx) / 2
+
+
+smooth_metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
+    smooth_log_psi_apply,
+    100,
+    dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
+)
+smooth_burning_step = mcmc.metropolis.make_jitted_burning_step(
+    smooth_metrop_step_fn, apply_pmap=False
+)
+smooth_walker_fn = mcmc.metropolis.make_jitted_walker_fn(
+    10, smooth_metrop_step_fn, apply_pmap=False
+)
+
+
 nelec_total = int(jnp.sum(nelec))
 
 nchains = 100
@@ -114,6 +133,14 @@ key, position = physics.core.initialize_molecular_pos(
     ion_charges,
     nelec_total,
 )
+key, smooth_position = physics.core.initialize_molecular_pos(
+    key,
+    nchains,
+    ion_pos,
+    ion_charges,
+    nelec_total,
+)
+
 
 p_sg = surrogate.init(subkey, position[0:1])
 
@@ -122,6 +149,16 @@ amplitudes = log_psi_apply(p_wf, position)
 data = dwpa.make_dynamic_width_position_amplitude_data(
     position,
     amplitudes,
+    std_move=0.25,
+    move_acceptance_sum=0.0,
+    moves_since_update=0,
+)
+
+
+smooth_amplitudes = smooth_log_psi_apply(p_wf, smooth_position)
+smooth_data = dwpa.make_dynamic_width_position_amplitude_data(
+    smooth_position,
+    smooth_amplitudes,
     std_move=0.25,
     move_acceptance_sum=0.0,
     moves_since_update=0,
@@ -161,7 +198,7 @@ def msqe_loss(param_wf, param_sg, position):
 
     sple_1 = SPLE_apply(param_wf, position, [0, 1, 2])
 
-    return jnp.mean((sg_predic_1 - sple_1) ** 2)
+    return jnp.nanmean((sg_predic_1 - sple_1) ** 2)
 
 
 val_grad_msqe = jax.value_and_grad(msqe_loss, argnums=1)
@@ -174,37 +211,83 @@ import numpy as np
 np.savez(dir + "/sg_initial", p_sg=p_sg.unfreeze())
 
 
-print("Burning!")
-data, key = mcmc.metropolis.burn_data(burning_step, 5000, p_wf, data, key)
+print("Burning regular data!")
+data, key = mcmc.metropolis.burn_data(burning_step, 1000, p_wf, data, key)
 
-print("Learning!")
+# print("Burning smooth data!")
+# smooth_data, key = mcmc.metropolis.burn_data(
+#     smooth_burning_step, 1000, p_wf, smooth_data, key
+# )
 
 
 def learning_rate_schedule(epoch):
-    return 0.01 / (1 + epoch / 100)
+    return 0.01
+    # return 0.01 / (1 + epoch / 100)
 
 
 sg_opt = optax.adam(learning_rate_schedule)
 sg_opt_state = sg_opt.init(p_sg)
 
 
-def training_iteration(data, key, sg_opt_state, p_sg):
+def training_iteration(
+    data,
+    # smooth_data,
+    key,
+    sg_opt_state,
+    p_sg,
+):
     accept_ratio, data, key = walker_fn(p_wf, data, key)
-    position = data["walker_data"]["position"]
-    msqe, grad_p_sg = val_grad_msqe(p_wf, p_sg, position)
+    # smooth_accept_ratio, smooth_data, key = smooth_walker_fn(p_wf, smooth_data, key)
+
+    position1 = data["walker_data"]["position"]
+    msqe, grad_p_sg = val_grad_msqe(p_wf, p_sg, position1)
+    # LE1 = SPLE_apply(p_wf, position1, [0, 1, 2])
+
+    # position2 = smooth_data["walker_data"]["position"]
+    # msqe2, grad_p_sg2 = val_grad_msqe(p_wf, p_sg, position2)
+
+    # msqe = (msqe1 + msqe2) / 2
+    # grad_p_sg = jax.tree_map(lambda x, y: (x + y) / 2, grad_p_sg1, grad_p_sg2)
+
     updates, sg_opt_state = sg_opt.update(grad_p_sg, sg_opt_state)
     p_sg = optax.apply_updates(p_sg, updates)
-    return data, key, sg_opt_state, p_sg, msqe
+
+    return (
+        data,
+        # smooth_data,
+        accept_ratio,
+        # smooth_accept_ratio,
+        key,
+        sg_opt_state,
+        p_sg,
+        msqe,
+    )
 
 
 training_iteration = jax.jit(training_iteration)
 
-
-for i in range(300):
-    data, key, sg_opt_state, p_sg, msqe = training_iteration(
-        data, key, sg_opt_state, p_sg
+print("Learning!")
+for i in range(1000):
+    (
+        data,
+        # smooth_data,
+        accept_ratio,
+        # smooth_accept_ratio,
+        key,
+        sg_opt_state,
+        p_sg,
+        msqe,
+    ) = training_iteration(
+        data,
+        # smooth_data,
+        key,
+        sg_opt_state,
+        p_sg,
     )
-    print(f"Epoch {i:5d}   MSQE: {msqe:3f}")
+    print(
+        f"Epoch {i:5d}   MSQE: {msqe:3f}   AR: {accept_ratio:2f}   "
+        # f"SAR: {smooth_accept_ratio:2f}"
+    )
 
 np.savez(dir + "/sg_final", p_sg=p_sg.unfreeze())
 

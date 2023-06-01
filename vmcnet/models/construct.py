@@ -1010,14 +1010,20 @@ class FermiNet(Module):
 
         if self.full_det:
             orbitals = jnp.concatenate(orbitals, axis=-2)  # (ndets, ..., elecs, orbs)
-            s_orbitals = jnp.sign(orbitals)
-            l_orbitals = jnp.log(jnp.abs(orbitals))
-            slog_prod_over_elecs = jnp.prod(s_orbitals, axis=-2), jnp.sum(
-                l_orbitals, axis=-2
-            )
-            slog_sum_orbs = slog_sum_over_axis(slog_prod_over_elecs, axis=-1)
-            slog_sum_orbs_and_dets = slog_sum_over_axis(slog_sum_orbs, axis=0)
-            return slog_sum_orbs_and_dets
+            # print(jnp.count_nonzero(jnp.where(orbitals == 0, True, False)))
+
+            result = jnp.sum(jnp.prod(orbitals, axis=-2), axis=(0, -1))
+            return jnp.sign(result), jnp.log(jnp.abs(result))
+
+            # Calculation in slog space seems to result in nans in second derivative.
+            # s_orbitals = jnp.sign(orbitals)
+            # l_orbitals = jnp.log(jnp.abs(orbitals))
+            # slog_prod_over_elecs = jnp.prod(s_orbitals, axis=-2), jnp.sum(
+            #     l_orbitals, axis=-2
+            # )
+            # slog_sum_orbs = slog_sum_over_axis(slog_prod_over_elecs, axis=-1)
+            # slog_sum_orbs_and_dets = slog_sum_over_axis(slog_sum_orbs, axis=0)
+            # return slog_sum_orbs_and_dets
 
         raise Exception("Only full det is supported!")
         #
