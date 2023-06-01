@@ -24,11 +24,11 @@ from vmcnet.utils.typing import (
 from .antisymmetry import (
     GenericAntisymmetrize,
     FactorizedAntisymmetrize,
-    slogdet_product,
 )
 from .core import (
     Activation,
     AddedModel,
+    Dense,
     SimpleResNet,
     Module,
     get_nelec_per_split,
@@ -1029,6 +1029,71 @@ class FermiNet(Module):
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         # slog_det_prods = slogdet_product(orbitals)
         # return slog_sum_over_axis(slog_det_prods)
+
+
+class FermiNetSurrogate(Module):
+    spin_split: ParticleSplit
+    compute_input_streams: ComputeInputStreams
+    backflow: Backflow
+
+    def setup(self):
+        """Setup backflow and symmetrized determinant function."""
+        # workaround MyPy's typing error for callable attribute, see
+        # https://github.com/python/mypy/issues/708
+        self._compute_input_streams = self.compute_input_streams
+        self._backflow = self.backflow
+
+    def _get_elec_pos_and_orbitals_split(
+        self, elec_pos: Array
+    ) -> Tuple[Array, ParticleSplit]:
+        return elec_pos, self.spin_split
+
+    @flax.linen.compact
+    def __call__(self, elec_pos: Array) -> Array:  # type: ignore[override]
+        """Compose FermiNet backflow -> orbitals -> logabs determinant product.
+
+        Args:
+            elec_pos (Array): array of particle positions (..., nelec, d)
+
+        Returns:
+            Array: FermiNet output; logarithm of the absolute value of a
+            anti-symmetric function of elec_pos, where the anti-symmetry is with respect
+            to the second-to-last axis of elec_pos. The anti-symmetry holds for
+            particles within the same split, but not for permutations which swap
+            particles across different spin splits. If the inputs have shape
+            (batch_dims, nelec, d), then the output has shape (batch_dims,).
+        """
+        elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
+
+        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+            elec_pos
+        )
+        stream_1e = self._backflow(input_stream_1e, input_stream_2e)
+
+        # Direct output
+        # return jnp.sum(stream_1e, axis=-1)
+
+        # Sum then 1->1 dense
+        # out_predense = jnp.sum(stream_1e, axis=-1, keepdims=True)
+        # return jnp.squeeze(Dense(1)(out_predense), axis=-1)
+
+        # Many -> 1 dense
+        return jnp.squeeze(Dense(1)(stream_1e), axis=-1)
+
+        # Many->1 dense with psi inverse amodified additive and multiplicatively
+        # out_and_psi_inverse_weight = Dense(2)(stream_1e)  # (.., nelec, 2)
+        # out1 = out_and_psi_inverse_weight[..., 0]  # (.., nelec)
+        # out2 = out_and_psi_inverse_weight[..., 1]  # (.., nelec)
+        #
+        # sign_psi_weight = out_and_psi_inverse_weight[..., 2]  # (..., nelec)
+        # sign_psi_weight = jnp.sqrt(sign_psi_weight**2 + 1) - 0.9
+        #
+        # return out1 * smoothed_psi_inverse + out2
+
+        # Just multiply psi_inverse by a weight; implicitly model HPsi with the network
+        # pre_psi_inverse_out = jnp.squeeze(Dense(1)(stream_1e), axis=-1)  # (.., nelec)
+        # modified_psi_inverse = jnp.expand_dims(psi_inverse, axis=-1) / 10 + 1
+        # return modified_psi_inverse * pre_psi_inverse_out
 
 
 class EmbeddedParticleFermiNet(FermiNet):
