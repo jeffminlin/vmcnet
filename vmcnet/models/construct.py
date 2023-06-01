@@ -82,6 +82,13 @@ class DeterminantFnMode(Enum):
 def _get_named_activation_fn(name):
     if name == "tanh":
         return jnp.tanh
+    elif name == "d2tanh":
+
+        def d2tanh(x):
+            tanhx = jnp.tanh(x)
+            return -2 * tanhx * (1 - tanhx**2)
+
+        return d2tanh
     elif name == "gelu":
         return jax.nn.gelu
     else:
@@ -1003,11 +1010,14 @@ class FermiNet(Module):
 
         if self.full_det:
             orbitals = jnp.concatenate(orbitals, axis=-2)  # (ndets, ..., elecs, orbs)
-            prod_over_elecs = jnp.prod(orbitals, axis=-2)  # (ndets..., orbs)
-            sum_over_orbs_and_dets = jnp.sum(prod_over_elecs, axis=(0, -1))  # (...,)
-            return jnp.sign(sum_over_orbs_and_dets), jnp.log(
-                jnp.abs(sum_over_orbs_and_dets)
+            s_orbitals = jnp.sign(orbitals)
+            l_orbitals = jnp.log(jnp.abs(orbitals))
+            slog_prod_over_elecs = jnp.prod(s_orbitals, axis=-2), jnp.sum(
+                l_orbitals, axis=-2
             )
+            slog_sum_orbs = slog_sum_over_axis(slog_prod_over_elecs, axis=-1)
+            slog_sum_orbs_and_dets = slog_sum_over_axis(slog_sum_orbs, axis=0)
+            return slog_sum_orbs_and_dets
 
         raise Exception("Only full det is supported!")
         #

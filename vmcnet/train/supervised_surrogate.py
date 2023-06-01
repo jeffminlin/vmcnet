@@ -200,7 +200,7 @@ def training_iteration(data, key, sg_opt_state, p_sg):
 training_iteration = jax.jit(training_iteration)
 
 
-for i in range(1000):
+for i in range(300):
     data, key, sg_opt_state, p_sg, msqe = training_iteration(
         data, key, sg_opt_state, p_sg
     )
