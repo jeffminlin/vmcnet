@@ -2,6 +2,7 @@ import sys
 
 import jax
 import jax.numpy as jnp
+import optax
 from ml_collections import ConfigDict, FieldReference
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 import vmcnet.mcmc as mcmc
@@ -45,7 +46,7 @@ input_streams = {
 }
 
 backflow_config = {
-    "ndense_list": ((16, 4), (16, 4), (16, 4), (16,)),
+    "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
     "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
     "kernel_init_mixed": orthogonal_init,
     "kernel_init_transformer": orthogonal_init,
@@ -130,9 +131,11 @@ data = dwpa.make_dynamic_width_position_amplitude_data(
 import vmcnet.physics.potential as potential
 
 ei_term = potential.create_electron_ion_coulomb_potential(
-    ion_pos, ion_charges, nparticles=1
+    ion_pos, ion_charges, nparticles=1, softening_term=1.0
 )
-ee_term = potential.create_electron_electron_coulomb_potential(nparticles=1)
+ee_term = potential.create_electron_electron_coulomb_potential(
+    nparticles=1, softening_term=1.0
+)
 import vmcnet.physics.random_particle as random_particle
 
 kinetic_term = random_particle.create_random_particle_kinetic_energy(
@@ -164,16 +167,47 @@ def msqe_loss(param_wf, param_sg, position):
 val_grad_msqe = jax.value_and_grad(msqe_loss, argnums=1)
 
 print(f"# params in sg: {jax.flatten_util.ravel_pytree(p_sg)[0].shape[0]}")
+
+
+import numpy as np
+
+np.savez(dir + "/sg_initial", p_sg=p_sg.unfreeze())
+
+
 print("Burning!")
-data, key = mcmc.metropolis.burn_data(burning_step, 100, p_wf, data, key)
+data, key = mcmc.metropolis.burn_data(burning_step, 5000, p_wf, data, key)
 
 print("Learning!")
-LR = 0.01
 
-for i in range(1000):
-    print(f"Epoch {i}")
+
+def learning_rate_schedule(epoch):
+    return 0.01 / (1 + epoch / 100)
+
+
+sg_opt = optax.adam(learning_rate_schedule)
+sg_opt_state = sg_opt.init(p_sg)
+
+
+def training_iteration(data, key, sg_opt_state, p_sg):
     accept_ratio, data, key = walker_fn(p_wf, data, key)
     position = data["walker_data"]["position"]
     msqe, grad_p_sg = val_grad_msqe(p_wf, p_sg, position)
-    p_sg = jax.tree_map(lambda x, y: x - LR * y, p_sg, grad_p_sg)
-    print(f"MSQE: {msqe}")
+    updates, sg_opt_state = sg_opt.update(grad_p_sg, sg_opt_state)
+    p_sg = optax.apply_updates(p_sg, updates)
+    return data, key, sg_opt_state, p_sg, msqe
+
+
+training_iteration = jax.jit(training_iteration)
+
+
+for i in range(1000):
+    data, key, sg_opt_state, p_sg, msqe = training_iteration(
+        data, key, sg_opt_state, p_sg
+    )
+    print(f"Epoch {i:5d}   MSQE: {msqe:3f}")
+
+np.savez(dir + "/sg_final", p_sg=p_sg.unfreeze())
+
+# LOADING IT
+# p_sg = np.load("sg_initial.npz", allow_pickle=True)
+# p_sg = p_sg['p_sg'].tolist()
