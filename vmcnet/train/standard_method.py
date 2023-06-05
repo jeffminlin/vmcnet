@@ -244,7 +244,7 @@ def run_molecule() -> None:
         log_psi_apply,
     )
 
-    optimizer_config = config.vmc.optimizer
+    optimizer_config = config.vmc.optimizer.adam
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
@@ -257,13 +257,11 @@ def run_molecule() -> None:
             1.0 + optimizer_config.learning_decay_rate * t
         )
 
-    wf_opt = _get_adam_optax_optimizer(
-        learning_rate_schedule, config.vmc.optimizer.adam
-    )
+    wf_opt = _get_adam_optax_optimizer(learning_rate_schedule, optimizer_config)
 
     wf_opt_state = wf_opt.init(wf_params)
 
-    clipping_fn = None
+    clipping_fn = _get_clipping_fn(config.vmc)
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
