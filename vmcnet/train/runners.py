@@ -330,24 +330,32 @@ def _get_energy_val_and_grad_fn(
     ei_softening = problem_config.ei_softening
     ee_softening = problem_config.ee_softening
 
-    local_energy_fn = _assemble_mol_local_energy_fn(
-        vmc_config.local_energy_type,
-        vmc_config.local_energy,
-        ion_pos,
-        ion_charges,
-        ei_softening,
-        ee_softening,
-        log_psi_apply,
-    )
 
-    import pickle
-    with open('ints.pickle','rb') as f:
-        ints=pickle.load(f)
-    ints1=ints['ints1']
-    ints2=ints['ints2']
+    if vmc_config.local_energy_type!='HF':
+        local_energy_fn = _assemble_mol_local_energy_fn(
+            vmc_config.local_energy_type,
+            vmc_config.local_energy,
+            ion_pos,
+            ion_charges,
+            ei_softening,
+            ee_softening,
+            log_psi_apply,
+        )
 
-    #def local_energy_fn(params,pos,key):
-    #    return jnp.zeros(pos.shape[:-2])
+    if vmc_config.local_energy_type=='HF':
+        import pickle
+        with open('ints.pickle','rb') as f:
+            ints=pickle.load(f)
+        ints1=ints['ints1']
+        ints2=ints['ints2']
+
+        def HF_energy(params):
+            return 0
+
+        def local_energy_fn(params,pos,key):
+            energy=HF_energy(params)
+            return jnp.ones(pos.shape[:-2])*energy
+    
 
     clipping_fn = _get_clipping_fn(vmc_config)
 
