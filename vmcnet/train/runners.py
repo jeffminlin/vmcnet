@@ -346,16 +346,30 @@ def _get_energy_val_and_grad_fn(
         import pickle
         with open('ints.pickle','rb') as f:
             ints=pickle.load(f)
-        ints1=ints['ints1']
-        ints2=ints['ints2']
+        h=ints['ints1e']
+        mnsl=jnp.array(ints['ints2e'])
+        mlsn=jnp.swapaxes(mnsl,-1,-3)
+        S=ints['overlap']
 
-        def HF_energy(params):
-            return 0
+        def UHF_energy(params):
+            C_a=params['C_up']
+            C_b=params['C_down']
+
+            D_a=jnp.inner(C_a,C_a)
+            D_b=jnp.inner(C_b,C_b)
+
+            F_a=h+(D_a+D_b)*mnsl-D_a*mlsn
+            F_b=h+(D_a+D_b)*mnsl-D_b*mlsn
+
+            E=0.5*jnp.sum(D_a*(h+F_a)+D_b*(h+F_b))
+
+            N=0.5*jnp.sum(D_a*S+D_b*S)
+            return E/N
 
         def local_energy_fn(params,pos,key):
-            energy=HF_energy(params)
+            energy=UHF_energy(params['params'])
             return jnp.ones(pos.shape[:-2])*energy
-    
+
 
     clipping_fn = _get_clipping_fn(vmc_config)
 

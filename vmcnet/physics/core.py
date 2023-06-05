@@ -390,8 +390,10 @@ def create_value_and_grad_energy_fn(
 
         return (energy, aux_data), grad_E
 
-    if local_energy_type == "standard" or local_energy_type=='HF':
+    if local_energy_type == "standard":
         return standard_energy_val_and_grad
+    elif local_energy_type == "HF":
+        return generic_energy_val_and_grad
     elif local_energy_type == "ibp":
         return generic_energy_val_and_grad
     elif local_energy_type == "random_particle":

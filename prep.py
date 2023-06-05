@@ -5,8 +5,9 @@ import pickle
 mol=pyscf.gto.M(atom='Li 0 0 0; H 3.014 0 0', basis='sto-3g')
 
 ints=dict(
-    ints1=mol.get_hcore(),
-    ints2=mol.intor('int2e', aosym='s1'),
+    ints1e=mol.get_hcore(),
+    ints2e=mol.intor('int2e', aosym='s1'),
+    overlap=mol.intor('int2e', aosym='s1'),
 )
 
 with open('ints.pickle','wb') as f:
