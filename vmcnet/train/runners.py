@@ -340,6 +340,15 @@ def _get_energy_val_and_grad_fn(
         log_psi_apply,
     )
 
+    import pickle
+    with open('ints.pickle','rb') as f:
+        ints=pickle.load(f)
+    ints1=ints['ints1']
+    ints2=ints['ints2']
+
+    #def local_energy_fn(params,pos,key):
+    #    return jnp.zeros(pos.shape[:-2])
+
     clipping_fn = _get_clipping_fn(vmc_config)
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
