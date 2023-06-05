@@ -131,8 +131,6 @@ def _assemble_mol_local_energy_fn(
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> LocalEnergyApply[P]:
-    print(ei_softening)
-    print(ee_softening)
     kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_pos, ion_charges, softening_term=ei_softening
@@ -253,7 +251,7 @@ def run_molecule() -> None:
 
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
 
-    wf_opt = optax.sgd(LR)
+    wf_opt = optax.adam(LR)
     wf_opt_state = wf_opt.init(wf_params)
 
     clipping_fn = None

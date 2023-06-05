@@ -155,7 +155,7 @@ def get_default_model_config() -> Dict:
     base_ferminet_config = {
         "input_streams": input_streams,
         "backflow": ferminet_backflow,
-        "ndeterminants": 1,
+        "ndeterminants": 10,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
@@ -166,7 +166,7 @@ def get_default_model_config() -> Dict:
         "use_det_resnet": False,
         "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
-        "full_det": False,
+        "full_det": True,
     }
 
     invariance_for_antieq = {

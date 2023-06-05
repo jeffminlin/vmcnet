@@ -174,7 +174,6 @@ def get_model_from_config(
                 full_det=model_config.full_det,
             )
         if model_config.type == "bosenet":
-            logging.info("Instantiating bosenet!")
             return BoseNet(
                 spin_split,
                 compute_input_streams,
