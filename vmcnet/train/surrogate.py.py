@@ -104,28 +104,6 @@ def _make_initial_single_device_data(
     )
 
 
-def _get_mcmc_fns(
-    run_config: ConfigDict, log_psi_apply: ModelApply[P], apply_pmap: bool = False
-) -> Tuple[
-    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
-    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
-]:
-    metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
-        log_psi_apply,
-        run_config.nmoves_per_width_update,
-        dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
-    )
-    burning_step = mcmc.metropolis.make_jitted_burning_step(
-        metrop_step_fn, apply_pmap=apply_pmap
-    )
-    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
-        run_config.nsteps_per_param_update, metrop_step_fn, apply_pmap=apply_pmap
-    )
-
-    return burning_step, walker_fn
-
-
-# TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
     local_energy_type: str,
     local_energy_config: ConfigDict,
@@ -134,7 +112,6 @@ def _assemble_mol_local_energy_fn(
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
-    surrogate: ModelApply[P],
 ) -> LocalEnergyApply[P]:
     if local_energy_type == "standard":
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
@@ -157,24 +134,6 @@ def _assemble_mol_local_energy_fn(
         local_energy_fn = (
             physics.random_particle.create_molecular_random_particle_local_energy(
                 log_psi_apply,
-                ion_pos,
-                ion_charges,
-                nparticles,
-                "kinetic" in sample_parts,
-                "ei" in sample_parts,
-                ei_softening,
-                "ee" in sample_parts,
-                ee_softening,
-            )
-        )
-        return local_energy_fn
-    elif local_energy_type == "surrogate":
-        nparticles = local_energy_config.random_particle.nparticles
-        sample_parts = local_energy_config.random_particle.sample_parts
-        local_energy_fn = (
-            physics.random_particle.create_molecular_surrogate_local_energy(
-                log_psi_apply,
-                surrogate,
                 ion_pos,
                 ion_charges,
                 nparticles,
@@ -248,7 +207,6 @@ def _get_random_particle_energy_val_and_grad_fn(
         ei_softening,
         ee_softening,
         log_psi_apply,
-        None,
     )
 
     clipping_fn = _get_clipping_fn(vmc_config)
@@ -576,7 +534,6 @@ def run_molecule() -> None:
         config.problem.ei_softening,
         config.problem.ee_softening,
         log_psi_apply,
-        None,
     )
     standard_local_energy_fn = jax.jit(
         jax.vmap(standard_local_energy_fn, in_axes=(None, 0, None), out_axes=0)

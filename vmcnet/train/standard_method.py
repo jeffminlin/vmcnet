@@ -104,27 +104,6 @@ def _make_initial_single_device_data(
     )
 
 
-def _get_mcmc_fns(
-    run_config: ConfigDict, log_psi_apply: ModelApply[P], apply_pmap: bool = False
-) -> Tuple[
-    mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
-    mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
-]:
-    metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
-        log_psi_apply,
-        run_config.nmoves_per_width_update,
-        dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
-    )
-    burning_step = mcmc.metropolis.make_jitted_burning_step(
-        metrop_step_fn, apply_pmap=apply_pmap
-    )
-    walker_fn = mcmc.metropolis.make_jitted_walker_fn(
-        run_config.nsteps_per_param_update, metrop_step_fn, apply_pmap=apply_pmap
-    )
-
-    return burning_step, walker_fn
-
-
 def _assemble_mol_local_energy_fn(
     ion_pos: Array,
     ion_charges: Array,
