@@ -30,6 +30,7 @@ from vmcnet.utils.typing import (
     LocalEnergyApply,
     ModelApply,
 )
+from vmcnet.updates.parse_config import _get_adam_optax_optimizer
 
 FLAGS = flags.FLAGS
 
@@ -243,7 +244,7 @@ def run_molecule() -> None:
         log_psi_apply,
     )
 
-    LR = config.vmc.optimizer.adam.learning_rate
+    optimizer_config = config.vmc.optimizer
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
@@ -251,7 +252,15 @@ def run_molecule() -> None:
 
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
 
-    wf_opt = optax.adam(LR)
+    def learning_rate_schedule(t):
+        return optimizer_config.learning_rate / (
+            1.0 + optimizer_config.learning_decay_rate * t
+        )
+
+    wf_opt = _get_adam_optax_optimizer(
+        learning_rate_schedule, config.vmc.optimizer.adam
+    )
+
     wf_opt_state = wf_opt.init(wf_params)
 
     clipping_fn = None
