@@ -1,5 +1,6 @@
 """Combine pieces to form full models."""
 # TODO (ggoldsh): split this file into smaller component files
+import logging
 from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple, cast
@@ -173,6 +174,7 @@ def get_model_from_config(
                 full_det=model_config.full_det,
             )
         if model_config.type == "bosenet":
+            logging.info("Instantiating bosenet!")
             return BoseNet(
                 spin_split,
                 compute_input_streams,
@@ -1150,16 +1152,6 @@ class BoseNet(Module):
 
         result = jnp.sum(jnp.prod(orbitals, axis=-2), axis=(0, -1))
         return jnp.sign(result), jnp.log(jnp.abs(result))
-
-        # Calculation in slog space seems to result in nans in second derivative.
-        # s_orbitals = jnp.sign(orbitals)
-        # l_orbitals = jnp.log(jnp.abs(orbitals))
-        # slog_prod_over_elecs = jnp.prod(s_orbitals, axis=-2), jnp.sum(
-        #     l_orbitals, axis=-2
-        # )
-        # slog_sum_orbs = slog_sum_over_axis(slog_prod_over_elecs, axis=-1)
-        # slog_sum_orbs_and_dets = slog_sum_over_axis(slog_sum_orbs, axis=0)
-        # return slog_sum_orbs_and_dets
 
 
 class FermiNetSurrogate(Module):

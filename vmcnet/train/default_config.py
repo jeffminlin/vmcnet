@@ -334,7 +334,6 @@ def get_default_vmc_config() -> Dict:
         "npretrain_wf": 200,
         "npretrain_sg": 200,
         "nepochs": 20000,
-        "nposttrain_sg": 0,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,

@@ -1,4 +1,5 @@
 """Core local energy and gradient construction routines."""
+import logging
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex
@@ -336,6 +337,7 @@ def create_value_and_grad_energy_fn(
     def standard_energy_val_and_grad(params, key, positions):
         del key
 
+        logging.info("Using standard energy val grad")
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
         )(params, positions, None)
@@ -343,8 +345,6 @@ def create_value_and_grad_energy_fn(
         aux_data, energy, grad_E = get_standard_contribution(
             local_energies_noclip, params, positions
         )
-
-        aux_data = (*aux_data, 0.0)
 
         return (energy, aux_data), grad_E
 
@@ -463,55 +463,3 @@ def create_surrogate_value_and_grad_energy_fn(
         return (energy, aux_data), grad_E
 
     return surrogate_energy_val_and_grad
-
-
-def create_double_chain_energy_val_and_grad_fn(
-    psi_apply: ModelApply[P],
-    local_energy_fn: LocalEnergyApply[P],
-    nchains: int,
-    nan_safe: bool = True,
-) -> ValueGradEnergyFn[P]:
-    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
-
-    def grad_estimator_forward(
-        params: P,
-        grad_positions: Array,
-        centered_grad_local_energies: Array,
-    ) -> chex.Numeric:
-        abs_psi = jnp.abs(psi_apply(params, grad_positions))
-
-        # NOTE: for the generic gradient estimator case it may be important to include
-        # the (nchains / nchains -1) factor here to make sure the standard and generic
-        # gradient terms aren't mismatched by a slight scale factor.
-        return (
-            2.0
-            * nchains
-            / (nchains - 1)
-            * mean_grad_fn(centered_grad_local_energies * abs_psi)
-        )
-
-    def energy_val_and_grad(params, positions, grad_positions):
-        local_energy_vmap = jax.vmap(
-            local_energy_fn, in_axes=(None, 0, None), out_axes=0
-        )
-        local_energies = local_energy_vmap(params, positions, None)
-        grad_local_energies = local_energy_vmap(params, grad_positions, None)
-
-        energy, variance = get_statistics_from_local_energy(
-            local_energies, nchains, nan_safe=nan_safe
-        )
-
-        centered_grad_local_energies = grad_local_energies - energy
-
-        grad_E = jax.grad(grad_estimator_forward, argnums=0)(
-            params, grad_positions, centered_grad_local_energies
-        )
-
-        # Correction for gradient scale factor - not needed with Adam??
-        inv_abs_psi = 1 / jnp.abs(psi_apply(params, positions))
-        mean_inv_abs_psi = mean_grad_fn(inv_abs_psi)
-        grad_E = jax.tree_map(lambda gE: gE * mean_inv_abs_psi, grad_E)
-
-        return (energy, variance, mean_inv_abs_psi), grad_E
-
-    return energy_val_and_grad

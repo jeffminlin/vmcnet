@@ -521,44 +521,6 @@ def run_molecule() -> None:
 
     wf_iteration_with_surrogate = jax.jit(wf_iteration_with_surrogate)
 
-    # Create array of fixed particle positions for making plots.
-    # step = 0.01
-    # offset = step / 2
-    # leftX = -2.5
-    # rightX = 2.5
-    #
-    # grid_pos = jnp.arange(leftX - offset, rightX + 2 * offset, step)
-    # ngrid = grid_pos.shape[0]
-    #
-    # x_1_pos = jnp.expand_dims(grid_pos, -1)
-    # y_1_pos = jnp.zeros((ngrid, 1))
-    # z_1_pos = jnp.zeros((ngrid, 1))
-    # pos_1 = jnp.concatenate([x_1_pos, y_1_pos, z_1_pos], axis=-1)
-    #
-    # npos = ngrid
-    #
-    # pos_2 = jnp.expand_dims(jnp.array([1.0, 0.5, 0.0]), 0)
-    # pos_2 = jnp.repeat(pos_2, npos, axis=0)
-    #
-    # pos_3 = jnp.expand_dims(jnp.array([-1.0, 0.5, 0.0]), 0)
-    # pos_3 = jnp.repeat(pos_3, npos, axis=0)
-    # plot_pos = jnp.stack([pos_1, pos_2, pos_3], axis=1)
-    # nplot = plot_pos.shape[0]
-
-    # def permute_sg_energies(surrogate_energies, perm):
-    #     return surrogate_energies[perm]
-
-    # permute_sg_energies = jax.jit(
-    #     jax.vmap(permute_sg_energies, in_axes=(0, 0), out_axes=0)
-    # )
-
-    # fixed_wf_energies_and_perms_fn = (
-    #     physics.random_particle.create_wf_energies_and_perms_fn(
-    #         log_psi_apply, ion_pos, ion_charges, no_perm=True
-    #     )
-    # )
-    # fixed_wf_energies_and_perms_fn = jax.jit(fixed_wf_energies_and_perms_fn)
-
     fpath = os.path.join(logdir, "train.txt")
     with open(fpath, "w") as f:
         for i in range(config.vmc.nepochs):
@@ -599,69 +561,12 @@ def run_molecule() -> None:
             )
             f.write(f"{energy_noclip} {variance_noclip} {msqe}\n")
 
-            # Every so often, make a plot of real energy vs SG energy.
-            # if i % 20 == 0:
-            #     key, subkey = jax.random.split(key)
-            #     subkey = jnp.broadcast_to(subkey, (nplot, 2))
-            #     (
-            #         _,
-            #         SPLE_1,
-            #         perms,
-            #     ) = fixed_wf_energies_and_perms_fn(wf_params, plot_pos, subkey)
-            #
-            #     psi_inverse = psi_inverse_apply(wf_params, plot_pos)
-            #     sg_raw = surrogate(sg_params, plot_pos, psi_inverse)
-            #     permuted_surrogate_energies = permute_sg_energies(sg_raw, perms)
-            #     sg_predic = permuted_surrogate_energies[:, 0]
-            #
-            #     fig, ax = plt.subplots()
-            #     ax.set_title("Particle 1, true energy vs surrogate")
-            #     ax.plot(x_1_pos, SPLE_1, label="Single particle energy")
-            #     ax.plot(x_1_pos, sg_predic, label="Surrogate")
-            #     ax.legend()
-            #     ax.grid()
-            #     ax.set_ylim([-30, 30])
-            #     plt.savefig(config.logdir + f"/plot_{i}")
-
     io.save_vmc_state(
         config.logdir,
         "train_checkpoint.npz",
         (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
     )
-    # #
-    # # logging.info("Completed VMC! Running postraining of surrogate only.")
-    # # fpath = os.path.join(logdir, "posttrain.txt")
-    # # posttrain_epochs = config.vmc.nposttrain_sg
-    # # with open(fpath, "w") as f:
-    # #     for i in range(posttrain_epochs):
-    # #         (
-    # #             accept_ratio,
-    # #             data,
-    # #             key,
-    # #             msqe,
-    # #             sg_opt_state,
-    # #             sg_params,
-    # #         ) = sg_train_iteration(
-    # #             data,
-    # #             key,
-    # #             sg_opt_state,
-    # #             sg_params,
-    # #             wf_params,
-    # #         )
-    # #
-    # #         logging.info(
-    # #             f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
-    # #         )
-    # #         f.write(f"{msqe}\n")
-    # #
-    # # io.save_vmc_state(
-    # #     config.logdir,
-    # #     "posttrain_checkpoint.npz",
-    # #     (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
-    # # )
-    # logging.info(
-    #     "Completed posttraining of surrogate! Running evaluation of WF energy."
-    # )
+
     logging.info("Completed VMC! Running evalution of WF energy and variance.")
     standard_local_energy_fn = _assemble_mol_local_energy_fn(
         "standard",

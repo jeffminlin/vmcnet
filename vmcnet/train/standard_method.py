@@ -124,7 +124,6 @@ def _get_mcmc_fns(
     return burning_step, walker_fn
 
 
-# TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
     ion_pos: Array,
     ion_charges: Array,
@@ -132,6 +131,8 @@ def _assemble_mol_local_energy_fn(
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> LocalEnergyApply[P]:
+    print(ei_softening)
+    print(ee_softening)
     kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
     ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
         ion_pos, ion_charges, softening_term=ei_softening
@@ -206,9 +207,6 @@ def run_molecule() -> None:
     key, init_pos = physics.core.initialize_molecular_pos(
         key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
     )
-    key, grad_init_pos = physics.core.initialize_molecular_pos(
-        key, config.vmc.nchains, ion_pos, ion_charges, nelec_total, dtype=dtype
-    )
 
     # Make the model
     slog_psi = models.construct.get_model_from_config(
@@ -219,19 +217,9 @@ def run_molecule() -> None:
 
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
 
-    def psi_apply(params, pos):
-        s, l = slog_psi.apply(params, pos)
-        return s * jnp.exp(l)
-
-    def half_log_psi_apply(params, pos):
-        return log_psi_apply(params, pos) / 2
-
     # Make initial data
     data = _make_initial_single_device_data(
         log_psi_apply, config.vmc, init_pos, wf_params
-    )
-    grad_data = _make_initial_single_device_data(
-        half_log_psi_apply, config.vmc, grad_init_pos, wf_params
     )
 
     # Setup metropolis step
@@ -249,21 +237,6 @@ def run_molecule() -> None:
         apply_pmap=False,
     )
 
-    # Setup grad metropolis step
-    grad_metrop_step_fn = dwpa.make_dynamic_pos_amp_gaussian_step(
-        half_log_psi_apply,
-        config.vmc.nmoves_per_width_update,
-        dwpa.make_threshold_adjust_std_move(0.5, 0.05, 0.1),
-    )
-    grad_burning_step = mcmc.metropolis.make_jitted_burning_step(
-        grad_metrop_step_fn, apply_pmap=False
-    )
-    grad_walker_fn = mcmc.metropolis.make_jitted_walker_fn(
-        config.vmc.nsteps_per_param_update,
-        grad_metrop_step_fn,
-        apply_pmap=False,
-    )
-
     standard_local_energy_fn = _assemble_mol_local_energy_fn(
         ion_pos,
         ion_charges,
@@ -277,45 +250,36 @@ def run_molecule() -> None:
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
     )
-    grad_data, key = mcmc.metropolis.burn_data(
-        grad_burning_step, config.vmc.nburn, wf_params, grad_data, key
-    )
 
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
-    grad_update_data_fn = pacore.get_update_data_fn(half_log_psi_apply)
 
-    wf_opt = optax.adam(LR)
+    wf_opt = optax.sgd(LR)
     wf_opt_state = wf_opt.init(wf_params)
+
+    clipping_fn = None
 
     energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
         log_psi_apply,
         standard_local_energy_fn,
         nchains=config.vmc.nchains,
+        clipping_fn=clipping_fn,
     )
 
-    def wf_train_iteration(data, grad_data, key, wf_opt_state, wf_params):
+    def wf_train_iteration(data, key, wf_opt_state, wf_params):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
-        grad_accept_ratio, grad_data, key = grad_walker_fn(wf_params, grad_data, key)
 
         position = data["walker_data"]["position"]
-        # grad_position = grad_data["walker_data"]["position"]
         (energy, aux_data), grad_e = energy_data_val_and_grad(wf_params, key, position)
         variance = aux_data[0]
 
-        norm_grad = jnp.linalg.norm(jax.flatten_util.ravel_pytree(grad_e)[0])
         updates, wf_opt_state = wf_opt.update(grad_e, wf_opt_state)
         wf_params = optax.apply_updates(wf_params, updates)
         data = update_data_fn(data, wf_params)
-        grad_data = grad_update_data_fn(grad_data, wf_params)
         return (
             accept_ratio,
-            grad_accept_ratio,
             energy,
             variance,
-            # mean_inv_abs_psi,
-            norm_grad,
             data,
-            grad_data,
             key,
             wf_opt_state,
             wf_params,
@@ -323,29 +287,19 @@ def run_molecule() -> None:
 
     wf_train_iteration = jax.jit(wf_train_iteration)
 
-    # Scratch on adding more stable scale factor
-    # position = data["walker_data"]["position"]
-    # psi = jax.jit(psi_apply)(wf_params, position)
-    # scale_factor = jnp.mean(1/jnp.abs(psi))
-
     fpath = os.path.join(logdir, "train.txt")
     with open(fpath, "w") as f:
         for i in range(config.vmc.nepochs):
             (
                 accept_ratio,
-                grad_accept_ratio,
                 energy,
                 variance,
-                # mean_inv_abs_psi,
-                norm_grad,
                 data,
-                grad_data,
                 key,
                 wf_opt_state,
                 wf_params,
             ) = wf_train_iteration(
                 data,
-                grad_data,
                 key,
                 wf_opt_state,
                 wf_params,
@@ -353,9 +307,7 @@ def run_molecule() -> None:
 
             logging.info(
                 f"Epoch {i:5d}   Energy {energy:3e}   "
-                f"Variance {variance:3e}   Scale factor: {0:3e}   "
-                f"Norm grad: {norm_grad:3e}   Accept ratio: {accept_ratio:3f}   "
-                f"Grad accept ratio: {grad_accept_ratio:3f}"
+                f"Variance {variance:3e}   Accept ratio: {accept_ratio:3f}"
             )
             f.write(f"{energy} {variance}\n")
 
