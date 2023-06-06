@@ -307,8 +307,6 @@ def run_molecule() -> None:
     LR = config.vmc.optimizer.adam.learning_rate
     sg_LR = config.surrogate.learning_rate
 
-    logging.info(f"WF LR {LR}, SG LR {sg_LR}")
-
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
     )
@@ -338,7 +336,7 @@ def run_molecule() -> None:
 
     fpath = os.path.join(logdir, "pretrain_wf.txt")
     with open(fpath, "w") as f:
-        logging.info("Pretraining WF")
+        logging.info("Pretraining WF with single particle method.")
         for i in range(pretrain_nepochs):
             (
                 accept_ratio,
@@ -361,7 +359,7 @@ def run_molecule() -> None:
             )
             f.write(f"{energy_noclip} {variance_noclip}\n")
 
-    logging.info("Done pretraining WF! Now pretraining surrogate")
+    logging.info("Done pretraining WF! Now pretraining surrogate with MSQE loss.")
 
     wf_energies_and_perms_fn = physics.random_particle.create_wf_energies_and_perms_fn(
         log_psi_apply,
@@ -430,7 +428,9 @@ def run_molecule() -> None:
             )
             f.write(f"{msqe}\n")
 
-    logging.info("Done pretraining surrogate! Running main VMC optimization")
+    logging.info(
+        "Done pretraining surrogate! Running joint VMC optimization of WF and SG."
+    )
     time.sleep(3)
     clipping_fn = _get_clipping_fn(config.vmc)
 

@@ -403,7 +403,7 @@ def get_default_eval_config() -> Dict:
     eval_config = {
         "nchains": 100,
         "nburn": 5000,
-        "nepochs": 2000,
+        "nepochs": 20000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,

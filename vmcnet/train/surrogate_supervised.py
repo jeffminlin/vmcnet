@@ -221,6 +221,7 @@ def run_molecule() -> None:
             burning_step, config.vmc.nburn, wf_params, data, key
         )
 
+        logging.info("Training surrogate based on MSQE loss.")
         for i in range(nepochs):
             (
                 accept_ratio,
