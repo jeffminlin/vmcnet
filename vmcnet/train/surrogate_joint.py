@@ -23,6 +23,10 @@ import vmcnet.mcmc.position_amplitude_core as pacore
 import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
+from vmcnet.updates.parse_config import (
+    _get_adam_optax_optimizer,
+    _get_learning_rate_schedule,
+)
 import vmcnet.utils as utils
 from vmcnet.utils.typing import (
     Array,
@@ -312,7 +316,8 @@ def run_molecule() -> None:
     )
     update_data_fn = jax.jit(pacore.get_update_data_fn(log_psi_apply))
 
-    wf_opt = optax.adam(LR)
+    wf_lr_schedule = _get_learning_rate_schedule(config.vmc.optimizer.adam)
+    wf_opt = _get_adam_optax_optimizer(wf_lr_schedule, config.vmc.optimizer.adam)
     wf_opt_state = wf_opt.init(wf_params)
 
     def wf_pretrain_iteration(
@@ -375,7 +380,8 @@ def run_molecule() -> None:
     sg_val_and_grad_fn = physics.random_particle.create_sg_val_and_grad_fn(surrogate)
     sg_val_and_grad_fn = jax.jit(sg_val_and_grad_fn)
 
-    sg_opt = optax.adam(sg_LR)
+    sg_lr_schedule = _get_learning_rate_schedule(config.surrogate.optimizer.adam)
+    sg_opt = _get_adam_optax_optimizer(sg_lr_schedule, config.surrogate.optimizer.adam)
     sg_opt_state = sg_opt.init(sg_params)
 
     def sg_train_iteration(
@@ -480,6 +486,9 @@ def run_molecule() -> None:
         )
 
     wf_iteration_with_surrogate = jax.jit(wf_iteration_with_surrogate)
+
+    wf_opt_state = wf_opt.init(wf_params)
+    sg_opt_state = sg_opt.init(sg_params)
 
     fpath = os.path.join(logdir, "train.txt")
     with open(fpath, "w") as f:

@@ -312,6 +312,17 @@ def get_default_surrogate_config() -> Dict:
         "input_streams": input_streams,
         "backflow": backflow_config,
         "learning_rate": 0.05,
+        "optimizer": {
+            "adam": {
+                "b1": 0.9,
+                "b2": 0.999,
+                "eps": 1e-8,
+                "eps_root": 0.0,
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,
+                "learning_decay_rate": 1e-4,
+            }
+        },
     }
 
 
