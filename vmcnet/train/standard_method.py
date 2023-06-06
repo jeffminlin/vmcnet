@@ -295,6 +295,13 @@ def run_molecule() -> None:
             )
             f.write(f"{energy} {variance}\n")
 
+            if i % 100 == 0:
+                io.save_vmc_state(
+                    config.logdir,
+                    "train_checkpoint.npz",
+                    (i, data, wf_params.unfreeze(), wf_opt_state, key),
+                )
+
     io.save_vmc_state(
         config.logdir,
         "train_checkpoint.npz",

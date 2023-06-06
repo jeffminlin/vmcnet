@@ -159,7 +159,7 @@ def get_default_model_config() -> Dict:
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
-        "envelope_softening": 0.0,
+        "envelope_softening": 1.0,
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
