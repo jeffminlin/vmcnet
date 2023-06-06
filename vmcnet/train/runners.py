@@ -36,7 +36,7 @@ from vmcnet.utils.typing import (
     ModelApply,
     OptimizerState,
 )
-
+import pickle
 FLAGS = flags.FLAGS
 
 
@@ -242,6 +242,41 @@ def _assemble_mol_local_energy_fn(
             [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
         )
         return local_energy_fn
+    if local_energy_type=='HF':
+        with open('ints.pickle','rb') as f:
+            ints=pickle.load(f)
+        h=ints['ints1e']
+        mnsl=jnp.array(ints['ints2e'])
+        mlsn=jnp.swapaxes(mnsl,-1,-3)
+        S=ints['overlap']
+        BC=jnp.real(jnp.linalg.inv(jax.scipy.linalg.sqrtm(S)))
+
+        ii=physics.potential.create_ion_ion_coulomb_potential(ion_pos,ion_charges)(None,None)
+
+        def UHF_energy(params):
+            C_a=params['C_up']
+            C_b=params['C_down']
+
+            C_a,*_=jnp.linalg.qr(C_a)
+            C_b,*_=jnp.linalg.qr(C_b)
+
+            C_a=jnp.dot(BC,C_a)
+            C_b=jnp.dot(BC,C_b)
+
+            D_a=jnp.inner(C_a,C_a)
+            D_b=jnp.inner(C_b,C_b)
+
+            F_a=h+jnp.sum((D_a+D_b)*mnsl-D_a*mlsn,axis=(-2,-1))
+            F_b=h+jnp.sum((D_a+D_b)*mnsl-D_b*mlsn,axis=(-2,-1))
+            E=0.5*jnp.sum(D_a*(h+F_a)+D_b*(h+F_b))
+            return E+ii
+
+        def local_energy_fn(params,pos,key):
+            energy=UHF_energy(params['params'])
+            return jnp.ones(pos.shape[:-2])*energy
+        
+        return local_energy_fn
+
     if local_energy_type == "ibp":
         ibp_parts = (local_energy_config.ibp.ibp_parts,)
         local_energy_fn = physics.ibp.create_ibp_local_energy(
@@ -330,51 +365,16 @@ def _get_energy_val_and_grad_fn(
     ei_softening = problem_config.ei_softening
     ee_softening = problem_config.ee_softening
 
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        vmc_config.local_energy_type,
+        vmc_config.local_energy,
+        ion_pos,
+        ion_charges,
+        ei_softening,
+        ee_softening,
+        log_psi_apply,
+    )
 
-    if vmc_config.local_energy_type!='HF':
-        local_energy_fn = _assemble_mol_local_energy_fn(
-            vmc_config.local_energy_type,
-            vmc_config.local_energy,
-            ion_pos,
-            ion_charges,
-            ei_softening,
-            ee_softening,
-            log_psi_apply,
-        )
-
-    if vmc_config.local_energy_type=='HF':
-        import pickle
-        with open('ints.pickle','rb') as f:
-            ints=pickle.load(f)
-        h=ints['ints1e']
-        mnsl=jnp.array(ints['ints2e'])
-        mlsn=jnp.swapaxes(mnsl,-1,-3)
-        S=ints['overlap']
-        BC=jnp.real(jnp.linalg.inv(jax.scipy.linalg.sqrtm(S)))
-
-        ii=physics.potential.create_ion_ion_coulomb_potential(ion_pos,ion_charges)(None,None)
-
-        def UHF_energy(params):
-            C_a=params['C_up']
-            C_b=params['C_down']
-
-            C_a,*_=jnp.linalg.qr(C_a)
-            C_b,*_=jnp.linalg.qr(C_b)
-
-            C_a=jnp.dot(BC,C_a)
-            C_b=jnp.dot(BC,C_b)
-
-            D_a=jnp.inner(C_a,C_a)
-            D_b=jnp.inner(C_b,C_b)
-
-            F_a=h+jnp.sum((D_a+D_b)*mnsl-D_a*mlsn,axis=(-2,-1))
-            F_b=h+jnp.sum((D_a+D_b)*mnsl-D_b*mlsn,axis=(-2,-1))
-            E=0.5*jnp.sum(D_a*(h+F_a)+D_b*(h+F_b))
-            return E+ii
-
-        def local_energy_fn(params,pos,key):
-            energy=UHF_energy(params['params'])
-            return jnp.ones(pos.shape[:-2])*energy
 
     clipping_fn = _get_clipping_fn(vmc_config)
 
