@@ -1,6 +1,5 @@
 """Combine pieces to form full models."""
 # TODO (ggoldsh): split this file into smaller component files
-import logging
 from enum import Enum
 import functools
 from typing import Callable, List, Optional, Sequence, Tuple, cast
@@ -1192,30 +1191,7 @@ class FermiNetSurrogate(Module):
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
 
-        # Direct output
-        # return jnp.sum(stream_1e, axis=-1)
-
-        # Sum then 1->1 dense
-        # out_predense = jnp.sum(stream_1e, axis=-1, keepdims=True)
-        # return jnp.squeeze(Dense(1)(out_predense), axis=-1)
-
-        # Many -> 1 dense
         return jnp.squeeze(Dense(1)(stream_1e), axis=-1)
-
-        # Many->1 dense with psi inverse amodified additive and multiplicatively
-        # out_and_psi_inverse_weight = Dense(2)(stream_1e)  # (.., nelec, 2)
-        # out1 = out_and_psi_inverse_weight[..., 0]  # (.., nelec)
-        # out2 = out_and_psi_inverse_weight[..., 1]  # (.., nelec)
-        #
-        # sign_psi_weight = out_and_psi_inverse_weight[..., 2]  # (..., nelec)
-        # sign_psi_weight = jnp.sqrt(sign_psi_weight**2 + 1) - 0.9
-        #
-        # return out1 * smoothed_psi_inverse + out2
-
-        # Just multiply psi_inverse by a weight; implicitly model HPsi with the network
-        # pre_psi_inverse_out = jnp.squeeze(Dense(1)(stream_1e), axis=-1)  # (.., nelec)
-        # modified_psi_inverse = jnp.expand_dims(psi_inverse, axis=-1) / 10 + 1
-        # return modified_psi_inverse * pre_psi_inverse_out
 
 
 class EmbeddedParticleFermiNet(FermiNet):

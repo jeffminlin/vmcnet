@@ -9,7 +9,6 @@ from typing import Any, Optional, Tuple
 
 import chex
 import flax
-import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -113,41 +112,6 @@ def _get_and_init_model(
         params = utils.distribute.replicate_all_local_devices(params)
     log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
     return log_psi_apply, params, key
-
-
-def _get_and_init_surrogate(
-    surrogate_config: ConfigDict,
-    ion_pos: Array,
-    nelec: Array,
-    init_pos: Array,
-    key: PRNGKey,
-    dtype=jnp.float32,
-    apply_pmap: bool = True,
-) -> Tuple[ModelApply[flax.core.FrozenDict], Any, PRNGKey]:
-    spin_split = models.construct.get_spin_split(nelec)
-
-    compute_input_streams = models.construct.get_compute_input_streams_from_config(
-        surrogate_config.input_streams, ion_pos
-    )
-
-    backflow = models.construct.get_backflow_from_config(
-        surrogate_config.backflow,
-        spin_split,
-        dtype=dtype,
-    )
-
-    surrogate = models.construct.FermiNetSurrogate(
-        spin_split, compute_input_streams, backflow
-    )
-    key, subkey = jax.random.split(key)
-    surrogate_params = surrogate.init(subkey, init_pos[0:1])
-
-    if apply_pmap:
-        surrogate_params = utils.distribute.replicate_all_local_devices(
-            surrogate_params
-        )
-
-    return surrogate.apply, surrogate_params, key
 
 
 # TODO: figure out how to merge this and other distributing logic with the current
@@ -256,7 +220,6 @@ def _assemble_mol_local_energy_fn(
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
-    surrogate: ModelApply[P],
 ) -> LocalEnergyApply[P]:
     if local_energy_type == "standard":
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
@@ -292,7 +255,6 @@ def _assemble_mol_local_energy_fn(
         local_energy_fn = (
             physics.random_particle.create_molecular_random_particle_local_energy(
                 log_psi_apply,
-                surrogate,
                 ion_pos,
                 ion_charges,
                 nparticles,
@@ -358,7 +320,6 @@ def _get_energy_val_and_grad_fn(
     ion_pos: Array,
     ion_charges: Array,
     log_psi_apply: ModelApply[P],
-    surrogate: ModelApply[P],
 ) -> physics.core.ValueGradEnergyFn[P]:
     ei_softening = problem_config.ei_softening
     ee_softening = problem_config.ee_softening
@@ -371,7 +332,6 @@ def _get_energy_val_and_grad_fn(
         ei_softening,
         ee_softening,
         log_psi_apply,
-        surrogate,
     )
 
     clipping_fn = _get_clipping_fn(vmc_config)
@@ -400,12 +360,11 @@ def _setup_vmc(
     apply_pmap: bool = True,
 ) -> Tuple[
     ModelApply[flax.core.FrozenDict],
-    ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
     updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
     GetAmplitudeFromData[dwpa.DWPAData],
-    Any,
+    flax.core.FrozenDict,
     dwpa.DWPAData,
     OptimizerState,
     PRNGKey,
@@ -416,7 +375,7 @@ def _setup_vmc(
     )
 
     # Make the model
-    log_psi_apply, wf_params, key = _get_and_init_model(
+    log_psi_apply, params, key = _get_and_init_model(
         config.model,
         ion_pos,
         ion_charges,
@@ -427,19 +386,9 @@ def _setup_vmc(
         apply_pmap=apply_pmap,
     )
 
-    surrogate, sg_params, key = _get_and_init_surrogate(
-        config.surrogate,
-        ion_pos,
-        nelec,
-        init_pos,
-        key,
-        dtype=dtype,
-        apply_pmap=apply_pmap,
-    )
-
     # Make initial data
     data = _make_initial_data(
-        log_psi_apply, config.vmc, init_pos, wf_params, apply_pmap=apply_pmap
+        log_psi_apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
     )
     get_amplitude_fn = pacore.get_amplitude_from_data
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
@@ -450,10 +399,8 @@ def _setup_vmc(
     )
 
     energy_data_val_and_grad = _get_energy_val_and_grad_fn(
-        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply, surrogate
+        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
     )
-
-    params = {"wf": wf_params, "sg": sg_params}
 
     # Setup parameter updates
     if apply_pmap:
@@ -476,7 +423,6 @@ def _setup_vmc(
 
     return (
         log_psi_apply,
-        surrogate,
         burning_step,
         walker_fn,
         update_param_fn,
@@ -513,7 +459,6 @@ def _setup_eval(
         ei_softening,
         ee_softening,
         log_psi_apply,
-        None,
     )
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
         local_energy_fn,
@@ -593,11 +538,9 @@ def _burn_and_run_vmc(
         nhistory_max = 0
         check_for_nans = False
 
-    burn_params = params if is_eval else params["wf"]
     data, key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, burn_params, data, key
+        burning_step, run_config.nburn, params, data, key
     )
-
     return train.vmc.vmc_loop(
         params,
         optimizer_state,
@@ -617,7 +560,6 @@ def _burn_and_run_vmc(
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
         is_pmapped=is_pmapped,
-        is_eval=is_eval,
     )
 
 
@@ -653,7 +595,6 @@ def run_molecule() -> None:
 
     (
         log_psi_apply,
-        surrogate,
         burning_step,
         walker_fn,
         update_param_fn,
@@ -694,13 +635,7 @@ def run_molecule() -> None:
             data, params, optimizer_state, key
         )
 
-    (
-        params,
-        optimizer_state,
-        data,
-        key,
-        nans_detected,
-    ) = _burn_and_run_vmc(
+    params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
         logdir,
         params,
@@ -719,7 +654,7 @@ def run_molecule() -> None:
         logging.info("VMC terminated due to Nans! Aborting.")
         return
     else:
-        logging.info("Completed VMC! Starting evaluation.")
+        logging.info("Completed VMC! Evaluating")
 
     # TODO: integrate the stuff in mcmc/statistics and write out an evaluation summary
     # (energy, var, overall mean acceptance ratio, std error, iac) to eval_logdir, post
@@ -742,7 +677,7 @@ def run_molecule() -> None:
         key, data = _make_new_data_for_eval(
             config,
             log_psi_apply,
-            params["wf"],
+            params,
             ion_pos,
             ion_charges,
             nelec,
@@ -754,7 +689,7 @@ def run_molecule() -> None:
     _burn_and_run_vmc(
         config.eval,
         eval_logdir,
-        params["wf"],
+        params,
         optimizer_state,
         data,
         eval_burning_step,

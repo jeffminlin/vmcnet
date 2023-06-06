@@ -1,12 +1,10 @@
 """Entry points for running standard jobs."""
 import datetime
-import functools
 import logging
 import os
 import subprocess
-from typing import Optional, Tuple
+from typing import Tuple
 
-import chex
 import jax
 import jax.numpy as jnp
 
@@ -216,9 +214,13 @@ def run_molecule() -> None:
     sg_train_iteration = jax.jit(sg_train_iteration)
 
     fpath = os.path.join(logdir, "train.txt")
-
     nepochs = config.vmc.nsupervised
+
     with open(fpath, "w") as f:
+        data, key = mcmc.metropolis.burn_data(
+            burning_step, config.vmc.nburn, wf_params, data, key
+        )
+
         for i in range(nepochs):
             (
                 accept_ratio,

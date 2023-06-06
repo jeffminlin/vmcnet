@@ -103,7 +103,7 @@ def process_checkpoint_data_for_saving(
     only copy. Params must also be converted from a frozen_dict to a dict.
     """
     (epoch, data, params, optimizer_state, key) = checkpoint_data
-    params = {"wf": params["wf"].unfreeze(), "sg": params["sg"].unfreeze()}
+    params = params.unfreeze()
     if is_distributed:
         params = get_first(params)
         optimizer_state = get_first(optimizer_state)

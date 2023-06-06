@@ -113,14 +113,9 @@ def create_grad_energy_update_param_fn(
         params, optimizer_state = optimizer_apply(
             grad_energy, params, optimizer_state, data
         )
-        data = update_data_fn(data, params["wf"])
+        data = update_data_fn(data, params)
 
-        metrics = {
-            "energy": energy,
-            "variance": aux_energy_data[0],
-            "sg_error": aux_energy_data[4],
-        }
-
+        metrics = {"energy": energy, "variance": aux_energy_data[0]}
         metrics = _update_metrics_with_noclip(
             aux_energy_data[2], aux_energy_data[3], metrics
         )
@@ -184,14 +179,13 @@ def create_kfac_update_param_fn(
             momentum=momentum,
             damping=damping,
         )
-        data = update_data_fn(data, params["wf"])
+        data = update_data_fn(data, params)
 
         energy = stats["loss"]
         variance = stats["aux"][0]
         energy_noclip = stats["aux"][2]
         variance_noclip = stats["aux"][3]
-        sg_error = stats["aux"][4]
-        picked_stats = (energy, variance, energy_noclip, variance_noclip, sg_error)
+        picked_stats = (energy, variance, energy_noclip, variance_noclip)
 
         if record_param_l1_norm:
             param_l1_norm = traced_compute_param_norm(params)
@@ -201,11 +195,7 @@ def create_kfac_update_param_fn(
         if optimizer.multi_device:
             stats_to_save = [utils.distribute.get_first(stat) for stat in picked_stats]
 
-        metrics = {
-            "energy": stats_to_save[0],
-            "variance": stats_to_save[1],
-            "sg_error": stats_to_save[4],
-        }
+        metrics = {"energy": stats_to_save[0], "variance": stats_to_save[1]}
         metrics = _update_metrics_with_noclip(
             stats_to_save[2], stats_to_save[3], metrics
         )

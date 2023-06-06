@@ -29,7 +29,7 @@ from vmcnet.utils.typing import (
 
 T = TypeVar("T")
 
-CHECKPOINT_FILE_NAME = "train_checkpoint.npz"
+CHECKPOINT_FILE_NAME = "checkpoint.npz"
 
 
 @dataclass
@@ -623,14 +623,11 @@ def save_metrics_and_regular_checkpoint(
     return checkpoint_str, nans_detected
 
 
-def log_vmc_loop_state(
-    epoch: int, metrics: Dict, checkpoint_str: str, is_eval: bool
-) -> None:
+def log_vmc_loop_state(epoch: int, metrics: Dict, checkpoint_str: str) -> None:
     """Log current energy, variance, and accept ratio, w/ optional unclipped values."""
     epoch_str = "Epoch %(epoch)5d"
     energy_str = "Energy: %(energy).5e"
     variance_str = "Variance: %(variance).5e"
-    sg_error_str = "Surrogate error: %(sg_error).5e"
     accept_ratio_str = "Accept ratio: %(accept_ratio).5f"
     amplitude_str = ""
 
@@ -643,17 +640,9 @@ def log_vmc_loop_state(
     if "amplitude_min" in metrics:
         amplitude_str = "Min/max amplitude: %(amplitude_min).2f/%(amplitude_max).2f"
 
-    msg_strs = [
-        epoch_str,
-        energy_str,
-        variance_str,
-        accept_ratio_str,
-        amplitude_str,
-    ]
-    if not is_eval:
-        msg_strs.append(sg_error_str)
-
-    info_out = ", ".join(msg_strs)
+    info_out = ", ".join(
+        [epoch_str, energy_str, variance_str, accept_ratio_str, amplitude_str]
+    )
     info_out = info_out + checkpoint_str
 
     logged_metrics = {"epoch": epoch + 1}

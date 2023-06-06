@@ -1,5 +1,4 @@
 """Core local energy and gradient construction routines."""
-import logging
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex
@@ -337,7 +336,6 @@ def create_value_and_grad_energy_fn(
     def standard_energy_val_and_grad(params, key, positions):
         del key
 
-        logging.info("Using standard energy val grad")
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
         )(params, positions, None)

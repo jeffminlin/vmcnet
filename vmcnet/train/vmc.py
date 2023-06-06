@@ -29,7 +29,6 @@ def vmc_loop(
     get_amplitude_fn: Optional[GetAmplitudeFromData[D]] = None,
     nhistory_max: int = 200,
     is_pmapped=True,
-    is_eval=False,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
@@ -114,8 +113,7 @@ def vmc_loop(
             old_data = data.copy()
             old_key = key.copy()
 
-            data_params = params if is_eval else params["wf"]
-            accept_ratio, data, key = walker_fn(data_params, data, key)
+            accept_ratio, data, key = walker_fn(params, data, key)
 
             params, data, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
@@ -156,7 +154,7 @@ def vmc_loop(
                 record_amplitudes=record_amplitudes,
                 get_amplitude_fn=get_amplitude_fn,
             )
-            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str, is_eval)
+            utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
             if nans_detected:
                 break

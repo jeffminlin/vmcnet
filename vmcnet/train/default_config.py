@@ -78,7 +78,7 @@ def get_default_config() -> ConfigDict:
                 "dtype": "float32",
                 "distribute": True,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
-                "initial_seed": 2,
+                "initial_seed": 0,
             }
         )
     )
@@ -287,7 +287,8 @@ def get_default_surrogate_config() -> Dict:
 
     backflow_config = {
         # "ndense_list": ((16, 4), (16, 4), (16, 4), (16,)),
-        "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
+        # "ndense_list": ((64, 16 ), (64, 16), (64, 16), (64,)),
+        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
         "kernel_init_transformer": orthogonal_init,
@@ -311,7 +312,6 @@ def get_default_surrogate_config() -> Dict:
         "input_streams": input_streams,
         "backflow": backflow_config,
         "learning_rate": 0.05,
-        "nsteps_per_wf_update": 1,
     }
 
 
@@ -352,7 +352,7 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "adam",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
