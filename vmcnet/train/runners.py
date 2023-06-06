@@ -350,26 +350,31 @@ def _get_energy_val_and_grad_fn(
         mnsl=jnp.array(ints['ints2e'])
         mlsn=jnp.swapaxes(mnsl,-1,-3)
         S=ints['overlap']
+        BC=jnp.real(jnp.linalg.inv(jax.scipy.linalg.sqrtm(S)))
+
+        ii=physics.potential.create_ion_ion_coulomb_potential(ion_pos,ion_charges)(None,None)
 
         def UHF_energy(params):
             C_a=params['C_up']
             C_b=params['C_down']
 
+            C_a,*_=jnp.linalg.qr(C_a)
+            C_b,*_=jnp.linalg.qr(C_b)
+
+            C_a=jnp.dot(BC,C_a)
+            C_b=jnp.dot(BC,C_b)
+
             D_a=jnp.inner(C_a,C_a)
             D_b=jnp.inner(C_b,C_b)
 
-            F_a=h+(D_a+D_b)*mnsl-D_a*mlsn
-            F_b=h+(D_a+D_b)*mnsl-D_b*mlsn
-
+            F_a=h+jnp.sum((D_a+D_b)*mnsl-D_a*mlsn,axis=(-2,-1))
+            F_b=h+jnp.sum((D_a+D_b)*mnsl-D_b*mlsn,axis=(-2,-1))
             E=0.5*jnp.sum(D_a*(h+F_a)+D_b*(h+F_b))
-
-            N=0.5*jnp.sum(D_a*S+D_b*S)
-            return E/N
+            return E+ii
 
         def local_energy_fn(params,pos,key):
             energy=UHF_energy(params['params'])
             return jnp.ones(pos.shape[:-2])*energy
-
 
     clipping_fn = _get_clipping_fn(vmc_config)
 
