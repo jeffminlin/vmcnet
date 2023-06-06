@@ -19,6 +19,7 @@ import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
 import vmcnet.utils as utils
+import vmcnet.utils.io as io
 from vmcnet.utils.typing import (
     Array,
     P,
@@ -214,8 +215,9 @@ def run_molecule() -> None:
     sg_train_iteration = jax.jit(sg_train_iteration)
 
     fpath = os.path.join(logdir, "train.txt")
-    nepochs = config.vmc.nsupervised
+    nepochs = config.vmc.nepochs
 
+    logging.info(f"Saving to {logdir}")
     with open(fpath, "w") as f:
         data, key = mcmc.metropolis.burn_data(
             burning_step, config.vmc.nburn, wf_params, data, key
@@ -242,5 +244,11 @@ def run_molecule() -> None:
                 f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
             )
             f.write(f"{msqe}\n")
+
+    io.save_vmc_state(
+        logdir,
+        "checkpoint.npz",
+        (-1, data, {"wf": wf_params, "sg": sg_params}, sg_opt_state, key),
+    )
 
     logging.info("Done training surrogate! Terminating.")

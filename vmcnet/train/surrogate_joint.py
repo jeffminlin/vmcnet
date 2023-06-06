@@ -337,6 +337,8 @@ def run_molecule() -> None:
     fpath = os.path.join(logdir, "pretrain_wf.txt")
     with open(fpath, "w") as f:
         logging.info("Pretraining WF with single particle method.")
+        logging.info(f"Saving to {logdir}")
+
         for i in range(pretrain_nepochs):
             (
                 accept_ratio,
@@ -521,7 +523,7 @@ def run_molecule() -> None:
 
     io.save_vmc_state(
         config.logdir,
-        "train_checkpoint.npz",
+        "checkpoint.npz",
         (-1, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
     )
 
