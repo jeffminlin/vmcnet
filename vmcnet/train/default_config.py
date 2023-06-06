@@ -78,7 +78,7 @@ def get_default_config() -> ConfigDict:
                 "dtype": "float32",
                 "distribute": True,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
-                "initial_seed": 0,
+                "initial_seed": 2,
             }
         )
     )

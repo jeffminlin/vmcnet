@@ -29,7 +29,7 @@ from vmcnet.utils.typing import (
 
 T = TypeVar("T")
 
-CHECKPOINT_FILE_NAME = "checkpoint.npz"
+CHECKPOINT_FILE_NAME = "train_checkpoint.npz"
 
 
 @dataclass

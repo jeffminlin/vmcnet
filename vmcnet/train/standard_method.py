@@ -298,7 +298,7 @@ def run_molecule() -> None:
     io.save_vmc_state(
         config.logdir,
         "train_checkpoint.npz",
-        (-1, data, wf_params, wf_opt_state, key),
+        (-1, data, wf_params.unfreeze(), wf_opt_state, key),
     )
 
     logging.info("Completed VMC! Running evaluation of WF energy.")
@@ -310,6 +310,10 @@ def run_molecule() -> None:
     energy_sum = 0.0
     variance_sum = 0.0
 
+    vmap_local_energy = jax.vmap(
+        standard_local_energy_fn, in_axes=(None, 0, None), out_axes=0
+    )
+
     def eval_iteration(
         data,
         energy_sum,
@@ -318,7 +322,7 @@ def run_molecule() -> None:
     ):
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
-        local_energies = standard_local_energy_fn(wf_params, position, None)
+        local_energies = vmap_local_energy(wf_params, position, None)
         energy = jnp.mean(local_energies)
         variance = jnp.mean(local_energies**2 - jnp.mean(local_energies) ** 2)
         energy_sum += energy
