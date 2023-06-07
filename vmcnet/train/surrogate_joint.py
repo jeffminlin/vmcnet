@@ -529,6 +529,12 @@ def run_molecule() -> None:
                 f"Epoch {i:5d}   Energy {energy_noclip:3e}   Variance {variance_noclip:3e}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
             )
             f.write(f"{energy_noclip} {variance_noclip} {msqe}\n")
+            if i % 100 == 0:
+                io.save_vmc_state(
+                    config.logdir,
+                    "checkpoint.npz",
+                    (i, data, {"wf": wf_params, "sg": sg_params}, wf_opt_state, key),
+                )
 
     io.save_vmc_state(
         config.logdir,

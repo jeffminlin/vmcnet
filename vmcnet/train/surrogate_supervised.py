@@ -18,6 +18,10 @@ import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
 import vmcnet.models as models
 import vmcnet.physics as physics
 import vmcnet.train as train
+from vmcnet.updates.parse_config import (
+    _get_adam_optax_optimizer,
+    _get_learning_rate_schedule,
+)
 import vmcnet.utils as utils
 import vmcnet.utils.io as io
 from vmcnet.utils.typing import (
@@ -184,7 +188,8 @@ def run_molecule() -> None:
     sg_val_and_grad_fn = physics.random_particle.create_sg_val_and_grad_fn(surrogate)
     sg_val_and_grad_fn = jax.jit(sg_val_and_grad_fn)
 
-    sg_opt = optax.adam(config.surrogate.learning_rate)
+    sg_lr_schedule = _get_learning_rate_schedule(config.vmc.optimizer.adam)
+    sg_opt = _get_adam_optax_optimizer(sg_lr_schedule, config.vmc.optimizer.adam)
     sg_opt_state = sg_opt.init(sg_params)
 
     def sg_train_iteration(
@@ -244,6 +249,13 @@ def run_molecule() -> None:
                 f"Epoch {i:5d}   MSQE {msqe:3e}   Accept ratio: {accept_ratio:3f}"
             )
             f.write(f"{msqe}\n")
+
+            if i % 100 == 0:
+                io.save_vmc_state(
+                    logdir,
+                    "checkpoint.npz",
+                    (-i, data, {"wf": wf_params, "sg": sg_params}, sg_opt_state, key),
+                )
 
     io.save_vmc_state(
         logdir,
