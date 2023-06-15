@@ -9,6 +9,7 @@ from typing import Any, Optional, Tuple
 
 import chex
 import flax
+import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -103,14 +104,16 @@ def _get_and_init_model(
     dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> Tuple[ModelApply[flax.core.FrozenDict], Any, PRNGKey]:
-    slog_psi = models.construct.get_model_from_config(
-        model_config, nelec, ion_pos, ion_charges, dtype=dtype
-    )
-    key, subkey = jax.random.split(key)
-    params = slog_psi.init(subkey, init_pos[0:1])
+    def c_init(key, shape):
+        return jnp.array([0.5, 1.0, 1.5])
+
+    model = models.construct.ExpHModel(c_init)
+    params = model.init(key, init_pos)
+    log_psi_apply = model.apply
+
     if apply_pmap:
         params = utils.distribute.replicate_all_local_devices(params)
-    log_psi_apply = models.construct.slog_psi_to_log_psi_apply(slog_psi.apply)
+
     return log_psi_apply, params, key
 
 
@@ -591,7 +594,9 @@ def run_molecule() -> None:
         config, dtype=dtype_to_use
     )
 
-    key = jax.random.PRNGKey(config.initial_seed)
+    import numpy as np
+
+    key = jax.random.PRNGKey(np.random.randint(0, 10000))
 
     (
         log_psi_apply,

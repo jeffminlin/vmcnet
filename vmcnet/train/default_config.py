@@ -73,7 +73,7 @@ def get_default_config() -> ConfigDict:
                 # if save_to_current_datetime_subfolder=True, will log into a subfolder
                 # named according to the datetime at start
                 "save_to_current_datetime_subfolder": True,
-                "logging_level": "WARNING",
+                "logging_level": "INFO",
                 "dtype": "float32",
                 "distribute": True,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
@@ -269,9 +269,15 @@ def get_default_model_config() -> Dict:
 def get_default_molecular_config() -> Dict:
     """Get a default molecular configuration (LiH)."""
     problem_config = {
-        "ion_pos": ((0.0, 0.0, -1.5069621), (0.0, 0.0, 1.5069621)),
-        "ion_charges": (1.0, 3.0),
-        "nelec": (2, 2),
+        "ion_pos": (
+            (
+                0.0,
+                0.0,
+                0.0,
+            ),
+        ),
+        "ion_charges": (1.0,),
+        "nelec": (1, 0),
         "ei_softening": 0.0,
         "ee_softening": 0.0,
     }
@@ -281,9 +287,9 @@ def get_default_molecular_config() -> Dict:
 def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
-        "nchains": 2000,
-        "nepochs": 200000,
-        "nburn": 5000,
+        "nchains": 100,
+        "nepochs": 4000,
+        "nburn": 1000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "std_move": 0.25,
@@ -300,45 +306,45 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "adam",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
-                "norm_constraint": 0.001,
+                "norm_constraint": 1.0,
                 "curvature_ema": 0.95,
                 "inverse_update_period": 1,
                 "min_damping": 1e-4,
                 "register_only_generic": False,
                 "estimation_mode": "fisher_exact",
                 "damping": 0.001,
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,
+                "schedule_type": "constant",  # constant or inverse_time
+                "learning_rate": 0.05,
                 "learning_decay_rate": 1e-4,
             },
             "adam": {
                 "b1": 0.9,
-                "b2": 0.999,
+                "b2": 0.9,
                 "eps": 1e-8,
                 "eps_root": 0.0,
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,
+                "schedule_type": "constant",  # constant or inverse_time
+                "learning_rate": 0.5,
                 "learning_decay_rate": 1e-4,
             },
             "sgd": {
-                "momentum": 0.0,
+                "momentum": 0.9,
                 "nesterov": False,
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,
+                "schedule_type": "constant",  # constant or inverse_time
+                "learning_rate": 0.5,
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
                 "damping": 1.0,  # needs to be tuned with everything else
                 "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                 "descent_type": "sgd",
-                "norm_constraint": 0.001,
+                "norm_constraint": 1.0,
                 "mode": "lazy",
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "schedule_type": "constant",  # constant or inverse_time
+                "learning_rate": 5.0,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
             },
         },
@@ -349,9 +355,9 @@ def get_default_vmc_config() -> Dict:
 def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
-        "nchains": 2000,
-        "nburn": 5000,
-        "nepochs": 20000,
+        "nchains": 100,
+        "nburn": 1000,
+        "nepochs": 1000,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "record_amplitudes": False,

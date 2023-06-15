@@ -124,6 +124,15 @@ def vmc_loop(
                 continue
 
             metrics["accept_ratio"] = accept_ratio
+            metrics["c1"] = old_params["params"]["ElementWiseMultiply_0"]["kernel"][
+                ..., 0
+            ]
+            metrics["c2"] = old_params["params"]["ElementWiseMultiply_0"]["kernel"][
+                ..., 1
+            ]
+            metrics["c3"] = old_params["params"]["ElementWiseMultiply_0"]["kernel"][
+                ..., 2
+            ]
 
             (
                 checkpoint_metric,
