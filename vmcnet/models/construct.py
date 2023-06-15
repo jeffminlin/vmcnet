@@ -741,25 +741,6 @@ class ExpHModel(Module):
         return -jnp.sum(prods, axis=-1)
 
 
-class GaussHModel(Module):
-    c_init: Callable
-
-    @flax.linen.compact
-    def __call__(self, pos: Array):
-        r = jnp.linalg.norm(pos, axis=-1)
-        r1 = r**2
-        r2 = r**2 + r**2 * jnp.exp(-((r - 5) ** 2) / 3)
-        r3 = r**2 + r**2 * jnp.exp(-((r - 2) ** 2))
-
-        rvals = jnp.concatenate(
-            [r1, r2, r3],
-            axis=-1,
-        )
-
-        prods = jnp.abs(ElementWiseMultiply(1, self.c_init)(rvals))
-        return -jnp.sum(prods, axis=-1)
-
-
 class SoftHModel(Module):
     c_init: Callable
 

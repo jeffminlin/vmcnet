@@ -302,29 +302,29 @@ def get_default_vmc_config() -> Dict:
         "checkpoint_variance_scale": 10,
         "check_for_nans": False,
         "nhistory_max": 200,
-        "record_amplitudes": True,
+        "record_amplitudes": False,
         "record_param_l1_norm": False,
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "sgd",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
                 "norm_constraint": 1.0,
-                "curvature_ema": 0.8,
+                "curvature_ema": 0.95,
                 "inverse_update_period": 1,
                 "min_damping": 1e-4,
                 "register_only_generic": False,
                 "estimation_mode": "fisher_exact",
-                "damping": 0.1,
+                "damping": 0.001,
                 "schedule_type": "constant",  # constant or inverse_time
                 "learning_rate": 0.5,
                 "learning_decay_rate": 1e-4,
             },
             "adam": {
                 "b1": 0.9,
-                "b2": 0.9,
+                "b2": 0.999,
                 "eps": 1e-8,
                 "eps_root": 0.0,
                 "schedule_type": "constant",  # constant or inverse_time
