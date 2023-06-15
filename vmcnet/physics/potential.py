@@ -88,6 +88,7 @@ def create_electron_ion_coulomb_potential(
     strength: chex.Scalar = 1.0,
     softening_term: chex.Scalar = 0.0,
     nparticles: Optional[int] = None,
+    mode="standard",
 ) -> ModelApply[ModelParams]:
     """Computes the total coulomb potential attraction between electron and ion.
 
@@ -119,10 +120,22 @@ def create_electron_ion_coulomb_potential(
             x = x[..., :nparticles, :]
 
         electron_ion_displacements = compute_displacements(x, ion_locations)
-        electron_ion_distances = compute_soft_norm(
-            electron_ion_displacements, softening_term=softening_term
-        )
-        coulomb_attraction = ion_charges / electron_ion_distances
+        if mode == "standard":
+            print("Using standard potential")
+            electron_ion_distances = compute_soft_norm(
+                electron_ion_displacements, softening_term=softening_term
+            )
+            coulomb_attraction = ion_charges / electron_ion_distances
+        elif mode == "soft":
+            r = compute_soft_norm(electron_ion_displacements, softening_term=0.0)
+            softr = jnp.sqrt(r**2 + 1)
+            print("Using soft potential")
+            coulomb_attraction = -ion_charges * (
+                1 / 2 * ((r**2 * softr - 1) / softr**3 - 2 / softr) - 1
+            )
+        else:
+            raise Exception()
+
         return -strength * jnp.sum(coulomb_attraction, axis=(-1, -2)) * multiplier
 
     return potential_fn

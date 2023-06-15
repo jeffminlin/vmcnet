@@ -325,7 +325,7 @@ def create_value_and_grad_energy_fn(
 
     def get_standard_contribution(local_energies_noclip, params, positions):
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+            local_energies_noclip, nchains, None, nan_safe
         )
         centered_local_energies = local_energies - energy
         grad_E = jax.grad(standard_estimator_forward, argnums=0)(

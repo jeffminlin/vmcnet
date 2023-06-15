@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
+from vmcnet.physics.potential import compute_soft_norm
 from vmcnet.models import antiequivariance
 from vmcnet.utils.slog_helpers import array_to_slog, slog_sum_over_axis
 from vmcnet.utils.typing import (
@@ -735,6 +736,45 @@ class ExpHModel(Module):
         r3 = r + jnp.exp(-((r - 2) ** 2))
 
         rvals = jnp.concatenate([r, r2, r3], axis=-1)
+
+        prods = jnp.abs(ElementWiseMultiply(1, self.c_init)(rvals))
+        return -jnp.sum(prods, axis=-1)
+
+
+class GaussHModel(Module):
+    c_init: Callable
+
+    @flax.linen.compact
+    def __call__(self, pos: Array):
+        r = jnp.linalg.norm(pos, axis=-1)
+        r1 = r**2
+        r2 = r**2 + r**2 * jnp.exp(-((r - 5) ** 2) / 3)
+        r3 = r**2 + r**2 * jnp.exp(-((r - 2) ** 2))
+
+        rvals = jnp.concatenate(
+            [r1, r2, r3],
+            axis=-1,
+        )
+
+        prods = jnp.abs(ElementWiseMultiply(1, self.c_init)(rvals))
+        return -jnp.sum(prods, axis=-1)
+
+
+class SoftHModel(Module):
+    c_init: Callable
+
+    @flax.linen.compact
+    def __call__(self, pos: Array):
+        r = jnp.linalg.norm(pos, axis=-1)
+        softr = jnp.sqrt(r**2 + 1) - 1
+        r1 = softr
+        r2 = softr + jnp.exp(-((r - 5) ** 2) / 3)
+        r3 = softr + jnp.exp(-((r - 2) ** 2))
+
+        rvals = jnp.concatenate(
+            [r1, r2, r3],
+            axis=-1,
+        )
 
         prods = jnp.abs(ElementWiseMultiply(1, self.c_init)(rvals))
         return -jnp.sum(prods, axis=-1)

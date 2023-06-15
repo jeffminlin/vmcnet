@@ -95,6 +95,7 @@ def _get_electron_ion_config_as_arrays(
 
 
 def _get_and_init_model(
+    mode: str,
     model_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
@@ -107,7 +108,15 @@ def _get_and_init_model(
     def c_init(key, shape):
         return jnp.array([0.5, 1.0, 1.5])
 
-    model = models.construct.ExpHModel(c_init)
+    if mode == "standard":
+        print("Using standard model")
+        model = models.construct.ExpHModel(c_init)
+    elif mode == "soft":
+        print("Using soft model")
+        model = models.construct.SoftHModel(c_init)
+    else:
+        raise Exception()
+
     params = model.init(key, init_pos)
     log_psi_apply = model.apply
 
@@ -222,12 +231,16 @@ def _assemble_mol_local_energy_fn(
     ion_charges: Array,
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
+    mode: str,
     log_psi_apply: ModelApply[P],
 ) -> LocalEnergyApply[P]:
     if local_energy_type == "standard":
         kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
         ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-            ion_pos, ion_charges, softening_term=ei_softening
+            ion_pos,
+            ion_charges,
+            softening_term=ei_softening,
+            mode=mode,
         )
         ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
             softening_term=ee_softening
@@ -334,6 +347,7 @@ def _get_energy_val_and_grad_fn(
         ion_charges,
         ei_softening,
         ee_softening,
+        problem_config.mode,
         log_psi_apply,
     )
 
@@ -379,6 +393,7 @@ def _setup_vmc(
 
     # Make the model
     log_psi_apply, params, key = _get_and_init_model(
+        config.problem.mode,
         config.model,
         ion_pos,
         ion_charges,
@@ -461,6 +476,7 @@ def _setup_eval(
         ion_charges,
         ei_softening,
         ee_softening,
+        problem_config.mode,
         log_psi_apply,
     )
     eval_update_param_fn = updates.params.create_eval_update_param_fn(
