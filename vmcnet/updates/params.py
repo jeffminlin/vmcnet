@@ -114,7 +114,7 @@ def create_grad_energy_update_param_fn(
         max_norm = 0.001
 
         def restrain_norm(array):
-            return jnp.where(norm_grad > max_norm, array / norm_grad * max_norm)
+            return jnp.where(norm_grad > max_norm, array / norm_grad * max_norm, array)
 
         grad_energy = jax.tree_map(restrain_norm, grad_energy)
 
