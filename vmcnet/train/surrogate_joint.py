@@ -193,7 +193,7 @@ def _get_clipping_fn(
     return clipping_fn
 
 
-def _get_random_particle_energy_val_and_grad_fn(
+def _get_standard_energy_val_and_grad_fn(
     vmc_config: ConfigDict,
     problem_config: ConfigDict,
     ion_pos: Array,
@@ -204,7 +204,7 @@ def _get_random_particle_energy_val_and_grad_fn(
     ee_softening = problem_config.ee_softening
 
     local_energy_fn = _assemble_mol_local_energy_fn(
-        "random_particle",
+        "standard",
         vmc_config.local_energy,
         ion_pos,
         ion_charges,
@@ -221,7 +221,7 @@ def _get_random_particle_energy_val_and_grad_fn(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        local_energy_type="random_particle",
+        local_energy_type="standard",
     )
 
     return energy_data_val_and_grad
@@ -297,8 +297,8 @@ def run_molecule() -> None:
         apply_pmap=False,
     )
 
-    random_particle_energy_data_val_and_grad = jax.jit(
-        _get_random_particle_energy_val_and_grad_fn(
+    standard_energy_data_val_and_grad = jax.jit(
+        _get_standard_energy_val_and_grad_fn(
             config.vmc,
             config.problem,
             ion_pos,
@@ -308,8 +308,6 @@ def run_molecule() -> None:
     )
 
     pretrain_nepochs = config.vmc.npretrain_wf
-    LR = config.vmc.optimizer.adam.learning_rate
-    sg_LR = config.surrogate.learning_rate
 
     data, key = mcmc.metropolis.burn_data(
         burning_step, config.vmc.nburn, wf_params, data, key
@@ -329,7 +327,7 @@ def run_molecule() -> None:
         accept_ratio, data, key = walker_fn(wf_params, data, key)
         position = data["walker_data"]["position"]
         key, subkey = jax.random.split(key)
-        (_, aux_data), grad_e = random_particle_energy_data_val_and_grad(
+        (_, aux_data), grad_e = standard_energy_data_val_and_grad(
             wf_params, subkey, position
         )
         updates, wf_opt_state = wf_opt.update(grad_e, wf_opt_state)
