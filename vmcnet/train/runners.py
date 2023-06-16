@@ -623,16 +623,16 @@ def run_molecule() -> None:
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
-        _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
+        _, data, params, reload_opt_state, key = utils.io.reload_vmc_state(
             directory, filename
         )
         (
             data,
             params,
-            optimizer_state,
+            _,
             key,
         ) = utils.distribute.distribute_vmc_state_from_checkpoint(
-            data, params, optimizer_state, key
+            data, params, reload_opt_state, key
         )
 
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
