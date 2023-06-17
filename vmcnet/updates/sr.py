@@ -87,32 +87,29 @@ def get_fisher_inverse_fn(
         ) -> P:
             raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
+            # nsample, nparam
             log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+            nchains_local = log_psi_grads.shape[-2]
+
+            # q: (nparam, nsample)
+            # r: (nsample, nsample)
+            q, r = jnp.linalg.qr(log_psi_grads.T)
+
+            # (nsample, nsample)
+            log_psi_grads = log_psi_grads @ q
+            raveled_energy_grad = raveled_energy_grad @ q
+
             mean_log_psi_grads = mean_grad_fn(log_psi_grads)
             centered_log_psi_grads = (
                 log_psi_grads - mean_log_psi_grads
-            )  # shape (nchains, nparams)
-
-            def fisher_apply(x: Array) -> Array:
-                # x is shape (nparams,)
-                nchains_local = centered_log_psi_grads.shape[0]
-                centered_jacobian_vector_prod = jnp.matmul(centered_log_psi_grads, x)
-                local_fisher_times_x = (
-                    jnp.matmul(
-                        jnp.transpose(centered_log_psi_grads),
-                        centered_jacobian_vector_prod,
-                    )
-                    / nchains_local
-                )
-                fisher_times_x = pmean_if_pmap(local_fisher_times_x)
-                return fisher_times_x + damping * x
-
-            sr_grad, _ = jscp.sparse.linalg.cg(
-                fisher_apply,
-                raveled_energy_grad,
-                x0=raveled_energy_grad,
-                maxiter=maxiter,
+            )  # shape (nsample, nparam -> nsample)
+            fisher = (
+                centered_log_psi_grads.T @ centered_log_psi_grads / nchains_local
+                + damping * jnp.eye(nchains_local, nchains_local)
             )
+
+            sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)
+            sr_grad = pmean_if_pmap(sr_grad @ q.T)
 
             return unravel_fn(sr_grad)
 
