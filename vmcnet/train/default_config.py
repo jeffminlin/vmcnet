@@ -137,7 +137,7 @@ def get_default_model_config() -> Dict:
     }
 
     ferminet_backflow = {
-        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
+        "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
         **base_backflow_config,
     }
 
@@ -281,7 +281,7 @@ def get_default_molecular_config() -> Dict:
 def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
-        "nchains": 2000,
+        "nchains": 100,
         "nepochs": 200000,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
@@ -300,7 +300,7 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "sr",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
@@ -332,11 +332,11 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
-                "damping": 1.0,  # needs to be tuned with everything else
+                "damping": .001,  # needs to be tuned with everything else
                 "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                 "descent_type": "sgd",
                 "norm_constraint": 0.001,
-                "mode": "lazy",
+                "mode": "debug",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
@@ -349,7 +349,7 @@ def get_default_vmc_config() -> Dict:
 def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
-        "nchains": 2000,
+        "nchains": 100,
         "nburn": 5000,
         "nepochs": 20000,
         "nsteps_per_param_update": 10,
