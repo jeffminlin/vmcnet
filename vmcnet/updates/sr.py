@@ -84,7 +84,7 @@ def get_fisher_inverse_fn(
         batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
         def precondition_grad_with_fisher(
-            energy_grad: P, params: P, positions: Array
+            energy_grad: P, params: P, positions: Array, key
         ) -> P:
             raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
@@ -94,8 +94,10 @@ def get_fisher_inverse_fn(
 
             # q: (nparam, ndim)
             # r: (ndim, nsample)
-            vectors = log_psi_grads[..., :ndim, :]
-            q, r = jnp.linalg.qr(vectors.T)
+            key, subkey = jax.random.split(key)
+            rand_vecs = jax.random.normal(subkey, (ndim, nchains_local))
+            range_vecs = rand_vecs @ log_psi_grads
+            q, r = jnp.linalg.qr(range_vecs.T)
 
             # (nsample, ndim)
             log_psi_grads = log_psi_grads @ q
@@ -114,7 +116,7 @@ def get_fisher_inverse_fn(
             sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)
             sr_grad = pmean_if_pmap(sr_grad @ q.T)
 
-            return unravel_fn(sr_grad)
+            return unravel_fn(sr_grad), key
 
     elif mode == SRMode.LAZY:
 

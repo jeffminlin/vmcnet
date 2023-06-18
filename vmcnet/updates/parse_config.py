@@ -493,8 +493,10 @@ def get_sr_update_fn_and_state(
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
 
-    def optimizer_apply(grad, params, optimizer_state, data):
-        preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
+    def optimizer_apply(grad, params, optimizer_state, data, key):
+        preconditioned_grad, key = precondition_grad_fn(
+            grad, params, get_position_fn(data), key
+        )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
         constrained_grad = constrain_norm(
@@ -505,7 +507,7 @@ def get_sr_update_fn_and_state(
             constrained_grad, optimizer_state, params
         )
         params = optax.apply_updates(params, updates)
-        return params, optimizer_state
+        return params, optimizer_state, key
 
     update_param_fn = create_grad_energy_update_param_fn(
         energy_data_val_and_grad,
