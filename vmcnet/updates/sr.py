@@ -29,6 +29,7 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     mean_grad_fn: Callable[[ArrayLike], ArrayLike],
     damping: float = 0.001,
+    ndim: int = 100,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,
 ):
@@ -91,21 +92,23 @@ def get_fisher_inverse_fn(
             log_psi_grads = batch_raveled_log_psi_grad(params, positions)
             nchains_local = log_psi_grads.shape[-2]
 
-            # q: (nparam, nsample)
-            # r: (nsample, nsample)
-            q, r = jnp.linalg.qr(log_psi_grads.T)
+            # q: (nparam, ndim)
+            # r: (ndim, nsample)
+            vectors = log_psi_grads[..., :ndim, :]
+            q, r = jnp.linalg.qr(vectors.T)
 
-            # (nsample, nsample)
+            # (nsample, ndim)
             log_psi_grads = log_psi_grads @ q
+            # (ndim,)
             raveled_energy_grad = raveled_energy_grad @ q
 
             mean_log_psi_grads = mean_grad_fn(log_psi_grads)
             centered_log_psi_grads = (
                 log_psi_grads - mean_log_psi_grads
-            )  # shape (nsample, nparam -> nsample)
+            )  # shape (nsample, ndim)
             fisher = (
                 centered_log_psi_grads.T @ centered_log_psi_grads / nchains_local
-                + damping * jnp.eye(nchains_local, nchains_local)
+                + damping * jnp.eye(ndim, ndim)
             )
 
             sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)

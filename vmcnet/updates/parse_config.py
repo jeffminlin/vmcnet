@@ -470,6 +470,7 @@ def get_sr_update_fn_and_state(
         log_psi_apply,
         mean_grad_fn,
         damping=optimizer_config.damping,
+        ndim=optimizer_config.ndim,
         maxiter=maxiter,
         mode=SRMode[optimizer_config.mode.upper()],
     )
