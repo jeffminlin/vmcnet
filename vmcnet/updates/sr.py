@@ -102,6 +102,7 @@ def get_fisher_inverse_fn(
             # (nsample, ndim)
             log_psi_grads = log_psi_grads @ q
             # (ndim,)
+            remainder_grad = raveled_energy_grad - raveled_energy_grad @ q @ q.T
             raveled_energy_grad = raveled_energy_grad @ q
 
             mean_log_psi_grads = mean_grad_fn(log_psi_grads)
@@ -114,7 +115,7 @@ def get_fisher_inverse_fn(
             )
 
             sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)
-            sr_grad = pmean_if_pmap(sr_grad @ q.T)
+            sr_grad = pmean_if_pmap(sr_grad @ q.T + remainder_grad)
 
             return unravel_fn(sr_grad), key
 
