@@ -6,6 +6,11 @@ import jax
 import jax.numpy as jnp
 import kfac_jax
 
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+)
+
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import tree_sum
 from vmcnet.utils.typing import (
@@ -323,14 +328,81 @@ def create_value_and_grad_energy_fn(
             * mean_grad_fn(centered_local_energies * log_psi)
         )
 
+    def raveled_log_psi_grad(params: P, positions: Array) -> Array:
+        log_grads = jax.grad(log_psi_apply)(params, positions)
+        return jax.flatten_util.ravel_pytree(log_grads)[0]
+
+    batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
+
+    # TODO (ggoldsh): can remove this?
+    def constrain_norm(
+        grads: P,
+        preconditioned_grads: P,
+        learning_rate: chex.Numeric,
+        norm_constraint: chex.Numeric = 0.001,
+    ) -> P:
+        """Constrains the preconditioned norm of the update, adapted from KFAC."""
+        sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
+        sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
+
+        # Sync the norms here, see:
+        # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
+        sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
+
+        max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+        coefficient = jnp.minimum(max_coefficient, 1)
+        constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
+
+        return constrained_grads
+
     def get_standard_contribution(local_energies_noclip, params, positions):
+        _, unravel_fn = jax.flatten_util.ravel_pytree(params)
+
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
         centered_local_energies = local_energies - energy
-        grad_E = jax.grad(standard_estimator_forward, argnums=0)(
-            params, positions, centered_local_energies
-        )
+        print(centered_local_energies.shape)
+        nchains_local = centered_local_energies.shape[-1]
+        print(nchains_local)
+
+        # (nchains, nparams)
+        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        raw_energy_grad = centered_local_energies @ log_psi_grads
+
+        print(log_psi_grads.shape)
+        mean_log_psi_grads = jnp.mean(log_psi_grads, axis=0)
+        print(mean_log_psi_grads.shape)
+        centered_log_psi_grads = (
+            log_psi_grads - mean_log_psi_grads
+        )  # (nchains, nparams)
+        print(centered_log_psi_grads.shape)
+
+        # (nchains, nchains)
+        S = log_psi_grads @ log_psi_grads.T
+        print(S.shape)
+        LFL = (
+            log_psi_grads
+            @ centered_log_psi_grads.T
+            @ centered_log_psi_grads
+            @ log_psi_grads.T
+        ) / nchains_local
+        print(LFL.shape)
+        damped_LFL = LFL + 0.001 * jnp.eye(nchains_local, nchains_local)
+        print(damped_LFL.shape)
+
+        Se = S @ centered_local_energies
+        print(Se.shape)
+        x = jnp.linalg.solve(damped_LFL, Se)  # (nchains)
+        print(x.shape)
+
+        grad_E = x @ log_psi_grads
+
+        grad_E = constrain_norm(raw_energy_grad, grad_E, 0.05, 0.001)
+
+        print(grad_E.shape)
+        grad_E = unravel_fn(utils.distribute.pmean_if_pmap(grad_E))
+
         return aux_data, energy, grad_E
 
     def standard_energy_val_and_grad(params, key, positions):
