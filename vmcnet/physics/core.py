@@ -381,7 +381,7 @@ def create_value_and_grad_energy_fn(
             @ centered_log_psi_grads
             @ log_psi_grads.T
         ) / nchains_local
-        damped_LFL = LFL + 0.001 * S
+        damped_LFL = LFL + 0.001 * S + 0.001 * jnp.eye(nchains_local, nchains_local)
 
         Se = 2 * S @ centered_local_energies
         x = jnp.linalg.solve(damped_LFL, Se)  # (nchains)
