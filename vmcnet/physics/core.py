@@ -361,36 +361,45 @@ def create_value_and_grad_energy_fn(
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
+        # (nchains)
         centered_local_energies = local_energies - energy
         nchains_local = centered_local_energies.shape[-1]
 
         # (nchains, nparams)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        raw_energy_grad = 2 * centered_local_energies @ log_psi_grads
-
-        mean_log_psi_grads = jnp.mean(log_psi_grads, axis=0)
-        centered_log_psi_grads = (
-            log_psi_grads - mean_log_psi_grads
-        )  # (nchains, nparams)
+        # (nparams)
+        energy_grad = 2 * centered_local_energies @ log_psi_grads
 
         # (nchains, nchains)
         S = log_psi_grads @ log_psi_grads.T
-        LFL = (
-            log_psi_grads
-            @ centered_log_psi_grads.T
-            @ centered_log_psi_grads
-            @ log_psi_grads.T
-        ) / nchains_local
-        damped_LFL = LFL + 0.01 * S + 0.01 * jnp.eye(nchains_local, nchains_local)
+        eval, evec = jnp.linalg.eigh(S)
+        sqrtSinv = evec @ jnp.diag(jnp.power(eval, -0.5)) @ evec.T
 
-        Se = 2 * S @ centered_local_energies
-        x = jnp.linalg.solve(damped_LFL, Se)  # (nchains)
+        # (nbasis, nparams)
+        q = sqrtSinv @ log_psi_grads
+        # (nbasis,)
+        e_basis = q @ energy_grad
 
-        grad_E = x @ log_psi_grads
+        # (nbasis, nchains)
+        log_psi_grads_basis = q @ log_psi_grads.T
+        mean_log_psi_grads_basis = jnp.mean(log_psi_grads_basis, axis=-1, keepdims=True)
+        centered_log_psi_grads = (
+            log_psi_grads_basis - mean_log_psi_grads_basis
+        )  # (nbasis, nchains)
 
-        grad_E = constrain_norm(raw_energy_grad, grad_E, 0.05, 0.001)
+        # (nbasis, nbasis)
+        F = centered_log_psi_grads @ centered_log_psi_grads.T
+        damped_F = F + jnp.eye(nchains_local, nchains_local) * 0.001
 
-        grad_E = unravel_fn(utils.distribute.pmean_if_pmap(grad_E))
+        x = jnp.linalg.solve(damped_F, e_basis)  # (nchains)
+
+        preconditioned_energy_grad = q.T @ x
+
+        preconditioned_energy_grad = constrain_norm(
+            energy_grad, preconditioned_energy_grad, 0.05, 0.001
+        )
+
+        grad_E = unravel_fn(utils.distribute.pmean_if_pmap(preconditioned_energy_grad))
 
         return aux_data, energy, grad_E
 
