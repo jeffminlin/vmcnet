@@ -366,7 +366,7 @@ def create_value_and_grad_energy_fn(
 
         # (nchains, nparams)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        raw_energy_grad = centered_local_energies @ log_psi_grads
+        raw_energy_grad = 2 * centered_local_energies @ log_psi_grads
 
         mean_log_psi_grads = jnp.mean(log_psi_grads, axis=0)
         centered_log_psi_grads = (
@@ -383,7 +383,7 @@ def create_value_and_grad_energy_fn(
         ) / nchains_local
         damped_LFL = LFL + 0.001 * S
 
-        Se = S @ centered_local_energies
+        Se = 2 * S @ centered_local_energies
         x = jnp.linalg.solve(damped_LFL, Se)  # (nchains)
 
         grad_E = x @ log_psi_grads
