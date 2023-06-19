@@ -388,7 +388,7 @@ def create_value_and_grad_energy_fn(
         )  # (nbasis, nchains)
 
         # (nbasis, nbasis)
-        F = centered_log_psi_grads @ centered_log_psi_grads.T
+        F = centered_log_psi_grads @ centered_log_psi_grads.T / nchains_local
         damped_F = F + jnp.eye(nchains_local, nchains_local) * 0.001
 
         x = jnp.linalg.solve(damped_F, e_basis)  # (nchains)
