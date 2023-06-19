@@ -362,45 +362,34 @@ def create_value_and_grad_energy_fn(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
         centered_local_energies = local_energies - energy
-        print(centered_local_energies.shape)
         nchains_local = centered_local_energies.shape[-1]
-        print(nchains_local)
 
         # (nchains, nparams)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
         raw_energy_grad = centered_local_energies @ log_psi_grads
 
-        print(log_psi_grads.shape)
         mean_log_psi_grads = jnp.mean(log_psi_grads, axis=0)
-        print(mean_log_psi_grads.shape)
         centered_log_psi_grads = (
             log_psi_grads - mean_log_psi_grads
         )  # (nchains, nparams)
-        print(centered_log_psi_grads.shape)
 
         # (nchains, nchains)
         S = log_psi_grads @ log_psi_grads.T
-        print(S.shape)
         LFL = (
             log_psi_grads
             @ centered_log_psi_grads.T
             @ centered_log_psi_grads
             @ log_psi_grads.T
         ) / nchains_local
-        print(LFL.shape)
-        damped_LFL = LFL + 0.001 * jnp.eye(nchains_local, nchains_local)
-        print(damped_LFL.shape)
+        damped_LFL = LFL + 0.001 * S
 
         Se = S @ centered_local_energies
-        print(Se.shape)
         x = jnp.linalg.solve(damped_LFL, Se)  # (nchains)
-        print(x.shape)
 
         grad_E = x @ log_psi_grads
 
         grad_E = constrain_norm(raw_energy_grad, grad_E, 0.05, 0.001)
 
-        print(grad_E.shape)
         grad_E = unravel_fn(utils.distribute.pmean_if_pmap(grad_E))
 
         return aux_data, energy, grad_E
