@@ -373,7 +373,11 @@ def create_value_and_grad_energy_fn(
         # (nchains, nchains)
         S = log_psi_grads @ log_psi_grads.T
         eval, evec = jnp.linalg.eigh(S)
-        sqrtSinv = evec @ jnp.diag(jnp.power(eval, -0.5)) @ evec.T
+        sqrtSinv = (
+            evec
+            @ jnp.diag(jnp.where(jnp.abs(eval) > 1e-3, jnp.power(eval, -0.5), 0.0))
+            @ evec.T
+        )
 
         # (nbasis, nparams)
         q = sqrtSinv @ log_psi_grads
