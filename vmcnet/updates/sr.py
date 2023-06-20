@@ -95,13 +95,14 @@ def get_fisher_inverse_fn(
             S = L @ L.T
             eigs, eigvecs = jnp.linalg.eigh(S)
 
-            # Guard against
-            # 1) Very small eigs, for stability
-            # 2) Slightly negative eigs, to avoid nans
-            eigs = jnp.where(eigs < rcond, rcond, eigs)
-
+            # Eliminate any erroneously negative eigenvalues (S is PSDF)
+            eigs = jnp.where(eigs < 0.0, 0, eigs)
             sqrtS = eigvecs @ jnp.diag(jnp.sqrt(eigs)) @ eigvecs.T
-            sqrtSinv = eigvecs @ jnp.diag(1 / jnp.sqrt(eigs)) @ eigvecs.T
+            sqrtSinv = (
+                eigvecs
+                @ jnp.diag(jnp.where(eigs < rcond, 0.0, 1 / jnp.sqrt(eigs)))
+                @ eigvecs.T
+            )
 
             # (nbasis, nparams)
             Q = sqrtSinv @ L
