@@ -93,8 +93,13 @@ def get_fisher_inverse_fn(
             nchains_local = L.shape[-2]
 
             S = L @ L.T
-            eval, evec = jnp.linalg.eigh(S)
-            sqrtS = evec @ jnp.diag(jnp.sqrt(jnp.abs(eval))) @ evec.T
+            eigs, eigvecs = jnp.linalg.eigh(S)
+            sqrtS = (
+                eigvecs
+                # Need to guard against slightly negative eigs or else sqrt fails
+                @ jnp.diag(jnp.sqrt(jnp.where(eigs < 0.0, 0.0, eigs)))
+                @ eigvecs.T
+            )
             sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=rcond)
 
             # (nbasis, nparams)
