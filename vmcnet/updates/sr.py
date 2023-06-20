@@ -94,13 +94,14 @@ def get_fisher_inverse_fn(
 
             S = L @ L.T
             eigs, eigvecs = jnp.linalg.eigh(S)
-            sqrtS = (
-                eigvecs
-                # Need to guard against slightly negative eigs or else sqrt fails
-                @ jnp.diag(jnp.sqrt(jnp.where(eigs < 0.0, 0.0, eigs)))
-                @ eigvecs.T
-            )
-            sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=rcond)
+
+            # Guard against
+            # 1) Very small eigs, for stability
+            # 2) Slightly negative eigs, to avoid nans
+            eigs = jnp.where(eigs < rcond, rcond, eigs)
+
+            sqrtS = eigvecs @ jnp.diag(jnp.sqrt(eigs)) @ eigvecs.T
+            sqrtSinv = eigvecs @ jnp.diag(1 / jnp.sqrt(eigs)) @ eigvecs.T
 
             # (nbasis, nparams)
             Q = sqrtSinv @ L
@@ -118,7 +119,7 @@ def get_fisher_inverse_fn(
             F = centered_LQ.T @ centered_LQ / nchains_local
             damped_F = F + damping * jnp.eye(nchains_local, nchains_local)
 
-            GQ_preconditioned = jnp.linalg.lstsq(damped_F, GQ, rcond=rcond)[0]
+            GQ_preconditioned = jnp.linalg.solve(damped_F, GQ)
             G_preconditioned = pmean_if_pmap(GQ_preconditioned @ Q)
 
             return unravel_fn(G_preconditioned)
