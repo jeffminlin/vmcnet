@@ -85,33 +85,37 @@ def get_fisher_inverse_fn(
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
-            raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
+            G, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
             # nsample, nparam
-            log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-            nchains_local = log_psi_grads.shape[-2]
+            L = batch_raveled_log_psi_grad(params, positions)
+            nchains_local = L.shape[-2]
 
-            # q: (nparam, nsample)
-            # r: (nsample, nsample)
-            q, r = jnp.linalg.qr(log_psi_grads.T)
+            S = L @ L.T
+            eval, evec = jnp.linalg.eigh(S)
+            sqrtS = evec @ jnp.diag(jnp.sqrt(eval)) @ evec.T
+            sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=1e-3)
 
-            # (nsample, nsample)
-            log_psi_grads = log_psi_grads @ q
-            raveled_energy_grad = raveled_energy_grad @ q
+            # (nbasis, nparams)
+            Q = sqrtSinv @ L
 
-            mean_log_psi_grads = mean_grad_fn(log_psi_grads)
-            centered_log_psi_grads = (
-                log_psi_grads - mean_log_psi_grads
-            )  # shape (nsample, nparam -> nsample)
-            fisher = (
-                centered_log_psi_grads.T @ centered_log_psi_grads / nchains_local
-                + damping * jnp.eye(nchains_local, nchains_local)
-            )
+            # (nsample, nbasis)
+            LQ = sqrtS
+            # (nbasis,)
+            GQ = G @ Q.T
 
-            sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)
-            sr_grad = pmean_if_pmap(sr_grad @ q.T)
+            # (nsample, nbasis)
+            mean_LQ = jnp.mean(LQ, axis=-2, keepdims=True)
+            centered_LQ = LQ - mean_LQ
 
-            return unravel_fn(sr_grad)
+            # (nbasis, nbasis)
+            F = centered_LQ.T @ centered_LQ / nchains_local
+            damped_F = F + damping * jnp.eye(nchains_local, nchains_local)
+
+            GQ_preconditioned = jnp.linalg.solve(damped_F, GQ)
+            G_preconditioned = pmean_if_pmap(GQ_preconditioned @ Q)
+
+            return unravel_fn(G_preconditioned)
 
     elif mode == SRMode.LAZY:
 
