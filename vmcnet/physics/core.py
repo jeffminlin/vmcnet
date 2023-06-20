@@ -375,13 +375,7 @@ def create_value_and_grad_energy_fn(
         eval, evec = jnp.linalg.eigh(S)
         sqrtSinv = (
             evec
-            @ jnp.diag(
-                jnp.where(
-                    jnp.abs(eval) < 1e-3,
-                    jnp.sqrt(1e3) * jnp.sign(eval),
-                    jnp.power(eval, -0.5),
-                )
-            )
+            @ jnp.diag(jnp.where(jnp.abs(eval) < 1e-3, 0, jnp.power(eval, -0.5)))
             @ evec.T
         )
 
