@@ -28,7 +28,8 @@ class SRMode(Enum):
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     mean_grad_fn: Callable[[ArrayLike], ArrayLike],
-    damping: float = 0.001,
+    damping: float = 1e-3,
+    rcond: float = 1e-5,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,
 ):
@@ -85,7 +86,6 @@ def get_fisher_inverse_fn(
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
-            rcond = 1e-5
             G, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
             # nsample, nparam
@@ -94,7 +94,7 @@ def get_fisher_inverse_fn(
 
             S = L @ L.T
             eval, evec = jnp.linalg.eigh(S)
-            sqrtS = evec @ jnp.diag(jnp.sqrt(eval)) @ evec.T
+            sqrtS = evec @ jnp.diag(jnp.sqrt(jnp.abs(eval))) @ evec.T
             sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=rcond)
 
             # (nbasis, nparams)
