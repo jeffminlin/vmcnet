@@ -372,7 +372,18 @@ def create_value_and_grad_energy_fn(
 
         # (nchains, nchains)
         S = log_psi_grads @ log_psi_grads.T
-        sqrtSinv = jax.scipy.linalg.sqrtm(jax.scipy.linalg.inv(S))
+        eval, evec = jnp.linalg.eigh(S)
+        sqrtSinv = (
+            evec
+            @ jnp.diag(
+                jnp.where(
+                    jnp.abs(eval) < 1e-3,
+                    jnp.sqrt(1e3) * jnp.sign(eval),
+                    jnp.power(eval, -0.5),
+                )
+            )
+            @ evec.T
+        )
 
         condS = jnp.linalg.cond(S)
         _, s, _ = jnp.linalg.svd(S)
