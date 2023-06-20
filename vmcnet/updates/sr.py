@@ -85,6 +85,7 @@ def get_fisher_inverse_fn(
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
+            rcond = 1e-5
             G, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
             # nsample, nparam
@@ -94,7 +95,7 @@ def get_fisher_inverse_fn(
             S = L @ L.T
             eval, evec = jnp.linalg.eigh(S)
             sqrtS = evec @ jnp.diag(jnp.sqrt(eval)) @ evec.T
-            sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=1e-3)
+            sqrtSinv = jnp.linalg.pinv(sqrtS, rcond=rcond)
 
             # (nbasis, nparams)
             Q = sqrtSinv @ L
@@ -112,7 +113,7 @@ def get_fisher_inverse_fn(
             F = centered_LQ.T @ centered_LQ / nchains_local
             damped_F = F + damping * jnp.eye(nchains_local, nchains_local)
 
-            GQ_preconditioned = jnp.linalg.solve(damped_F, GQ)
+            GQ_preconditioned = jnp.linalg.lstsq(damped_F, GQ, rcond=rcond)[0]
             G_preconditioned = pmean_if_pmap(GQ_preconditioned @ Q)
 
             return unravel_fn(G_preconditioned)
