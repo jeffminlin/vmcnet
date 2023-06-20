@@ -372,12 +372,10 @@ def create_value_and_grad_energy_fn(
 
         # (nchains, nchains)
         S = log_psi_grads @ log_psi_grads.T
-        eval, evec = jnp.linalg.eigh(S)
-        sqrtSinv = (
-            evec
-            @ jnp.diag(jnp.where(jnp.abs(eval) > 1e-3, jnp.power(eval, -0.5), 0.0))
-            @ evec.T
-        )
+        sqrtSinv = jax.scipy.linalg.sqrtm(jax.scipy.linalg.inv(S))
+
+        condS = jnp.linalg.cond(S)
+        _, s, _ = jnp.linalg.svd(S)
 
         # (nbasis, nparams)
         q = sqrtSinv @ log_psi_grads
@@ -393,9 +391,9 @@ def create_value_and_grad_energy_fn(
 
         # (nbasis, nbasis)
         F = centered_log_psi_grads @ centered_log_psi_grads.T / nchains_local
-        damped_F = F + jnp.eye(nchains_local, nchains_local) * 0.001
+        damped_F = F + jnp.eye(nchains_local, nchains_local) * 1e-3
 
-        x = jnp.linalg.solve(damped_F, e_basis)  # (nchains)
+        x = jax.scipy.linalg.solve(damped_F, e_basis)  # (nchains)
 
         preconditioned_energy_grad = q.T @ x
 
@@ -405,6 +403,7 @@ def create_value_and_grad_energy_fn(
 
         grad_E = unravel_fn(utils.distribute.pmean_if_pmap(preconditioned_energy_grad))
 
+        aux_data = (*aux_data, condS)
         return aux_data, energy, grad_E
 
     def standard_energy_val_and_grad(params, key, positions):
