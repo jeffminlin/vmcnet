@@ -366,12 +366,14 @@ def create_value_and_grad_energy_fn(
         nchains_local = centered_local_energies.shape[-1]
 
         # (nchains, nparams)
-        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        L = batch_raveled_log_psi_grad(params, positions)
         # (nparams)
-        energy_grad = 2 * centered_local_energies @ log_psi_grads
+        G = 2 * centered_local_energies @ L / nchains_local
 
         # (nchains, nchains)
-        S = log_psi_grads @ log_psi_grads.T
+        S = L @ L.T
+        condS = jnp.linalg.cond(S)
+
         eval, evec = jnp.linalg.eigh(S)
         sqrtSinv = (
             evec
@@ -379,34 +381,26 @@ def create_value_and_grad_energy_fn(
             @ evec.T
         )
 
-        condS = jnp.linalg.cond(S)
-        _, s, _ = jnp.linalg.svd(S)
-
         # (nbasis, nparams)
-        q = sqrtSinv @ log_psi_grads
+        Q = sqrtSinv @ L
         # (nbasis,)
-        e_basis = q @ energy_grad
+        GQ = Q @ G
 
         # (nbasis, nchains)
-        log_psi_grads_basis = q @ log_psi_grads.T
-        mean_log_psi_grads_basis = jnp.mean(log_psi_grads_basis, axis=-1, keepdims=True)
-        centered_log_psi_grads = (
-            log_psi_grads_basis - mean_log_psi_grads_basis
-        )  # (nbasis, nchains)
+        LQ = Q @ L.T
+        centered_LQ = LQ - jnp.mean(LQ, axis=-1, keepdims=True)  # (nbasis, nchains)
 
         # (nbasis, nbasis)
-        F = centered_log_psi_grads @ centered_log_psi_grads.T / nchains_local
+        F = centered_LQ @ centered_LQ.T / nchains_local
         damped_F = F + jnp.eye(nchains_local, nchains_local) * 1e-3
 
-        x = jax.scipy.linalg.solve(damped_F, e_basis)  # (nchains)
+        GQ_preconditioned = jax.scipy.linalg.solve(damped_F, GQ)  # (nchains)
 
-        preconditioned_energy_grad = q.T @ x
+        G_preconditioned = Q.T @ GQ_preconditioned
 
-        preconditioned_energy_grad = constrain_norm(
-            energy_grad, preconditioned_energy_grad, 0.05, 0.001
-        )
+        G_preconditioned = constrain_norm(G, G_preconditioned, 0.05, 0.001)
 
-        grad_E = unravel_fn(utils.distribute.pmean_if_pmap(preconditioned_energy_grad))
+        grad_E = unravel_fn(utils.distribute.pmean_if_pmap(G_preconditioned))
 
         aux_data = (*aux_data, condS)
         return aux_data, energy, grad_E
