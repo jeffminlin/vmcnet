@@ -88,37 +88,17 @@ def get_fisher_inverse_fn(
         ) -> P:
             G, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
-            # nsample, nparam
-            L = batch_raveled_log_psi_grad(params, positions)
-            nchains_local = L.shape[-2]
+            # nparam, nsample, tall and skinny
+            L = batch_raveled_log_psi_grad(params, positions).T
+            nchains_local = L.shape[-1]
+            L = (L - jnp.mean(L, axis=-1, keepdims=True)) / jnp.sqrt(nchains_local)
 
-            S = L @ L.T
-            eigs, eigvecs = jnp.linalg.eigh(S)
+            S = L.T @ L
+            damped_F = S + damping * jnp.eye(nchains_local, nchains_local)
 
-            # Eliminate any erroneously negative eigenvalues (S is PSDF)
-            eigs = jnp.where(eigs < 0.0, 0, eigs)
-            sqrtS = eigvecs @ jnp.diag(jnp.sqrt(eigs)) @ eigvecs.T
-            sqrtSinv = eigvecs @ jnp.diag(1 / jnp.sqrt(eigs)) @ eigvecs.T
-
-            # (nbasis, nparams)
-            Q = sqrtSinv @ L
-
-            # (nsample, nbasis)
-            # Try this instead of just using sqrtS, for consistency?
-            LQ = L @ Q.T
-            # (nbasis,)
-            GQ = G @ Q.T
-
-            # (nsample, nbasis)
-            mean_LQ = jnp.mean(LQ, axis=-2, keepdims=True)
-            centered_LQ = LQ - mean_LQ
-
-            # (nbasis, nbasis)
-            F = centered_LQ.T @ centered_LQ / nchains_local
-            damped_F = F + damping * jnp.eye(nchains_local, nchains_local)
-
-            GQ_preconditioned = jnp.linalg.solve(damped_F, GQ)
-            G_preconditioned = pmean_if_pmap(GQ_preconditioned @ Q)
+            b = jnp.linalg.solve(damped_F, L.T @ G)
+            G_preconditioned = (1 / damping) * (G - L @ b)
+            G_preconditioned = pmean_if_pmap(G_preconditioned)
 
             return unravel_fn(G_preconditioned)
 
