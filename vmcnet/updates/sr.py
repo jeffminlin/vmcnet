@@ -85,17 +85,24 @@ def get_fisher_inverse_fn(
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
+            # The formula for this method is taken from
+            # https://arxiv.org/pdf/2006.05924.pdf.
+            # We center and normalize L to start, and once that is done, the formula
+            # for the preconditioned gradient is G' = L S^{-2) L^T G, where S = L^T L.
+            # However one can verify that the computation below produces the same result
+            # in the limit as damping -> 0, and this seems to be the standard, stable
+            # way to compute such an update.
             G, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
             # nparam, nsample, tall and skinny
             L = batch_raveled_log_psi_grad(params, positions).T
             nchains_local = L.shape[-1]
+
             L = (L - jnp.mean(L, axis=-1, keepdims=True)) / jnp.sqrt(nchains_local)
-
             S = L.T @ L
-            damped_F = S + damping * jnp.eye(nchains_local, nchains_local)
+            damped_S = S + damping * jnp.eye(nchains_local, nchains_local)
 
-            b = jnp.linalg.solve(damped_F, L.T @ G)
+            b = jnp.linalg.solve(damped_S, L.T @ G)
             G_preconditioned = (1 / damping) * (G - L @ b)
             G_preconditioned = pmean_if_pmap(G_preconditioned)
 
