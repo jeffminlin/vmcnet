@@ -137,7 +137,7 @@ def get_default_model_config() -> Dict:
     }
 
     ferminet_backflow = {
-        "ndense_list": ((64, 16), (64, 16), (64, 16), (64,)),
+        "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
         **base_backflow_config,
     }
 
