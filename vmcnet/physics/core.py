@@ -252,6 +252,7 @@ def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: LocalEnergyApply[P],
     nchains: int,
+    nchains_energy: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
     local_energy_type: str = "standard",
@@ -313,6 +314,7 @@ def create_value_and_grad_energy_fn(
     ) -> chex.Numeric:
         log_psi = log_psi_apply(params, positions)
         kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
+        log_psi = log_psi[:nchains_energy, ...]
         # NOTE: for the generic gradient estimator case it may be important to include
         # the (nchains / nchains -1) factor here to make sure the standard and generic
         # gradient terms aren't mismatched by a slight scale factor.
@@ -325,7 +327,7 @@ def create_value_and_grad_energy_fn(
 
     def get_standard_contribution(local_energies_noclip, params, positions):
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+            local_energies_noclip, nchains_energy, clipping_fn, nan_safe
         )
         centered_local_energies = local_energies - energy
         grad_E = jax.grad(standard_estimator_forward, argnums=0)(
@@ -338,7 +340,7 @@ def create_value_and_grad_energy_fn(
 
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
-        )(params, positions, None)
+        )(params, positions[:nchains_energy, ...], None)
 
         aux_data, energy, grad_E = get_standard_contribution(
             local_energies_noclip, params, positions

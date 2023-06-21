@@ -340,6 +340,7 @@ def _get_energy_val_and_grad_fn(
         log_psi_apply,
         local_energy_fn,
         vmc_config.nchains,
+        vmc_config.nchains_energy,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
         local_energy_type=vmc_config.local_energy_type,
