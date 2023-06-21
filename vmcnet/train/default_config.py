@@ -333,7 +333,6 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "damping": 0.001,  # needs to be tuned with everything else
-                "rcond": 1e-3,
                 "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                 "descent_type": "sgd",
                 "norm_constraint": 0.001,

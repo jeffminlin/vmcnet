@@ -29,7 +29,6 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     mean_grad_fn: Callable[[ArrayLike], ArrayLike],
     damping: float = 1e-3,
-    rcond: float = 1e-5,
     maxiter: Optional[int] = None,
     mode: SRMode = SRMode.LAZY,
 ):
