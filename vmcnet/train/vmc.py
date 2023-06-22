@@ -2,10 +2,14 @@
 from typing import Tuple, Optional
 
 import jax
+import numpy as np
+import os
 
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.params import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
+from vmcnet.utils.distribute import get_first
+from vmcnet.utils.pytree_helpers import tree_sum, multiply_tree_by_scalar
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKey, S
 
@@ -98,6 +102,17 @@ def vmc_loop(
     )
     nans_detected = False
 
+    param_avg = jax.tree_util.tree_map(lambda x: x.copy(), params)
+    os.makedirs(f"{logdir}/param_avg", exist_ok=True)
+
+    def update_param_avg(old_avg, new_params):
+        return tree_sum(
+            multiply_tree_by_scalar(new_params, 0.2),
+            multiply_tree_by_scalar(old_avg, 0.98),
+        )
+
+    update_param_avg = jax.jit(update_param_avg)
+
     with CheckpointWriter(
         is_pmapped
     ) as checkpoint_writer, MetricsWriter() as metrics_writer:
@@ -118,6 +133,7 @@ def vmc_loop(
             params, data, optimizer_state, metrics, key = update_param_fn(
                 params, data, optimizer_state, key
             )
+            param_avg = update_param_avg(param_avg, params)
 
             # Don't checkpoint if no metrics to checkpoint
             if metrics is None:
@@ -155,6 +171,9 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+
+            if epoch % 40 == 0:
+                np.save(f"{logdir}/param_avg/{epoch}", get_first(param_avg.unfreeze()))
 
             if nans_detected:
                 break
