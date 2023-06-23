@@ -8,7 +8,7 @@ import vmcnet.models as models
 import vmcnet.physics as physics
 from vmcnet.utils.typing import Array, Backflow, Jastrow
 
-from .core import Dense, Module, compute_ee_norm_with_safe_diag
+from .core import Dense, ElementWiseMultiply, Module, compute_ee_norm_with_safe_diag
 from .weights import WeightInitializer, get_constant_init, zeros
 
 
@@ -18,28 +18,17 @@ def _isotropy_on_leaf(
     kernel_initializer: WeightInitializer,
 ) -> Array:
     """Isotropic scaling of the electron-ion displacements."""
-    nion = r_ei_leaf.shape[-2]
-
     # swap axes around and inject an axis to go from
     # r_ei_leaf: (..., nelec, nion, d) -> x_nion: (..., nelec, d, nion, 1)
     x_nion = jnp.swapaxes(r_ei_leaf, axis1=-1, axis2=-2)
     x_nion = jnp.expand_dims(x_nion, axis=-1)
 
-    # split x_nion along the ion axis and apply nion parallel maps 1 -> norbitals
-    # along the last axis, resulting in
-    # [i: (..., nelec, d, 1, norbitals)], where i is the ion index
-    split_out = models.equivariance.SplitDense(
-        nion,
-        (norbitals,) * nion,
-        kernel_initializer,
-        zeros,
-        use_bias=False,
-    )(x_nion)
+    # (..., nelec, d, nion, norbitals)
+    x_nion = jnp.broadcast_to(x_nion, (*x_nion.shape[:-1], norbitals))
+    iso_out = ElementWiseMultiply(1, kernel_initializer)(x_nion)
 
-    # concatenate over the ion axis, then swap axes to get
-    # an output of shape (..., nelec, norbitals, nion, d)
-    concat_out = jnp.concatenate(split_out, axis=-2)
-    return jnp.swapaxes(concat_out, axis1=-1, axis2=-3)
+    # Swap axes to get (..., nelec, norbitals, nion, d)
+    return jnp.swapaxes(iso_out, axis1=-1, axis2=-3)
 
 
 def _anisotropy_on_leaf(
