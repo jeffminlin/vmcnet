@@ -10,6 +10,7 @@ import jax.scipy as jscp
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
 from vmcnet.utils.typing import Array, ArrayLike, ModelApply, P
+from vmcnet.utils.log_linear_exp import log_linear_exp
 
 
 class SRMode(Enum):
@@ -82,27 +83,38 @@ def get_fisher_inverse_fn(
 
         batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
+        def log_N_apply(params, positions):
+            log_psi = log_psi_apply(params, positions)
+            log_normalization = log_linear_exp(
+                jnp.array(1.0), 2 * log_psi, None, axis=-1
+            )[1][0]
+            return log_normalization
+
+        val_and_grad_log_N_apply = jax.value_and_grad(log_N_apply, argnums=0)
+
         def precondition_grad_with_fisher(
             energy_grad: P, params: P, positions: Array
         ) -> P:
             raveled_energy_grad, unravel_fn = jax.flatten_util.ravel_pytree(energy_grad)
 
+            # (nsamples, nparams)
             log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-            mean_log_psi_grads = mean_grad_fn(log_psi_grads)
-            centered_log_psi_grads = (
-                log_psi_grads - mean_log_psi_grads
-            )  # shape (nchains, nparams)
+            log_psi = log_psi_apply(params, positions)
+            log_N, tree_grad_log_N = val_and_grad_log_N_apply(params, positions)
+            grad_log_N = jax.flatten_util.ravel_pytree(tree_grad_log_N)[0]
+
+            log_sqrt_P = log_psi - jnp.expand_dims(log_N / 2, axis=-1)
+            log_p_grads = 2 * log_psi_grads - jnp.expand_dims(grad_log_N, -2)
+            weighted_log_p_grads = log_p_grads * jnp.expand_dims(
+                jnp.exp(log_sqrt_P), -1
+            )
 
             def fisher_apply(x: Array) -> Array:
                 # x is shape (nparams,)
-                nchains_local = centered_log_psi_grads.shape[0]
-                centered_jacobian_vector_prod = jnp.matmul(centered_log_psi_grads, x)
-                local_fisher_times_x = (
-                    jnp.matmul(
-                        jnp.transpose(centered_log_psi_grads),
-                        centered_jacobian_vector_prod,
-                    )
-                    / nchains_local
+                centered_jacobian_vector_prod = jnp.matmul(weighted_log_p_grads, x)
+                local_fisher_times_x = jnp.matmul(
+                    jnp.transpose(weighted_log_p_grads),
+                    centered_jacobian_vector_prod,
                 )
                 fisher_times_x = pmean_if_pmap(local_fisher_times_x)
                 return fisher_times_x + damping * x

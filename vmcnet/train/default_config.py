@@ -332,11 +332,11 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
-                "damping": 1.0,  # needs to be tuned with everything else
-                "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
+                "damping": 0.001,  # needs to be tuned with everything else
+                "maxiter": 100,  # when maxiter <= -1, uses default 10 * nparams
                 "descent_type": "sgd",
                 "norm_constraint": 0.001,
-                "mode": "lazy",
+                "mode": "debug",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
