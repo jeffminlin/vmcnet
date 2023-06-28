@@ -108,7 +108,7 @@ def get_fisher_inverse_fn(
                 + damping * jnp.eye(nchains_local, nchains_local)
             )
 
-            sr_grad = jnp.linalg.solve(fisher, raveled_energy_grad)
+            sr_grad = jnp.linalg.lstsq(fisher, raveled_energy_grad)[0]
             sr_grad = pmean_if_pmap(sr_grad @ q.T)
 
             return unravel_fn(sr_grad)
