@@ -236,8 +236,10 @@ class ElementWiseMultiply(Module):
             Array: the input array multiplied element-wise by the kernel.
         """
         kernel_shape = [inputs.shape[-self.naxes + i] for i in range(self.naxes)]
+        # Pad shape with extra dim since kernel initializers require at least 2D arrays.
+        kernel_shape = [1, *kernel_shape]
         kernel = self.param("kernel", self.kernel_init, kernel_shape)
-        return inputs * kernel
+        return inputs * kernel[0, ...]
 
 
 class LogDomainDense(Module):
