@@ -333,11 +333,11 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
-                "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
+                "rcond": 1e-6,
             },
         },
     }
