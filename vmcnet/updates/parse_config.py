@@ -161,7 +161,6 @@ def get_update_fn_and_init_optimizer(
             vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
-            nan_safe=vmc_config.nan_safe,
         )
         return update_param_fn, optimizer_state, key
     else:
@@ -424,7 +423,6 @@ def get_sr_update_fn_and_state(
     descent_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
-    nan_safe: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for stochastic reconfiguration.
 
@@ -449,9 +447,6 @@ def get_sr_update_fn_and_state(
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
-        nan_safe (bool, optional): whether the mean function used when centering the
-            Jacobian of log|psi(x)| during the Fisher matvec is nan-safe. Defaults to
-            True.
 
     Raises:
         ValueError: A non-supported descent type is requested. Currently only Adam and
@@ -464,14 +459,8 @@ def get_sr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    maxiter = optimizer_config.maxiter if optimizer_config.maxiter >= 0 else None
-    mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
     precondition_grad_fn = get_fisher_inverse_fn(
         log_psi_apply,
-        mean_grad_fn,
-        damping=optimizer_config.damping,
-        maxiter=maxiter,
-        mode=SRMode[optimizer_config.mode.upper()],
     )
 
     if optimizer_config.descent_type == "adam":
@@ -489,19 +478,10 @@ def get_sr_update_fn_and_state(
             )
         )
 
-    def get_optimizer_step_count(optimizer_state):
-        return optimizer_state[1].count
-
-    def optimizer_apply(grad, params, optimizer_state, data):
-        preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
-        step_count = get_optimizer_step_count(optimizer_state)
-        learning_rate = learning_rate_schedule(step_count)
-        constrained_grad = constrain_norm(
-            grad, preconditioned_grad, learning_rate, optimizer_config.norm_constraint
-        )
-
+    def optimizer_apply(centered_energies, params, optimizer_state, data):
+        grad = precondition_grad_fn(centered_energies, params, get_position_fn(data))
         updates, optimizer_state = descent_optimizer.update(
-            constrained_grad, optimizer_state, params
+            grad, optimizer_state, params
         )
         params = optax.apply_updates(params, updates)
         return params, optimizer_state

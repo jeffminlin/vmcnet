@@ -341,11 +341,12 @@ def create_value_and_grad_energy_fn(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
         )(params, positions, None)
 
-        aux_data, energy, grad_E = get_standard_contribution(
-            local_energies_noclip, params, positions
+        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+            local_energies_noclip, nchains, clipping_fn, nan_safe
         )
+        centered_local_energies = local_energies - energy
 
-        return (energy, aux_data), grad_E
+        return (energy, aux_data), centered_local_energies
 
     def random_particle_energy_val_and_grad(params, key, positions):
         nbatch = positions.shape[0]
