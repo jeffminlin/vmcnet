@@ -1,6 +1,7 @@
 """Stochastic reconfiguration (SR) routine."""
 from enum import Enum, auto
 
+import chex
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
@@ -21,7 +22,7 @@ class SRMode(Enum):
     DEBUG = auto()
 
 
-def get_fisher_inverse_fn(log_psi_apply: ModelApply[P]):
+def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
     """Get a Fisher-preconditioned update.
 
     Given a gradient update grad_E, the function returned here approximates
@@ -64,7 +65,16 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P]):
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
 
-        SR_G = jnp.linalg.lstsq(log_psi_grads, centered_energies)[0]
+        T = log_psi_grads @ log_psi_grads.T
+        eigval, eigvec = jnp.linalg.eigh(T)
+
+        absval = jnp.abs(eigval)
+        maxabs = jnp.max(absval)
+        eigval_inv = jnp.where(absval > maxabs * rcond, 1 / eigval, 0)
+
+        Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
+
+        SR_G = log_psi_grads.T @ Tinv @ centered_energies
 
         return unravel_fn(SR_G)
 
