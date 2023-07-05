@@ -64,8 +64,11 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        centered_log_psi_grads = log_psi_grads - jnp.mean(
+            log_psi_grads, axis=0, keepdims=True
+        )
 
-        T = log_psi_grads @ log_psi_grads.T
+        T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
         absval = jnp.abs(eigval)
@@ -74,7 +77,7 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        SR_G = log_psi_grads.T @ Tinv @ centered_energies
+        SR_G = centered_log_psi_grads.T @ Tinv @ centered_energies
 
         return unravel_fn(SR_G)
 
