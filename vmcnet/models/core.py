@@ -239,7 +239,7 @@ class ElementWiseMultiply(Module):
         # Pad shape with extra dim since kernel initializers require at least 2D arrays.
         kernel_shape = [1, *kernel_shape]
         kernel = self.param("kernel", self.kernel_init, kernel_shape)
-        return inputs * kernel[0, ...]
+        return inputs * kernel
 
 
 class LogDomainDense(Module):
