@@ -459,7 +459,9 @@ def get_sr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    precondition_grad_fn = get_fisher_inverse_fn(log_psi_apply, optimizer_config.rcond)
+    precondition_grad_fn = get_fisher_inverse_fn(
+        log_psi_apply, optimizer_config.rcond, optimizer_config.damping
+    )
 
     if optimizer_config.descent_type == "adam":
         descent_optimizer = _get_adam_optax_optimizer(

@@ -338,6 +338,7 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 "rcond": 1e-12,
+                "damping": 0.001,
             },
         },
     }
