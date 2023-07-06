@@ -22,9 +22,7 @@ class SRMode(Enum):
     DEBUG = auto()
 
 
-def get_fisher_inverse_fn(
-    log_psi_apply: ModelApply[P], rcond: chex.Scalar, damping: chex.Scalar
-):
+def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
     """Get a Fisher-preconditioned update.
 
     Given a gradient update grad_E, the function returned here approximates
@@ -71,15 +69,14 @@ def get_fisher_inverse_fn(
             log_psi_grads, axis=0, keepdims=True
         )
 
-        T = (
-            centered_log_psi_grads @ centered_log_psi_grads.T
-            + damping * jnp.eye(nchains, nchains) * nchains
-        )
+        T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
-        absval = jnp.abs(eigval)
-        maxabs = jnp.max(absval)
-        eigval_inv = jnp.where(absval > maxabs * rcond, 1 / eigval, 0)
+        # should be nonnegative since it's PSDF matrix
+        eigval = jnp.where(eigval < 0, 0, eigval)
+        # Damping has scale factor of nchains since we didn't divide T
+        eigval += damping * nchains
+        eigval_inv = 1 / eigval
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
