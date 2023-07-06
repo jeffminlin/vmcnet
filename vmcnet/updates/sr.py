@@ -22,7 +22,9 @@ class SRMode(Enum):
     DEBUG = auto()
 
 
-def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
+def get_fisher_inverse_fn(
+    log_psi_apply: ModelApply[P], rcond: chex.Scalar, damping: chex.Scalar
+):
     """Get a Fisher-preconditioned update.
 
     Given a gradient update grad_E, the function returned here approximates
@@ -59,6 +61,7 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
     def precondition_grad_with_fisher(
         centered_energies: P, params: P, positions: Array
     ) -> P:
+        nchains = positions.shape[0]
         example_grad = jax.grad(log_psi_apply)(params, positions[0, ...])
         _, unravel_fn = jax.flatten_util.ravel_pytree(example_grad)
 
@@ -68,7 +71,10 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], rcond: chex.Scalar):
             log_psi_grads, axis=0, keepdims=True
         )
 
-        T = centered_log_psi_grads @ centered_log_psi_grads.T
+        T = (
+            centered_log_psi_grads @ centered_log_psi_grads.T
+            + damping * jnp.eye(nchains, nchains) * nchains
+        )
         eigval, eigvec = jnp.linalg.eigh(T)
 
         absval = jnp.abs(eigval)
