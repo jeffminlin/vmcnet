@@ -56,18 +56,25 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
+    def mean_log_psi(params, positions):
+        log_psi = log_psi_apply(params, positions)
+        return jnp.mean(log_psi)
+
+    grad_log_N_apply = jax.grad(mean_log_psi, argnums=0)
+
     def precondition_grad_with_fisher(
         centered_energies: P, params: P, positions: Array
     ) -> P:
         nchains_energy = centered_energies.shape[0]
 
-        example_grad = jax.grad(log_psi_apply)(params, positions[0, ...])
-        _, unravel_fn = jax.flatten_util.ravel_pytree(example_grad)
+        grad_log_N = grad_log_N_apply(params, positions)
+        grad_log_N, unravel_fn = jax.flatten_util.ravel_pytree(grad_log_N)
 
         # (nsample, nparam)
-        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        mean_log_psi_grad = jnp.mean(log_psi_grads, axis=0, keepdims=True)
-        centered_log_psi_grads = log_psi_grads[:nchains_energy, ...] - mean_log_psi_grad
+        log_psi_grads = batch_raveled_log_psi_grad(
+            params, positions[:nchains_energy, ...]
+        )
+        centered_log_psi_grads = log_psi_grads - jnp.expand_dims(grad_log_N, 0)
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
