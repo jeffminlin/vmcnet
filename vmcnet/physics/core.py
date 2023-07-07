@@ -252,6 +252,7 @@ def create_value_and_grad_energy_fn(
     log_psi_apply: ModelApply[P],
     local_energy_fn: LocalEnergyApply[P],
     nchains: int,
+    nchains_energy: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
     local_energy_type: str = "standard",
@@ -338,10 +339,10 @@ def create_value_and_grad_energy_fn(
 
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
-        )(params, positions, None)
+        )(params, positions[:nchains_energy, ...], None)
 
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+            local_energies_noclip, nchains_energy, clipping_fn, nan_safe
         )
         centered_local_energies = local_energies - energy
 

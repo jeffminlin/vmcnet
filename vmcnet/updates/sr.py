@@ -59,23 +59,23 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
     def precondition_grad_with_fisher(
         centered_energies: P, params: P, positions: Array
     ) -> P:
-        nchains = positions.shape[0]
+        nchains_energy = centered_energies.shape[0]
+
         example_grad = jax.grad(log_psi_apply)(params, positions[0, ...])
         _, unravel_fn = jax.flatten_util.ravel_pytree(example_grad)
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        centered_log_psi_grads = log_psi_grads - jnp.mean(
-            log_psi_grads, axis=0, keepdims=True
-        )
+        mean_log_psi_grad = jnp.mean(log_psi_grads, axis=0, keepdims=True)
+        centered_log_psi_grads = log_psi_grads[:nchains_energy, ...] - mean_log_psi_grad
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
-        # should be nonnegative since it's PSDF matrix
+        # just to be safe, make sure eigs are nonnegative since T is PSDF
         eigval = jnp.where(eigval < 0, 0, eigval)
-        # Damping has scale factor of nchains since we didn't divide T
-        eigval += damping * nchains
+        # Damping has scale factor of nchains since I'm not dividing T by nchains
+        eigval += damping * nchains_energy
         eigval_inv = 1 / eigval
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
