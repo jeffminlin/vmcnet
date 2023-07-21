@@ -68,6 +68,7 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
         centered_log_psi_grads = log_psi_grads - jnp.mean(
             log_psi_grads, axis=0, keepdims=True
         )
+        G = 2 * centered_energies @ log_psi_grads / nchains
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
@@ -82,6 +83,6 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
 
         SR_G = centered_log_psi_grads.T @ Tinv @ centered_energies
 
-        return unravel_fn(SR_G)
+        return unravel_fn(G), unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
