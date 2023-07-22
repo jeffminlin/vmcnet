@@ -1,6 +1,8 @@
 """Get update functions from ConfigDicts."""
 from typing import Tuple
 
+import jax
+import jax.numpy as jnp
 from kfac_jax import Optimizer as kfac_Optimizer
 import optax
 from ml_collections import ConfigDict
@@ -28,7 +30,7 @@ from .params import (
     create_grad_energy_update_param_fn,
     create_kfac_update_param_fn,
 )
-from .sr import SRMode, get_fisher_inverse_fn
+from .sr import get_fisher_inverse_fn
 
 
 def _get_learning_rate_schedule(
@@ -276,9 +278,15 @@ def _get_sgd_optax_optimizer(
 def _init_optax_optimizer(
     optimizer: optax.GradientTransformation, params: P, apply_pmap: bool = True
 ) -> optax.OptState:
-    optimizer_init = optimizer.init
+    def optimizer_init(params):
+        optimizer_state = optimizer.init(params)
+        prev_zeros = jax.tree_map(lambda x: jnp.zeros_like(x), params)
+        optimizer_state = (*optimizer_state, prev_zeros)
+        return optimizer_state
+
     if apply_pmap:
         optimizer_init = utils.distribute.pmap(optimizer_init)
+
     optimizer_state = optimizer_init(params)
     return optimizer_state
 
@@ -460,7 +468,7 @@ def get_sr_update_fn_and_state(
         initial optimizer state
     """
     precondition_grad_fn = get_fisher_inverse_fn(
-        log_psi_apply, optimizer_config.damping
+        log_psi_apply, optimizer_config.damping, optimizer_config.momentum
     )
 
     if optimizer_config.descent_type == "adam":
@@ -483,7 +491,7 @@ def get_sr_update_fn_and_state(
 
     def optimizer_apply(centered_energies, params, optimizer_state, data):
         grad, preconditioned_grad = precondition_grad_fn(
-            centered_energies, params, get_position_fn(data)
+            centered_energies, params, optimizer_state[-1], get_position_fn(data)
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
@@ -492,8 +500,9 @@ def get_sr_update_fn_and_state(
         )
 
         updates, optimizer_state = descent_optimizer.update(
-            constrained_grad, optimizer_state, params
+            constrained_grad, optimizer_state[:-1], params
         )
+        optimizer_state = (*optimizer_state, constrained_grad)
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 

@@ -334,6 +334,7 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
+                "momentum": 0.9,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
