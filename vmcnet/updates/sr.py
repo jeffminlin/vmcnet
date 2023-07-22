@@ -22,7 +22,9 @@ class SRMode(Enum):
     DEBUG = auto()
 
 
-def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
+def get_fisher_inverse_fn(
+    log_psi_apply: ModelApply[P], damping: chex.Scalar, momentum: chex.Scalar
+):
     """Get a Fisher-preconditioned update.
 
     Given a gradient update grad_E, the function returned here approximates
@@ -57,18 +59,20 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
     def precondition_grad_with_fisher(
-        centered_energies: P, params: P, positions: Array
+        centered_energies: P, params: P, prev_grad, positions: Array
     ) -> P:
         nchains = positions.shape[0]
-        example_grad = jax.grad(log_psi_apply)(params, positions[0, ...])
-        _, unravel_fn = jax.flatten_util.ravel_pytree(example_grad)
+        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
+        prev_grad *= momentum
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
         centered_log_psi_grads = log_psi_grads - jnp.mean(
             log_psi_grads, axis=0, keepdims=True
         )
-        G = 2 * centered_energies @ log_psi_grads / nchains
+
+        raw_G = 2 * centered_energies @ log_psi_grads / nchains
+        e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
@@ -81,8 +85,9 @@ def get_fisher_inverse_fn(log_psi_apply: ModelApply[P], damping: chex.Scalar):
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        SR_G = centered_log_psi_grads.T @ Tinv @ centered_energies
+        SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
+        SR_G = SR_G_tilde + prev_grad
 
-        return unravel_fn(G), unravel_fn(SR_G)
+        return unravel_fn(raw_G), unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
