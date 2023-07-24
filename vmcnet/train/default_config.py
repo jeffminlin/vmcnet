@@ -334,12 +334,14 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
-                "momentum": 0.9,
+                "norm_type": "kfac", # kfac or minsr
+                "momentum": 0.0,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 "damping": 0.001,
+                "damping_type": "diag_shift", # diag_shift or pinv
             },
         },
     }
