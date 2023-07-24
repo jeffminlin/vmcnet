@@ -271,14 +271,15 @@ def create_eval_update_param_fn(
 
 # TODO (ggoldsh): can remove this?
 def constrain_norm(
-    grads: P,
     preconditioned_grads: P,
     learning_rate: chex.Numeric,
     norm_constraint: chex.Numeric = 0.001,
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
-    sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
+    sq_norm_precond_grads = tree_inner_product(
+        preconditioned_grads, preconditioned_grads
+    )
+    sq_norm_scaled_grads = sq_norm_precond_grads * learning_rate**2
 
     # Sync the norms here, see:
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
