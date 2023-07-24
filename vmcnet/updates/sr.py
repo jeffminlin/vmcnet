@@ -23,7 +23,10 @@ class SRMode(Enum):
 
 
 def get_fisher_inverse_fn(
-    log_psi_apply: ModelApply[P], damping: chex.Scalar, momentum: chex.Scalar
+    log_psi_apply: ModelApply[P],
+    damping: chex.Scalar,
+    momentum: chex.Scalar,
+    damping_type: str = "diag_shift",
 ):
     """Get a Fisher-preconditioned update.
 
@@ -59,7 +62,10 @@ def get_fisher_inverse_fn(
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
     def precondition_grad_with_fisher(
-        centered_energies: P, params: P, prev_grad, positions: Array
+        centered_energies: P,
+        params: P,
+        prev_grad,
+        positions: Array,
     ) -> P:
         nchains = positions.shape[0]
         prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
@@ -71,6 +77,7 @@ def get_fisher_inverse_fn(
             log_psi_grads, axis=0, keepdims=True
         )
 
+        raw_G = 2 * centered_energies @ log_psi_grads / nchains
         e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
@@ -79,14 +86,20 @@ def get_fisher_inverse_fn(
         # should be nonnegative since it's PSDF matrix
         eigval = jnp.where(eigval < 0, 0, eigval)
         # Damping has scale factor of nchains since we didn't divide T
-        eigval += damping * nchains
-        eigval_inv = 1 / eigval
+
+        if damping_type == "diag_shift":
+            eigval += damping * nchains
+            eigval_inv = 1 / eigval
+        elif damping_type == "pinv":
+            eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
+        else:
+            raise ValueError("Damping type must be either diag_shift or pinv")
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
         SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
         SR_G = SR_G_tilde + prev_grad
 
-        return unravel_fn(SR_G)
+        return unravel_fn(raw_G), unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
