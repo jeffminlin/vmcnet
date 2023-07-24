@@ -71,7 +71,6 @@ def get_fisher_inverse_fn(
             log_psi_grads, axis=0, keepdims=True
         )
 
-        raw_G = 2 * centered_energies @ log_psi_grads / nchains
         e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
@@ -88,6 +87,6 @@ def get_fisher_inverse_fn(
         SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
         SR_G = SR_G_tilde + prev_grad
 
-        return unravel_fn(raw_G), unravel_fn(SR_G)
+        return unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
