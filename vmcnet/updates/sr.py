@@ -25,7 +25,7 @@ class SRMode(Enum):
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar,
-    momentum: chex.Scalar,
+    dt_learning_rate: chex.Scalar,
     damping_type: str = "diag_shift",
 ):
     """Get a Fisher-preconditioned update.
@@ -69,7 +69,6 @@ def get_fisher_inverse_fn(
     ) -> P:
         nchains = positions.shape[0]
         prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
-        prev_grad *= momentum
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
