@@ -76,8 +76,7 @@ def get_fisher_inverse_fn(
             log_psi_grads, axis=0, keepdims=True
         )
 
-        raw_G = 2 * centered_energies @ log_psi_grads / nchains
-        e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
+        prev_res = centered_log_psi_grads @ prev_grad - centered_energies
 
         T = centered_log_psi_grads @ centered_log_psi_grads.T
         eigval, eigvec = jnp.linalg.eigh(T)
@@ -96,9 +95,11 @@ def get_fisher_inverse_fn(
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
-        SR_G = SR_G_tilde + prev_grad
+        new_grad = (
+            prev_grad
+            - 2 * dt_learning_rate * centered_log_psi_grads.T @ Tinv @ prev_res
+        )
 
-        return unravel_fn(raw_G), unravel_fn(SR_G)
+        return unravel_fn(new_grad)
 
     return precondition_grad_with_fisher
