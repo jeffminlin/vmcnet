@@ -300,7 +300,7 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "sr",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
@@ -338,9 +338,11 @@ def get_default_vmc_config() -> Dict:
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
-                "dt_learning_rate": 5e-2,
-                "damping": 0.001,
+                "dt_type": "natural",  # euclidean or natural
+                # NOTE: LR=1 when dt_type=natural corresponds to solving MinSR exactly
+                "dt_learning_rate": 0.2, # seems like a good value in practice
                 "damping_type": "diag_shift",  # diag_shift or pinv
+                "damping": 0.001,
             },
         },
     }

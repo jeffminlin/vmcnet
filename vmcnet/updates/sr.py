@@ -24,9 +24,10 @@ class SRMode(Enum):
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
-    damping: chex.Scalar,
-    dt_learning_rate: chex.Scalar,
     damping_type: str = "diag_shift",
+    damping: chex.Scalar = 0.001,
+    dt_type: str = "euclidean",
+    dt_learning_rate: chex.Scalar = 0.05,
 ):
     """Get a Fisher-preconditioned update.
 
@@ -78,27 +79,34 @@ def get_fisher_inverse_fn(
 
         prev_res = centered_log_psi_grads @ prev_grad - centered_energies
 
-        T = centered_log_psi_grads @ centered_log_psi_grads.T
-        eigval, eigvec = jnp.linalg.eigh(T)
+        if dt_type == "natural":
+            T = centered_log_psi_grads @ centered_log_psi_grads.T
+            eigval, eigvec = jnp.linalg.eigh(T)
 
-        # should be nonnegative since it's PSDF matrix
-        eigval = jnp.where(eigval < 0, 0, eigval)
-        # Damping has scale factor of nchains since we didn't divide T
+            # should be nonnegative since it's PSDF matrix
+            eigval = jnp.where(eigval < 0, 0, eigval)
+            # Damping has scale factor of nchains since we didn't divide T
 
-        if damping_type == "diag_shift":
-            eigval += damping * nchains
-            eigval_inv = 1 / eigval
-        elif damping_type == "pinv":
-            eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
+            if damping_type == "diag_shift":
+                eigval += damping * nchains
+                eigval_inv = 1 / eigval
+            elif damping_type == "pinv":
+                eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
+            else:
+                raise ValueError("Damping type must be either diag_shift or pinv")
+
+            Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
+
+            new_grad = (
+                prev_grad
+                - dt_learning_rate * centered_log_psi_grads.T @ Tinv @ prev_res
+            )
+        elif dt_type == "euclidean":
+            new_grad = (
+                prev_grad - dt_learning_rate * centered_log_psi_grads.T @ prev_res
+            )
         else:
-            raise ValueError("Damping type must be either diag_shift or pinv")
-
-        Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
-
-        new_grad = (
-            prev_grad
-            - 2 * dt_learning_rate * centered_log_psi_grads.T @ Tinv @ prev_res
-        )
+            raise ValueError("dt_type must be either euclidean or natural")
 
         return unravel_fn(new_grad)
 
