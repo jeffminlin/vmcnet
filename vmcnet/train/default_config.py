@@ -334,7 +334,7 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
-                "norm_type": "kfac",  # kfac or minsr
+                "norm_type": "minsr",  # kfac or minsr
                 "decay": 0.95,
                 "mixing": 1.0,
                 "descent_type": "sgd",
