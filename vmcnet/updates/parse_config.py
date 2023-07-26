@@ -469,9 +469,10 @@ def get_sr_update_fn_and_state(
     """
     precondition_grad_fn = get_fisher_inverse_fn(
         log_psi_apply,
-        optimizer_config.damping,
-        optimizer_config.momentum,
         optimizer_config.damping_type,
+        optimizer_config.damping,
+        optimizer_config.decay,
+        optimizer_config.mixing,
     )
 
     if optimizer_config.descent_type == "adam":
