@@ -335,8 +335,8 @@ def get_default_vmc_config() -> Dict:
             "sr": {
                 "norm_constraint": 0.001,
                 "norm_type": "minsr",  # kfac or minsr
-                "decay": 0.95,
-                "mixing": 1.0,
+                "parallel_momentum": 0.9,
+                "complement_decay": 0.95,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else

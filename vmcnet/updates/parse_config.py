@@ -471,8 +471,8 @@ def get_sr_update_fn_and_state(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
-        optimizer_config.decay,
-        optimizer_config.mixing,
+        optimizer_config.parallel_momentum,
+        optimizer_config.complement_decay,
     )
 
     if optimizer_config.descent_type == "adam":

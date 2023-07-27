@@ -26,8 +26,8 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    decay: chex.Scalar = 0.95,
-    mixing: chex.Scalar = 1.0,
+    parallel_momentum: chex.Scalar = 0.9,
+    complement_decay: chex.Scalar = 0.95,
 ):
     """Get a Fisher-preconditioned update.
 
@@ -70,18 +70,14 @@ def get_fisher_inverse_fn(
     ) -> P:
         nchains = positions.shape[0]
         prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
-        prev_grad *= decay
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        centered_log_psi_grads = log_psi_grads - jnp.mean(
-            log_psi_grads, axis=0, keepdims=True
-        )
+        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
         raw_G = 2 * centered_energies @ log_psi_grads / nchains
-        e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
 
-        T = centered_log_psi_grads @ centered_log_psi_grads.T
+        T = Ohat @ Ohat.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
         # should be nonnegative since it's PSDF matrix
@@ -98,10 +94,25 @@ def get_fisher_inverse_fn(
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
-        SR_G = SR_G_tilde + prev_grad
+        # prev_grad *= decay
+        min_sr_solution = Ohat.T @ Tinv @ centered_energies
 
-        SR_G = mixing * SR_G + (1 - mixing) * prev_grad
+        prev_grad_subspace = Ohat.T @ Tinv @ Ohat @ prev_grad
+        prev_grad_complement = prev_grad - prev_grad_subspace
+
+        prev_grad_subspace_parallel = (
+            min_sr_solution
+            * (min_sr_solution @ prev_grad_subspace)
+            / (min_sr_solution @ min_sr_solution)
+        )
+
+        subspace_direction_with_momentum = (
+            prev_grad_subspace_parallel * parallel_momentum
+            + min_sr_solution * (1 - parallel_momentum)
+        )
+        SR_G = (
+            subspace_direction_with_momentum + prev_grad_complement * complement_decay
+        )
 
         return unravel_fn(raw_G), unravel_fn(SR_G)
 
