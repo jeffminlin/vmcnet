@@ -95,9 +95,12 @@ def get_fisher_inverse_fn(
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
         # prev_grad *= decay
-        min_sr_solution = Ohat.T @ Tinv @ centered_energies
+        P = Ohat.T @ Tinv
 
-        prev_grad_subspace = Ohat.T @ Tinv @ Ohat @ prev_grad
+        min_sr_solution = P @ centered_energies
+
+        Ohat_prev_grad = Ohat @ prev_grad
+        prev_grad_subspace = P @ Ohat_prev_grad
         prev_grad_complement = prev_grad - prev_grad_subspace
 
         prev_grad_subspace_parallel = (
