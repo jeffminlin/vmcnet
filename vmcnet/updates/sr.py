@@ -64,20 +64,7 @@ def get_fisher_inverse_fn(
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
-    def precondition_grad_with_fisher(
-        centered_energies: P,
-        params: P,
-        prev_grad,
-        positions: Array,
-    ) -> P:
-        nchains = positions.shape[0]
-        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
-
-        # (nsample, nparam)
-        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
-
-        T = Ohat @ Ohat.T
+    def invert_T(T, nchains):
         eigval, eigvec = jnp.linalg.eigh(T)
 
         # should be nonnegative since it's PSDF matrix
@@ -93,13 +80,29 @@ def get_fisher_inverse_fn(
             raise ValueError("Damping type must be either diag_shift or pinv")
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
+        return Tinv
+
+    def precondition_grad_with_fisher(
+        centered_energies: P,
+        params: P,
+        prev_grad,
+        positions: Array,
+    ) -> P:
+        nchains = positions.shape[0]
+        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
+
+        # (nsample, nparam)
+        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
+
+        T = Ohat @ Ohat.T
+        Tinv = invert_T(T, nchains)
 
         OhatT_Tinv = Ohat.T @ Tinv
 
         min_sr_solution = OhatT_Tinv @ centered_energies
 
         Ohat_prev_grad = Ohat @ prev_grad
-
         prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
         prev_grad_complement = prev_grad - prev_grad_subspace
 
@@ -110,13 +113,31 @@ def get_fisher_inverse_fn(
         )
         prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
 
+        # The update consists of a linear combination of 4 components. The first
+        # component is min_sr_solution, which is the update used by the original
+        # MinSR method. The remaining components come from a simple decomposition of the
+        # previous gradient into several mutually orthogonal components.
+        #
+        # First, prev_grad is decomposed as prev_grad = prev_grad_subspace +
+        # prev_grad_complement, where prev_grad_subspace lies within the span of the
+        # current gradients and prev_grad_complement lies in the orthogonal space.
+        # Second, prev_grad_subspace is decomposed as prev_grad_subspace =
+        # prev_grad_parallel + prev_grad_orthogonal, where prev_grad_parallel is a
+        # multiple of min_sr_solution and prev_grad_orthogonal is orthogonal to
+        # min_sr_solution.
+        #
+        # Finally, the update is taken as a linear combination of min_sr_solution,
+        # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
         SR_G = (
             min_sr_solution * minsr_scale
+            + prev_grad_complement * complement_decay
             + prev_grad_parallel * parallel_decay
             + prev_grad_orthogonal * orthogonal_decay
-            + prev_grad_complement * complement_decay
         )
 
+        # This vector is returned to facilitate a "natural" norm constraint, since the
+        # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
+        # step w.r.t to the Fisher information metric.
         Ohat_G = Ohat @ SR_G / jnp.sqrt(nchains)
 
         return Ohat_G, unravel_fn(SR_G)
