@@ -26,7 +26,9 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    parallel_momentum: chex.Scalar = 0.9,
+    minsr_scale: chex.Scalar = 1.0,
+    parallel_decay: chex.Scalar = 0.0,
+    orthogonal_decay: chex.Scalar = 0.0,
     complement_decay: chex.Scalar = 0.95,
 ):
     """Get a Fisher-preconditioned update.
@@ -75,8 +77,6 @@ def get_fisher_inverse_fn(
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
-        raw_G = 2 * centered_energies @ log_psi_grads / nchains
-
         T = Ohat @ Ohat.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
@@ -94,29 +94,31 @@ def get_fisher_inverse_fn(
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        # prev_grad *= decay
-        P = Ohat.T @ Tinv
+        OhatT_Tinv = Ohat.T @ Tinv
 
-        min_sr_solution = P @ centered_energies
+        min_sr_solution = OhatT_Tinv @ centered_energies
 
         Ohat_prev_grad = Ohat @ prev_grad
-        prev_grad_subspace = P @ Ohat_prev_grad
+
+        prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
         prev_grad_complement = prev_grad - prev_grad_subspace
 
-        prev_grad_subspace_parallel = (
+        prev_grad_parallel = (
             min_sr_solution
             * (min_sr_solution @ prev_grad_subspace)
             / (min_sr_solution @ min_sr_solution)
         )
+        prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
 
-        subspace_direction_with_momentum = (
-            prev_grad_subspace_parallel * parallel_momentum
-            + min_sr_solution * (1 - parallel_momentum)
-        )
         SR_G = (
-            subspace_direction_with_momentum + prev_grad_complement * complement_decay
+            min_sr_solution * minsr_scale
+            + prev_grad_parallel * parallel_decay
+            + prev_grad_orthogonal * orthogonal_decay
+            + prev_grad_complement * complement_decay
         )
 
-        return unravel_fn(raw_G), unravel_fn(SR_G)
+        Ohat_G = Ohat @ SR_G / jnp.sqrt(nchains)
+
+        return Ohat_G, unravel_fn(SR_G)
 
     return precondition_grad_with_fisher

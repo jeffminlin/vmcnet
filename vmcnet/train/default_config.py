@@ -334,8 +334,9 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
-                "norm_type": "minsr",  # kfac or minsr
-                "parallel_momentum": 0.9,
+                "minsr_scale": 1.0,
+                "parallel_decay": 0.0,
+                "orthogonal_decay": 0.0,
                 "complement_decay": 0.95,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time

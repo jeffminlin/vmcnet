@@ -471,7 +471,9 @@ def get_sr_update_fn_and_state(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
-        optimizer_config.parallel_momentum,
+        optimizer_config.minsr_scale,
+        optimizer_config.parallel_decay,
+        optimizer_config.orthogonal_decay,
         optimizer_config.complement_decay,
     )
 
@@ -494,17 +496,16 @@ def get_sr_update_fn_and_state(
         return optimizer_state[1].count
 
     def optimizer_apply(centered_energies, params, optimizer_state, data):
-        grad, preconditioned_grad = precondition_grad_fn(
+        Ohat_times_grad, grad = precondition_grad_fn(
             centered_energies, params, optimizer_state[-1], get_position_fn(data)
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
         constrained_grad = constrain_norm(
             grad,
-            preconditioned_grad,
+            Ohat_times_grad,
             learning_rate,
             optimizer_config.norm_constraint,
-            optimizer_config.norm_type,
         )
 
         updates, optimizer_state = descent_optimizer.update(

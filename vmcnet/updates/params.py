@@ -271,30 +271,22 @@ def create_eval_update_param_fn(
 
 # TODO (ggoldsh): can remove this?
 def constrain_norm(
-    grads: P,
-    preconditioned_grads: P,
+    grad: P,
+    Ohat_times_grad: Array,
     learning_rate: chex.Numeric,
     norm_constraint: chex.Numeric = 0.001,
-    norm_type: str = "kfac",
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    if norm_type == "kfac":
-        sq_norm_precond_grads = tree_inner_product(grads, preconditioned_grads)
-    elif norm_type == "minsr":
-        sq_norm_precond_grads = tree_inner_product(
-            preconditioned_grads, preconditioned_grads
-        )
-    else:
-        raise ValueError("Norm type should be either kfac or minsr")
+    sq_norm_grad = tree_inner_product(Ohat_times_grad, Ohat_times_grad)
 
-    sq_norm_scaled_grads = sq_norm_precond_grads * learning_rate**2
+    sq_norm_scaled_grad = sq_norm_grad * learning_rate**2
 
     # Sync the norms here, see:
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
-    sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
+    sq_norm_scaled_grad = utils.distribute.pmean_if_pmap(sq_norm_scaled_grad)
 
-    max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grad)
     coefficient = jnp.minimum(max_coefficient, 1)
-    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
+    constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
