@@ -27,7 +27,6 @@ def get_fisher_inverse_fn(
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
     decay: chex.Scalar = 0.95,
-    mixing: chex.Scalar = 1.0,
 ):
     """Get a Fisher-preconditioned update.
 
@@ -100,8 +99,6 @@ def get_fisher_inverse_fn(
 
         SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
         SR_G = SR_G_tilde + prev_grad
-
-        SR_G = mixing * SR_G + (1 - mixing) * prev_grad
 
         return unravel_fn(raw_G), unravel_fn(SR_G)
 

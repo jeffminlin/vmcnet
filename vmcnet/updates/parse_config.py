@@ -472,7 +472,6 @@ def get_sr_update_fn_and_state(
         optimizer_config.damping_type,
         optimizer_config.damping,
         optimizer_config.decay,
-        optimizer_config.mixing,
     )
 
     if optimizer_config.descent_type == "adam":
