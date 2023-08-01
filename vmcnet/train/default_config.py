@@ -334,6 +334,7 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
+                "norm_type": "grad",
                 "minsr_scale": 1.0,
                 "parallel_decay": 0.0,
                 "orthogonal_decay": 0.0,

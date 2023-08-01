@@ -506,6 +506,7 @@ def get_sr_update_fn_and_state(
             Ohat_times_grad,
             learning_rate,
             optimizer_config.norm_constraint,
+            optimizer_config.norm_type,
         )
 
         updates, optimizer_state = descent_optimizer.update(
