@@ -493,14 +493,14 @@ def get_sr_update_fn_and_state(
         return optimizer_state[1].count
 
     def optimizer_apply(centered_energies, params, optimizer_state, data):
-        grad, preconditioned_grad = precondition_grad_fn(
+        Ohat_grad, grad = precondition_grad_fn(
             centered_energies, params, optimizer_state[-1], get_position_fn(data)
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
         constrained_grad = constrain_norm(
+            Ohat_grad,
             grad,
-            preconditioned_grad,
             learning_rate,
             optimizer_config.norm_constraint,
             optimizer_config.norm_type,

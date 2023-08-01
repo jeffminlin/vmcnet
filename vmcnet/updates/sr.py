@@ -73,14 +73,11 @@ def get_fisher_inverse_fn(
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        centered_log_psi_grads = log_psi_grads - jnp.mean(
-            log_psi_grads, axis=0, keepdims=True
-        )
+        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
-        raw_G = 2 * centered_energies @ log_psi_grads / nchains
-        e_tilde = centered_energies - centered_log_psi_grads @ prev_grad
+        e_tilde = centered_energies - Ohat @ prev_grad
 
-        T = centered_log_psi_grads @ centered_log_psi_grads.T
+        T = Ohat @ Ohat.T
         eigval, eigvec = jnp.linalg.eigh(T)
 
         # should be nonnegative since it's PSDF matrix
@@ -97,9 +94,14 @@ def get_fisher_inverse_fn(
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
 
-        SR_G_tilde = centered_log_psi_grads.T @ Tinv @ e_tilde
+        SR_G_tilde = Ohat.T @ Tinv @ e_tilde
         SR_G = SR_G_tilde + prev_grad
 
-        return unravel_fn(raw_G), unravel_fn(SR_G)
+        # This vector is returned to facilitate a "natural" norm constraint, since the
+        # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
+        # step w.r.t to the Fisher information metric.
+        Ohat_G = Ohat @ SR_G / jnp.sqrt(nchains)
+
+        return Ohat_G, unravel_fn(SR_G)
 
     return precondition_grad_with_fisher

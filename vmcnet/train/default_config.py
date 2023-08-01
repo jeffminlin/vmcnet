@@ -333,7 +333,7 @@ def get_default_vmc_config() -> Dict:
             },
             "sr": {
                 "norm_constraint": 0.001,
-                "norm_type": "minsr",  # kfac or minsr
+                "norm_type": "grad",  # grad or Ohat_grad
                 "decay": 0.95,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time

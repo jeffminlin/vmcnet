@@ -271,19 +271,17 @@ def create_eval_update_param_fn(
 
 # TODO (ggoldsh): can remove this?
 def constrain_norm(
-    grads: P,
-    preconditioned_grads: P,
+    Ohat_grad: P,
+    grad: P,
     learning_rate: chex.Numeric,
     norm_constraint: chex.Numeric = 0.001,
-    norm_type: str = "kfac",
+    norm_type: str = "grad",
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    if norm_type == "kfac":
-        sq_norm_precond_grads = tree_inner_product(grads, preconditioned_grads)
-    elif norm_type == "minsr":
-        sq_norm_precond_grads = tree_inner_product(
-            preconditioned_grads, preconditioned_grads
-        )
+    if norm_type == "Ohat_grad":
+        sq_norm_precond_grads = tree_inner_product(Ohat_grad, Ohat_grad)
+    elif norm_type == "grad":
+        sq_norm_precond_grads = tree_inner_product(grad, grad)
     else:
         raise ValueError("Norm type should be either kfac or minsr")
 
@@ -295,6 +293,6 @@ def constrain_norm(
 
     max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
     coefficient = jnp.minimum(max_coefficient, 1)
-    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
+    constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
