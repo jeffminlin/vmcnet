@@ -26,9 +26,8 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    minsr_scale: chex.Scalar = 1.0,
-    parallel_decay: chex.Scalar = 0.0,
-    orthogonal_decay: chex.Scalar = 0.0,
+    momentum: chex.Scalar = 0.9,
+    momentum_cutoff_epoch: int = 1e4,
     complement_decay: chex.Scalar = 0.95,
 ):
     """Get a Fisher-preconditioned update.
@@ -87,6 +86,7 @@ def get_fisher_inverse_fn(
         params: P,
         prev_grad,
         positions: Array,
+        epoch: int,
     ) -> P:
         nchains = positions.shape[0]
         prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
@@ -111,28 +111,12 @@ def get_fisher_inverse_fn(
             * (min_sr_solution @ prev_grad_subspace)
             / (min_sr_solution @ min_sr_solution)
         )
-        prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
 
-        # The update consists of a linear combination of 4 components. The first
-        # component is min_sr_solution, which is the update used by the original
-        # MinSR method. The remaining components come from a simple decomposition of the
-        # previous gradient into several mutually orthogonal components.
-        #
-        # First, prev_grad is decomposed as prev_grad = prev_grad_subspace +
-        # prev_grad_complement, where prev_grad_subspace lies within the span of the
-        # current gradients and prev_grad_complement lies in the orthogonal space.
-        # Second, prev_grad_subspace is decomposed as prev_grad_subspace =
-        # prev_grad_parallel + prev_grad_orthogonal, where prev_grad_parallel is a
-        # multiple of min_sr_solution and prev_grad_orthogonal is orthogonal to
-        # min_sr_solution.
-        #
-        # Finally, the update is taken as a linear combination of min_sr_solution,
-        # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
+        mom = jnp.where(epoch < momentum_cutoff_epoch, momentum, 0.0)
         SR_G = (
-            min_sr_solution * minsr_scale
+            min_sr_solution * (1 - mom)
             + prev_grad_complement * complement_decay
-            + prev_grad_parallel * parallel_decay
-            + prev_grad_orthogonal * orthogonal_decay
+            + prev_grad_parallel * mom
         )
 
         # This vector is returned to facilitate a "natural" norm constraint, since the

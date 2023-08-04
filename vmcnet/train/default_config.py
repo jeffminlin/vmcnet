@@ -334,16 +334,15 @@ def get_default_vmc_config() -> Dict:
             "sr": {
                 "norm_constraint": 0.001,
                 "norm_type": "grad",
-                "minsr_scale": 1.0,
-                "parallel_decay": 0.0,
-                "orthogonal_decay": 0.0,
-                "complement_decay": 0.95,
                 "descent_type": "sgd",
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 "damping": 0.001,
                 "damping_type": "diag_shift",  # diag_shift or pinv
+                "momentum": 0.9,
+                "momentum_cutoff_epoch": 1e4,
+                "complement_decay": 0.95,
             },
         },
     }
