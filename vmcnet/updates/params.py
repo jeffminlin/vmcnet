@@ -278,9 +278,9 @@ def constrain_norm(
     norm_type: str = "grad",
 ) -> P:
     """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    if norm_type == "Ohat_grad":
+    if norm_type == "natural":
         sq_norm_precond_grads = tree_inner_product(Ohat_grad, Ohat_grad)
-    elif norm_type == "grad":
+    elif norm_type == "euclidean":
         sq_norm_precond_grads = tree_inner_product(grad, grad)
     else:
         raise ValueError("Norm type should be either Ohat_grad or grad")
