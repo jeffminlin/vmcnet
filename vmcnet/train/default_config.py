@@ -333,18 +333,24 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
             },
             "sr": {
-                "norm_constraint": 0.001,
-                "norm_type": "grad",
+                # Learning rate params
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "learning_decay_rate": 1e-4,
+                "descent_type": "sgd",
+                # Four coefficients that define a Minibatch SR scheme
                 "minsr_scale": 1.0,
                 "parallel_decay": 0.0,
                 "orthogonal_decay": 0.0,
                 "complement_decay": 0.95,
-                "descent_type": "sgd",
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
-                "learning_decay_rate": 1e-4,
-                "damping": 0.001,
+                # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
+                "damping": 0.001,
+                # Norm constraint magnitude and type
+                # NOTE: the natural norm constraint has been found to seriously reduce
+                # the performance of all variants of minsr. Prefer euclidean version.
+                "norm_type": "euclidean",  # euclidean or natural
+                "norm_constraint": 0.001,
             },
         },
     }
