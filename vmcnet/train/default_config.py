@@ -338,10 +338,10 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
                 "descent_type": "sgd",
                 # Four coefficients that define a Minibatch SR scheme
-                "minsr_scale": 1.0,
-                "parallel_decay": 0.0,
+                "minsr_scale": 0.1,
+                "parallel_decay": 0.9,
                 "orthogonal_decay": 0.0,
-                "complement_decay": 0.95,
+                "complement_decay": 0.99,
                 # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
                 "damping": 0.001,
