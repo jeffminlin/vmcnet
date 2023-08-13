@@ -100,46 +100,32 @@ def get_fisher_inverse_fn(
 
         OhatT_Tinv = Ohat.T @ Tinv
 
-        min_sr_solution = OhatT_Tinv @ centered_energies
+        prev_epsilon = Ohat @ prev_grad
+        prev_epsilon_parallel = (
+            (centered_energies.T @ prev_epsilon)
+            / (centered_energies.T @ centered_energies)
+            * centered_energies
+        )
+        prev_epsilon_orthogonal = prev_epsilon - prev_epsilon_parallel
 
-        Ohat_prev_grad = Ohat @ prev_grad
-        prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
+        epsilon_tilde = (
+            minsr_scale * centered_energies
+            + parallel_decay * prev_epsilon_parallel
+            + orthogonal_decay * prev_epsilon_orthogonal
+        )
+
+        minsr_solution = OhatT_Tinv @ epsilon_tilde
+
+        prev_grad_subspace = OhatT_Tinv @ prev_epsilon
         prev_grad_complement = prev_grad - prev_grad_subspace
 
-        prev_grad_parallel = (
-            min_sr_solution
-            * (min_sr_solution @ prev_grad_subspace)
-            / (min_sr_solution @ min_sr_solution)
-        )
-        prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
-
-        # The update consists of a linear combination of 4 components. The first
-        # component is min_sr_solution, which is the update used by the original
-        # MinSR method. The remaining components come from a simple decomposition of the
-        # previous gradient into several mutually orthogonal components.
-        #
-        # First, prev_grad is decomposed as prev_grad = prev_grad_subspace +
-        # prev_grad_complement, where prev_grad_subspace lies within the span of the
-        # current gradients and prev_grad_complement lies in the orthogonal space.
-        # Second, prev_grad_subspace is decomposed as prev_grad_subspace =
-        # prev_grad_parallel + prev_grad_orthogonal, where prev_grad_parallel is a
-        # multiple of min_sr_solution and prev_grad_orthogonal is orthogonal to
-        # min_sr_solution.
-        #
-        # Finally, the update is taken as a linear combination of min_sr_solution,
-        # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
-        SR_G = (
-            min_sr_solution * minsr_scale
-            + prev_grad_complement * complement_decay
-            + prev_grad_parallel * parallel_decay
-            + prev_grad_orthogonal * orthogonal_decay
-        )
+        proxsr_solution = minsr_solution + complement_decay * prev_grad_complement
 
         # This vector is returned to facilitate a "natural" norm constraint, since the
         # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
         # step w.r.t to the Fisher information metric.
-        Ohat_G = Ohat @ SR_G / jnp.sqrt(nchains)
+        Ohat_G = Ohat @ proxsr_solution / jnp.sqrt(nchains)
 
-        return Ohat_G, unravel_fn(SR_G)
+        return Ohat_G, unravel_fn(proxsr_solution)
 
     return precondition_grad_with_fisher
