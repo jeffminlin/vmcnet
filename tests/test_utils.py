@@ -1,7 +1,6 @@
 """Shared pieces for the test suite."""
 from typing import Tuple
 
-import flax.core.frozen_dict as frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -67,9 +66,7 @@ def make_dummy_data_params_and_key():
     seed = 0
     key = jax.random.PRNGKey(seed)
     data = jnp.array([0, 0, 0, 0])
-    params = frozen_dict.freeze(
-        {"kernel_1": jnp.array([1, 2, 3]), "kernel_2": jnp.array([[4, 5], [6, 7]])}
-    )
+    params = {"kernel_1": jnp.array([1, 2, 3]), "kernel_2": jnp.array([[4, 5], [6, 7]])}
 
     return data, params, key
 
@@ -120,7 +117,7 @@ def get_dense_and_log_domain_dense_same_params(
     """Get matching params for Dense and LogDomainDense layers."""
     dense_params = dense_layer.init(key, batch)
     log_domain_params = _get_log_domain_params_for_dense_layer(dense_params["params"])
-    log_domain_params = frozen_dict.freeze({"params": log_domain_params})
+    log_domain_params = {"params": log_domain_params}
     return dense_params, log_domain_params
 
 
@@ -137,8 +134,8 @@ def get_resnet_and_log_domain_resnet_same_params(
         log_domain_layer_params = _get_log_domain_params_for_dense_layer(layer_params)
         log_domain_params[dense_layer_key] = log_domain_layer_params
 
-    frozen_params = frozen_dict.freeze({"params": log_domain_params})
-    return resnet_params, frozen_params
+    params = {"params": log_domain_params}
+    return resnet_params, params
 
 
 def assert_pytree_allclose(

@@ -10,6 +10,7 @@ import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import tree_sum
 from vmcnet.utils.typing import (
     Array,
+    ArrayLike,
     P,
     ClippingFn,
     PRNGKey,
@@ -310,7 +311,7 @@ def create_value_and_grad_energy_fn(
         params: P,
         positions: Array,
         centered_local_energies: Array,
-    ) -> chex.Numeric:
+    ) -> ArrayLike:
         log_psi = log_psi_apply(params, positions)
         kfac_jax.register_normal_predictive_distribution(log_psi[:, None])
         # NOTE: for the generic gradient estimator case it may be important to include
