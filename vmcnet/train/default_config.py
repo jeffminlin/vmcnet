@@ -337,11 +337,10 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 "descent_type": "sgd",
-                # Four coefficients that define a Minibatch SR scheme
-                "minsr_scale": 0.1,
-                "parallel_decay": 0.9,
-                "orthogonal_decay": 0.0,
-                "complement_decay": 0.99,
+                # Two coefficients for MinSR vs ProxSR vs ProxSR+M
+                "mu": 0.99,
+                "momentum_type": "parallel", # parallel or full
+                "momentum": 0.9,
                 # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
                 "damping": 0.001,
