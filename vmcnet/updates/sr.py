@@ -26,10 +26,9 @@ def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    minsr_scale: chex.Scalar = 1.0,
-    parallel_decay: chex.Scalar = 0.0,
-    orthogonal_decay: chex.Scalar = 0.0,
-    complement_decay: chex.Scalar = 0.95,
+    mu: chex.Scalar = 0.99,
+    momentum_type: str = "parallel",
+    momentum: chex.Scalar = 0.9,
 ):
     """Get a Fisher-preconditioned update.
 
@@ -77,7 +76,10 @@ def get_fisher_inverse_fn(
         elif damping_type == "pinv":
             eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
         else:
-            raise ValueError("Damping type must be either diag_shift or pinv")
+            raise ValueError(
+                "Damping type must be either diag_shift "
+                f"or pinv; received {damping_type}"
+            )
 
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
         return Tinv
@@ -101,31 +103,36 @@ def get_fisher_inverse_fn(
         OhatT_Tinv = Ohat.T @ Tinv
 
         prev_epsilon = Ohat @ prev_grad
-        prev_epsilon_parallel = (
-            (centered_energies.T @ prev_epsilon)
-            / (centered_energies.T @ centered_energies)
-            * centered_energies
-        )
-        prev_epsilon_orthogonal = prev_epsilon - prev_epsilon_parallel
 
-        epsilon_tilde = (
-            minsr_scale * centered_energies
-            + parallel_decay * prev_epsilon_parallel
-            + orthogonal_decay * prev_epsilon_orthogonal
-        )
+        if momentum_type == "parallel":
+            prev_epsilon_parallel = (
+                (centered_energies.T @ prev_epsilon)
+                / (centered_energies.T @ centered_energies)
+                * centered_energies
+            )
+            v_prev = prev_epsilon_parallel
+        elif momentum_type == "full":
+            v_prev = prev_epsilon
+        else:
+            raise ValueError(
+                "Momentum type must be either parallel "
+                f"or full; received {momentum_type}"
+            )
+
+        epsilon_tilde = (1 - momentum) * centered_energies + momentum * v_prev
 
         minsr_solution = OhatT_Tinv @ epsilon_tilde
 
         prev_grad_subspace = OhatT_Tinv @ prev_epsilon
         prev_grad_complement = prev_grad - prev_grad_subspace
 
-        proxsr_solution = minsr_solution + complement_decay * prev_grad_complement
+        G = minsr_solution + mu * prev_grad_complement
 
         # This vector is returned to facilitate a "natural" norm constraint, since the
         # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
         # step w.r.t to the Fisher information metric.
-        Ohat_G = Ohat @ proxsr_solution / jnp.sqrt(nchains)
+        Ohat_G = Ohat @ G / jnp.sqrt(nchains)
 
-        return Ohat_G, unravel_fn(proxsr_solution)
+        return Ohat_G, unravel_fn(G)
 
     return precondition_grad_with_fisher
