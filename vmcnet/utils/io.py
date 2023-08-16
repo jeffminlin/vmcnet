@@ -3,7 +3,6 @@ import functools
 import os
 from typing import Any, Callable, Dict, IO, TypeVar
 
-import flax.core.frozen_dict as frozen_dict
 import jax
 import json
 from ml_collections import ConfigDict
@@ -103,7 +102,6 @@ def process_checkpoint_data_for_saving(
     only copy. Params must also be converted from a frozen_dict to a dict.
     """
     (epoch, data, params, optimizer_state, key) = checkpoint_data
-    params = params.unfreeze()
     if is_distributed:
         params = get_first(params)
         optimizer_state = get_first(optimizer_state)
@@ -151,8 +149,7 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
             if data.dtype == np.dtype("object"):
                 data = data.tolist()
 
-            # Params are stored by flax as a frozen dict, so mimic that behavior here.
-            params = frozen_dict.freeze(npz_data["p"].tolist())
+            params = npz_data["p"].tolist()
             optimizer_state = npz_data["o"].tolist()
             key = npz_data["k"]
             return (epoch, data, params, optimizer_state, key)
