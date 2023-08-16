@@ -62,6 +62,7 @@ def get_default_config() -> ConfigDict:
     config = ConfigDict(
         _copy_all_dicts(
             {
+                "notes": "default",
                 "problem": get_default_molecular_config(),
                 "model": get_default_model_config(),
                 "vmc": get_default_vmc_config(),
