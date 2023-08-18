@@ -501,18 +501,22 @@ def get_sr_update_fn_and_state(
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
-        constrained_grad = constrain_norm(
-            grad,
-            Ohat_times_grad,
-            learning_rate,
-            optimizer_config.norm_constraint,
-            optimizer_config.norm_type,
-        )
+
+        if optimizer_config.constrain_norm:
+            grad = constrain_norm(
+                grad,
+                Ohat_times_grad,
+                learning_rate,
+                optimizer_config.norm_constraint,
+                optimizer_config.norm_type,
+            )
+        else:
+            grad = grad
 
         updates, optimizer_state = descent_optimizer.update(
-            constrained_grad, optimizer_state[:-1], params
+            grad, optimizer_state[:-1], params
         )
-        optimizer_state = (*optimizer_state, constrained_grad)
+        optimizer_state = (*optimizer_state, grad)
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 
