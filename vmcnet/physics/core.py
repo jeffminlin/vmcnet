@@ -231,8 +231,6 @@ def get_clipped_energies_and_aux_data(
         energy, variance = get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
-
-        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
     else:
         local_energies = local_energies_noclip
         energy, variance = get_statistics_from_local_energy(
@@ -245,7 +243,13 @@ def get_clipped_energies_and_aux_data(
         energy_noclip, variance_noclip = get_statistics_from_local_energy(
             local_energies_noclip, nchains, nan_safe=False
         )
-        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
+
+    aux_data=dict(
+        variance=variance,
+        local_energies_noclip=local_energies_noclip,
+        energy_noclip=energy_noclip,
+        variance_noclip=variance_noclip,
+    )
     return energy, local_energies, aux_data
 
 
@@ -328,10 +332,13 @@ def create_value_and_grad_energy_fn(
         energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
+
         centered_local_energies = local_energies - energy
         grad_E = jax.grad(standard_estimator_forward, argnums=0)(
             params, positions, centered_local_energies
         )
+
+        aux_data['centered_local_energies'] = centered_local_energies
         return aux_data, energy, grad_E
 
     def standard_energy_val_and_grad(params, key, positions):
@@ -341,12 +348,10 @@ def create_value_and_grad_energy_fn(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
         )(params, positions, None)
 
-        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn, nan_safe
+        aux_data, energy, grad_E = get_standard_contribution(
+            local_energies_noclip, params, positions
         )
-        centered_local_energies = local_energies - energy
-
-        return (energy, aux_data), centered_local_energies
+        return (energy, aux_data), grad_E
 
     def random_particle_energy_val_and_grad(params, key, positions):
         nbatch = positions.shape[0]
