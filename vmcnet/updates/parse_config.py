@@ -495,9 +495,11 @@ def get_sr_update_fn_and_state(
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
 
-    def optimizer_apply(centered_energies, params, optimizer_state, data):
+    def optimizer_apply(_, params, optimizer_state, data):
+
+        centered_local_energies=data['centered_local_energies']
         Ohat_times_grad, grad = precondition_grad_fn(
-            centered_energies, params, optimizer_state[-1], get_position_fn(data)
+            centered_local_energies, params, optimizer_state[-1], get_position_fn(data)
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
