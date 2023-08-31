@@ -39,17 +39,24 @@ from vmcnet.utils.typing import (
 
 FLAGS = flags.FLAGS
 
-
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
     logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
-            config.logdir = os.path.join(
+            logdir = os.path.join(
                 config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             )
 
-        logdir = config.logdir
+        suffixint=0
+        suffix=''
+
+        while os.path.exists(logdir+suffix):
+            suffixint+=1
+            suffix='_'+str(suffixint)
+
+        logdir=logdir+suffix
+        config.logdir = logdir
         utils.io.save_config_dict_to_json(config, logdir, "config")
         utils.io.save_config_dict_to_json(reload_config, logdir, "reload_config")
     else:
