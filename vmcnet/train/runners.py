@@ -618,7 +618,12 @@ def run_molecule() -> None:
         and reload_config.use_checkpoint_file
     )
 
-    if reload_from_checkpoint:
+    breakpoint()
+    if config.reload_model_state!="":
+        params=utils.io.reload_model_state(config.reload_model_state)
+        breakpoint()
+
+    elif reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )

@@ -155,6 +155,13 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
             return (epoch, data, params, optimizer_state, key)
 
 
+def reload_model_state(path: str):
+    with open(path,'rb') as file_handle:
+        with np.load(file_handle, allow_pickle=True) as npz_data:
+            breakpoint()
+            return npz_data["p"].tolist()
+
+
 def add_suffix_for_uniqueness(name, logdir, trailing_suffix=""):
     """Adds a numerical suffix to keep names unique in a directory.
 

@@ -79,6 +79,7 @@ def get_default_config() -> ConfigDict:
                 "distribute": True,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
                 "initial_seed": 0,
+                "reload_model_state": "",
             }
         )
     )
