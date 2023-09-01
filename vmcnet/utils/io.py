@@ -122,6 +122,7 @@ def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
       checkpoint_data (CheckpointData): data to save
     """
     (epoch, data, params, optimizer_state, key) = checkpoint_data
+    unfrozen_params: Dict[str,Any] = flax.core.unfreeze(params)
 
     with open_or_create(directory, name, "wb") as file_handle:
         np.savez(
@@ -129,7 +130,7 @@ def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
             e=epoch,
             d=data,
             p=params,
-            unfrozen_params=flax.core.unfreeze(params),
+            unfrozen_params=unfrozen_params,
             o=optimizer_state,
             k=key,
         )
