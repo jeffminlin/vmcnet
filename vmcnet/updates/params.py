@@ -68,7 +68,7 @@ def _make_traced_fn_with_single_metrics(
 
 def create_grad_energy_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    optimizer_apply: Callable[[P, P, S, D, Array], Tuple[P, S]],
+    optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S]],
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     apply_pmap: bool = True,
@@ -115,7 +115,7 @@ def create_grad_energy_update_param_fn(
             params,
             optimizer_state,
             data,
-            aux_energy_data["centered_local_energies"],
+            dict(centered_local_energies=aux_energy_data["centered_local_energies"]),
         )
         data = update_data_fn(data, params)
 

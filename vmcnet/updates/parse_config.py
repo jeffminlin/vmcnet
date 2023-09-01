@@ -293,7 +293,8 @@ def _get_optax_update_fn_and_state(
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    def optimizer_apply(grad, params, optimizer_state, *args):
+    def optimizer_apply(grad, params, optimizer_state, data, aux):
+        del data, aux
         updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
@@ -491,7 +492,7 @@ def get_sr_update_fn_and_state(
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
 
-    def optimizer_apply(grad, params, optimizer_state, data, *args):
+    def optimizer_apply(grad, params, optimizer_state, data, aux):
         preconditioned_grad = precondition_grad_fn(grad, params, get_position_fn(data))
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
