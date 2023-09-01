@@ -16,9 +16,11 @@ from vmcnet.utils.typing import (
     PRNGKey,
     LocalEnergyApply,
     ModelApply,
+    Dict,
+    Any
 )
 
-EnergyAuxData = Tuple[Array, Array, Optional[Array], Optional[Array]]
+EnergyAuxData = Dict[str, Any]
 EnergyData = Tuple[Array, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
 
