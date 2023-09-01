@@ -3,6 +3,7 @@ import functools
 import os
 from typing import Any, Callable, Dict, IO, TypeVar
 
+import flax
 import jax
 import json
 from ml_collections import ConfigDict
@@ -128,6 +129,7 @@ def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
             e=epoch,
             d=data,
             p=params,
+            unfrozen_params=flax.core.unfreeze(params),
             o=optimizer_state,
             k=key,
         )
@@ -158,8 +160,8 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
 def reload_model_state(path: str):
     with open(path,'rb') as file_handle:
         with np.load(file_handle, allow_pickle=True) as npz_data:
-            breakpoint()
-            return npz_data["p"].tolist()
+            params=npz_data["unfrozen_params"].item()
+    return flax.core.freeze(params)
 
 
 def add_suffix_for_uniqueness(name, logdir, trailing_suffix=""):
