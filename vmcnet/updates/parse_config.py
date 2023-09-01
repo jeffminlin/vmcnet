@@ -293,8 +293,7 @@ def _get_optax_update_fn_and_state(
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    def optimizer_apply(grad, params, optimizer_state, data):
-        del data
+    def optimizer_apply(grad, params, optimizer_state, *args):
         updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
