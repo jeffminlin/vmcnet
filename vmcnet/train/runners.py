@@ -620,6 +620,7 @@ def run_molecule() -> None:
 
     if config.reload_model_state!="":
         params=utils.io.reload_model_state(config.reload_model_state)
+        params=jax.tree_map(lambda x: x[None,...], params)
 
     elif reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
