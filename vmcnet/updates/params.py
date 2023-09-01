@@ -111,7 +111,11 @@ def create_grad_energy_update_param_fn(
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(
-            grad_energy, params, optimizer_state, data, aux_energy_data["centered_local_energies"]
+            grad_energy,
+            params,
+            optimizer_state,
+            data,
+            aux_energy_data["centered_local_energies"],
         )
         data = update_data_fn(data, params)
 
