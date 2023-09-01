@@ -45,9 +45,11 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
     logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
-            config.logdir = os.path.join(
-                config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            dirname = utils.io.add_suffix_for_uniqueness(
+                name=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+                logdir=config.logdir,
             )
+            config.logdir = os.path.join(config.logdir, dirname)
 
         logdir = config.logdir
         utils.io.save_config_dict_to_json(config, logdir, "config")
