@@ -17,7 +17,7 @@ from vmcnet.utils.typing import (
     LocalEnergyApply,
     ModelApply,
     Dict,
-    Any
+    Any,
 )
 
 EnergyAuxData = Dict[str, Any]
@@ -245,7 +245,7 @@ def get_clipped_energies_and_aux_data(
         energy_noclip, variance_noclip = get_statistics_from_local_energy(
             local_energies_noclip, nchains, nan_safe=False
         )
-    aux_data=dict(
+    aux_data = dict(
         variance=variance,
         local_energies_noclip=local_energies_noclip,
         energy_noclip=energy_noclip,
@@ -337,7 +337,7 @@ def create_value_and_grad_energy_fn(
         grad_E = jax.grad(standard_estimator_forward, argnums=0)(
             params, positions, centered_local_energies
         )
-        aux_data['centered_local_energies'] = centered_local_energies
+        aux_data["centered_local_energies"] = centered_local_energies
         return aux_data, energy, grad_E
 
     def standard_energy_val_and_grad(params, key, positions):

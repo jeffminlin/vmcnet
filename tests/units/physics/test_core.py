@@ -55,8 +55,8 @@ def test_total_energy_grad():
 
     energy_data, grad_energy = total_energy_value_and_grad(a, key, x)
     energy = energy_data[0]
-    variance = energy_data[1]['variance']
-    local_energies = energy_data[1]['local_energies_noclip']
+    variance = energy_data[1]["variance"]
+    local_energies = energy_data[1]["local_energies_noclip"]
 
     np.testing.assert_allclose(local_energies, target_local_energies)
     np.testing.assert_allclose(energy, target_energy)

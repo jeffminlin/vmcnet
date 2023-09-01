@@ -108,8 +108,8 @@ def create_grad_energy_update_param_fn(
 
         energy_data, grad_energy = energy_data_val_and_grad(params, subkey, position)
         energy, aux_energy_data = energy_data
-        if 'centered_local_energies' in aux_energy_data:
-            data['centered_local_energies'] = aux_energy_data['centered_local_energies']
+        if "centered_local_energies" in aux_energy_data:
+            data["centered_local_energies"] = aux_energy_data["centered_local_energies"]
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(
@@ -117,9 +117,11 @@ def create_grad_energy_update_param_fn(
         )
         data = update_data_fn(data, params)
 
-        metrics = {"energy": energy, "variance": aux_energy_data['variance']}
+        metrics = {"energy": energy, "variance": aux_energy_data["variance"]}
         metrics = _update_metrics_with_noclip(
-            aux_energy_data['energy_noclip'], aux_energy_data['variance_noclip'], metrics
+            aux_energy_data["energy_noclip"],
+            aux_energy_data["variance_noclip"],
+            metrics,
         )
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": tree_reduce_l1(params)})
@@ -184,9 +186,9 @@ def create_kfac_update_param_fn(
         data = update_data_fn(data, params)
 
         energy = stats["loss"]
-        variance = stats["aux"]['variance']
-        energy_noclip = stats["aux"]['energy_noclip']
-        variance_noclip = stats["aux"]['variance_noclip']
+        variance = stats["aux"]["variance"]
+        energy_noclip = stats["aux"]["energy_noclip"]
+        variance_noclip = stats["aux"]["variance_noclip"]
         picked_stats = (energy, variance, energy_noclip, variance_noclip)
 
         if record_param_l1_norm:
