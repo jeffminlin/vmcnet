@@ -53,7 +53,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
 
     a) with flag --base_config.path=...json
 
-    Load a base config from a json file, and then override it with any command line flags
+    Load a base config from a json file, then override it with any command line flags
 
 
     b) with flag --reload.logdir=...
