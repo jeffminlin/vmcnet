@@ -16,9 +16,11 @@ from vmcnet.utils.typing import (
     PRNGKey,
     LocalEnergyApply,
     ModelApply,
+    Dict,
+    Any,
 )
 
-EnergyAuxData = Tuple[Array, Array, Optional[Array], Optional[Array]]
+EnergyAuxData = Dict[str, Any]
 EnergyData = Tuple[Array, EnergyAuxData]
 ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
 
@@ -231,8 +233,6 @@ def get_clipped_energies_and_aux_data(
         energy, variance = get_statistics_from_local_energy(
             local_energies, nchains, nan_safe=nan_safe
         )
-
-        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
     else:
         local_energies = local_energies_noclip
         energy, variance = get_statistics_from_local_energy(
@@ -245,7 +245,13 @@ def get_clipped_energies_and_aux_data(
         energy_noclip, variance_noclip = get_statistics_from_local_energy(
             local_energies_noclip, nchains, nan_safe=False
         )
-        aux_data = (variance, local_energies_noclip, energy_noclip, variance_noclip)
+    aux_data = dict(
+        variance=variance,
+        local_energies_noclip=local_energies_noclip,
+        energy_noclip=energy_noclip,
+        variance_noclip=variance_noclip,
+        centered_local_energies=local_energies - energy,
+    )
     return energy, local_energies, aux_data
 
 
