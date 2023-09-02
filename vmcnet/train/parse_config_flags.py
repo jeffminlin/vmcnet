@@ -3,7 +3,6 @@
 import sys
 from typing import Tuple
 
-import os
 import jax
 from absl import flags
 from ml_collections import ConfigDict
