@@ -3,6 +3,7 @@
 import sys
 from typing import Tuple
 
+import os
 import jax
 from absl import flags
 from ml_collections import ConfigDict
@@ -105,16 +106,17 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     base_config_path = flag_values.base_config.path
     reload_config = flag_values.reload
 
-    if (
+    reload = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
-    ):
+    )
+    load_base_config = os.path.splitext(base_config_path)[1] in [".json"]
+
+    if reload and load_base_config:
+        raise ValueError("Cannot specify --base_config.path when using reloaded config")
+    if reload:
         config = _get_config_from_reload(reload_config, flag_values)
-        if base_config_path != "NONE":
-            raise ValueError(
-                "Cannot specify --base_config.path when using reloaded config"
-            )
-    elif base_config_path != "NONE":
+    elif load_base_config:
         config = _get_config_from_base(base_config_path, flag_values)
     else:
         config = _get_config_from_default_config(flag_values)
