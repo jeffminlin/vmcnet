@@ -13,7 +13,7 @@ import vmcnet.utils.io as io
 
 
 def _get_config_from_base(path, flag_values: flags.FlagValues) -> ConfigDict:
-    reloaded_config = io.load_config_dict( '.', path)
+    reloaded_config = io.load_config_dict(".", path)
     config_flags.DEFINE_config_dict(
         "config", reloaded_config, lock_config=True, flag_values=flag_values
     )
@@ -52,12 +52,12 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
     a) with flag --base_config.path=...json
-    
+
     Load a base config from a json file, and then override it with any command line flags
 
 
     b) with flag --reload.logdir=...
-    
+
     In the second, the default ConfigDict is loaded from a previous run by specifying
     the log directory for that run, as well as several other options. These options are
     provided using `--reload..`, for example `--reload.logdir=./logs`.
@@ -110,11 +110,11 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         and reload_config.use_config_file
     ):
         config = _get_config_from_reload(reload_config, flag_values)
-        if base_config_path!="NONE":
+        if base_config_path != "NONE":
             raise ValueError(
                 "Cannot specify --base_config.path when using reloaded config"
             )
-    elif base_config_path!="NONE":
+    elif base_config_path != "NONE":
         config = _get_config_from_base(base_config_path, flag_values)
     else:
         config = _get_config_from_default_config(flag_values)
