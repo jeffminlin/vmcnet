@@ -12,15 +12,6 @@ import vmcnet.train as train
 import vmcnet.utils.io as io
 
 
-def _get_config_from_base(path, flag_values: flags.FlagValues) -> ConfigDict:
-    reloaded_config = io.load_config_dict(".", path)
-    config_flags.DEFINE_config_dict(
-        "config", reloaded_config, lock_config=True, flag_values=flag_values
-    )
-    flag_values(sys.argv)
-    return flag_values.config
-
-
 def _get_config_from_reload(
     reload_config: ConfigDict, flag_values: flags.FlagValues
 ) -> ConfigDict:
@@ -34,10 +25,18 @@ def _get_config_from_reload(
     return flag_values.config
 
 
-def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict:
+def _get_config_from_default_config(
+    flag_values: flags.FlagValues, *presets_paths
+) -> ConfigDict:
+    base_config = train.default_config.get_default_config()
+
+    for path in presets_paths:
+        layer = io.load_config_dict(".", path)
+        base_config.update(layer)
+
     config_flags.DEFINE_config_dict(
         "config",
-        train.default_config.get_default_config(),
+        base_config,
         lock_config=False,
         flag_values=flag_values,
     )
@@ -51,9 +50,10 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
 def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
-    a) with flag --base_config.path=...json
+    a) with flag --preset_config.path=...json
 
-    Load a base config from a json file, then override it with any command line flags
+    Update default config with a preset config from a json file, then override it with
+    any command line flags.
 
 
     b) with flag --reload.logdir=...
@@ -69,7 +69,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     :func:`~vmcnet.train.choose_model_type_in_model_config`.
 
 
-    c) with no --base_config or --reload.logdir
+    c) with no --preset_config or --reload.logdir
 
     A global default ConfigDict is made in python, and changed only where the user
     overrides it via command line flags such as `--config.vmc.nburn=100`.
@@ -88,7 +88,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
             The second holds all other settings.
     """
     config_flags.DEFINE_config_dict(
-        "base_config",
+        "preset_config",
         ConfigDict({"path": "NONE"}),
         lock_config=True,
         flag_values=flag_values,
@@ -100,21 +100,23 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         flag_values=flag_values,
     )
     flag_values(sys.argv, True)
-    base_config_path = flag_values.base_config.path
+    preset_config_path = flag_values.preset_config.path
     reload_config = flag_values.reload
 
     reload = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     )
-    load_base_config = base_config_path != "NONE"
+    load_preset_config = preset_config_path != "NONE"
 
-    if reload and load_base_config:
-        raise ValueError("Cannot specify --base_config.path when using reloaded config")
+    if reload and load_preset_config:
+        raise ValueError(
+            "Cannot specify --preset_config.path when using reloaded config"
+        )
     if reload:
         config = _get_config_from_reload(reload_config, flag_values)
-    elif load_base_config:
-        config = _get_config_from_base(base_config_path, flag_values)
+    elif load_preset_config:
+        config = _get_config_from_default_config(flag_values, preset_config_path)
     else:
         config = _get_config_from_default_config(flag_values)
 
