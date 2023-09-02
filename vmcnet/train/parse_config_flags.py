@@ -51,7 +51,7 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
 
 def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
-
+    
     a) with flag --base_config.path=...json
 
     Load a base config from a json file, then override it with any command line flags
@@ -83,13 +83,11 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
             flags. Should generally use the global flags.FLAGS, but it's useful to be
             able to override this for testing, since an error will be thrown if multiple
             tests define configs for the same FlagValues object.
-
     Returns:
         (reload_config, config): Two ConfigDicts. The first holds settings for the
             case where configurations or checkpoints are reloaded from a previous run.
             The second holds all other settings.
     """
-
     config_flags.DEFINE_config_dict(
         "base_config",
         ConfigDict({"path": "NONE"}),
