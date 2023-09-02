@@ -108,7 +108,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     )
-    load_base_config = os.path.splitext(base_config_path)[1] in [".json"]
+    load_base_config = base_config_path != "NONE"
 
     if reload and load_base_config:
         raise ValueError("Cannot specify --base_config.path when using reloaded config")
