@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import vmcnet.train as train
+from ml_collections import ConfigDict
 
 
 def _get_config(vmc_nchains, eval_nchains, distribute):
@@ -47,6 +48,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
     mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
     mock_flags.config = config
     mock_flags.reload = train.default_config.get_default_reload_config()
+    mock_flags.base_config = ConfigDict({"path": "base_configs/quicktest.json"})
 
     train.runners.run_molecule()
 

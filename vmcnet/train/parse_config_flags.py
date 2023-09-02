@@ -51,7 +51,7 @@ def _get_config_from_default_config(flag_values: flags.FlagValues) -> ConfigDict
 
 def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
-    
+
     a) with flag --base_config.path=...json
 
     Load a base config from a json file, then override it with any command line flags
