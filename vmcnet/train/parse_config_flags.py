@@ -26,7 +26,7 @@ def _get_config_from_reload(
 
 
 def _get_config_from_default_config(
-    flag_values: flags.FlagValues, presets_path: str = None
+    flag_values: flags.FlagValues, presets_path = None
 ) -> ConfigDict:
     base_config = train.default_config.get_default_config()
 
