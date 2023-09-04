@@ -589,8 +589,12 @@ def run_molecule() -> None:
     reload_run_from_checkpoint = reload and not reload_config.model_only
     reload_model_from_checkpoint = reload and reload_config.model_only
 
+    if reload_run_from_checkpoint:
+        config.notes = config.notes + " (reloaded run from {}/{})".format(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
+        )
     if reload_model_from_checkpoint:
-        config.notes = config.notes + " (reloaded model from {}/{})".format(
+        config.notes = config.notes + " (reloaded model state from {}/{})".format(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
 
@@ -648,7 +652,8 @@ def run_molecule() -> None:
 
         if reload_model_from_checkpoint:
             params = utils.io.reload_vmc_state(directory, filename)[2]
-            params = jax.tree_map(lambda x: x[None], params)
+            #if apply_pmap:
+            params = utils.distribute.replicate_all_local_devices(params)
 
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
