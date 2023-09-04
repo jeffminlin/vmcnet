@@ -6,6 +6,7 @@ from ml_collections import ConfigDict, FieldReference
 
 from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
 
+NO_PATH = "NONE"
 NO_RELOAD_LOG_DIR = "NONE"
 DEFAULT_CONFIG_FILE_NAME = "config.json"
 

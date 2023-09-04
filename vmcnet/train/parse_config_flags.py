@@ -89,7 +89,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """
     config_flags.DEFINE_config_dict(
         "preset_config",
-        ConfigDict({"path": "NONE"}),
+        ConfigDict({"path": train.default_config.NO_PATH}),
         lock_config=True,
         flag_values=flag_values,
     )
@@ -107,7 +107,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     )
-    load_preset_config = preset_config_path != "NONE"
+    load_preset_config = preset_config_path != train.default_config.NO_PATH
 
     if reload and load_preset_config:
         raise ValueError(
