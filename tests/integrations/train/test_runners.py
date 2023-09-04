@@ -48,7 +48,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
     mock_flags = mocker.patch("vmcnet.train.runners.FLAGS")
     mock_flags.config = config
     mock_flags.reload = train.default_config.get_default_reload_config()
-    mock_flags.preset_config = ConfigDict({"path": train.default_config.NO_PATH})
+    mock_flags.presets = ConfigDict({"path": train.default_config.NO_PATH})
 
     train.runners.run_molecule()
 

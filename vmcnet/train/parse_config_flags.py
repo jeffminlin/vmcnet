@@ -31,8 +31,8 @@ def _get_config_from_default_config(
     base_config = train.default_config.get_default_config()
 
     if presets_path is not None:
-        layer = io.load_config_dict(".", presets_path)
-        base_config.update(layer)
+        presets = io.load_config_dict(".", presets_path)
+        base_config.update(presets)
 
     config_flags.DEFINE_config_dict(
         "config",
@@ -50,7 +50,7 @@ def _get_config_from_default_config(
 def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
-    a) with flag --preset_config.path=...json
+    a) with flag --presets.path=...json
 
     Update default config with a preset config from a json file, then override it with
     any command line flags.
@@ -69,7 +69,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     :func:`~vmcnet.train.choose_model_type_in_model_config`.
 
 
-    c) with no --preset_config or --reload.logdir
+    c) with no --presets or --reload.logdir
 
     A global default ConfigDict is made in python, and changed only where the user
     overrides it via command line flags such as `--config.vmc.nburn=100`.
@@ -88,7 +88,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
             The second holds all other settings.
     """
     config_flags.DEFINE_config_dict(
-        "preset_config",
+        "presets",
         ConfigDict({"path": train.default_config.NO_PATH}),
         lock_config=True,
         flag_values=flag_values,
@@ -100,23 +100,23 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         flag_values=flag_values,
     )
     flag_values(sys.argv, True)
-    preset_config_path = flag_values.preset_config.path
+    presets_path = flag_values.presets.path
     reload_config = flag_values.reload
 
     reload = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     )
-    load_preset_config = preset_config_path != train.default_config.NO_PATH
+    load_presets = presets_path != train.default_config.NO_PATH
 
-    if reload and load_preset_config:
+    if reload and load_presets:
         raise ValueError(
-            "Cannot specify --preset_config.path when using reloaded config"
+            "Cannot specify --presets.path when using reloaded config"
         )
     if reload:
         config = _get_config_from_reload(reload_config, flag_values)
-    elif load_preset_config:
-        config = _get_config_from_default_config(flag_values, preset_config_path)
+    elif load_presets:
+        config = _get_config_from_default_config(flag_values, presets_path)
     else:
         config = _get_config_from_default_config(flag_values)
 
