@@ -26,12 +26,12 @@ def _get_config_from_reload(
 
 
 def _get_config_from_default_config(
-    flag_values: flags.FlagValues, *presets_paths
+    flag_values: flags.FlagValues, presets_path: str = None
 ) -> ConfigDict:
     base_config = train.default_config.get_default_config()
 
-    for path in presets_paths:
-        layer = io.load_config_dict(".", path)
+    if presets_path is not None:
+        layer = io.load_config_dict(".", presets_path)
         base_config.update(layer)
 
     config_flags.DEFINE_config_dict(
