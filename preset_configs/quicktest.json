@@ -3,15 +3,14 @@
     "problem": {
         "ion_pos": [
             [
-                0.0
+                0.0, 0.0, 0.0
             ]
         ],
         "ion_charges": [
             2.0
         ],
         "nelec": [
-            1,
-            1
+            1, 1
         ],
         "ei_softening": 0.0,
         "ee_softening": 0.0
@@ -40,7 +39,7 @@
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
         "best_checkpoint_every": 100,
-        "optimizer_type": "kfac"
+        "optimizer_type": "sgd"
     },
     "eval": {
         "nchains": 100,
