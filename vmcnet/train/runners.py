@@ -594,7 +594,7 @@ def run_molecule() -> None:
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
     if reload_model_from_checkpoint:
-        config.notes = config.notes + " (reloaded model state from {}/{})".format(
+        config.notes = config.notes + " (reloaded model from {}/{})".format(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
 
