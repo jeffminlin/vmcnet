@@ -1,6 +1,7 @@
 """Logic for parsing command line flags into a ConfigDict."""
 
 import sys
+import os
 from typing import Tuple
 
 import jax
@@ -10,6 +11,7 @@ from ml_collections.config_flags import config_flags
 
 import vmcnet.train as train
 import vmcnet.utils.io as io
+from vmcnet.train.default_config import NO_NAME, NO_PATH, DEFAULT_PRESETS_DIR
 
 
 def _get_config_from_reload(
@@ -50,7 +52,8 @@ def _get_config_from_default_config(
 def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
-    a) with flag --presets.path=...json
+    a) with flag --presets.path=my_preset.json
+    or --presets.name=my_preset, if PRESETS_DIR/my_preset.json exists
 
     Update default config with a preset config from a json file, then override it with
     any command line flags.
@@ -89,7 +92,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     """
     config_flags.DEFINE_config_dict(
         "presets",
-        ConfigDict({"path": train.default_config.NO_PATH}),
+        ConfigDict({"name": NO_NAME, "path": NO_PATH}),
         lock_config=True,
         flag_values=flag_values,
     )
@@ -100,14 +103,26 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         flag_values=flag_values,
     )
     flag_values(sys.argv, True)
-    presets_path = flag_values.presets.path
+
     reload_config = flag_values.reload
 
     reload = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_config_file
     )
-    load_presets = presets_path != train.default_config.NO_PATH
+
+    load_presets = (
+        flag_values.presets.name != NO_NAME or flag_values.presets.path != NO_PATH
+    )
+    if flag_values.presets.path != NO_PATH and flag_values.presets.name != NO_NAME:
+        raise ValueError("Cannot specify both --presets.path and --presets.name")
+
+    if flag_values.presets.name != NO_NAME:
+        presets_path = os.path.join(
+            DEFAULT_PRESETS_DIR, flag_values.presets.name + ".json"
+        )
+    elif flag_values.presets.path != NO_PATH:
+        presets_path = flag_values.presets.path
 
     if reload and load_presets:
         raise ValueError("Cannot specify --presets.path when using reloaded config")
