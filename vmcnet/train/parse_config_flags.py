@@ -26,7 +26,7 @@ def _get_config_from_reload(
 
 
 def _get_config_from_default_config(
-    flag_values: flags.FlagValues, presets_path = None
+    flag_values: flags.FlagValues, presets_path=None
 ) -> ConfigDict:
     base_config = train.default_config.get_default_config()
 
@@ -110,9 +110,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     load_presets = presets_path != train.default_config.NO_PATH
 
     if reload and load_presets:
-        raise ValueError(
-            "Cannot specify --presets.path when using reloaded config"
-        )
+        raise ValueError("Cannot specify --presets.path when using reloaded config")
     if reload:
         config = _get_config_from_reload(reload_config, flag_values)
     elif load_presets:
