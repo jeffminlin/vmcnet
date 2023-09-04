@@ -43,5 +43,6 @@
         "nchains": 100,
         "nburn": 100,
         "nepochs": 100
-    }
+    },
+    "logdir": "logs/quicktest"
 }

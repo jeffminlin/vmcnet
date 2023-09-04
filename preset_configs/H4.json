@@ -19,5 +19,6 @@
     },
     "vmc": {
         "nepochs": 10000
-    }
+    },
+    "logdir": "logs/H4"
 }
