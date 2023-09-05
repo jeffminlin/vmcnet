@@ -33,7 +33,7 @@ def _get_config_from_default_config(
     base_config = train.default_config.get_default_config()
 
     if presets_path is not None:
-        presets = io.load_config_dict(".", presets_path)
+        presets = io.load_config_dict("", presets_path)
         base_config.update(presets)
 
     config_flags.DEFINE_config_dict(
