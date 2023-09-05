@@ -35,7 +35,6 @@ from .sr import (
 from .proxsr import (
     get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
     constrain_norm as constrain_norm_proxsr,
-    SRMode
 )
 
 
