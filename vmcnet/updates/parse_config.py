@@ -170,6 +170,8 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
             nan_safe=vmc_config.nan_safe,
         )
+        return update_param_fn, optimizer_state, key
+
     # >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
     elif vmc_config.optimizer_type == "proxsr":
         (
@@ -187,8 +189,9 @@ def get_update_fn_and_init_optimizer(
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
         )
-    # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
         return update_param_fn, optimizer_state, key
+    # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
+
     else:
         raise ValueError(
             "Requested optimizer type not supported; {} was requested".format(
