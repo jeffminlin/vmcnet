@@ -582,6 +582,26 @@ def run_molecule() -> None:
     """Run VMC on a molecule."""
     reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
 
+    reload_from_checkpoint = (
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_checkpoint_file
+    )
+    reload_run_from_checkpoint = (
+        reload_from_checkpoint and not reload_config.model_params_only
+    )
+    reload_model_from_checkpoint = (
+        reload_from_checkpoint and reload_config.model_params_only
+    )
+
+    if reload_run_from_checkpoint:
+        config.notes = config.notes + " (reloaded run from {}/{})".format(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
+        )
+    if reload_model_from_checkpoint:
+        config.notes = config.notes + " (reloaded model from {}/{})".format(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path
+        )
+
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
     logdir = _get_logdir_and_save_config(reload_config, config)
@@ -615,27 +635,29 @@ def run_molecule() -> None:
         apply_pmap=config.distribute,
     )
 
-    reload_from_checkpoint = (
-        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
-        and reload_config.use_checkpoint_file
-    )
-
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
-        _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
-            directory, filename
-        )
-        (
-            data,
-            params,
-            optimizer_state,
-            key,
-        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
-            data, params, optimizer_state, key
-        )
+
+        if reload_run_from_checkpoint:
+            _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
+                directory, filename
+            )
+            (
+                data,
+                params,
+                optimizer_state,
+                key,
+            ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+                data, params, optimizer_state, key
+            )
+
+        if reload_model_from_checkpoint:
+            params = utils.io.reload_vmc_state(directory, filename)[2]
+            if config.distribute:
+                params = utils.distribute.replicate_all_local_devices(params)
 
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
