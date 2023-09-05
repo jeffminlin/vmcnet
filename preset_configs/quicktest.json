@@ -1,0 +1,48 @@
+{
+    "notes": "quicktest: He",
+    "problem": {
+        "ion_pos": [
+            [
+                0.0, 0.0, 0.0
+            ]
+        ],
+        "ion_charges": [
+            2.0
+        ],
+        "nelec": [
+            1, 1
+        ]
+    },
+    "model": {
+        "backflow": {
+            "ndense_list": [
+                [
+                    64,
+                    16
+                ],
+                [
+                    64,
+                    16
+                ],
+                [
+                    64
+                ]
+            ]
+        }
+    },
+    "vmc": {
+        "nchains": 100,
+        "nepochs": 100,
+        "nburn": 100,
+        "nsteps_per_param_update": 10,
+        "nmoves_per_width_update": 100,
+        "best_checkpoint_every": 100,
+        "optimizer_type": "sgd"
+    },
+    "eval": {
+        "nchains": 100,
+        "nburn": 100,
+        "nepochs": 100
+    },
+    "logdir": "logs/quicktest"
+}
