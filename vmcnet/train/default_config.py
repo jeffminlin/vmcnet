@@ -6,8 +6,11 @@ from ml_collections import ConfigDict, FieldReference
 
 from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
 
+NO_NAME = "NONE"
+NO_PATH = "NONE"
 NO_RELOAD_LOG_DIR = "NONE"
 DEFAULT_CONFIG_FILE_NAME = "config.json"
+DEFAULT_PRESETS_DIR = "./preset_configs"
 
 
 def _copy_all_dicts(config: Dict) -> Dict:
