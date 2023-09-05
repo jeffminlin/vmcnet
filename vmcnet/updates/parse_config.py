@@ -191,7 +191,25 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
     # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
-
+    elif vmc_config.optimizer_type == "minsr":
+        minsr_as_proxsr_config=ConfigDict(
+            dict(vmc_config.optimizer.minsr)|{"complement_decay": 0.0}
+        )
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_proxsr_update_fn_and_state(
+            log_psi_apply,
+            params,
+            get_position_fn,
+            update_data_fn,
+            energy_data_val_and_grad,
+            learning_rate_schedule,
+            minsr_as_proxsr_config,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
+        )
+        return update_param_fn, optimizer_state, key
     else:
         raise ValueError(
             "Requested optimizer type not supported; {} was requested".format(
@@ -601,9 +619,6 @@ def get_proxsr_update_fn_and_state(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
-        optimizer_config.minsr_scale,
-        optimizer_config.parallel_decay,
-        optimizer_config.orthogonal_decay,
         optimizer_config.complement_decay,
     )
 

@@ -352,12 +352,8 @@ def get_default_vmc_config() -> Dict:
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
-                # Four coefficients that define a Minibatch SR scheme
-                "minsr_scale": 1.0,
-                "parallel_decay": 0.0,
-                "orthogonal_decay": 0.0,
-                "complement_decay": 0.0
-                ,
+                # ProxSR-specific params
+                "complement_decay": 0.95,
                 # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
                 "damping": 0.001,
@@ -369,6 +365,21 @@ def get_default_vmc_config() -> Dict:
                 "norm_constraint": 0.001,
             },
             # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
+            "minsr": {
+                # Learning rate params
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "learning_decay_rate": 1e-4,
+                # Damping magnitude and type
+                "damping_type": "diag_shift",  # diag_shift or pinv
+                "damping": 0.001,
+                # Norm constraint magnitude and type
+                # NOTE: the natural norm constraint has been found to seriously reduce
+                # the performance of all variants of minsr. Prefer euclidean version.
+                "constrain_norm": True,
+                "norm_type": "euclidean",  # euclidean or natural
+                "norm_constraint": 0.001,
+            },
         },
     }
     return vmc_config
