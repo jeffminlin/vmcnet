@@ -10,6 +10,12 @@ import jax.numpy as jnp
 
 from vmcnet.utils.typing import Array, ModelApply, P
 
+import chex
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+)
+from vmcnet import utils
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],

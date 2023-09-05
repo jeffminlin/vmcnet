@@ -24,11 +24,19 @@ from vmcnet.utils.typing import (
 
 from .params import (
     UpdateParamFn,
-    constrain_norm,
     create_grad_energy_update_param_fn,
     create_kfac_update_param_fn,
 )
-from .sr import SRMode, get_fisher_inverse_fn
+from .sr import (
+    get_fisher_inverse_fn,
+    constrain_norm,
+    SRMode
+)
+from .proxsr import (
+    get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
+    constrain_norm as constrain_norm_proxsr,
+    SRMode
+)
 
 
 def _get_learning_rate_schedule(
@@ -588,7 +596,7 @@ def get_proxsr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    precondition_grad_fn = get_fisher_inverse_fn(
+    precondition_grad_fn = get_fisher_inverse_fn_proxsr(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
