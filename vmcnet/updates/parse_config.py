@@ -36,6 +36,7 @@ from .proxsr import (
     get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
     constrain_norm as constrain_norm_proxsr,
 )
+from .optimizers import sgd
 
 
 def _get_learning_rate_schedule(
@@ -177,15 +178,14 @@ def get_update_fn_and_init_optimizer(
         (
             update_param_fn,
             optimizer_state,
-        ) = get_sr_update_fn_and_state(
+        ) = get_proxsr_update_fn_and_state(
             log_psi_apply,
             params,
             get_position_fn,
             update_data_fn,
             energy_data_val_and_grad,
             learning_rate_schedule,
-            vmc_config.optimizer.sr,
-            vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
+            vmc_config.optimizer.proxsr,
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
         )
@@ -550,7 +550,7 @@ def get_sr_update_fn_and_state(
 
 
 
-# >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
+# >>>>>>>>>> from gg-min-sr-mom (modified) >>>>>>>>>>
 def get_proxsr_update_fn_and_state(
     log_psi_apply: ModelApply[P],
     params: P,
@@ -559,7 +559,6 @@ def get_proxsr_update_fn_and_state(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
-    descent_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
@@ -608,27 +607,20 @@ def get_proxsr_update_fn_and_state(
         optimizer_config.complement_decay,
     )
 
-    if optimizer_config.descent_type == "adam":
-        descent_optimizer = _get_adam_optax_optimizer(
-            learning_rate_schedule, descent_config
-        )
-    elif optimizer_config.descent_type == "sgd":
-        descent_optimizer = _get_sgd_optax_optimizer(
-            learning_rate_schedule, descent_config
-        )
-    else:
-        raise ValueError(
-            "Requested descent type not supported; {} was requested".format(
-                optimizer_config.descent_type
-            )
-        )
+    descent_optimizer = sgd(
+        learning_rate=learning_rate_schedule, momentum=0, nesterov=False
+    )
 
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
+    
+    def prev_update(optimizer_state):
+        return optimizer_state[0].trace
 
-    def optimizer_apply(centered_energies, params, optimizer_state, data):
+    def optimizer_apply(regular_grad, params, optimizer_state, data, aux):
+        del regular_grad
         Ohat_times_grad, grad = precondition_grad_fn(
-            centered_energies, params, optimizer_state[-1], get_position_fn(data)
+            aux['centered_local_energies'], params, prev_update(optimizer_state), get_position_fn(data)
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
@@ -645,9 +637,8 @@ def get_proxsr_update_fn_and_state(
             grad = grad
 
         updates, optimizer_state = descent_optimizer.update(
-            grad, optimizer_state[:-1], params
+            grad, optimizer_state, params
         )
-        optimizer_state = (*optimizer_state, grad)
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 
@@ -666,3 +657,4 @@ def get_proxsr_update_fn_and_state(
     return update_param_fn, optimizer_state
 
 # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
+

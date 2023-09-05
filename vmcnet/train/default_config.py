@@ -352,7 +352,6 @@ def get_default_vmc_config() -> Dict:
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
-                "descent_type": "sgd",
                 # Four coefficients that define a Minibatch SR scheme
                 "minsr_scale": 1.0,
                 "parallel_decay": 0.0,
