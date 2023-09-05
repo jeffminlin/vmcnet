@@ -163,6 +163,24 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
             nan_safe=vmc_config.nan_safe,
         )
+    # >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
+    elif vmc_config.optimizer_type == "proxsr":
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = get_sr_update_fn_and_state(
+            log_psi_apply,
+            params,
+            get_position_fn,
+            update_data_fn,
+            energy_data_val_and_grad,
+            learning_rate_schedule,
+            vmc_config.optimizer.sr,
+            vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
+        )
+    # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
         return update_param_fn, optimizer_state, key
     else:
         raise ValueError(
@@ -519,3 +537,122 @@ def get_sr_update_fn_and_state(
     )
 
     return update_param_fn, optimizer_state
+
+
+
+# >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
+def get_proxsr_update_fn_and_state(
+    log_psi_apply: ModelApply[P],
+    params: P,
+    get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
+    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
+    learning_rate_schedule: LearningRateSchedule,
+    optimizer_config: ConfigDict,
+    descent_config: ConfigDict,
+    record_param_l1_norm: bool = False,
+    apply_pmap: bool = True,
+) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
+    """Get an update param function and initial state for stochastic reconfiguration.
+
+    Args:
+        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
+            function is (params, x) -> log|psi(x)|
+        params (pytree): params with which to initialize optimizer state
+        get_position_fn (Callable): function which gets the position array from the data
+        update_data_fn (Callable): function which updates data for new params
+        energy_data_val_and_grad (Callable): function which computes the clipped energy
+            value and gradient. Has the signature
+                (params, x)
+                -> ((expected_energy, auxiliary_energy_data), grad_energy),
+            where auxiliary_energy_data is the tuple
+            (expected_variance, local_energies, unclipped_energy, unclipped_variance)
+        learning_rate_schedule (Callable): function which returns a learning rate from
+            epoch number. Has signature epoch -> learning_rate
+        optimizer_config (ConfigDict): configuration for stochastic reconfiguration
+        descent_config (ConfigDict): configuration for the gradient descent-like method
+            used to apply the preconditioned updates
+        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+            parameters in the metrics. Defaults to False.
+        apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
+            True.
+
+    Raises:
+        ValueError: A non-supported descent type is requested. Currently only Adam and
+            SGD are supported.
+
+    Returns:
+        (UpdateParamFn, optax.OptState):
+        update param function with signature
+            (params, data, optimizer_state, key)
+            -> (new params, new state, metrics, new key), and
+        initial optimizer state
+    """
+    precondition_grad_fn = get_fisher_inverse_fn(
+        log_psi_apply,
+        optimizer_config.damping_type,
+        optimizer_config.damping,
+        optimizer_config.minsr_scale,
+        optimizer_config.parallel_decay,
+        optimizer_config.orthogonal_decay,
+        optimizer_config.complement_decay,
+    )
+
+    if optimizer_config.descent_type == "adam":
+        descent_optimizer = _get_adam_optax_optimizer(
+            learning_rate_schedule, descent_config
+        )
+    elif optimizer_config.descent_type == "sgd":
+        descent_optimizer = _get_sgd_optax_optimizer(
+            learning_rate_schedule, descent_config
+        )
+    else:
+        raise ValueError(
+            "Requested descent type not supported; {} was requested".format(
+                optimizer_config.descent_type
+            )
+        )
+
+    def get_optimizer_step_count(optimizer_state):
+        return optimizer_state[1].count
+
+    def optimizer_apply(centered_energies, params, optimizer_state, data):
+        Ohat_times_grad, grad = precondition_grad_fn(
+            centered_energies, params, optimizer_state[-1], get_position_fn(data)
+        )
+        step_count = get_optimizer_step_count(optimizer_state)
+        learning_rate = learning_rate_schedule(step_count)
+
+        if optimizer_config.constrain_norm:
+            grad = constrain_norm_proxsr(
+                grad,
+                Ohat_times_grad,
+                learning_rate,
+                optimizer_config.norm_constraint,
+                optimizer_config.norm_type,
+            )
+        else:
+            grad = grad
+
+        updates, optimizer_state = descent_optimizer.update(
+            grad, optimizer_state[:-1], params
+        )
+        optimizer_state = (*optimizer_state, grad)
+        params = optax.apply_updates(params, updates)
+        return params, optimizer_state
+
+    update_param_fn = create_grad_energy_update_param_fn(
+        energy_data_val_and_grad,
+        optimizer_apply,
+        get_position_fn=get_position_fn,
+        update_data_fn=update_data_fn,
+        record_param_l1_norm=record_param_l1_norm,
+        apply_pmap=apply_pmap,
+    )
+    optimizer_state = _init_optax_optimizer(
+        descent_optimizer, params, apply_pmap=apply_pmap
+    )
+
+    return update_param_fn, optimizer_state
+
+# <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
