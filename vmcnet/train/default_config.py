@@ -56,7 +56,7 @@ def get_default_reload_config() -> ConfigDict:
             "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
             "use_checkpoint_file": True,
             "checkpoint_relative_file_path": CHECKPOINT_FILE_NAME,
-            "model_only": False,
+            "model_params_only": False,
         }
     )
 

@@ -582,12 +582,16 @@ def run_molecule() -> None:
     """Run VMC on a molecule."""
     reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
 
-    reload = (
+    reload_from_checkpoint = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_checkpoint_file
     )
-    reload_run_from_checkpoint = reload and not reload_config.model_only
-    reload_model_from_checkpoint = reload and reload_config.model_only
+    reload_run_from_checkpoint = (
+        reload_from_checkpoint and not reload_config.model_params_only
+    )
+    reload_model_from_checkpoint = (
+        reload_from_checkpoint and reload_config.model_params_only
+    )
 
     if reload_run_from_checkpoint:
         config.notes = config.notes + " (reloaded run from {}/{})".format(
@@ -631,7 +635,7 @@ def run_molecule() -> None:
         apply_pmap=config.distribute,
     )
 
-    if reload:
+    if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
