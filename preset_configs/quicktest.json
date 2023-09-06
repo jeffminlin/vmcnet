@@ -44,5 +44,5 @@
         "nburn": 100,
         "nepochs": 100
     },
-    "logdir": "logs/quicktest"
+    "save_to_named_subfolder": true
 }

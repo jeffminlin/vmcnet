@@ -78,6 +78,7 @@ def get_default_config() -> ConfigDict:
                 # if save_to_current_datetime_subfolder=True, will log into a subfolder
                 # named according to the datetime at start
                 "save_to_current_datetime_subfolder": True,
+                "save_to_named_subfolder": False,
                 "logging_level": "INFO",
                 "dtype": "float32",
                 "distribute": True,

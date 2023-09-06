@@ -20,5 +20,5 @@
     "vmc": {
         "nepochs": 10000
     },
-    "logdir": "logs/H4"
+    "save_to_named_subfolder": true
 }
