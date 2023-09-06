@@ -32,7 +32,6 @@ from .proxsr import (
     get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
     constrain_norm as constrain_norm_proxsr,
 )
-from .optimizers import sgd
 
 
 def _get_learning_rate_schedule(
@@ -617,7 +616,7 @@ def get_proxsr_update_fn_and_state(
         optimizer_config.complement_decay,
     )
 
-    descent_optimizer = sgd(
+    descent_optimizer = optax.sgd(
         learning_rate=learning_rate_schedule, momentum=0, nesterov=False
     )
 
