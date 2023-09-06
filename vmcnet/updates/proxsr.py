@@ -96,15 +96,6 @@ def get_fisher_inverse_fn(
         prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
         prev_grad_complement = prev_grad - prev_grad_subspace
 
-        # >>> not currently used
-        # prev_grad_parallel = (
-        #     min_sr_solution
-        #     * (min_sr_solution @ prev_grad_subspace)
-        #     / (min_sr_solution @ min_sr_solution)
-        # )
-        # prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
-        # not currently used <<<
-
         # The update consists of a linear combination of 4 components. The first
         # component is min_sr_solution, which is the update used by the original
         # MinSR method. The remaining components come from a simple decomposition of the
@@ -120,12 +111,6 @@ def get_fisher_inverse_fn(
         #
         # Finally, the update is taken as a linear combination of min_sr_solution,
         # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
-        # SR_G = (
-        #    min_sr_solution * minsr_scale
-        #    + prev_grad_complement * complement_decay
-        #    + prev_grad_parallel * parallel_decay
-        #    + prev_grad_orthogonal * orthogonal_decay
-        # )
         SR_G = min_sr_solution + prev_grad_complement * complement_decay
 
         # This vector is returned to facilitate a "natural" norm constraint, since the
@@ -164,6 +149,5 @@ def constrain_norm(
     constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
-
 
 # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
