@@ -29,7 +29,7 @@ from .params import (
 )
 from .sr import get_fisher_inverse_fn, constrain_norm, SRMode
 from .proxsr import (
-    get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
+    get_proxsr_update_fn,
     constrain_norm as constrain_norm_proxsr,
 )
 
@@ -168,7 +168,6 @@ def get_update_fn_and_init_optimizer(
         )
         return update_param_fn, optimizer_state, key
 
-    # >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
     elif vmc_config.optimizer_type == "proxsr":
         (
             update_param_fn,
@@ -185,10 +184,10 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
-    # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
+    
     elif vmc_config.optimizer_type == "minsr":
         minsr_as_proxsr_config = ConfigDict(
-            dict(vmc_config.optimizer.minsr) | {"complement_decay": 0.0}
+            dict(vmc_config.optimizer.minsr) | {"prev_grad_decay": 0.0}
         )
         (
             update_param_fn,
@@ -562,7 +561,6 @@ def get_sr_update_fn_and_state(
     return update_param_fn, optimizer_state
 
 
-# >>>>>>>>>> from gg-min-sr-mom (modified) >>>>>>>>>>
 def get_proxsr_update_fn_and_state(
     log_psi_apply: ModelApply[P],
     params: P,
@@ -609,11 +607,11 @@ def get_proxsr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    precondition_grad_fn = get_fisher_inverse_fn_proxsr(
+    precondition_grad_fn = get_proxsr_update_fn(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
-        optimizer_config.complement_decay,
+        optimizer_config.prev_grad_decay,
     )
 
     descent_optimizer = optax.sgd(
@@ -667,6 +665,3 @@ def get_proxsr_update_fn_and_state(
     )
 
     return update_param_fn, optimizer_state
-
-
-# <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<

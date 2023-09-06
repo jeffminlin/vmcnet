@@ -167,7 +167,6 @@ def get_fisher_inverse_fn(
     return precondition_grad_with_fisher
 
 
-# TODO (ggoldsh): can remove this?
 def constrain_norm(
     grads: P,
     preconditioned_grads: P,

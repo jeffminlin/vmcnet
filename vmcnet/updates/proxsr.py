@@ -1,5 +1,3 @@
-# >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
-
 """Stochastic reconfiguration (SR) routine."""
 import jax
 import jax.flatten_util
@@ -15,11 +13,11 @@ from vmcnet.utils.pytree_helpers import (
 from vmcnet import utils
 
 
-def get_fisher_inverse_fn(
+def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
     damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    complement_decay: chex.Scalar = 0.95,
+    prev_grad_decay: chex.Scalar = 0.99,
 ):
     """Get a Fisher-preconditioned update.
 
@@ -111,7 +109,7 @@ def get_fisher_inverse_fn(
         #
         # Finally, the update is taken as a linear combination of min_sr_solution,
         # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
-        SR_G = min_sr_solution + prev_grad_complement * complement_decay
+        SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
 
         # This vector is returned to facilitate a "natural" norm constraint, since the
         # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
@@ -149,6 +147,3 @@ def constrain_norm(
     constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
-
-
-# <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<

@@ -346,14 +346,13 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
             },
-            # >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
             "proxsr": {
                 # Learning rate params
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 # ProxSR-specific params
-                "complement_decay": 0.95,
+                "prev_grad_decay": 0.99,
                 # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
                 "damping": 0.001,
@@ -364,7 +363,6 @@ def get_default_vmc_config() -> Dict:
                 "norm_type": "euclidean",  # euclidean or natural
                 "norm_constraint": 0.001,
             },
-            # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
             "minsr": {
                 # Learning rate params
                 "schedule_type": "inverse_time",  # constant or inverse_time
