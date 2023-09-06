@@ -607,7 +607,7 @@ def get_proxsr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    precondition_grad_fn = get_proxsr_update_fn(
+    proxsr_update_fn = get_proxsr_update_fn(
         log_psi_apply,
         optimizer_config.damping_type,
         optimizer_config.damping,
@@ -626,7 +626,7 @@ def get_proxsr_update_fn_and_state(
 
     def optimizer_apply(regular_grad, params, optimizer_state, data, aux):
         del regular_grad
-        Ohat_times_grad, grad = precondition_grad_fn(
+        grad = proxsr_update_fn(
             aux["centered_local_energies"],
             params,
             prev_update(optimizer_state),
