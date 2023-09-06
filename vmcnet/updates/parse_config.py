@@ -577,10 +577,6 @@ def get_proxsr_update_fn_and_state(
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
 
-    Raises:
-        ValueError: A non-supported descent type is requested. Currently only Adam and
-            SGD are supported.
-
     Returns:
         (UpdateParamFn, optax.OptState):
         update param function with signature
