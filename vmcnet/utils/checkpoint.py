@@ -213,7 +213,6 @@ def initialize_checkpointing(
     best checkpoint data is initialized to None.
     """
     if logdir is not None:
-        logging.info("Saving to %s", logdir)
         os.makedirs(logdir, exist_ok=True)
         if checkpoint_every is not None:
             checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)

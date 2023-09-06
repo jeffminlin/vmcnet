@@ -56,6 +56,8 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
     config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
     utils.io.save_config_dict_to_json(config, config.logdir, "config")
     utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
+
+    logging.info("Saving to %s", config.logdir)
     return config.logdir
 
 
