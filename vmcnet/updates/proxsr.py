@@ -1,9 +1,6 @@
 # >>>>>>>>>> from gg-min-sr-mom >>>>>>>>>>
 
 """Stochastic reconfiguration (SR) routine."""
-from enum import Enum, auto
-
-import chex
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
