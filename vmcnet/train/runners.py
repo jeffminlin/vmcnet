@@ -66,7 +66,7 @@ def _get_name_from_config(config: ConfigDict) -> str:
     name = re.sub(r"\(.*?\)|\[.*?\]", "", name)
 
     # remove special characters
-    name = re.sub("[^a-zA-Z0-9]+", "_", name).strip("_")
+    name = re.sub("[^a-zA-Z0-9=]+", "_", name).strip("_")
 
     # shorten
     name = "_".join(name.split("_")[:3])
