@@ -1,16 +1,12 @@
 {
-    "notes": "H4 (4 Bohr)",
+    "notes": "LiH warm start",
     "problem": {
         "ion_pos": [
             [ 0.0, 0.0, 0.0 ],
-            [ 4.0, 0.0, 0.0 ],
-            [ 0.0, 4.0, 0.0 ],
-            [ 4.0, 4.0, 0.0 ]
+            [ 3.015, 0.0, 0.0 ]
         ],
         "ion_charges": [
-            1.0,
-            1.0,
-            1.0,
+            3.0,
             1.0
         ],
         "nelec": [
@@ -18,7 +14,13 @@
         ]
     },
     "vmc": {
-        "nepochs": 10000
+        "nepochs": 10000,
+        "checkpoint_every": 1000,
+        "nchains": 1000
+    },
+    "eval": {
+        "nepochs": 5000,
+        "nchains": 1000
     },
     "save_to_named_subfolder": true,
     "save_to_current_datetime_subfolder": false

@@ -44,5 +44,6 @@
         "nburn": 100,
         "nepochs": 100
     },
-    "save_to_named_subfolder": true
+    "save_to_named_subfolder": true,
+    "save_to_current_datetime_subfolder": false
 }
