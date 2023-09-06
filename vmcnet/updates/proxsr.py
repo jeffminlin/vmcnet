@@ -150,4 +150,5 @@ def constrain_norm(
 
     return constrained_grads
 
+
 # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
