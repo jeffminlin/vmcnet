@@ -360,7 +360,6 @@ def get_default_vmc_config() -> Dict:
                 # NOTE: the natural norm constraint has been found to seriously reduce
                 # the performance of all variants of minsr. Prefer euclidean version.
                 "constrain_norm": True,
-                "norm_type": "euclidean",  # euclidean or natural
                 "norm_constraint": 0.001,
             },
             "minsr": {
@@ -375,7 +374,6 @@ def get_default_vmc_config() -> Dict:
                 # NOTE: the natural norm constraint has been found to seriously reduce
                 # the performance of all variants of minsr. Prefer euclidean version.
                 "constrain_norm": True,
-                "norm_type": "euclidean",  # euclidean or natural
                 "norm_constraint": 0.001,
             },
         },

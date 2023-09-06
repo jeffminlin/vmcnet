@@ -638,10 +638,8 @@ def get_proxsr_update_fn_and_state(
         if optimizer_config.constrain_norm:
             grad = constrain_norm_proxsr(
                 grad,
-                Ohat_times_grad,
                 learning_rate,
                 optimizer_config.norm_constraint,
-                optimizer_config.norm_type,
             )
         else:
             grad = grad

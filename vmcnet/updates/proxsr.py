@@ -111,31 +111,18 @@ def get_proxsr_update_fn(
         # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
         SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
 
-        # This vector is returned to facilitate a "natural" norm constraint, since the
-        # norm of this vector, i.e. Ohat_G.T @ Ohat_G, gives the distance of the update
-        # step w.r.t to the Fisher information metric.
-        Ohat_G = Ohat @ SR_G / jnp.sqrt(nchains)
-
-        return Ohat_G, unravel_fn(SR_G)
+        return unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
 
 
 def constrain_norm(
     grad: P,
-    Ohat_grad: P,
     learning_rate: chex.Numeric,
     norm_constraint: chex.Numeric = 0.001,
-    norm_type: str = "grad",
 ) -> P:
-    """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    if norm_type == "natural":
-        sq_norm_precond_grads = tree_inner_product(Ohat_grad, Ohat_grad)
-    elif norm_type == "euclidean":
-        sq_norm_precond_grads = tree_inner_product(grad, grad)
-    else:
-        raise ValueError("Norm type should be either Ohat_grad or grad")
-
+    """euclidean norm constraint"""
+    sq_norm_precond_grads = tree_inner_product(grad, grad)
     sq_norm_scaled_grads = sq_norm_precond_grads * learning_rate**2
 
     # Sync the norms here, see:
