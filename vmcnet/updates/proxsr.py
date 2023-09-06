@@ -19,32 +19,20 @@ def get_proxsr_update_fn(
     damping: chex.Scalar = 0.001,
     prev_grad_decay: chex.Scalar = 0.99,
 ):
-    """Get a Fisher-preconditioned update.
-
-    Given a gradient update grad_E, the function returned here approximates
-
-        (0.25 * F + damping * I)^{-1} * grad_E,
-
-    where F is the Fisher information matrix. The inversion is approximated via the
-    conjugate gradient algorithm (possibly truncated to a finite number of iterations).
-
-    This preconditioned gradient update, when used as-is, is also known as the
-    stochastic reconfiguration algorithm. See https://arxiv.org/pdf/1909.02487.pdf,
-    Appendix C for the connection between natural gradient descent and stochastic
-    reconfiguration.
+    """
+    Get the ProxSR update function.
 
     Args:
         log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
             function is (params, x) -> log|psi(x)|
+        damping_type (str): either "diag_shift" or "pinv"
+        damping (float): damping parameter
+        prev_grad_decay (float): ProxSR-specific parameter
 
     Returns:
-        Callable: function which computes the gradient preconditioned with the inverse
-        of the Fisher information matrix. Has the signature
-            (energy_grad, params, positions) -> preconditioned_grad
+        Callable: ProxSR update function. Has the signature
+        (centered_energies, params, prev_grad, positions) -> new_grad
     """
-    # TODO(Jeffmin): explore preconditioners for speeding up convergence and to provide
-    # more stability
-    # TODO(Jeffmin): investigate damping scheduling and possibly adaptive damping
 
     def raveled_log_psi_grad(params: P, positions: Array) -> Array:
         log_grads = jax.grad(log_psi_apply)(params, positions)
@@ -70,7 +58,7 @@ def get_proxsr_update_fn(
         Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
         return Tinv
 
-    def precondition_grad_with_fisher(
+    def proxsr_update_fn(
         centered_energies: P,
         params: P,
         prev_grad,
@@ -94,26 +82,10 @@ def get_proxsr_update_fn(
         prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
         prev_grad_complement = prev_grad - prev_grad_subspace
 
-        # The update consists of a linear combination of 4 components. The first
-        # component is min_sr_solution, which is the update used by the original
-        # MinSR method. The remaining components come from a simple decomposition of the
-        # previous gradient into several mutually orthogonal components.
-        #
-        # First, prev_grad is decomposed as prev_grad = prev_grad_subspace +
-        # prev_grad_complement, where prev_grad_subspace lies within the span of the
-        # current gradients and prev_grad_complement lies in the orthogonal space.
-        # Second, prev_grad_subspace is decomposed as prev_grad_subspace =
-        # prev_grad_parallel + prev_grad_orthogonal, where prev_grad_parallel is a
-        # multiple of min_sr_solution and prev_grad_orthogonal is orthogonal to
-        # min_sr_solution.
-        #
-        # Finally, the update is taken as a linear combination of min_sr_solution,
-        # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
         SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
-
         return unravel_fn(SR_G)
 
-    return precondition_grad_with_fisher
+    return proxsr_update_fn
 
 
 def constrain_norm(
@@ -121,7 +93,7 @@ def constrain_norm(
     learning_rate: chex.Numeric,
     norm_constraint: chex.Numeric = 0.001,
 ) -> P:
-    """euclidean norm constraint"""
+    """Euclidean norm constraint."""
     sq_norm_precond_grads = tree_inner_product(grad, grad)
     sq_norm_scaled_grads = sq_norm_precond_grads * learning_rate**2
 

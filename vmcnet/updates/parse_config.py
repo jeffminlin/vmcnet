@@ -184,7 +184,7 @@ def get_update_fn_and_init_optimizer(
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
-    
+
     else:
         raise ValueError(
             "Requested optimizer type not supported; {} was requested".format(
