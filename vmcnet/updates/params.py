@@ -9,8 +9,6 @@ import kfac_jax
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import (
-    multiply_tree_by_scalar,
-    tree_inner_product,
     tree_reduce_l1,
 )
 from vmcnet.utils.typing import (

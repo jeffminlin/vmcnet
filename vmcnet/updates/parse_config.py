@@ -27,11 +27,7 @@ from .params import (
     create_grad_energy_update_param_fn,
     create_kfac_update_param_fn,
 )
-from .sr import (
-    get_fisher_inverse_fn,
-    constrain_norm,
-    SRMode
-)
+from .sr import get_fisher_inverse_fn, constrain_norm, SRMode
 from .proxsr import (
     get_fisher_inverse_fn as get_fisher_inverse_fn_proxsr,
     constrain_norm as constrain_norm_proxsr,
@@ -192,8 +188,8 @@ def get_update_fn_and_init_optimizer(
         return update_param_fn, optimizer_state, key
     # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
     elif vmc_config.optimizer_type == "minsr":
-        minsr_as_proxsr_config=ConfigDict(
-            dict(vmc_config.optimizer.minsr)|{"complement_decay": 0.0}
+        minsr_as_proxsr_config = ConfigDict(
+            dict(vmc_config.optimizer.minsr) | {"complement_decay": 0.0}
         )
         (
             update_param_fn,
@@ -567,7 +563,6 @@ def get_sr_update_fn_and_state(
     return update_param_fn, optimizer_state
 
 
-
 # >>>>>>>>>> from gg-min-sr-mom (modified) >>>>>>>>>>
 def get_proxsr_update_fn_and_state(
     log_psi_apply: ModelApply[P],
@@ -628,14 +623,17 @@ def get_proxsr_update_fn_and_state(
 
     def get_optimizer_step_count(optimizer_state):
         return optimizer_state[1].count
-    
+
     def prev_update(optimizer_state):
         return optimizer_state[0].trace
 
     def optimizer_apply(regular_grad, params, optimizer_state, data, aux):
         del regular_grad
         Ohat_times_grad, grad = precondition_grad_fn(
-            aux['centered_local_energies'], params, prev_update(optimizer_state), get_position_fn(data)
+            aux["centered_local_energies"],
+            params,
+            prev_update(optimizer_state),
+            get_position_fn(data),
         )
         step_count = get_optimizer_step_count(optimizer_state)
         learning_rate = learning_rate_schedule(step_count)
@@ -671,5 +669,5 @@ def get_proxsr_update_fn_and_state(
 
     return update_param_fn, optimizer_state
 
-# <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
 
+# <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<

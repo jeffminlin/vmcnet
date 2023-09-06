@@ -6,15 +6,15 @@ import jax
 import jax.flatten_util
 import jax.numpy as jnp
 import jax.scipy as jscp
+import chex
 
 from vmcnet.utils.distribute import pmean_if_pmap
-from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
 from vmcnet.utils.typing import Array, ArrayLike, ModelApply, P
 
-import chex
 from vmcnet.utils.pytree_helpers import (
     multiply_tree_by_scalar,
     tree_inner_product,
+    tree_sum,
 )
 from vmcnet import utils
 

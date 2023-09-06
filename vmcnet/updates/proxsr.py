@@ -5,7 +5,7 @@ import jax
 import jax.flatten_util
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ModelApply, P
+from vmcnet.utils.typing import Array, ModelApply, P, Tuple
 
 import chex
 from vmcnet.utils.pytree_helpers import (
@@ -13,6 +13,7 @@ from vmcnet.utils.pytree_helpers import (
     tree_inner_product,
 )
 from vmcnet import utils
+
 
 def get_fisher_inverse_fn(
     log_psi_apply: ModelApply[P],
@@ -76,7 +77,7 @@ def get_fisher_inverse_fn(
         params: P,
         prev_grad,
         positions: Array,
-    ) -> P:
+    ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
         prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
 
@@ -104,7 +105,6 @@ def get_fisher_inverse_fn(
         # prev_grad_orthogonal = prev_grad_subspace - prev_grad_parallel
         # not currently used <<<
 
-
         # The update consists of a linear combination of 4 components. The first
         # component is min_sr_solution, which is the update used by the original
         # MinSR method. The remaining components come from a simple decomposition of the
@@ -120,12 +120,12 @@ def get_fisher_inverse_fn(
         #
         # Finally, the update is taken as a linear combination of min_sr_solution,
         # prev_grad_complement, prev_grad_parallel, and prev_grad_orthogonal.
-        #SR_G = (
+        # SR_G = (
         #    min_sr_solution * minsr_scale
         #    + prev_grad_complement * complement_decay
         #    + prev_grad_parallel * parallel_decay
         #    + prev_grad_orthogonal * orthogonal_decay
-        #)
+        # )
         SR_G = min_sr_solution + prev_grad_complement * complement_decay
 
         # This vector is returned to facilitate a "natural" norm constraint, since the
@@ -136,9 +136,6 @@ def get_fisher_inverse_fn(
         return Ohat_G, unravel_fn(SR_G)
 
     return precondition_grad_with_fisher
-
-
-
 
 
 def constrain_norm(
@@ -167,5 +164,6 @@ def constrain_norm(
     constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
+
 
 # <<<<<<<<<< from gg-min-sr-mom <<<<<<<<<<
