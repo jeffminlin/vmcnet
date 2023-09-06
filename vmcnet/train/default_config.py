@@ -356,23 +356,6 @@ def get_default_vmc_config() -> Dict:
                 # Damping magnitude and type
                 "damping_type": "diag_shift",  # diag_shift or pinv
                 "damping": 0.001,
-                # Norm constraint magnitude and type
-                # NOTE: the natural norm constraint has been found to seriously reduce
-                # the performance of all variants of minsr. Prefer euclidean version.
-                "constrain_norm": True,
-                "norm_constraint": 0.001,
-            },
-            "minsr": {
-                # Learning rate params
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
-                "learning_decay_rate": 1e-4,
-                # Damping magnitude and type
-                "damping_type": "diag_shift",  # diag_shift or pinv
-                "damping": 0.001,
-                # Norm constraint magnitude and type
-                # NOTE: the natural norm constraint has been found to seriously reduce
-                # the performance of all variants of minsr. Prefer euclidean version.
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
             },
