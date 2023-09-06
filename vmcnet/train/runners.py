@@ -45,18 +45,14 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
     logging.info("Running with configuration: \n%s", config)
     if config.logdir:
         if config.save_to_current_datetime_subfolder:
-            dirname = utils.io.add_suffix_for_uniqueness(
-                name=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
-                logdir=config.logdir,
-            )
-            config.logdir = os.path.join(config.logdir, dirname)
+            config.logdir = os.path.join(config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-        logdir = config.logdir
-        utils.io.save_config_dict_to_json(config, logdir, "config")
-        utils.io.save_config_dict_to_json(reload_config, logdir, "reload_config")
+        config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
+        utils.io.save_config_dict_to_json(config, config.logdir, "config")
+        utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
+        return config.logdir
     else:
-        logdir = None
-    return logdir
+        return None
 
 
 def _save_git_hash(logdir):
