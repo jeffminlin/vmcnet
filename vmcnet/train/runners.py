@@ -44,36 +44,37 @@ FLAGS = flags.FLAGS
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
     logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
-    if config.logdir:
-        if config.save_to_named_subfolder:
-            config.logdir = os.path.join(config.logdir, _get_name_from_config(config))
 
-        if config.save_to_current_datetime_subfolder:
-            config.logdir = os.path.join(config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+    if config.save_to_named_subfolder:
+        config.logdir = os.path.join(config.logdir, _get_name_from_config(config))
 
-        config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
-        utils.io.save_config_dict_to_json(config, config.logdir, "config")
-        utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
-        return config.logdir
-    else:
-        return None
+    if config.save_to_current_datetime_subfolder:
+        config.logdir = os.path.join(
+            config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        )
+
+    config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
+    utils.io.save_config_dict_to_json(config, config.logdir, "config")
+    utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
+    return config.logdir
+
 
 def _get_name_from_config(config: ConfigDict) -> str:
-    name=config.notes
+    name = config.notes
 
     # remove remarks in parentheses (assumes not nested)
-    name=re.sub("\(.*?\)|\[.*?\]","",name)
+    name = re.sub(r"\(.*?\)|\[.*?\]", "", name)
 
     # remove special characters
-    name=re.sub("[^a-zA-Z0-9]+","_",name)
+    name = re.sub("[^a-zA-Z0-9]+", "_", name).strip("_")
 
     # shorten
-    name="_".join(name.split("_")[:3])
+    name = "_".join(name.split("_")[:3])
 
-    if name=="":
-        name="run"
+    if name == "":
+        name = "run"
 
-    return name 
+    return name
 
 
 def _save_git_hash(logdir):
