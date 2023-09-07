@@ -553,7 +553,7 @@ def get_proxsr_update_fn_and_state(
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    """Get an update param function and initial state for stochastic reconfiguration.
+    """Get an update param function and initial state for proximal SR.
 
     Args:
         log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
@@ -570,8 +570,6 @@ def get_proxsr_update_fn_and_state(
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for stochastic reconfiguration
-        descent_config (ConfigDict): configuration for the gradient descent-like method
-            used to apply the preconditioned updates
         record_param_l1_norm (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to

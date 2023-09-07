@@ -45,8 +45,8 @@ def get_proxsr_update_fn(
 
         # should be nonnegative since it's PSDF matrix
         eigval = jnp.where(eigval < 0, 0, eigval)
-        # Damping has scale factor of nchains since we didn't divide T
 
+        # Damping has scale factor of nchains since we didn't divide T
         if damping_type == "diag_shift":
             eigval += damping * nchains
             eigval_inv = 1 / eigval
@@ -101,8 +101,8 @@ def constrain_norm(
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
     sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
 
-    max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
-    coefficient = jnp.minimum(max_coefficient, 1)
+    norm_scale_factor = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    coefficient = jnp.minimum(norm_scale_factor, 1)
     constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
     return constrained_grads
