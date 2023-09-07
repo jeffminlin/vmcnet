@@ -9,8 +9,6 @@ import kfac_jax
 import vmcnet.physics as physics
 import vmcnet.utils as utils
 from vmcnet.utils.pytree_helpers import (
-    multiply_tree_by_scalar,
-    tree_inner_product,
     tree_reduce_l1,
 )
 from vmcnet.utils.typing import (
@@ -272,25 +270,3 @@ def create_eval_update_param_fn(
     )
 
     return traced_fn
-
-
-# TODO (ggoldsh): can remove this?
-def constrain_norm(
-    grads: P,
-    preconditioned_grads: P,
-    learning_rate: chex.Numeric,
-    norm_constraint: chex.Numeric = 0.001,
-) -> P:
-    """Constrains the preconditioned norm of the update, adapted from KFAC."""
-    sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
-    sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
-
-    # Sync the norms here, see:
-    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
-    sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
-
-    max_coefficient = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
-    coefficient = jnp.minimum(max_coefficient, 1)
-    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
-
-    return constrained_grads

@@ -6,10 +6,17 @@ import jax
 import jax.flatten_util
 import jax.numpy as jnp
 import jax.scipy as jscp
+import chex
 
 from vmcnet.utils.distribute import pmean_if_pmap
-from vmcnet.utils.pytree_helpers import multiply_tree_by_scalar, tree_sum
 from vmcnet.utils.typing import Array, ArrayLike, ModelApply, P
+
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+    tree_sum,
+)
+from vmcnet import utils
 
 
 class SRMode(Enum):
@@ -158,3 +165,24 @@ def get_fisher_inverse_fn(
         )
 
     return precondition_grad_with_fisher
+
+
+def constrain_norm(
+    grads: P,
+    preconditioned_grads: P,
+    learning_rate: chex.Numeric,
+    norm_constraint: chex.Numeric = 0.001,
+) -> P:
+    """Constrains the preconditioned norm of the update, adapted from KFAC."""
+    sq_norm_grads = tree_inner_product(preconditioned_grads, grads)
+    sq_norm_scaled_grads = sq_norm_grads * learning_rate**2
+
+    # Sync the norms here, see:
+    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
+    sq_norm_scaled_grads = utils.distribute.pmean_if_pmap(sq_norm_scaled_grads)
+
+    norm_scale_factor = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    coefficient = jnp.minimum(norm_scale_factor, 1)
+    constrained_grads = multiply_tree_by_scalar(preconditioned_grads, coefficient)
+
+    return constrained_grads

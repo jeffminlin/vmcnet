@@ -7,7 +7,6 @@ otherwise they are intended for documentation and clarity.
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from jax.random import KeyArray
-import flax.core.frozen_dict as frozen_dict
 from jax import Array
 from jax.typing import ArrayLike
 import kfac_jax
@@ -43,7 +42,7 @@ OptimizerState = Union[kfac_jax.optimizer.OptimizerState, optax.OptState]
 
 LearningRateSchedule = Callable[[Array], Array]
 
-ModelParams = Union[frozen_dict.FrozenDict, Dict[str, Any]]
+ModelParams = Dict[str, Any]
 
 # VMC state needed for a checkpoint. Values are:
 #  1. The epoch

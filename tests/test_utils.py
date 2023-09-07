@@ -115,7 +115,7 @@ def get_dense_and_log_domain_dense_same_params(
     dense_layer: models.core.Dense,
 ) -> Tuple[ModelParams, ModelParams]:
     """Get matching params for Dense and LogDomainDense layers."""
-    dense_params = dense_layer.init(key, batch)
+    dense_params = dict(dense_layer.init(key, batch))
     log_domain_params = _get_log_domain_params_for_dense_layer(dense_params["params"])
     log_domain_params = {"params": log_domain_params}
     return dense_params, log_domain_params
@@ -127,7 +127,7 @@ def get_resnet_and_log_domain_resnet_same_params(
     resnet: models.core.SimpleResNet,
 ) -> Tuple[ModelParams, ModelParams]:
     """Get matching params for SimpleResNet and LogDomainResnet models."""
-    resnet_params = resnet.init(key, batch)
+    resnet_params = dict(resnet.init(key, batch))
     log_domain_params = {}
 
     for dense_layer_key, layer_params in resnet_params["params"].items():
