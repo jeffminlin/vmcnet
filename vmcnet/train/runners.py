@@ -41,18 +41,16 @@ FLAGS = flags.FLAGS
 
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
+    if config.save_to_current_datetime_subfolder:
+        config.logdir = os.path.join(config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+    config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
+    utils.io.save_config_dict_to_json(config, config.logdir, "config")
+    utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
+
     logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
-    if config.logdir:
-        if config.save_to_current_datetime_subfolder:
-            config.logdir = os.path.join(config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-
-        config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
-        utils.io.save_config_dict_to_json(config, config.logdir, "config")
-        utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
-        return config.logdir
-    else:
-        return None
+    return config.logdir
 
 
 def _save_git_hash(logdir):
@@ -654,6 +652,8 @@ def run_molecule() -> None:
             params = utils.io.reload_vmc_state(directory, filename)[2]
             if config.distribute:
                 params = utils.distribute.replicate_all_local_devices(params)
+
+    logging.info("Saving to %s", logdir)
 
     params, optimizer_state, data, key, nans_detected = _burn_and_run_vmc(
         config.vmc,
