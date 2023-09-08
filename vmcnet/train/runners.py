@@ -520,6 +520,8 @@ def _burn_and_run_vmc(
     key: PRNGKey,
     is_eval: bool,
     is_pmapped: bool,
+    skip_burn: bool = False,
+    start_epoch: int = 0,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
@@ -536,9 +538,10 @@ def _burn_and_run_vmc(
         nhistory_max = 0
         check_for_nans = False
 
-    data, key = mcmc.metropolis.burn_data(
-        burning_step, run_config.nburn, params, data, key
-    )
+    if not skip_burn:
+        data, key = mcmc.metropolis.burn_data(
+            burning_step, run_config.nburn, params, data, key
+        )
     return train.vmc.vmc_loop(
         params,
         optimizer_state,
@@ -558,6 +561,7 @@ def _burn_and_run_vmc(
         get_amplitude_fn=get_amplitude_fn,
         nhistory_max=nhistory_max,
         is_pmapped=is_pmapped,
+        start_epoch=start_epoch,
     )
 
 
@@ -582,21 +586,13 @@ def run_molecule() -> None:
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_checkpoint_file
     )
-    reload_run_from_checkpoint = (
-        reload_from_checkpoint and not reload_config.model_params_only
-    )
-    reload_model_from_checkpoint = (
-        reload_from_checkpoint and reload_config.model_params_only
-    )
 
-    if reload_run_from_checkpoint:
-        config.notes = config.notes + " (reloaded run from {}/{})".format(
-            reload_config.logdir, reload_config.checkpoint_relative_file_path
+    if reload_from_checkpoint:
+        config.notes = config.notes + " (reloaded from {}/{}{})".format(
+            reload_config.logdir, reload_config.checkpoint_relative_file_path,
+            ", new optimizer" if reload_config.reset_optimizer else ""
         )
-    if reload_model_from_checkpoint:
-        config.notes = config.notes + " (reloaded model from {}/{})".format(
-            reload_config.logdir, reload_config.checkpoint_relative_file_path
-        )
+
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
@@ -631,29 +627,32 @@ def run_molecule() -> None:
         apply_pmap=config.distribute,
     )
 
+    start_epoch=0
+
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
             reload_config.logdir, reload_config.checkpoint_relative_file_path
         )
         directory, filename = os.path.split(checkpoint_file_path)
 
-        if reload_run_from_checkpoint:
-            _, data, params, optimizer_state, key = utils.io.reload_vmc_state(
-                directory, filename
-            )
-            (
-                data,
-                params,
-                optimizer_state,
-                key,
-            ) = utils.distribute.distribute_vmc_state_from_checkpoint(
-                data, params, optimizer_state, key
-            )
+        reload_at_epoch, data, params, reloaded_optimizer_state, key = utils.io.reload_vmc_state(
+            directory, filename
+        )
 
-        if reload_model_from_checkpoint:
-            params = utils.io.reload_vmc_state(directory, filename)[2]
-            if config.distribute:
-                params = utils.distribute.replicate_all_local_devices(params)
+        if not reload_config.reset_optimizer:
+            optimizer_state = reloaded_optimizer_state
+
+        if reload_config.append:
+            start_epoch=reload_at_epoch
+
+        (
+            data,
+            params,
+            optimizer_state,
+            key,
+        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+            data, params, optimizer_state, key
+        )
 
     logging.info("Saving to %s", logdir)
 
@@ -670,6 +669,8 @@ def run_molecule() -> None:
         key,
         is_eval=False,
         is_pmapped=config.distribute,
+        skip_burn=reload_from_checkpoint and not reload_config.reburn,
+        start_epoch=start_epoch,
     )
 
     if nans_detected:
