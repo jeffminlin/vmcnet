@@ -42,7 +42,9 @@ FLAGS = flags.FLAGS
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
     if config.save_to_current_datetime_subfolder:
-        config.logdir = os.path.join(config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        config.logdir = os.path.join(
+            config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        )
 
     config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
     utils.io.save_config_dict_to_json(config, config.logdir, "config")
