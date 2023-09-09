@@ -35,6 +35,7 @@ def append_metric_to_file(new_metric, logdir, name):
 
 
 def copy_txt_stats(source_dir, target_dir, truncate=None):
+    """Copies and truncated energy.txt as similar stats."""
     names = ["energy", "energy_noclip", "variance", "variance_noclip", "accept_ratio"]
     for name in names:
         filename = name + ".txt"
