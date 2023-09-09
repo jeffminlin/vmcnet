@@ -1,5 +1,6 @@
 {
     "notes": "quicktest: He",
+    "subfolder_name": "quicktest",
     "problem": {
         "ion_pos": [
             [
@@ -44,6 +45,5 @@
         "nburn": 100,
         "nepochs": 100
     },
-    "logdir": "logs/quicktest",
     "save_to_current_datetime_subfolder": false
 }
