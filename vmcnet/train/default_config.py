@@ -4,7 +4,7 @@ from typing import Dict
 
 from ml_collections import ConfigDict, FieldReference
 
-from vmcnet.utils.checkpoint import BEST_CHECKPOINT_FILE_NAME, RECENT_CHECKPOINT_FILE_NAME
+from vmcnet.utils.checkpoint import RECENT_CHECKPOINT_FILE_NAME
 
 NO_NAME = "NONE"
 NO_PATH = "NONE"
@@ -56,7 +56,7 @@ def get_default_reload_config() -> ConfigDict:
             "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
             "use_checkpoint_file": True,
             "checkpoint_relative_file_path": RECENT_CHECKPOINT_FILE_NAME,
-            "reset_optimizer": False,
+            "new_optimizer": False,
             "reburn": False,
             "append": True,
             "same_logdir": False,

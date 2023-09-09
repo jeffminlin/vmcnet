@@ -240,7 +240,9 @@ def finish_checkpointing(
 ):
     """Save any final checkpoint data to the CheckpointWriter."""
     if logdir is not None and best_checkpoint_data is not None:
-        checkpoint_writer.save_data(logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data)
+        checkpoint_writer.save_data(
+            logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data
+        )
 
 
 def _add_amplitude_to_metrics_if_requested(
@@ -367,11 +369,12 @@ def save_metrics_and_handle_checkpoints(
             the energy history
         moving_checkpoints_every (int, optional): limit on how often to save recent
             checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-adjusted
-            running avg of the energy improves, instead of immediately saving a checkpoint, we hold
-            onto the data from that epoch in memory, and if it's still the best one when
-            we hit an epoch which is a multiple of `moving_checkpoints_every`, we save it
-            then. This ensures we don't waste time saving best checkpoints too often
+            Best checkpoint is saved even if energy is improving. When the error-
+            adjusted running avg of the energy improves, instead of immediately saving
+            a checkpoint, we hold onto the data from that epoch in memory,
+            and if it's still the best one when we hit an epoch which is a multiple of
+            `moving_checkpoints_every`, we save it then.
+            This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         logdir (str, optional): name of parent log directory. If None, no checkpointing
@@ -504,11 +507,12 @@ def track_and_save_best_checkpoint(
             occurred
         moving_checkpoints_every (int, optional): limit on how often to save recent
             checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-adjusted
-            running avg of the energy improves, instead of immediately saving a checkpoint, we hold
-            onto the data from that epoch in memory, and if it's still the best one when
-            we hit an epoch which is a multiple of `moving_checkpoints_every`, we save it
-            then. This ensures we don't waste time saving best checkpoints too often
+            Best checkpoint is saved even if energy is improving. When the error-
+            adjusted running avg of the energy improves, instead of immediately saving
+            a checkpoint, we hold onto the data from that epoch in memory,
+            and if it's still the best one when we hit an epoch which is a multiple of
+            `moving_checkpoints_every`, we save it then.
+            This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         best_checkpoint_data (CheckpointData, optional): the data needed to save a

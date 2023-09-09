@@ -65,11 +65,12 @@ def vmc_loop(
             energy improves. Defaults to 1000.
         moving_checkpoints_every (int, optional): limit on how often to save recent
             checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-adjusted
-            running avg of the energy improves, instead of immediately saving a checkpoint, we hold
-            onto the data from that epoch in memory, and if it's still the best one when
-            we hit an epoch which is a multiple of `moving_checkpoints_every`, we save it
-            then. This ensures we don't waste time saving best checkpoints too often
+            Best checkpoint is saved even if energy is improving. When the error-
+            adjusted running avg of the energy improves, instead of immediately saving
+            a checkpoint, we hold onto the data from that epoch in memory,
+            and if it's still the best one when we hit an epoch which is a multiple of
+            `moving_checkpoints_every`, we save it then.
+            This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         checkpoint_dir (str, optional): name of subdirectory to save the regular
@@ -103,7 +104,7 @@ def vmc_loop(
     with CheckpointWriter(
         is_pmapped
     ) as checkpoint_writer, MetricsWriter() as metrics_writer:
-        for epoch in range(start_epoch,nepochs):
+        for epoch in range(start_epoch, nepochs):
             # Save state for checkpointing at the start of the epoch for two reasons:
             # 1. To save the model that generates the best energy and variance metrics,
             # rather than the model one parameter UPDATE after the best metrics.

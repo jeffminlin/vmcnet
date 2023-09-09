@@ -41,7 +41,6 @@ FLAGS = flags.FLAGS
 
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
-
     if reload_config.same_logdir:
         config.logdir = reload_config.logdir
     else:
@@ -592,8 +591,9 @@ def run_molecule() -> None:
 
     if reload_from_checkpoint:
         config.notes = config.notes + " (reloaded from {}/{}{})".format(
-            reload_config.logdir, reload_config.checkpoint_relative_file_path,
-            ", new optimizer" if reload_config.reset_optimizer else ""
+            reload_config.logdir,
+            reload_config.checkpoint_relative_file_path,
+            ", new optimizer" if reload_config.new_optimizer else "",
         )
 
     root_logger = logging.getLogger()
@@ -629,7 +629,7 @@ def run_molecule() -> None:
         apply_pmap=config.distribute,
     )
 
-    start_epoch=0
+    start_epoch = 0
 
     if reload_from_checkpoint:
         checkpoint_file_path = os.path.join(
@@ -637,25 +637,31 @@ def run_molecule() -> None:
         )
         directory, filename = os.path.split(checkpoint_file_path)
 
-        reload_at_epoch, data, params, reloaded_optimizer_state, key = utils.io.reload_vmc_state(
-            directory, filename
-        )
-
-        if not reload_config.reset_optimizer:
-            optimizer_state = reloaded_optimizer_state
+        (
+            reload_at_epoch,
+            data,
+            params,
+            reloaded_optimizer_state,
+            key,
+        ) = utils.io.reload_vmc_state(directory, filename)
 
         if reload_config.append:
-            start_epoch=reload_at_epoch
-            utils.io.copy_txt_stats(reload_config.logdir, logdir, truncate=reload_at_epoch)
+            start_epoch = reload_at_epoch
+            utils.io.copy_txt_stats(
+                reload_config.logdir, logdir, truncate=reload_at_epoch
+            )
 
         (
             data,
             params,
-            optimizer_state,
+            reloaded_optimizer_state,
             key,
         ) = utils.distribute.distribute_vmc_state_from_checkpoint(
-            data, params, optimizer_state, key
+            data, params, reloaded_optimizer_state, key
         )
+
+        if not reload_config.new_optimizer:
+            optimizer_state = reloaded_optimizer_state
 
     logging.info("Saving to %s", logdir)
 
