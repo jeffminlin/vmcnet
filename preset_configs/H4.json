@@ -1,5 +1,6 @@
 {
     "notes": "H4, 4 Bohr",
+    "subfolder_name": "H4",
     "problem": {
         "ion_pos": [
             [ 0.0, 0.0, 0.0 ],
@@ -16,9 +17,5 @@
         "nelec": [
             2, 2
         ]
-    },
-    "vmc": {
-        "nepochs": 10000
-    },
-    "logdir": "logs/H4"
+    }
 }
