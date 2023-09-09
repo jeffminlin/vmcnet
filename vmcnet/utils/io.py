@@ -34,6 +34,25 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
+def copy_txt_stats(source_dir, target_dir, truncate=None):
+    names=['energy','energy_noclip','variance','variance_noclip','accept_ratio']
+    for name in names:
+        filename=name+'.txt'
+        source_path=os.path.join(source_dir,filename)
+        target_path=os.path.join(target_dir,filename)
+
+        if not os.path.exists(source_path):
+            continue
+
+        with open(source_path, "r") as f:
+            lines=f.readlines()
+            if truncate:
+                lines=lines[:truncate]
+
+        with open(target_path, "w") as f:
+            f.writelines(lines)
+
+
 def _config_dict_write(fp: IO[str], config: ConfigDict) -> None:
     """Write config dict to json."""
     fp.write(config.to_json(indent=4))

@@ -525,14 +525,14 @@ def _burn_and_run_vmc(
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
-        best_checkpoint_every = run_config.best_checkpoint_every
+        moving_checkpoints_every = run_config.moving_checkpoints_every
         checkpoint_dir = run_config.checkpoint_dir
         checkpoint_variance_scale = run_config.checkpoint_variance_scale
         nhistory_max = run_config.nhistory_max
         check_for_nans = run_config.check_for_nans
     else:
         checkpoint_every = None
-        best_checkpoint_every = None
+        moving_checkpoints_every = None
         checkpoint_dir = ""
         checkpoint_variance_scale = 0
         nhistory_max = 0
@@ -553,7 +553,7 @@ def _burn_and_run_vmc(
         key,
         logdir=logdir,
         checkpoint_every=checkpoint_every,
-        best_checkpoint_every=best_checkpoint_every,
+        moving_checkpoints_every=moving_checkpoints_every,
         checkpoint_dir=checkpoint_dir,
         checkpoint_variance_scale=checkpoint_variance_scale,
         check_for_nans=check_for_nans,
@@ -644,6 +644,7 @@ def run_molecule() -> None:
 
         if reload_config.append:
             start_epoch=reload_at_epoch
+            utils.io.copy_txt_stats(reload_config.logdir, logdir, truncate=reload_at_epoch)
 
         (
             data,
