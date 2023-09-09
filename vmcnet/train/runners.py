@@ -44,10 +44,8 @@ def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -
     if reload_config.same_logdir:
         config.logdir = reload_config.logdir
     else:
-        if config.subfolder_name!=train.default_config.NO_NAME:
-            config.logdir = os.path.join(
-                config.logdir, config.subfolder_name
-            )
+        if config.subfolder_name != train.default_config.NO_NAME:
+            config.logdir = os.path.join(config.logdir, config.subfolder_name)
         if config.save_to_current_datetime_subfolder:
             config.logdir = os.path.join(
                 config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

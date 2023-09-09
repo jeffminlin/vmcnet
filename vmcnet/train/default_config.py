@@ -90,6 +90,7 @@ def get_default_config() -> ConfigDict:
             }
         )
     )
+    config.base_logdir = config.logdir
     return config
 
 

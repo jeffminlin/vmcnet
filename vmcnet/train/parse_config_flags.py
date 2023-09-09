@@ -20,7 +20,7 @@ def _get_config_from_reload(
     reloaded_config = io.load_config_dict(
         reload_config.logdir, reload_config.config_relative_file_path
     )
-    reloaded_config.logdir=reloaded_config.base_logdir
+    reloaded_config.logdir = reloaded_config.base_logdir
     config_flags.DEFINE_config_dict(
         "config", reloaded_config, lock_config=True, flag_values=flag_values
     )
