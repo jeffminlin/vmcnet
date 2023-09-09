@@ -91,7 +91,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
             for i in range(num_regular_checkpoints)
         ]
     )
-    assert (inner_logdir / "checkpoint.npz").exists()
+    assert (inner_logdir / "best_checkpoint.npz").exists()
 
     # Check that evaluation is being done and metrics are being saved
     assert (inner_logdir / "eval").exists()
