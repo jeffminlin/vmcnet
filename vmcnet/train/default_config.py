@@ -59,6 +59,7 @@ def get_default_reload_config() -> ConfigDict:
             "reset_optimizer": False,
             "reburn": False,
             "append": True,
+            "same_logdir": False,
         }
     )
 

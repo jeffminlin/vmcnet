@@ -537,7 +537,7 @@ def track_and_save_best_checkpoint(
                 key,
             )
 
-        should_save_best_checkpoint = epoch % moving_checkpoints_every == 0 and epoch > 0
+        should_save_best_checkpoint = (epoch + 1) % moving_checkpoints_every == 0
         if should_save_best_checkpoint and best_checkpoint_data is not None:
             checkpoint_writer.save_data(
                 logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data
@@ -604,7 +604,7 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_data = (epoch, data, old_params, optimizer_state, key)
 
     if checkpoint_every is not None:
-        if epoch % checkpoint_every == 0 and epoch>0:
+        if (epoch + 1) % checkpoint_every == 0:
             checkpoint_writer.save_data(
                 os.path.join(logdir, checkpoint_dir),
                 str(epoch) + ".npz",
@@ -613,13 +613,13 @@ def save_metrics_and_regular_checkpoint(
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
 
     if recent_checkpoint_every is not None:
-        if epoch % recent_checkpoint_every == 0 and epoch>0:
+        if (epoch + 1) % recent_checkpoint_every == 0:
             checkpoint_writer.save_data(
-                os.path.join(logdir, checkpoint_dir),
-                "recent_checkpoint.npz",
+                logdir,
+                RECENT_CHECKPOINT_FILE_NAME,
                 checkpoint_data,
             )
-            checkpoint_str = checkpoint_str + ", regular ckpt saved"
+            checkpoint_str = checkpoint_str + ", recent ckpt saved"
 
     nans_detected = False
     if check_for_nans:

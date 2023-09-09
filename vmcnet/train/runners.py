@@ -41,15 +41,18 @@ FLAGS = flags.FLAGS
 
 
 def _get_logdir_and_save_config(reload_config: ConfigDict, config: ConfigDict) -> str:
-    if config.save_to_current_datetime_subfolder:
-        config.logdir = os.path.join(
-            config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        )
 
-    config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
+    if reload_config.same_logdir:
+        config.logdir = reload_config.logdir
+    else:
+        if config.save_to_current_datetime_subfolder:
+            config.logdir = os.path.join(
+                config.logdir, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            )
+        config.logdir = utils.io.add_suffix_for_uniqueness(config.logdir)
+
     utils.io.save_config_dict_to_json(config, config.logdir, "config")
     utils.io.save_config_dict_to_json(reload_config, config.logdir, "reload_config")
-
     logging.info("Reload configuration: \n%s", reload_config)
     logging.info("Running with configuration: \n%s", config)
     return config.logdir
@@ -592,7 +595,6 @@ def run_molecule() -> None:
             reload_config.logdir, reload_config.checkpoint_relative_file_path,
             ", new optimizer" if reload_config.reset_optimizer else ""
         )
-
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
