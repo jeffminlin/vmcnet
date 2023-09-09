@@ -611,7 +611,7 @@ def save_metrics_and_regular_checkpoint(
         if (epoch + 1) % checkpoint_every == 0:
             checkpoint_writer.save_data(
                 os.path.join(logdir, checkpoint_dir),
-                str(epoch) + ".npz",
+                str(epoch + 1) + ".npz",
                 checkpoint_data,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
@@ -632,7 +632,7 @@ def save_metrics_and_regular_checkpoint(
     if nans_detected:
         checkpoint_writer.save_data(
             os.path.join(logdir, checkpoint_dir),
-            "nans_" + str(epoch) + ".npz",
+            "nans_" + str(epoch + 1) + ".npz",
             checkpoint_data,
         )
         checkpoint_str = checkpoint_str + ", nans ckpt saved"
