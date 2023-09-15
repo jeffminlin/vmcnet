@@ -563,7 +563,6 @@ def save_metrics_and_regular_checkpoint(
     checkpoint_dir: str,
     checkpoint_str: str,
     checkpoint_every: Optional[int] = None,
-    recent_checkpoint_every: Optional[int] = None,
     check_for_nans: bool = False,
 ) -> Tuple[str, bool]:
     """Save current metrics to file, and save model state regularly.
