@@ -84,7 +84,7 @@ def test_save_best_checkpoint(mocker):
     def track_and_save_best(
         epoch, checkpoint_writer, checkpoint_metric, best_checkpoint_data
     ):
-        moving_checkpoints_every = 3
+        best_checkpoint_every = 3
         return checkpoint.track_and_save_best_checkpoint(
             epoch,
             params,
@@ -99,7 +99,7 @@ def test_save_best_checkpoint(mocker):
             log_dir,
             1.0,
             "",
-            moving_checkpoints_every,
+            best_checkpoint_every,
             best_checkpoint_data,
         )
 

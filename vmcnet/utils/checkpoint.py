@@ -30,7 +30,7 @@ from vmcnet.utils.typing import (
 T = TypeVar("T")
 
 BEST_CHECKPOINT_FILE_NAME = "best_checkpoint.npz"
-RECENT_CHECKPOINT_FILE_NAME = "recent_checkpoint.npz"
+DEFAULT_CHECKPOINT_FILE_NAME = "best_checkpoint.npz"
 
 
 @dataclass
@@ -329,7 +329,7 @@ def save_metrics_and_handle_checkpoints(
     logdir: Optional[str] = None,
     variance_scale: float = 10.0,
     checkpoint_every: Optional[int] = None,
-    moving_checkpoints_every: Optional[int] = None,
+    best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
     checkpoint_dir: str = "checkpoints",
     check_for_nans: bool = False,
@@ -367,14 +367,12 @@ def save_metrics_and_handle_checkpoints(
             and variances
         checkpoint_metric (chex.Numeric): current best error adjusted running average of
             the energy history
-        moving_checkpoints_every (int, optional): limit on how often to save recent
-            checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-
-            adjusted running avg of the energy improves, instead of immediately saving
-            a checkpoint, we hold onto the data from that epoch in memory,
-            and if it's still the best one when we hit an epoch which is a multiple of
-            `moving_checkpoints_every`, we save it then.
-            This ensures we don't waste time saving best checkpoints too often
+        best_checkpoint_every (int): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         logdir (str, optional): name of parent log directory. If None, no checkpointing
@@ -426,7 +424,6 @@ def save_metrics_and_handle_checkpoints(
         checkpoint_dir,
         checkpoint_str,
         checkpoint_every,
-        moving_checkpoints_every,
         check_for_nans,
     )
 
@@ -448,7 +445,7 @@ def save_metrics_and_handle_checkpoints(
         logdir,
         variance_scale,
         checkpoint_str,
-        moving_checkpoints_every,
+        best_checkpoint_every,
         best_checkpoint_data,
     )
 
@@ -474,7 +471,7 @@ def track_and_save_best_checkpoint(
     logdir: str,
     variance_scale: float,
     checkpoint_str: str,
-    moving_checkpoints_every: Optional[int] = None,
+    best_checkpoint_every: Optional[int] = None,
     best_checkpoint_data: Optional[CheckpointData[D, P, S]] = None,
 ) -> Tuple[str, chex.Numeric, Optional[CheckpointData[D, P, S]]]:
     """Update running avgs and checkpoint if the error-adjusted energy avg improves.
@@ -505,14 +502,12 @@ def track_and_save_best_checkpoint(
             :func:`~vmctrain.train.vmc.get_checkpoint_metric`.
         checkpoint_str (str): string indicating whether checkpointing has previously
             occurred
-        moving_checkpoints_every (int, optional): limit on how often to save recent
-            checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-
-            adjusted running avg of the energy improves, instead of immediately saving
-            a checkpoint, we hold onto the data from that epoch in memory,
-            and if it's still the best one when we hit an epoch which is a multiple of
-            `moving_checkpoints_every`, we save it then.
-            This ensures we don't waste time saving best checkpoints too often
+        best_checkpoint_every (int, optional): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         best_checkpoint_data (CheckpointData, optional): the data needed to save a
@@ -523,7 +518,7 @@ def track_and_save_best_checkpoint(
         additional info if this function did checkpointing, then best error-adjusted
         energy average, then new best checkpoint data, or None.
     """
-    if moving_checkpoints_every is not None:
+    if best_checkpoint_every is not None:
         energy, variance = running_energy_and_variance
 
         energy.move_history_window(metrics["energy"])
@@ -541,7 +536,7 @@ def track_and_save_best_checkpoint(
                 key,
             )
 
-        should_save_best_checkpoint = (epoch + 1) % moving_checkpoints_every == 0
+        should_save_best_checkpoint = (epoch + 1) % best_checkpoint_every == 0
         if should_save_best_checkpoint and best_checkpoint_data is not None:
             checkpoint_writer.save_data(
                 logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data
@@ -615,15 +610,6 @@ def save_metrics_and_regular_checkpoint(
                 checkpoint_data,
             )
             checkpoint_str = checkpoint_str + ", regular ckpt saved"
-
-    if recent_checkpoint_every is not None:
-        if (epoch + 1) % recent_checkpoint_every == 0:
-            checkpoint_writer.save_data(
-                logdir,
-                RECENT_CHECKPOINT_FILE_NAME,
-                checkpoint_data,
-            )
-            checkpoint_str = checkpoint_str + ", recent ckpt saved"
 
     nans_detected = False
     if check_for_nans:

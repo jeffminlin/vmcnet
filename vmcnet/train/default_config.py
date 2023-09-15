@@ -4,7 +4,7 @@ from typing import Dict
 
 from ml_collections import ConfigDict, FieldReference
 
-from vmcnet.utils.checkpoint import RECENT_CHECKPOINT_FILE_NAME
+from vmcnet.utils.checkpoint import DEFAULT_CHECKPOINT_FILE_NAME
 
 NO_NAME = "NONE"
 NO_PATH = "NONE"
@@ -55,7 +55,7 @@ def get_default_reload_config() -> ConfigDict:
             "use_config_file": True,
             "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
             "use_checkpoint_file": True,
-            "checkpoint_relative_file_path": RECENT_CHECKPOINT_FILE_NAME,
+            "checkpoint_relative_file_path": DEFAULT_CHECKPOINT_FILE_NAME,
             "new_optimizer": False,
             "reburn": False,
             "append": True,
@@ -300,7 +300,7 @@ def get_default_vmc_config() -> Dict:
         "local_energy_type": "standard",  # [standard, ibp, random_particle]
         "local_energy": get_default_local_energy_config(),
         "checkpoint_every": 5000,
-        "moving_checkpoints_every": 100,
+        "best_checkpoint_every": 100,
         "checkpoint_dir": "checkpoints",
         "checkpoint_variance_scale": 10,
         "check_for_nans": False,

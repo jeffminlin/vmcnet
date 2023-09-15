@@ -21,7 +21,7 @@ def vmc_loop(
     key: PRNGKey,
     logdir: Optional[str] = None,
     checkpoint_every: Optional[int] = 1000,
-    moving_checkpoints_every: Optional[int] = 100,
+    best_checkpoint_every: Optional[int] = 100,
     checkpoint_dir: str = "checkpoints",
     checkpoint_variance_scale: float = 10.0,
     check_for_nans: bool = False,
@@ -63,14 +63,12 @@ def vmc_loop(
         checkpoint_every (int, optional): how often to regularly save checkpoints. If
             None, checkpoints are only saved when the error-adjusted running avg of the
             energy improves. Defaults to 1000.
-        moving_checkpoints_every (int, optional): limit on how often to save recent
-            checkpoint and best checkpoint.
-            Best checkpoint is saved even if energy is improving. When the error-
-            adjusted running avg of the energy improves, instead of immediately saving
-            a checkpoint, we hold onto the data from that epoch in memory,
-            and if it's still the best one when we hit an epoch which is a multiple of
-            `moving_checkpoints_every`, we save it then.
-            This ensures we don't waste time saving best checkpoints too often
+        best_checkpoint_every (int, optional): limit on how often to save best
+            checkpoint, even if energy is improving. When the error-adjusted running avg
+            of the energy improves, instead of immediately saving a checkpoint, we hold
+            onto the data from that epoch in memory, and if it's still the best one when
+            we hit an epoch which is a multiple of `best_checkpoint_every`, we save it
+            then. This ensures we don't waste time saving best checkpoints too often
             when the energy is on a downward trajectory (as we hope it often is!).
             Defaults to 100.
         checkpoint_dir (str, optional): name of subdirectory to save the regular
@@ -150,7 +148,7 @@ def vmc_loop(
                 logdir=logdir,
                 variance_scale=checkpoint_variance_scale,
                 checkpoint_every=checkpoint_every,
-                moving_checkpoints_every=moving_checkpoints_every,
+                best_checkpoint_every=best_checkpoint_every,
                 best_checkpoint_data=best_checkpoint_data,
                 checkpoint_dir=checkpoint_dir,
                 check_for_nans=check_for_nans,

@@ -37,7 +37,7 @@
         "nburn": 100,
         "nsteps_per_param_update": 10,
         "nmoves_per_width_update": 100,
-        "moving_checkpoints_every": 100,
+        "best_checkpoint_every": 100,
         "optimizer_type": "sgd"
     },
     "eval": {

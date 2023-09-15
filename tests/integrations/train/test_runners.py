@@ -15,7 +15,7 @@ def _get_config(vmc_nchains, eval_nchains, distribute):
     config.vmc.nepochs = 5
     config.vmc.nburn = 2
     config.vmc.checkpoint_every = 2
-    config.vmc.moving_checkpoints_every = 4
+    config.vmc.best_checkpoint_every = 4
     config.vmc.nsteps_per_param_update = 3
 
     config.eval.nchains = eval_nchains
