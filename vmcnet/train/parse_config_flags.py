@@ -119,7 +119,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
 
     if flag_values.presets.name != NO_NAME:
         presets_path = os.path.join(
-            io.get_vmcpath(), DEFAULT_PRESETS_DIR, flag_values.presets.name + ".json"
+            DEFAULT_PRESETS_DIR, flag_values.presets.name + ".json"
         )
     elif flag_values.presets.path != NO_PATH:
         presets_path = flag_values.presets.path
