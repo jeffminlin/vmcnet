@@ -595,7 +595,7 @@ def run_molecule() -> None:
         config.notes = config.notes + " (reloaded from {}/{}{})".format(
             reload_config.logdir,
             reload_config.checkpoint_relative_file_path,
-            ", new optimizer" if reload_config.new_optimizer else "",
+            ", new optimizer state" if reload_config.new_optimizer_state else "",
         )
 
     root_logger = logging.getLogger()
@@ -662,7 +662,7 @@ def run_molecule() -> None:
             data, params, reloaded_optimizer_state, key
         )
 
-        if not reload_config.new_optimizer:
+        if not reload_config.new_optimizer_state:
             optimizer_state = reloaded_optimizer_state
 
     logging.info("Saving to %s", logdir)
