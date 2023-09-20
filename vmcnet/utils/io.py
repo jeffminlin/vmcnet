@@ -196,6 +196,6 @@ def add_suffix_for_uniqueness(relative_path, base_dir="", trailing_suffix=""):
 
 def get_vmcpath():
     """Get the path to the vmcnet package."""
-    path=os.path.dirname(os.path.abspath(__file__))
-    path=path.split('vmcnet')[0]
-    return os.path.join(path,'vmcnet')
+    path = os.path.dirname(os.path.abspath(__file__))
+    path = path.split("vmcnet")[0]
+    return os.path.join(path, "vmcnet")
