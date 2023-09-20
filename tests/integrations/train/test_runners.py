@@ -141,6 +141,13 @@ def test_run_molecule_jitted(mocker, tmp_path):
 
 @pytest.mark.very_slow
 def test_reload_append(mocker, tmp_path):
+    """Reload and continue a run from a checkpoint.
+
+    This runs an example for 10 epochs as run_1. It then reloads
+    from the checkpoint at 5 epochs and re-runs the last epochs
+    until 10 epochs total is reached again.
+    The energy histories from the two runs are compared.
+    """
     mocker.patch("os.curdir", tmp_path)
     path1 = (tmp_path / "run_1").as_posix()
     path2 = (tmp_path / "run_2").as_posix()
