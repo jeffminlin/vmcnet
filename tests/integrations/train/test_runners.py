@@ -8,7 +8,6 @@ import pytest
 import vmcnet.train as train
 from ml_collections import ConfigDict
 
-from vmcnet.utils import io
 from absl import flags
 
 
@@ -142,22 +141,21 @@ def test_run_molecule_jitted(mocker, tmp_path):
 
 @pytest.mark.very_slow
 def test_reload_append(mocker, tmp_path):
-
     mocker.patch("os.curdir", tmp_path)
-    path1=(tmp_path / "run_1").as_posix()
-    path2=(tmp_path / "run_2").as_posix()
+    path1 = (tmp_path / "run_1").as_posix()
+    path2 = (tmp_path / "run_2").as_posix()
 
-    mock_argv1=[
+    mock_argv1 = [
         "vmc-molecule",
         "--presets.name=quicktest",
-        "--config.vmc.nchains="+str(2*jax.local_device_count()),
+        "--config.vmc.nchains=" + str(2 * jax.local_device_count()),
         "--config.vmc.nburn=10",
         "--config.vmc.nepochs=10",
         "--config.eval.nburn=0",
         "--config.eval.nepochs=0",
         "--config.vmc.checkpoint_every=5",
         "--config.save_to_current_datetime_subfolder=False",
-        "--config.logdir="+path1,
+        "--config.logdir=" + path1,
         "--config.subfolder_name=NONE",
     ]
     mocker.patch("sys.argv", mock_argv1)
@@ -166,22 +164,22 @@ def test_reload_append(mocker, tmp_path):
     for name in list(flags.FLAGS):
         delattr(flags.FLAGS, name)
 
-    mock_argv2=[
+    mock_argv2 = [
         "vmc-molecule",
-        "--reload.logdir="+path1,
+        "--reload.logdir=" + path1,
         "--reload.append=True",
         "--reload.checkpoint_relative_file_path=checkpoints/5.npz",
         "--config.save_to_current_datetime_subfolder=False",
-        "--config.logdir="+path2,
+        "--config.logdir=" + path2,
         "--config.subfolder_name=NONE",
     ]
     mocker.patch("sys.argv", mock_argv2)
     train.runners.run_molecule()
 
-    with open(path1+'/energy.txt','r') as f:
-        energies1=np.array(f.readlines(),dtype=float)
+    with open(path1 + "/energy.txt", "r") as f:
+        energies1 = np.array(f.readlines(), dtype=float)
 
-    with open(path2+'/energy.txt','r') as f:
-        energies2=np.array(f.readlines(),dtype=float)
+    with open(path2 + "/energy.txt", "r") as f:
+        energies2 = np.array(f.readlines(), dtype=float)
 
-    np.testing.assert_allclose(energies1,energies2,rtol=1e-5)
+    np.testing.assert_allclose(energies1, energies2, rtol=1e-5)
