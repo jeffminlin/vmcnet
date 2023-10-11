@@ -164,6 +164,7 @@ def test_reload_append(mocker, tmp_path):
         "--config.save_to_current_datetime_subfolder=False",
         "--config.logdir=" + path1,
         "--config.subfolder_name=NONE",
+        "--config.vmc.optimizer_type=kfac",
     ]
     mocker.patch("sys.argv", mock_argv1)
     train.runners.run_molecule()
