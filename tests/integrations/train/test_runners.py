@@ -148,14 +148,15 @@ def test_reload_append(mocker, tmp_path):
     This runs an example for 10 epochs as run_1. It then reloads
     from the checkpoint at 5 epochs and re-runs the last epochs
     until 10 epochs total is reached again.
-    The energy histories from the two runs are compared.
+    The weights and energy histories from the two runs are compared.
     """
     mocker.patch("os.curdir", tmp_path)
     path0 = (tmp_path / "run_0").as_posix()
     path1 = (tmp_path / "run_1").as_posix()
     path2 = (tmp_path / "run_2").as_posix()
+    path3 = (tmp_path / "run_3").as_posix()
 
-    mock_argv_ = [
+    start_argv = [
         "vmc-molecule",
         "--presets.name=quicktest",
         "--config.vmc.nchains=" + str(2 * jax.local_device_count()),
@@ -168,15 +169,16 @@ def test_reload_append(mocker, tmp_path):
         "--config.subfolder_name=NONE",
         "--config.vmc.optimizer_type=sgd",
     ]
-    mock_argv0 = mock_argv_+["initial_seed=0", "--config.logdir=" + path0]
-    mock_argv1 = mock_argv_+["initial_seed=1", "--config.logdir=" + path1]
-    mock_argv2 = [
+    reload_argv = [
         "vmc-molecule",
         "--reload.logdir=" + path1,
         "--reload.append=True",
         "--reload.checkpoint_relative_file_path=checkpoints/5.npz",
-        "--config.logdir=" + path2,
     ]
+    mock_argv0 = start_argv+["initial_seed=0", "--config.logdir=" + path0]
+    mock_argv1 = start_argv+["initial_seed=0", "--config.logdir=" + path1]
+    mock_argv2 = reload_argv+["--config.logdir=" + path2]
+    mock_argv3 = reload_argv+["--config.logdir=" + path3]
 
     mocker.patch("sys.argv", mock_argv0)
     train.runners.run_molecule()
@@ -190,16 +192,30 @@ def test_reload_append(mocker, tmp_path):
 
     mocker.patch("sys.argv", mock_argv2)
     train.runners.run_molecule()
+    for name in list(flags.FLAGS):
+        delattr(flags.FLAGS, name)
+
+    mocker.patch("sys.argv", mock_argv3)
+    train.runners.run_molecule()
+    for name in list(flags.FLAGS):
+        delattr(flags.FLAGS, name)
 
     state0=io.reload_vmc_state(path0+'/checkpoints','10.npz')
     state1=io.reload_vmc_state(path1+'/checkpoints','10.npz')
     state2=io.reload_vmc_state(path2+'/checkpoints','10.npz')
+    state3=io.reload_vmc_state(path3+'/checkpoints','10.npz')
     params0=state0[2]['params']
     params1=state1[2]['params']
     params2=state2[2]['params']
+    params3=state3[2]['params']
 
-    rtol=1e-3
-    assert(tree_dist(params1,params2)<rtol*tree_dist(params0,params1))
+    # check that the error from reloading vs a continuous run
+    # is comparable to the error between identical runs
+    assert(tree_dist(params1,params2)<10*tree_dist(params0,params1))
+
+    # check that the error from reloading vs a continuous run
+    # is comparable to the error between identical reloads
+    assert(tree_dist(params1,params2)<10*tree_dist(params2,params3))
 
     with open(path1 + "/energy.txt", "r") as f:
         energies1 = np.array(f.readlines(), dtype=float)
