@@ -125,7 +125,18 @@ def process_checkpoint_data_for_saving(
     if is_distributed:
         params = get_first(params)
         optimizer_state = get_first(optimizer_state)
+    optimizer_state = wrap_singleton(optimizer_state)
     return (epoch, data, params, optimizer_state, key)
+
+
+def wrap_singleton(x):
+    return {"single_element": x}
+
+
+def unwrap_if_singleton(x):
+    if isinstance(x, dict) and len(x) == 1 and "single_element" in x:
+        return x["single_element"]
+    return x
 
 
 def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
@@ -170,7 +181,7 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
                 data = data.tolist()
 
             params = npz_data["p"].tolist()
-            optimizer_state = npz_data["o"].tolist()
+            optimizer_state = unwrap_if_singleton(npz_data["o"].tolist())
             key = npz_data["k"]
             return (epoch, data, params, optimizer_state, key)
 
