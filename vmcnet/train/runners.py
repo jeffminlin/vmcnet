@@ -5,7 +5,8 @@ import functools
 import logging
 import os
 import subprocess
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, List
+import sys
 
 import chex
 import flax
@@ -578,9 +579,9 @@ def _compute_and_save_energy_statistics(
     )
 
 
-def run_molecule() -> None:
+def run_molecule(flagdefs: List[str] = sys.argv) -> None:
     """Run VMC on a molecule."""
-    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS, flagdefs)
 
     reload_from_checkpoint = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR

@@ -2,7 +2,7 @@
 
 import sys
 import os
-from typing import Tuple
+from typing import Tuple, List
 
 import jax
 from absl import flags
@@ -15,7 +15,7 @@ from vmcnet.train.default_config import NO_NAME, NO_PATH, DEFAULT_PRESETS_DIR
 
 
 def _get_config_from_reload(
-    reload_config: ConfigDict, flag_values: flags.FlagValues
+    flagdefs: List[str], reload_config: ConfigDict, flag_values: flags.FlagValues
 ) -> ConfigDict:
     reloaded_config = io.load_config_dict(
         reload_config.logdir, reload_config.config_relative_file_path
@@ -23,12 +23,12 @@ def _get_config_from_reload(
     config_flags.DEFINE_config_dict(
         "config", reloaded_config, lock_config=True, flag_values=flag_values
     )
-    flag_values(sys.argv)
+    flag_values(flagdefs)
     return flag_values.config
 
 
 def _get_config_from_default_config(
-    flag_values: flags.FlagValues, presets_path=None
+    flagdefs: List[str], flag_values: flags.FlagValues, presets_path=None
 ) -> ConfigDict:
     base_config = train.default_config.get_default_config()
 
@@ -42,14 +42,16 @@ def _get_config_from_default_config(
         lock_config=False,
         flag_values=flag_values,
     )
-    flag_values(sys.argv)
+    flag_values(flagdefs)
     config = flag_values.config
     config.model = train.default_config.choose_model_type_in_model_config(config.model)
     config.lock()
     return config
 
 
-def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
+def parse_flags(
+    flag_values: flags.FlagValues, flagdefs: List[str] = sys.argv
+) -> Tuple[ConfigDict, ConfigDict]:
     """Parse command line flags into ConfigDicts.
 
     a) with flag --presets.path=my_preset.json
@@ -102,7 +104,7 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
         lock_config=True,
         flag_values=flag_values,
     )
-    flag_values(sys.argv, True)
+    flag_values(flagdefs, True)
 
     reload_config = flag_values.reload
 
@@ -127,11 +129,11 @@ def parse_flags(flag_values: flags.FlagValues) -> Tuple[ConfigDict, ConfigDict]:
     if reload and load_presets:
         raise ValueError("Cannot specify --presets.path when using reloaded config")
     if reload:
-        config = _get_config_from_reload(reload_config, flag_values)
+        config = _get_config_from_reload(flagdefs, reload_config, flag_values)
     elif load_presets:
-        config = _get_config_from_default_config(flag_values, presets_path)
+        config = _get_config_from_default_config(flagdefs, flag_values, presets_path)
     else:
-        config = _get_config_from_default_config(flag_values)
+        config = _get_config_from_default_config(flagdefs, flag_values)
 
     if config.debug_nans:
         config.distribute = False
