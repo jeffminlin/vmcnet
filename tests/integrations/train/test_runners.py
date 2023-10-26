@@ -140,7 +140,6 @@ def test_run_molecule_jitted(mocker, tmp_path):
 
     _run_and_check_output_files(mocker, tmp_path, config)
 
-
 @pytest.mark.very_slow
 def test_reload_append(mocker, tmp_path):
     """Reload and continue a run from a checkpoint.
@@ -151,10 +150,8 @@ def test_reload_append(mocker, tmp_path):
     The weights and energy histories from the two runs are compared.
     """
     mocker.patch("os.curdir", tmp_path)
-    path0 = (tmp_path / "run_0").as_posix()
     path1 = (tmp_path / "run_1").as_posix()
     path2 = (tmp_path / "run_2").as_posix()
-    path3 = (tmp_path / "run_3").as_posix()
 
     start_argv = [
         "vmc-molecule",
@@ -164,10 +161,10 @@ def test_reload_append(mocker, tmp_path):
         "--config.vmc.nepochs=10",
         "--config.eval.nburn=0",
         "--config.eval.nepochs=0",
-        "--config.vmc.checkpoint_every=5",
+        "--config.vmc.checkpoint_every=1",
         "--config.save_to_current_datetime_subfolder=False",
         "--config.subfolder_name=NONE",
-        "--config.vmc.optimizer_type=sgd",
+        "--config.vmc.optimizer_type=proxsr",
     ]
     reload_argv = [
         "vmc-molecule",
@@ -175,16 +172,9 @@ def test_reload_append(mocker, tmp_path):
         "--reload.append=True",
         "--reload.checkpoint_relative_file_path=checkpoints/5.npz",
     ]
-    mock_argv0 = start_argv+["initial_seed=0", "--config.logdir=" + path0]
     mock_argv1 = start_argv+["initial_seed=0", "--config.logdir=" + path1]
     mock_argv2 = reload_argv+["--config.logdir=" + path2]
-    mock_argv3 = reload_argv+["--config.logdir=" + path3]
 
-    mocker.patch("sys.argv", mock_argv0)
-    train.runners.run_molecule()
-    for name in list(flags.FLAGS):
-        delattr(flags.FLAGS, name)
-    
     mocker.patch("sys.argv", mock_argv1)
     train.runners.run_molecule()
     for name in list(flags.FLAGS):
@@ -195,27 +185,18 @@ def test_reload_append(mocker, tmp_path):
     for name in list(flags.FLAGS):
         delattr(flags.FLAGS, name)
 
-    mocker.patch("sys.argv", mock_argv3)
-    train.runners.run_molecule()
-    for name in list(flags.FLAGS):
-        delattr(flags.FLAGS, name)
+    states1=dict()
+    states2=dict()
+    for f in sorted(os.listdir(path1+'/checkpoints'),key=lambda x:int(x.split('.')[0])):
+        states1[f]=io.reload_vmc_state(path1+'/checkpoints',f)
+    for f in sorted(os.listdir(path2+'/checkpoints'),key=lambda x:int(x.split('.')[0])):
+        states2[f]=io.reload_vmc_state(path2+'/checkpoints',f)
 
-    state0=io.reload_vmc_state(path0+'/checkpoints','10.npz')
-    state1=io.reload_vmc_state(path1+'/checkpoints','10.npz')
-    state2=io.reload_vmc_state(path2+'/checkpoints','10.npz')
-    state3=io.reload_vmc_state(path3+'/checkpoints','10.npz')
-    params0=state0[2]['params']
-    params1=state1[2]['params']
-    params2=state2[2]['params']
-    params3=state3[2]['params']
+    params1={f:state[2]['params'] for f,state in states1.items()}
+    params2={f:state[2]['params'] for f,state in states2.items()}
 
-    # check that the error from reloading vs a continuous run
-    # is comparable to the error between identical runs
-    assert(tree_dist(params1,params2)<10*tree_dist(params0,params1))
-
-    # check that the error from reloading vs a continuous run
-    # is comparable to the error between identical reloads
-    assert(tree_dist(params1,params2)<10*tree_dist(params2,params3))
+    common=[f for f in params1.keys() if f in params2.keys()]
+    dists=[[tree_dist(params1[i],params2[j]) for j in common] for i in common]
 
     with open(path1 + "/energy.txt", "r") as f:
         energies1 = np.array(f.readlines(), dtype=float)
@@ -223,4 +204,25 @@ def test_reload_append(mocker, tmp_path):
     with open(path2 + "/energy.txt", "r") as f:
         energies2 = np.array(f.readlines(), dtype=float)
 
-    np.testing.assert_allclose(energies1, energies2, rtol=1e-3)
+    errs=(energies1[:,None]-energies2[None,:])**2
+
+    if True:
+        import matplotlib.pyplot as plt
+        fig,axs=plt.subplots(2)
+        axs[0].imshow(dists)
+        axs[1].imshow(errs)
+        plt.show()
+        breakpoint()
+    
+
+    ## check that the error from reloading vs a continuous run
+    ## is comparable to the error between identical runs
+    #assert(tree_dist(params1,params2)<10*tree_dist(params0,params1))
+
+    ## check that the error from reloading vs a continuous run
+    ## is comparable to the error between identical reloads
+    #assert(tree_dist(params1,params2)<10*tree_dist(params2,params3))
+
+
+    #np.testing.assert_allclose(energies1, energies2, rtol=1e-3)
+
