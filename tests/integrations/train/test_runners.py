@@ -164,7 +164,7 @@ def test_reload_append(mocker, tmp_path):
         "--config.vmc.checkpoint_every=1",
         "--config.save_to_current_datetime_subfolder=False",
         "--config.subfolder_name=NONE",
-        "--config.vmc.optimizer_type=proxsr",
+        "--config.vmc.optimizer_type=sgd",
     ]
     reload_argv = [
         "vmc-molecule",
@@ -200,33 +200,24 @@ def test_reload_append(mocker, tmp_path):
         energies2 = np.array(f.readlines(), dtype=float)
 
     all_dists=[[[tree_dist(states1[i][k],states2[j][k]) for j in common] for i in common] for k in range(5)]
-    dists_data=[[tree_dist(states1[i][1],states2[j][1]) for j in common] for i in common]
-    dists_params=[[tree_dist(states1[i][2],states2[j][2]) for j in common] for i in common]
-    dists_energy=(energies1[4:,None]-energies2[None,4:])**2
+    names = ('epoch', 'data', 'old_params', 'optimizer_state', 'key')
+    
+    eps=1e-6
+    try:
+        for k,name in enumerate(names):
+            distmatrix=all_dists[k]
+            assert(np.mean(np.diag(distmatrix))<eps*np.mean(distmatrix))
+            print('test passed for',name)
 
-    if True:
+    except:
         import matplotlib.pyplot as plt
-        fig,axs=plt.subplots(1,3)
-        #axs[0].imshow(dists_params)
-        #axs[1].imshow(dists_data)
-        #axs[2].imshow(dists_energy)
 
-        fig,axs=plt.subplots(1,6)
-        for k in range(5):
+        fig,axs=plt.subplots(6)
+        for k,name in enumerate(names):
             axs[k].imshow(all_dists[k])
-        axs[5].imshow(dists_energy)
+            axs[k].set_title(name)
+        axs[5].plot(energies1)
+        axs[5].plot(energies2)
         plt.show()
         breakpoint()
-    
-
-    ## check that the error from reloading vs a continuous run
-    ## is comparable to the error between identical runs
-    #assert(tree_dist(params1,params2)<10*tree_dist(params0,params1))
-
-    ## check that the error from reloading vs a continuous run
-    ## is comparable to the error between identical reloads
-    #assert(tree_dist(params1,params2)<10*tree_dist(params2,params3))
-
-
-    #np.testing.assert_allclose(energies1, energies2, rtol=1e-3)
 
