@@ -192,25 +192,29 @@ def test_reload_append(mocker, tmp_path):
     for f in sorted(os.listdir(path2+'/checkpoints'),key=lambda x:int(x.split('.')[0])):
         states2[f]=io.reload_vmc_state(path2+'/checkpoints',f)
 
-    params1={f:state[2]['params'] for f,state in states1.items()}
-    params2={f:state[2]['params'] for f,state in states2.items()}
-
-    common=[f for f in params1.keys() if f in params2.keys()]
-    dists=[[tree_dist(params1[i],params2[j]) for j in common] for i in common]
+    common=[f for f in states1.keys() if f in states2.keys()]
 
     with open(path1 + "/energy.txt", "r") as f:
         energies1 = np.array(f.readlines(), dtype=float)
-
     with open(path2 + "/energy.txt", "r") as f:
         energies2 = np.array(f.readlines(), dtype=float)
 
-    errs=(energies1[:,None]-energies2[None,:])**2
+    all_dists=[[[tree_dist(states1[i][k],states2[j][k]) for j in common] for i in common] for k in range(5)]
+    dists_data=[[tree_dist(states1[i][1],states2[j][1]) for j in common] for i in common]
+    dists_params=[[tree_dist(states1[i][2],states2[j][2]) for j in common] for i in common]
+    dists_energy=(energies1[4:,None]-energies2[None,4:])**2
 
     if True:
         import matplotlib.pyplot as plt
-        fig,axs=plt.subplots(2)
-        axs[0].imshow(dists)
-        axs[1].imshow(errs)
+        fig,axs=plt.subplots(1,3)
+        #axs[0].imshow(dists_params)
+        #axs[1].imshow(dists_data)
+        #axs[2].imshow(dists_energy)
+
+        fig,axs=plt.subplots(1,6)
+        for k in range(5):
+            axs[k].imshow(all_dists[k])
+        axs[5].imshow(dists_energy)
         plt.show()
         breakpoint()
     
