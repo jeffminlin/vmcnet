@@ -653,14 +653,15 @@ def run_molecule() -> None:
                 reload_config.logdir, logdir, truncate=reload_at_epoch
             )
 
-        (
-            data,
-            params,
-            reloaded_optimizer_state,
-            key,
-        ) = utils.distribute.distribute_vmc_state_from_checkpoint(
-            data, params, reloaded_optimizer_state, key
-        )
+        if config.distribute:
+            (
+                data,
+                params,
+                reloaded_optimizer_state,
+                key,
+            ) = utils.distribute.distribute_vmc_state_from_checkpoint(
+                data, params, reloaded_optimizer_state, key
+            )
 
         if not reload_config.new_optimizer_state:
             optimizer_state = reloaded_optimizer_state

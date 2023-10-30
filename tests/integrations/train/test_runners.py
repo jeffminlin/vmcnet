@@ -164,7 +164,8 @@ def test_reload_append(mocker, tmp_path):
         "--config.vmc.checkpoint_every=1",
         "--config.save_to_current_datetime_subfolder=False",
         "--config.subfolder_name=NONE",
-        "--config.vmc.optimizer_type=sgd",
+        "--config.vmc.optimizer_type=proxsr",
+        "--config.distribute=False",
     ]
     reload_argv = [
         "vmc-molecule",
