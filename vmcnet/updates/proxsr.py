@@ -2,6 +2,7 @@
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
+import numpy as np
 
 from vmcnet.utils.typing import Array, ModelApply, P, Tuple
 
@@ -40,24 +41,6 @@ def get_proxsr_update_fn(
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
-    def invert_T(T, nchains):
-        eigval, eigvec = jnp.linalg.eigh(T)
-
-        # should be nonnegative since it's PSDF matrix
-        eigval = jnp.where(eigval < 0, 0, eigval)
-
-        # Damping has scale factor of nchains since we didn't divide T
-        if damping_type == "diag_shift":
-            eigval += damping * nchains
-            eigval_inv = 1 / eigval
-        elif damping_type == "pinv":
-            eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
-        else:
-            raise ValueError("Damping type must be either diag_shift or pinv")
-
-        Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
-        return Tinv
-
     def proxsr_update_fn(
         centered_energies: P,
         params: P,
@@ -72,14 +55,18 @@ def get_proxsr_update_fn(
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
         T = Ohat @ Ohat.T
-        Tinv = invert_T(T, nchains)
+        L = jnp.linalg.cholesky(T + np.eye(nchains) * damping * nchains)
 
-        OhatT_Tinv = Ohat.T @ Tinv
+        # min_sr_solution is Ohat.T @ x where L @ L.T x = epsilon
+        LT_x = jax.scipy.linalg.solve_triangular(L, centered_energies, lower=True)
+        x = jax.scipy.linalg.solve_triangular(L.T, LT_x, lower=False)
+        min_sr_solution = Ohat.T @ x
 
-        min_sr_solution = OhatT_Tinv @ centered_energies
-
+        # prev_grad_subspace is Ohat.T @ x where L @ L.T x = Ohat @ prev_grad
         Ohat_prev_grad = Ohat @ prev_grad
-        prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
+        LT_x = jax.scipy.linalg.solve_triangular(L, Ohat_prev_grad, lower=True)
+        x = jax.scipy.linalg.solve_triangular(L.T, LT_x, lower=False)
+        prev_grad_subspace = Ohat.T @ x
         prev_grad_complement = prev_grad - prev_grad_subspace
 
         SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
