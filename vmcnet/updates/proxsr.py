@@ -60,7 +60,9 @@ def get_proxsr_update_fn(
         epsilon_diff = centered_energies - epsilon_prev
 
         T = Ohat @ Ohat.T
-        x = jax.scipy.linalg.solve(T, epsilon_diff, assume_a="pos")
+        x = jax.scipy.linalg.solve(
+            T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="pos"
+        )
         residual_solution = Ohat.T @ x
 
         SR_G = residual_solution + prev_grad_decayed
