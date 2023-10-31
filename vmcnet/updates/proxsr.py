@@ -16,7 +16,7 @@ from vmcnet import utils
 
 def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
-    damping_type: str = "diag_shift",
+    solve_type: str = "pos",
     damping: chex.Scalar = 0.001,
     prev_grad_decay: chex.Scalar = 0.99,
 ):
@@ -61,7 +61,7 @@ def get_proxsr_update_fn(
 
         T = Ohat @ Ohat.T
         x = jax.scipy.linalg.solve(
-            T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="pos"
+            T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a=solve_type
         )
         residual_solution = Ohat.T @ x
 
