@@ -54,15 +54,14 @@ def get_proxsr_update_fn(
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
-        T = Ohat @ Ohat.T
-        L = jnp.linalg.cholesky(T + jnp.eye(nchains) * damping * nchains)
-
-        # residual_solution is Ohat.T @ x where L @ L.T x = epsilon_diff
+        # residual_solution is Ohat.T @ x where T @ x = epsilon_diff
         prev_grad_decayed = prev_grad * prev_grad_decay
         epsilon_prev = Ohat @ prev_grad_decayed
         epsilon_diff = centered_energies - epsilon_prev
-        LT_x = jax.scipy.linalg.solve_triangular(L, epsilon_diff, lower=True)
-        x = jax.scipy.linalg.solve_triangular(L.T, LT_x, lower=False)
+
+        T = Ohat @ Ohat.T
+        C, low = jax.scipy.linalg.cho_factor(T + jnp.eye(nchains) * damping * nchains)
+        x = jax.scipy.linalg.cho_solve((C, low), epsilon_diff)
         residual_solution = Ohat.T @ x
 
         SR_G = residual_solution + prev_grad_decayed
