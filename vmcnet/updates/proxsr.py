@@ -55,21 +55,17 @@ def get_proxsr_update_fn(
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
         T = Ohat @ Ohat.T
-        L = jnp.linalg.cholesky(T + np.eye(nchains) * damping * nchains)
+        L = jnp.linalg.cholesky(T + jnp.eye(nchains) * damping * nchains)
 
-        # min_sr_solution is Ohat.T @ x where L @ L.T x = epsilon
-        LT_x = jax.scipy.linalg.solve_triangular(L, centered_energies, lower=True)
+        # residual_solution is Ohat.T @ x where L @ L.T x = epsilon_diff
+        prev_grad_decayed = prev_grad * prev_grad_decay
+        epsilon_prev = Ohat @ prev_grad_decayed
+        epsilon_diff = centered_energies - epsilon_prev
+        LT_x = jax.scipy.linalg.solve_triangular(L, epsilon_diff, lower=True)
         x = jax.scipy.linalg.solve_triangular(L.T, LT_x, lower=False)
-        min_sr_solution = Ohat.T @ x
+        residual_solution = Ohat.T @ x
 
-        # prev_grad_subspace is Ohat.T @ x where L @ L.T x = Ohat @ prev_grad
-        Ohat_prev_grad = Ohat @ prev_grad
-        LT_x = jax.scipy.linalg.solve_triangular(L, Ohat_prev_grad, lower=True)
-        x = jax.scipy.linalg.solve_triangular(L.T, LT_x, lower=False)
-        prev_grad_subspace = Ohat.T @ x
-        prev_grad_complement = prev_grad - prev_grad_subspace
-
-        SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
+        SR_G = residual_solution + prev_grad_decayed
         return unravel_fn(SR_G)
 
     return proxsr_update_fn
