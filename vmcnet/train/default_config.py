@@ -354,7 +354,7 @@ def get_default_vmc_config() -> Dict:
                 # ProxSR-specific params
                 "prev_grad_decay": 0.99,
                 # Damping magnitude and type
-                "solve_type": "pos",  # pos or sym
+                "solve_type": "pos",  # pos or sym or eigh
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
