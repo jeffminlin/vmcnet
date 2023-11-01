@@ -60,15 +60,45 @@ def get_proxsr_update_fn(
         epsilon_diff = centered_energies - epsilon_prev
 
         T = Ohat @ Ohat.T
-        x = jax.scipy.linalg.solve(
-            T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a=solve_type
-        )
+        if solve_type == "pos":
+            x = solveT_pos(T, damping, nchains, epsilon_diff)
+        elif solve_type == "sym":
+            x = solveT_sym(T, damping, nchains, epsilon_diff)
+        elif solve_type == "eigh":
+            x = solveT_eigh(T, damping, nchains, epsilon_diff)
+        else:
+            raise ValueError(
+                f"solve_type must be pos, sym, or eigh. Received {solve_type}."
+            )
+
         residual_solution = Ohat.T @ x
 
         SR_G = residual_solution + prev_grad_decayed
         return unravel_fn(SR_G)
 
     return proxsr_update_fn
+
+
+def solveT_pos(T, damping, nchains, epsilon_diff):
+    return jax.scipy.linalg.solve(
+        T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="pos"
+    )
+
+
+def solveT_sym(T, damping, nchains, epsilon_diff):
+    return jax.scipy.linalg.solve(
+        T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="sym"
+    )
+
+
+def solveT_eigh(T, damping, nchains, epsilon_diff):
+    eigval, eigvec = jnp.linalg.eigh(T)
+
+    eigval += damping * nchains
+    eigval_inv = 1 / eigval
+
+    Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
+    return Tinv @ epsilon_diff
 
 
 def constrain_norm(
