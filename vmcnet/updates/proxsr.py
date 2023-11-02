@@ -52,14 +52,13 @@ def get_proxsr_update_fn(
 
         # (nsample, nparam)
         log_psi_grads = batch_raveled_log_psi_grad(params, positions)
-        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
-        # residual_solution is Ohat.T @ x where T @ x = epsilon_diff
         prev_grad_decayed = prev_grad * prev_grad_decay
-        epsilon_prev = Ohat @ prev_grad_decayed
-        epsilon_diff = centered_energies - epsilon_prev
 
         if solve_type == "extended":
+            epsilon_prev = log_psi_grads @ prev_grad_decayed
+            epsilon_diff = centered_energies - epsilon_prev
+
             T_reg = (
                 log_psi_grads @ log_psi_grads.T + jnp.eye(nchains) * damping * nchains
             )
@@ -73,7 +72,14 @@ def get_proxsr_update_fn(
 
             x = jax.scipy.linalg.solve(T_extend, epsilon_diff_extend, assume_a="sym")
             x = x[:-1]
+            residual_solution = log_psi_grads.T @ x
+
         else:
+            # residual_solution is Ohat.T @ x where T @ x = epsilon_diff
+            Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
+            epsilon_prev = Ohat @ prev_grad_decayed
+            epsilon_diff = centered_energies - epsilon_prev
+
             T = Ohat @ Ohat.T
             if solve_type == "pos":
                 x = solveT_pos(T, damping, nchains, epsilon_diff)
@@ -87,8 +93,7 @@ def get_proxsr_update_fn(
                 raise ValueError(
                     f"solve_type must be pos, sym, or eigh. Received {solve_type}."
                 )
-
-        residual_solution = log_psi_grads.T @ x
+            residual_solution = Ohat.T @ x
 
         SR_G = residual_solution + prev_grad_decayed
         return unravel_fn(SR_G)
