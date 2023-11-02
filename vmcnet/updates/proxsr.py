@@ -79,18 +79,21 @@ def get_proxsr_update_fn(
 
 
 def solveT_pos(T, damping, nchains, epsilon_diff):
+    """Use Cholesky to invert T."""
     return jax.scipy.linalg.solve(
         T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="pos"
     )
 
 
 def solveT_sym(T, damping, nchains, epsilon_diff):
+    """Use LU to invert T."""
     return jax.scipy.linalg.solve(
         T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="sym"
     )
 
 
 def solveT_eigh(T, damping, nchains, epsilon_diff):
+    """Use eigenvalue decomposition to invert T."""
     eigval, eigvec = jnp.linalg.eigh(T)
 
     eigval += damping * nchains
