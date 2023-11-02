@@ -66,6 +66,8 @@ def get_proxsr_update_fn(
             x = solveT_sym(T, damping, nchains, epsilon_diff)
         elif solve_type == "eigh":
             x = solveT_eigh(T, damping, nchains, epsilon_diff)
+        elif solve_type == "svd":
+            x = solveT_svd(T, damping, nchains, epsilon_diff)
         else:
             raise ValueError(
                 f"solve_type must be pos, sym, or eigh. Received {solve_type}."
@@ -98,6 +100,15 @@ def solveT_eigh(T, damping, nchains, epsilon_diff):
     eigval_inv = 1 / eigval
 
     Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
+    return Tinv @ epsilon_diff
+
+
+def solveT_svd(T, damping, nchains, epsilon_diff):
+    U, S, VT = jnp.linalg.svd(T)
+
+    Sinv = 1 / (S + damping * nchains)
+
+    Tinv = VT.T @ jnp.diag(Sinv) @ U.T
     return Tinv @ epsilon_diff
 
 

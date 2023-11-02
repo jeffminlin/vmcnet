@@ -177,7 +177,6 @@ def laplacian_psi_over_psi(
             + jnp.square(jnp.dot(primals, vecs[i]))
             + jnp.dot(tangents, vecs[i]),
         ), None
-
     out, _ = jax.lax.scan(step_fn, (0, jnp.array(0.0)), xs=None, length=length)
     return out[1] * multiplier
 
