@@ -59,21 +59,36 @@ def get_proxsr_update_fn(
         epsilon_prev = Ohat @ prev_grad_decayed
         epsilon_diff = centered_energies - epsilon_prev
 
-        T = Ohat @ Ohat.T
-        if solve_type == "pos":
-            x = solveT_pos(T, damping, nchains, epsilon_diff)
-        elif solve_type == "sym":
-            x = solveT_sym(T, damping, nchains, epsilon_diff)
-        elif solve_type == "eigh":
-            x = solveT_eigh(T, damping, nchains, epsilon_diff)
-        elif solve_type == "svd":
-            x = solveT_svd(T, damping, nchains, epsilon_diff)
-        else:
-            raise ValueError(
-                f"solve_type must be pos, sym, or eigh. Received {solve_type}."
+        if solve_type == "extended":
+            T_reg = (
+                log_psi_grads @ log_psi_grads.T + jnp.eye(nchains) * damping * nchains
             )
+            T_row_extend = jnp.concatenate([T_reg, jnp.ones((1, nchains))], axis=0)
+            final_col = jnp.concatenate(
+                [jnp.ones((nchains, 1)), jnp.array([[0]])], axis=0
+            )
+            T_extend = jnp.concatenate([T_row_extend, final_col], axis=1)
 
-        residual_solution = Ohat.T @ x
+            epsilon_diff_extend = jnp.concatenate([epsilon_diff, np.array([0])], axis=0)
+
+            x = jax.scipy.linalg.solve(T_extend, epsilon_diff_extend, assume_a="sym")
+            x = x[:-1]
+        else:
+            T = Ohat @ Ohat.T
+            if solve_type == "pos":
+                x = solveT_pos(T, damping, nchains, epsilon_diff)
+            elif solve_type == "sym":
+                x = solveT_sym(T, damping, nchains, epsilon_diff)
+            elif solve_type == "eigh":
+                x = solveT_eigh(T, damping, nchains, epsilon_diff)
+            elif solve_type == "svd":
+                x = solveT_svd(T, damping, nchains, epsilon_diff)
+            else:
+                raise ValueError(
+                    f"solve_type must be pos, sym, or eigh. Received {solve_type}."
+                )
+
+        residual_solution = log_psi_grads.T @ x
 
         SR_G = residual_solution + prev_grad_decayed
         return unravel_fn(SR_G)
