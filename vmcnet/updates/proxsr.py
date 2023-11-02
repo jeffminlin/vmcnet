@@ -60,11 +60,11 @@ def get_proxsr_update_fn(
 
         T = Ohat @ Ohat.T
         if solve_type == "pos":
-            x = solveT_pos(T, damping, nchains, epsilon_diff)
+            x = _solveT_pos(T, damping, nchains, epsilon_diff)
         elif solve_type == "sym":
-            x = solveT_sym(T, damping, nchains, epsilon_diff)
+            x = _solveT_sym(T, damping, nchains, epsilon_diff)
         elif solve_type == "eigh":
-            x = solveT_eigh(T, damping, nchains, epsilon_diff)
+            x = _solveT_eigh(T, damping, nchains, epsilon_diff)
         else:
             raise ValueError(
                 f"solve_type must be pos, sym, or eigh. Received {solve_type}."
@@ -78,21 +78,21 @@ def get_proxsr_update_fn(
     return proxsr_update_fn
 
 
-def solveT_pos(T, damping, nchains, epsilon_diff):
+def _solveT_pos(T, damping, nchains, epsilon_diff):
     """Use Cholesky to invert T."""
     return jax.scipy.linalg.solve(
         T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="pos"
     )
 
 
-def solveT_sym(T, damping, nchains, epsilon_diff):
+def _solveT_sym(T, damping, nchains, epsilon_diff):
     """Use LU to invert T."""
     return jax.scipy.linalg.solve(
         T + jnp.eye(nchains) * damping * nchains, epsilon_diff, assume_a="sym"
     )
 
 
-def solveT_eigh(T, damping, nchains, epsilon_diff):
+def _solveT_eigh(T, damping, nchains, epsilon_diff):
     """Use eigenvalue decomposition to invert T."""
     eigval, eigvec = jnp.linalg.eigh(T)
 
