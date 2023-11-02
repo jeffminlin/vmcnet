@@ -2,7 +2,6 @@
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
-import numpy as np
 
 from vmcnet.utils.typing import Array, ModelApply, P, Tuple
 
