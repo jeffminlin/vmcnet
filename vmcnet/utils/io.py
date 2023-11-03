@@ -36,9 +36,9 @@ def append_metric_to_file(new_metric, logdir, name):
 
 def copy_txt_stats(source_dir, target_dir, truncate=None):
     """Copies and truncated energy.txt as similar stats."""
-    names = ["energy", "energy_noclip", "variance", "variance_noclip", "accept_ratio"]
-    for name in names:
-        filename = name + ".txt"
+    filenames=[n for n in os.listdir(source_dir) if n.endswith(".txt") and "git_hash" not in n]
+
+    for filename in filenames:
         source_path = os.path.join(source_dir, filename)
         target_path = os.path.join(target_dir, filename)
 
