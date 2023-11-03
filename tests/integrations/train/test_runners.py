@@ -140,6 +140,7 @@ def test_run_molecule_jitted(mocker, tmp_path):
 
     _run_and_check_output_files(mocker, tmp_path, config)
 
+
 @pytest.mark.very_slow
 def test_reload_append(mocker, tmp_path):
     """Reload and continue a run from a checkpoint.
@@ -173,8 +174,8 @@ def test_reload_append(mocker, tmp_path):
         "--reload.append=True",
         "--reload.checkpoint_relative_file_path=checkpoints/5.npz",
     ]
-    mock_argv1 = start_argv+["initial_seed=0", "--config.logdir=" + path1]
-    mock_argv2 = reload_argv+["--config.logdir=" + path2]
+    mock_argv1 = start_argv + ["initial_seed=0", "--config.logdir=" + path1]
+    mock_argv2 = reload_argv + ["--config.logdir=" + path2]
 
     mocker.patch("sys.argv", mock_argv1)
     train.runners.run_molecule()
@@ -186,27 +187,34 @@ def test_reload_append(mocker, tmp_path):
     for name in list(flags.FLAGS):
         delattr(flags.FLAGS, name)
 
-    states1=dict()
-    states2=dict()
-    for f in sorted(os.listdir(path1+'/checkpoints'),key=lambda x:int(x.split('.')[0])):
-        states1[f]=io.reload_vmc_state(path1+'/checkpoints',f)
-    for f in sorted(os.listdir(path2+'/checkpoints'),key=lambda x:int(x.split('.')[0])):
-        states2[f]=io.reload_vmc_state(path2+'/checkpoints',f)
+    states1 = dict()
+    states2 = dict()
+    for f in sorted(
+        os.listdir(path1 + "/checkpoints"), key=lambda x: int(x.split(".")[0])
+    ):
+        states1[f] = io.reload_vmc_state(path1 + "/checkpoints", f)
+    for f in sorted(
+        os.listdir(path2 + "/checkpoints"), key=lambda x: int(x.split(".")[0])
+    ):
+        states2[f] = io.reload_vmc_state(path2 + "/checkpoints", f)
 
-    common=[f for f in states1.keys() if f in states2.keys()]
+    common = [f for f in states1.keys() if f in states2.keys()]
 
     with open(path1 + "/energy.txt", "r") as f:
         energies1 = np.array(f.readlines(), dtype=float)
     with open(path2 + "/energy.txt", "r") as f:
         energies2 = np.array(f.readlines(), dtype=float)
 
-    all_dists=[[[tree_dist(states1[i][k],states2[j][k]) for j in common] for i in common] for k in range(5)]
-    names = ('epoch', 'data', 'old_params', 'optimizer_state', 'key')
-    
-    eps=1e-6
-    for k,name in enumerate(names):
-        distmatrix=all_dists[k]
-        assert(np.mean(np.diag(distmatrix))<eps*np.mean(distmatrix))
-        print('test passed for',name)
+    all_dists = [
+        [[tree_dist(states1[i][k], states2[j][k]) for j in common] for i in common]
+        for k in range(5)
+    ]
+    names = ("epoch", "data", "old_params", "optimizer_state", "key")
+
+    eps = 1e-6
+    for k, name in enumerate(names):
+        distmatrix = all_dists[k]
+        assert np.mean(np.diag(distmatrix)) < eps * np.mean(distmatrix)
+        print("test passed for", name)
 
     np.testing.assert_allclose(energies1, energies2, rtol=1e-6)
