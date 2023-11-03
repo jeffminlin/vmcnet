@@ -74,11 +74,13 @@ def get_proxsr_update_fn(
 
         else:
             # residual_solution is Ohat.T @ x where T @ x = epsilon_diff
-            Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
-            epsilon_prev = Ohat @ prev_grad_decayed
-            epsilon_diff = centered_energies - epsilon_prev
+            epsilon_prev = log_psi_grads @ prev_grad_decayed
+            epsilon_prev_centered = epsilon_prev - jnp.mean(epsilon_prev)
+            epsilon_diff = centered_energies - epsilon_prev_centered
 
-            T = Ohat @ Ohat.T
+            T = log_psi_grads @ log_psi_grads.T
+            T = T - jnp.mean(T, axis=0, keepdims=True)
+            T = T - jnp.mean(T, axis=1, keepdims=True)
             if solve_type == "pos":
                 x = solveT_pos(T, damping, nchains, epsilon_diff)
             elif solve_type == "sym":
@@ -91,7 +93,8 @@ def get_proxsr_update_fn(
                 raise ValueError(
                     f"solve_type must be pos, sym, or eigh. Received {solve_type}."
                 )
-            residual_solution = Ohat.T @ x
+            centered_x = x - jnp.mean(x)
+            residual_solution = log_psi_grads.T @ centered_x
 
         SR_G = residual_solution + prev_grad_decayed
         return unravel_fn(SR_G)
