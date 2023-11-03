@@ -81,6 +81,8 @@ def get_proxsr_update_fn(
             T = log_psi_grads @ log_psi_grads.T
             T = T - jnp.mean(T, axis=0, keepdims=True)
             T = T - jnp.mean(T, axis=1, keepdims=True)
+            T = (T + T.T) / 2
+
             if solve_type == "pos":
                 x = solveT_pos(T, damping, nchains, epsilon_diff)
             elif solve_type == "sym":
@@ -117,8 +119,8 @@ def solveT_sym(T, damping, nchains, epsilon_diff):
 def solveT_eigh(T, damping, nchains, epsilon_diff):
     eigval, eigvec = jnp.linalg.eigh(T)
 
-    eigval += damping * nchains
-    eigval_inv = 1 / eigval
+    eigval = jnp.where(eigval < 0, 0, eigval)
+    eigval_inv = 1 / (eigval + damping * nchains)
 
     Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
     return Tinv @ epsilon_diff
