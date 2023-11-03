@@ -204,21 +204,9 @@ def test_reload_append(mocker, tmp_path):
     names = ('epoch', 'data', 'old_params', 'optimizer_state', 'key')
     
     eps=1e-6
-    try:
-        for k,name in enumerate(names):
-            distmatrix=all_dists[k]
-            assert(np.mean(np.diag(distmatrix))<eps*np.mean(distmatrix))
-            print('test passed for',name)
+    for k,name in enumerate(names):
+        distmatrix=all_dists[k]
+        assert(np.mean(np.diag(distmatrix))<eps*np.mean(distmatrix))
+        print('test passed for',name)
 
-    except:
-        import matplotlib.pyplot as plt
-
-        fig,axs=plt.subplots(6)
-        for k,name in enumerate(names):
-            axs[k].imshow(all_dists[k])
-            axs[k].set_title(name)
-        axs[5].plot(energies1)
-        axs[5].plot(energies2)
-        plt.show()
-        breakpoint()
-
+    np.assert_allclose(energies1, energies2, rtol=1e-6)
