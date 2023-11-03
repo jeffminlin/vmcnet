@@ -209,4 +209,4 @@ def test_reload_append(mocker, tmp_path):
         assert(np.mean(np.diag(distmatrix))<eps*np.mean(distmatrix))
         print('test passed for',name)
 
-    np.assert_allclose(energies1, energies2, rtol=1e-6)
+    np.testing.assert_allclose(energies1, energies2, rtol=1e-6)
