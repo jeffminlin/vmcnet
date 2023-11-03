@@ -132,10 +132,20 @@ def process_checkpoint_data_for_saving(
 
 
 def wrap_singleton(x):
+    """Wrap tuple.
+
+    numpy.savez does not load tuples correctly,
+    so we wrap the optimizer_state.
+    """
     return {"single_element": x}
 
 
 def unwrap_if_singleton(x):
+    """Unwrap data.
+
+    numpy.savez does not load tuples correctly,
+    so we wrap the optimizer_state.
+    """
     if isinstance(x, dict) and len(x) == 1 and "single_element" in x:
         return x["single_element"]
     return x
