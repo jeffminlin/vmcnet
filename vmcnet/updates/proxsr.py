@@ -59,10 +59,8 @@ def get_proxsr_update_fn(
             epsilon_prev = log_psi_grads @ prev_grad_decayed
             epsilon_diff = centered_energies - epsilon_prev
 
-            T_reg = (
-                log_psi_grads @ log_psi_grads.T + jnp.eye(nchains) * damping * nchains
-            )
-            T_row_extend = jnp.concatenate([T_reg, jnp.ones((1, nchains))], axis=0)
+            T = log_psi_grads @ log_psi_grads.T
+            T_row_extend = jnp.concatenate([T, jnp.ones((1, nchains))], axis=0)
             final_col = jnp.concatenate(
                 [jnp.ones((nchains, 1)), jnp.array([[0]])], axis=0
             )
