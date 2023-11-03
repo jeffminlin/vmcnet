@@ -648,7 +648,6 @@ def run_molecule() -> None:
         ) = utils.io.reload_vmc_state(directory, filename)
 
         if reload_config.append:
-            start_epoch = reload_at_epoch
             utils.io.copy_txt_stats(
                 reload_config.logdir, logdir, truncate=reload_at_epoch
             )
@@ -665,6 +664,7 @@ def run_molecule() -> None:
 
         if not reload_config.new_optimizer_state:
             optimizer_state = reloaded_optimizer_state
+            start_epoch = reload_at_epoch
 
     logging.info("Saving to %s", logdir)
 
