@@ -71,7 +71,26 @@ def get_proxsr_update_fn(
             x = jax.scipy.linalg.solve(T_extend, epsilon_diff_extend, assume_a="sym")
             x = x[:-1]
             residual_solution = log_psi_grads.T @ x
+        elif solve_type == "c":
+            O = log_psi_grads
+            epsilon_prev = O @ prev_grad_decayed
+            epsilon_diff = centered_energies - epsilon_prev
 
+            reg_T = O @ O.T + jnp.eye(nchains) * damping * nchains
+            C = jax.scipy.linalg.cho_factor(reg_T)
+            phi_base = O.T @ jax.scipy.linalg.cho_solve(C, epsilon_diff)
+            phi_free = O.T @ jax.scipy.linalg.cho_solve(C, jnp.ones((nchains, 1)))
+
+            residual_solution = phi_base - phi_free * jnp.dot(phi_free, phi_base) / (
+                jnp.norm(phi_free) ** 2
+            )
+        elif solve_type == "unshift":
+            O = log_psi_grads
+            epsilon_prev = O @ prev_grad_decayed
+            epsilon_diff = centered_energies - epsilon_prev
+
+            reg_T = O @ O.T + jnp.eye(nchains) * damping * nchains
+            residual_solution = O.T @ jax.scipy.linalg.solve(reg_T, epsilon_diff)
         else:
             # residual_solution is Ohat.T @ x where T @ x = epsilon_diff
             epsilon_prev = log_psi_grads @ prev_grad_decayed
