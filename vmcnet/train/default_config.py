@@ -306,7 +306,10 @@ def get_default_vmc_config() -> Dict:
         "check_for_nans": False,
         "nhistory_max": 200,
         "record_amplitudes": False,
-        "record_param_l1_norm": False,
+        "optional_metrics": {
+            "param_l1_norm": False,
+            "updates_l2_norm": False,
+        },
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,

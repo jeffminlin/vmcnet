@@ -8,9 +8,7 @@ import kfac_jax
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
-from vmcnet.utils.pytree_helpers import (
-    tree_reduce_l1,
-)
+from vmcnet.utils.pytree_helpers import tree_reduce_l1, tree_reduce_squared_norm
 from vmcnet.utils.typing import (
     Array,
     D,
@@ -22,6 +20,7 @@ from vmcnet.utils.typing import (
     PyTree,
     S,
     UpdateDataFn,
+    Union,
 )
 
 UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, D, S, Dict, PRNGKey]]
@@ -66,11 +65,11 @@ def _make_traced_fn_with_single_metrics(
 
 def create_grad_energy_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S]],
+    optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S, P]],
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
+    optional_metrics: Union[Dict[str, bool], None] = None,
     apply_pmap: bool = True,
-    record_param_l1_norm: bool = False,
 ) -> UpdateParamFn[P, D, S]:
     """Create the `update_param_fn` based on the gradient of the total energy.
 
@@ -108,7 +107,7 @@ def create_grad_energy_update_param_fn(
         energy, aux_energy_data = energy_data
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
-        params, optimizer_state = optimizer_apply(
+        params, optimizer_state, updates_info = optimizer_apply(
             grad_energy,
             params,
             optimizer_state,
@@ -123,8 +122,15 @@ def create_grad_energy_update_param_fn(
             aux_energy_data["variance_noclip"],
             metrics,
         )
-        if record_param_l1_norm:
-            metrics.update({"param_l1_norm": tree_reduce_l1(params)})
+
+        if optional_metrics is not None:
+            if optional_metrics["param_l1_norm"]:
+                metrics["param_l1_norm"] = tree_reduce_l1(params)
+
+            if optional_metrics["updates_l2_norm"]:
+                updates = updates_info["updates"]
+                metrics["updates_l2_norm"] = jnp.sqrt(tree_reduce_squared_norm(updates))
+
         return params, data, optimizer_state, metrics, key
 
     traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)

@@ -45,3 +45,9 @@ def tree_reduce_l1(xs: PyTree) -> chex.Numeric:
     """L1 norm of a pytree as a flattened vector."""
     concat_xs, _ = jax.flatten_util.ravel_pytree(xs)
     return jnp.sum(jnp.abs(concat_xs))
+
+
+def tree_reduce_squared_norm(xs: PyTree) -> chex.Numeric:
+    """Squared L2 norm of a pytree as a flattened vector."""
+    concat_xs, _ = jax.flatten_util.ravel_pytree(xs)
+    return jnp.sum(concat_xs**2)

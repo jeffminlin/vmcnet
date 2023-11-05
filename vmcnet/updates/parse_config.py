@@ -20,6 +20,7 @@ from vmcnet.utils.typing import (
     P,
     PRNGKey,
     UpdateDataFn,
+    Dict,
 )
 
 from .params import (
@@ -116,7 +117,7 @@ def get_update_fn_and_init_optimizer(
             key,
             learning_rate_schedule,
             vmc_config.optimizer.kfac,
-            vmc_config.record_param_l1_norm,
+            vmc_config.optional_metrics,
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
@@ -130,7 +131,7 @@ def get_update_fn_and_init_optimizer(
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.sgd,
-            vmc_config.record_param_l1_norm,
+            vmc_config.optional_metrics,
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
@@ -145,7 +146,7 @@ def get_update_fn_and_init_optimizer(
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.adam,
-            vmc_config.record_param_l1_norm,
+            vmc_config.optional_metrics,
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
@@ -162,7 +163,7 @@ def get_update_fn_and_init_optimizer(
             learning_rate_schedule,
             vmc_config.optimizer.sr,
             vmc_config.optimizer[vmc_config.optimizer.sr.descent_type],
-            vmc_config.record_param_l1_norm,
+            vmc_config.optional_metrics,
             apply_pmap=apply_pmap,
             nan_safe=vmc_config.nan_safe,
         )
@@ -180,7 +181,7 @@ def get_update_fn_and_init_optimizer(
             energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.proxsr,
-            vmc_config.record_param_l1_norm,
+            vmc_config.optional_metrics,
             apply_pmap=apply_pmap,
         )
         return update_param_fn, optimizer_state, key
@@ -202,7 +203,7 @@ def get_kfac_update_fn_and_state(
     key: PRNGKey,
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
     """Get an update param function, initial state, and key for KFAC.
@@ -222,7 +223,7 @@ def get_kfac_update_fn_and_state(
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for KFAC
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+        optional_metrics (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
@@ -265,7 +266,7 @@ def get_kfac_update_fn_and_state(
         optimizer_config.damping,
         pacore.get_position_from_data,
         update_data_fn,
-        record_param_l1_norm=record_param_l1_norm,
+        record_param_l1_norm=optional_metrics["param_l1_norm"],
     )
 
     return update_param_fn, optimizer_state, key
@@ -311,21 +312,21 @@ def _get_optax_update_fn_and_state(
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     def optimizer_apply(grad, params, optimizer_state, data, aux):
-        del data, aux
         updates, optimizer_state = optimizer.update(grad, optimizer_state, params)
         params = optax.apply_updates(params, updates)
-        return params, optimizer_state
+        info = {"grad": grad, "updates": updates, "aux": aux}
+        return params, optimizer_state, info
 
     update_param_fn = create_grad_energy_update_param_fn(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
         update_data_fn=update_data_fn,
-        record_param_l1_norm=record_param_l1_norm,
+        optional_metrics=optional_metrics,
         apply_pmap=apply_pmap,
     )
 
@@ -341,7 +342,7 @@ def get_adam_update_fn_and_state(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for Adam.
@@ -359,7 +360,7 @@ def get_adam_update_fn_and_state(
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for Adam
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+        optional_metrics (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
@@ -379,7 +380,7 @@ def get_adam_update_fn_and_state(
         get_position_fn,
         update_data_fn,
         energy_data_val_and_grad,
-        record_param_l1_norm,
+        optional_metrics,
         apply_pmap,
     )
 
@@ -391,7 +392,7 @@ def get_sgd_update_fn_and_state(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for SGD.
@@ -409,7 +410,7 @@ def get_sgd_update_fn_and_state(
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for SGD
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+        optional_metrics (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
@@ -429,7 +430,7 @@ def get_sgd_update_fn_and_state(
         get_position_fn,
         update_data_fn,
         energy_data_val_and_grad,
-        record_param_l1_norm,
+        optional_metrics,
         apply_pmap,
     )
 
@@ -443,7 +444,7 @@ def get_sr_update_fn_and_state(
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     descent_config: ConfigDict,
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
     nan_safe: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
@@ -466,7 +467,7 @@ def get_sr_update_fn_and_state(
         optimizer_config (ConfigDict): configuration for stochastic reconfiguration
         descent_config (ConfigDict): configuration for the gradient descent-like method
             used to apply the preconditioned updates
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+        optional_metrics (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
@@ -525,14 +526,15 @@ def get_sr_update_fn_and_state(
             constrained_grad, optimizer_state, params
         )
         params = optax.apply_updates(params, updates)
-        return params, optimizer_state
+        info = {"grad": grad, "updates": updates, "aux": aux}
+        return params, optimizer_state, info
 
     update_param_fn = create_grad_energy_update_param_fn(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
         update_data_fn=update_data_fn,
-        record_param_l1_norm=record_param_l1_norm,
+        optional_metrics=optional_metrics,
         apply_pmap=apply_pmap,
     )
     optimizer_state = _init_optax_optimizer(
@@ -550,7 +552,7 @@ def get_proxsr_update_fn_and_state(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
-    record_param_l1_norm: bool = False,
+    optional_metrics: Dict[str, bool],
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
     """Get an update param function and initial state for proximal SR.
@@ -570,7 +572,7 @@ def get_proxsr_update_fn_and_state(
         learning_rate_schedule (Callable): function which returns a learning rate from
             epoch number. Has signature epoch -> learning_rate
         optimizer_config (ConfigDict): configuration for stochastic reconfiguration
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
+        optional_metrics (bool, optional): whether to record the L1 norm of the
             parameters in the metrics. Defaults to False.
         apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
             True.
@@ -623,14 +625,15 @@ def get_proxsr_update_fn_and_state(
             grad, optimizer_state, params
         )
         params = optax.apply_updates(params, updates)
-        return params, optimizer_state
+        info = {"grad": grad, "updates": updates, "aux": aux}
+        return params, optimizer_state, info
 
     update_param_fn = create_grad_energy_update_param_fn(
         energy_data_val_and_grad,
         optimizer_apply,
         get_position_fn=get_position_fn,
         update_data_fn=update_data_fn,
-        record_param_l1_norm=record_param_l1_norm,
+        optional_metrics=optional_metrics,
         apply_pmap=apply_pmap,
     )
     optimizer_state = _init_optax_optimizer(
