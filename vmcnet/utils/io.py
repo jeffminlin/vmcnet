@@ -34,6 +34,28 @@ def append_metric_to_file(new_metric, logdir, name):
         np.savetxt(outfile, dumped_metric)
 
 
+def copy_txt_stats(source_dir, target_dir, truncate=None):
+    """Copies and truncated energy.txt as similar stats."""
+    filenames = [
+        n for n in os.listdir(source_dir) if n.endswith(".txt") and "git_hash" not in n
+    ]
+
+    for filename in filenames:
+        source_path = os.path.join(source_dir, filename)
+        target_path = os.path.join(target_dir, filename)
+
+        if not os.path.exists(source_path):
+            continue
+
+        with open(source_path, "r") as f:
+            lines = f.readlines()
+            if truncate:
+                lines = lines[:truncate]
+
+        with open(target_path, "w") as f:
+            f.writelines(lines)
+
+
 def _config_dict_write(fp: IO[str], config: ConfigDict) -> None:
     """Write config dict to json."""
     fp.write(config.to_json(indent=4))
@@ -105,7 +127,28 @@ def process_checkpoint_data_for_saving(
     if is_distributed:
         params = get_first(params)
         optimizer_state = get_first(optimizer_state)
+    optimizer_state = wrap_singleton(optimizer_state)
     return (epoch, data, params, optimizer_state, key)
+
+
+def wrap_singleton(x):
+    """Wrap tuple.
+
+    numpy.savez does not load tuples correctly,
+    so we wrap the optimizer_state.
+    """
+    return {"single_element": x}
+
+
+def unwrap_if_singleton(x):
+    """Unwrap data.
+
+    numpy.savez does not load tuples correctly,
+    so we wrap the optimizer_state.
+    """
+    if isinstance(x, dict) and len(x) == 1 and "single_element" in x:
+        return x["single_element"]
+    return x
 
 
 def save_vmc_state(directory, name, checkpoint_data: CheckpointData):
@@ -150,12 +193,12 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
                 data = data.tolist()
 
             params = npz_data["p"].tolist()
-            optimizer_state = npz_data["o"].tolist()
+            optimizer_state = unwrap_if_singleton(npz_data["o"].tolist())
             key = npz_data["k"]
             return (epoch, data, params, optimizer_state, key)
 
 
-def add_suffix_for_uniqueness(name, logdir, trailing_suffix=""):
+def add_suffix_for_uniqueness(relative_path, base_dir="", trailing_suffix=""):
     """Adds a numerical suffix to keep names unique in a directory.
 
     Checks for the presence of name + trailing_suffix, name + "_1" + trailing_suffix,
@@ -164,13 +207,18 @@ def add_suffix_for_uniqueness(name, logdir, trailing_suffix=""):
 
     If name + trailing_suffix is not in logdir, returns name.
     """
-    final_name = name
+    final_relative_path = relative_path.rstrip(os.sep)
     i = 0
-    try:
-        while (final_name + trailing_suffix) in os.listdir(logdir):
-            i += 1
-            final_name = name + "_" + str(i)
-    except FileNotFoundError:
-        # don't do anything to the name if the directory doesn't exist
-        pass
-    return final_name
+    while os.path.exists(os.path.join(base_dir, final_relative_path + trailing_suffix)):
+        i += 1
+        final_relative_path = relative_path + "_" + str(i)
+
+    # This function is for ensuring uniqueness, so it doesn't check existence
+    return final_relative_path
+
+
+def get_vmcpath():
+    """Get the path to the vmcnet package."""
+    path = os.path.dirname(os.path.abspath(__file__))
+    path = path.split("vmcnet")[0]
+    return os.path.join(path, "vmcnet")

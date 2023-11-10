@@ -4,7 +4,7 @@ from typing import Dict
 
 from ml_collections import ConfigDict, FieldReference
 
-from vmcnet.utils.checkpoint import CHECKPOINT_FILE_NAME
+from vmcnet.utils.checkpoint import DEFAULT_CHECKPOINT_FILE_NAME
 
 NO_NAME = "NONE"
 NO_PATH = "NONE"
@@ -55,8 +55,11 @@ def get_default_reload_config() -> ConfigDict:
             "use_config_file": True,
             "config_relative_file_path": DEFAULT_CONFIG_FILE_NAME,
             "use_checkpoint_file": True,
-            "checkpoint_relative_file_path": CHECKPOINT_FILE_NAME,
-            "model_params_only": False,
+            "checkpoint_relative_file_path": DEFAULT_CHECKPOINT_FILE_NAME,
+            "new_optimizer_state": False,
+            "reburn": False,
+            "append": True,
+            "same_logdir": False,
         }
     )
 
@@ -78,6 +81,7 @@ def get_default_config() -> ConfigDict:
                 # if save_to_current_datetime_subfolder=True, will log into a subfolder
                 # named according to the datetime at start
                 "save_to_current_datetime_subfolder": True,
+                "subfolder_name": NO_NAME,
                 "logging_level": "INFO",
                 "dtype": "float32",
                 "distribute": True,
@@ -86,6 +90,7 @@ def get_default_config() -> ConfigDict:
             }
         )
     )
+    config.base_logdir = config.logdir
     return config
 
 

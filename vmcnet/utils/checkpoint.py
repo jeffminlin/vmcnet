@@ -29,7 +29,8 @@ from vmcnet.utils.typing import (
 
 T = TypeVar("T")
 
-CHECKPOINT_FILE_NAME = "checkpoint.npz"
+BEST_CHECKPOINT_FILE_NAME = "best_checkpoint.npz"
+DEFAULT_CHECKPOINT_FILE_NAME = "best_checkpoint.npz"
 
 
 @dataclass
@@ -213,7 +214,6 @@ def initialize_checkpointing(
     best checkpoint data is initialized to None.
     """
     if logdir is not None:
-        logging.info("Saving to %s", logdir)
         os.makedirs(logdir, exist_ok=True)
         if checkpoint_every is not None:
             checkpoint_dir = io.add_suffix_for_uniqueness(checkpoint_dir, logdir)
@@ -240,7 +240,9 @@ def finish_checkpointing(
 ):
     """Save any final checkpoint data to the CheckpointWriter."""
     if logdir is not None and best_checkpoint_data is not None:
-        checkpoint_writer.save_data(logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data)
+        checkpoint_writer.save_data(
+            logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data
+        )
 
 
 def _add_amplitude_to_metrics_if_requested(
@@ -537,7 +539,7 @@ def track_and_save_best_checkpoint(
         should_save_best_checkpoint = (epoch + 1) % best_checkpoint_every == 0
         if should_save_best_checkpoint and best_checkpoint_data is not None:
             checkpoint_writer.save_data(
-                logdir, CHECKPOINT_FILE_NAME, best_checkpoint_data
+                logdir, BEST_CHECKPOINT_FILE_NAME, best_checkpoint_data
             )
             checkpoint_str = checkpoint_str + ", best weights saved"
             best_checkpoint_data = None

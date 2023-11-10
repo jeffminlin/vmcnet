@@ -7,6 +7,10 @@ import pytest
 
 import vmcnet.train as train
 from ml_collections import ConfigDict
+from vmcnet.utils import io
+from vmcnet.utils.pytree_helpers import tree_dist
+
+from absl import flags
 
 
 def _get_config(vmc_nchains, eval_nchains, distribute):
@@ -91,7 +95,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
             for i in range(num_regular_checkpoints)
         ]
     )
-    assert (inner_logdir / "checkpoint.npz").exists()
+    assert (inner_logdir / "best_checkpoint.npz").exists()
 
     # Check that evaluation is being done and metrics are being saved
     assert (inner_logdir / "eval").exists()
@@ -135,3 +139,82 @@ def test_run_molecule_jitted(mocker, tmp_path):
     config = _get_config(vmc_nchains, eval_nchains, False)
 
     _run_and_check_output_files(mocker, tmp_path, config)
+
+
+@pytest.mark.very_slow
+def test_reload_append(mocker, tmp_path):
+    """Reload and continue a run from a checkpoint.
+
+    This runs an example for 10 epochs as run_1. It then reloads
+    from the checkpoint at 5 epochs and re-runs the last epochs
+    until 10 epochs total is reached again.
+    The weights and energy histories from the two runs are compared.
+    """
+    mocker.patch("os.curdir", tmp_path)
+    path1 = (tmp_path / "run_1").as_posix()
+    path2 = (tmp_path / "run_2").as_posix()
+
+    start_argv = [
+        "vmc-molecule",
+        "--presets.name=quicktest",
+        "--config.vmc.nchains=" + str(2 * jax.local_device_count()),
+        "--config.vmc.nburn=10",
+        "--config.vmc.nepochs=10",
+        "--config.eval.nburn=0",
+        "--config.eval.nepochs=0",
+        "--config.vmc.checkpoint_every=1",
+        "--config.save_to_current_datetime_subfolder=False",
+        "--config.subfolder_name=NONE",
+        "--config.vmc.optimizer_type=proxsr",
+        "--config.distribute=False",
+    ]
+    reload_argv = [
+        "vmc-molecule",
+        "--reload.logdir=" + path1,
+        "--reload.append=True",
+        "--reload.checkpoint_relative_file_path=checkpoints/5.npz",
+    ]
+    mock_argv1 = start_argv + ["initial_seed=0", "--config.logdir=" + path1]
+    mock_argv2 = reload_argv + ["--config.logdir=" + path2]
+
+    mocker.patch("sys.argv", mock_argv1)
+    train.runners.run_molecule()
+    for name in list(flags.FLAGS):
+        delattr(flags.FLAGS, name)
+
+    mocker.patch("sys.argv", mock_argv2)
+    train.runners.run_molecule()
+    for name in list(flags.FLAGS):
+        delattr(flags.FLAGS, name)
+
+    states1 = dict()
+    states2 = dict()
+    for f in sorted(
+        os.listdir(path1 + "/checkpoints"), key=lambda x: int(x.split(".")[0])
+    ):
+        states1[f] = io.reload_vmc_state(path1 + "/checkpoints", f)
+    for f in sorted(
+        os.listdir(path2 + "/checkpoints"), key=lambda x: int(x.split(".")[0])
+    ):
+        states2[f] = io.reload_vmc_state(path2 + "/checkpoints", f)
+
+    common = [f for f in states1.keys() if f in states2.keys()]
+
+    with open(path1 + "/energy.txt", "r") as f:
+        energies1 = np.array(f.readlines(), dtype=float)
+    with open(path2 + "/energy.txt", "r") as f:
+        energies2 = np.array(f.readlines(), dtype=float)
+
+    all_dists = [
+        [[tree_dist(states1[i][k], states2[j][k]) for j in common] for i in common]
+        for k in range(5)
+    ]
+    names = ("epoch", "data", "old_params", "optimizer_state", "key")
+
+    eps = 1e-6
+    for k, name in enumerate(names):
+        distmatrix = all_dists[k]
+        assert np.mean(np.diag(distmatrix)) < eps * np.mean(distmatrix)
+        print("test passed for", name)
+
+    np.testing.assert_allclose(energies1, energies2, rtol=1e-6)

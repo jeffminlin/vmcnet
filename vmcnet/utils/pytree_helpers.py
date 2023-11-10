@@ -12,6 +12,19 @@ def tree_sum(tree1: T, tree2: T) -> T:
     return jax.tree_map(lambda a, b: a + b, tree1, tree2)
 
 
+def tree_diff(tree1: T, tree2: T) -> T:
+    """Leaf-wise sum of two pytrees with the same structure."""
+    return jax.tree_map(lambda a, b: a - b, tree1, tree2)
+
+
+def tree_dist(tree1: T, tree2: T, mode="squares") -> Array:
+    """Distance between two pytrees with the same structure."""
+    dT = tree_diff(tree1, tree2)
+    if mode == "squares":
+        return tree_inner_product(dT, dT)
+    raise ValueError(f"Unknown mode {mode}")
+
+
 def tree_prod(tree1: T, tree2: T) -> T:
     """Leaf-wise product of two pytrees with the same structure."""
     return jax.tree_map(lambda a, b: a * b, tree1, tree2)
