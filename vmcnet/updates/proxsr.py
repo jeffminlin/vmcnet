@@ -64,9 +64,19 @@ def get_proxsr_update_fn(
         dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
             T_reg, epsion_tilde, assume_a="pos"
         )
+        cholesky_nans = jnp.count_nonzero(jnp.isnan(dtheta_residual)) > 0
+        previous_nans = jnp.logical_or(
+            jnp.count_nonzero(jnp.isnan(epsion_tilde)) > 0,
+            jnp.count_nonzero(jnp.isnan(T_reg)) > 0,
+        )
+        cholesky_fail = jnp.logical_and(jnp.logical_not(previous_nans), cholesky_nans)
 
         SR_G = dtheta_residual + prev_grad_decayed
-        return unravel_fn(SR_G)
+
+        SR_G = jax.lax.cond(cholesky_fail, lambda: prev_grad, lambda: SR_G)
+        apply_grad = jnp.logical_not(cholesky_fail)
+
+        return unravel_fn(SR_G), apply_grad
 
     return proxsr_update_fn
 

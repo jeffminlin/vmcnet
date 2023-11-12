@@ -1,6 +1,7 @@
 """Get update functions from ConfigDicts."""
 from typing import Tuple
 
+import jax
 from kfac_jax import Optimizer as kfac_Optimizer
 import optax
 from ml_collections import ConfigDict
@@ -598,9 +599,8 @@ def get_proxsr_update_fn_and_state(
     def prev_update(optimizer_state):
         return optimizer_state[0].trace
 
-    def optimizer_apply(regular_grad, params, optimizer_state, data, aux):
-        del regular_grad
-        grad = proxsr_update_fn(
+    def optimizer_apply(grad, params, optimizer_state, data, aux):
+        grad, apply_grad = proxsr_update_fn(
             aux["centered_local_energies"],
             params,
             prev_update(optimizer_state),
@@ -615,13 +615,14 @@ def get_proxsr_update_fn_and_state(
                 learning_rate,
                 optimizer_config.norm_constraint,
             )
-        else:
-            grad = grad
 
         updates, optimizer_state = descent_optimizer.update(
             grad, optimizer_state, params
         )
-        params = optax.apply_updates(params, updates)
+        params = jax.lax.cond(
+            apply_grad, optax.apply_updates, lambda p, _: p, params, updates
+        )
+
         return params, optimizer_state
 
     update_param_fn = create_grad_energy_update_param_fn(
