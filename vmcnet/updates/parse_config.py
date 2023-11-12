@@ -584,9 +584,8 @@ def get_proxsr_update_fn_and_state(
     """
     proxsr_update_fn = get_proxsr_update_fn(
         log_psi_apply,
-        optimizer_config.damping_type,
         optimizer_config.damping,
-        optimizer_config.prev_grad_decay,
+        optimizer_config.mu,
     )
 
     descent_optimizer = optax.sgd(

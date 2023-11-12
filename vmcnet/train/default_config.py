@@ -356,10 +356,7 @@ def get_default_vmc_config() -> Dict:
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
-                # ProxSR-specific params
-                "prev_grad_decay": 0.99,
-                # Damping magnitude and type
-                "damping_type": "diag_shift",  # diag_shift or pinv
+                "mu": 0.99,
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,

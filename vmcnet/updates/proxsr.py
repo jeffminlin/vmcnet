@@ -15,9 +15,8 @@ from vmcnet import utils
 
 def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
-    damping_type: str = "diag_shift",
     damping: chex.Scalar = 0.001,
-    prev_grad_decay: chex.Scalar = 0.99,
+    mu: chex.Scalar = 0.99,
 ):
     """
     Get the ProxSR update function.
@@ -25,9 +24,8 @@ def get_proxsr_update_fn(
     Args:
         log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
             function is (params, x) -> log|psi(x)|
-        damping_type (str): either "diag_shift" or "pinv"
         damping (float): damping parameter
-        prev_grad_decay (float): ProxSR-specific parameter
+        mu (float): ProxSR-specific regularization
 
     Returns:
         Callable: ProxSR update function. Has the signature
@@ -40,24 +38,6 @@ def get_proxsr_update_fn(
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
-    def invert_T(T, nchains):
-        eigval, eigvec = jnp.linalg.eigh(T)
-
-        # should be nonnegative since it's PSDF matrix
-        eigval = jnp.where(eigval < 0, 0, eigval)
-
-        # Damping has scale factor of nchains since we didn't divide T
-        if damping_type == "diag_shift":
-            eigval += damping * nchains
-            eigval_inv = 1 / eigval
-        elif damping_type == "pinv":
-            eigval_inv = jnp.where(eigval >= damping * nchains, 1 / eigval, 0.0)
-        else:
-            raise ValueError("Damping type must be either diag_shift or pinv")
-
-        Tinv = eigvec @ jnp.diag(eigval_inv) @ eigvec.T
-        return Tinv
-
     def proxsr_update_fn(
         centered_energies: P,
         params: P,
@@ -65,24 +45,27 @@ def get_proxsr_update_fn(
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
-        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
 
-        # (nsample, nparam)
-        log_psi_grads = batch_raveled_log_psi_grad(params, positions)
+        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
+        prev_grad_decayed = mu * prev_grad
+
+        log_psi_grads = batch_raveled_log_psi_grad(params, positions) / jnp.sqrt(
+            nchains
+        )
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
 
         T = Ohat @ Ohat.T
-        Tinv = invert_T(T, nchains)
+        ones = jnp.ones((nchains, 1))
+        T_reg = T + ones @ ones.T + damping * jnp.eye(nchains)
 
-        OhatT_Tinv = Ohat.T @ Tinv
+        epsilon_bar = centered_energies / jnp.sqrt(nchains)
+        epsion_tilde = epsilon_bar - Ohat @ prev_grad_decayed
 
-        min_sr_solution = OhatT_Tinv @ centered_energies
+        dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
+            T_reg, epsion_tilde, assume_a="pos"
+        )
 
-        Ohat_prev_grad = Ohat @ prev_grad
-        prev_grad_subspace = OhatT_Tinv @ Ohat_prev_grad
-        prev_grad_complement = prev_grad - prev_grad_subspace
-
-        SR_G = min_sr_solution + prev_grad_complement * prev_grad_decay
+        SR_G = dtheta_residual + prev_grad_decayed
         return unravel_fn(SR_G)
 
     return proxsr_update_fn
