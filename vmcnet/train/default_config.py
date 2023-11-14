@@ -314,7 +314,7 @@ def get_default_vmc_config() -> Dict:
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
-                "norm_constraint": 0.001,
+                "norm_constraint": 0.001,  # supply value of -1 to use no constraint
                 "curvature_ema": 0.95,
                 "inverse_update_period": 1,
                 "min_damping": 1e-4,

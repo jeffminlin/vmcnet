@@ -235,10 +235,13 @@ def get_kfac_update_fn_and_state(
         initial optimizer state, and
         PRNGKey
     """
+    norm_constraint = optimizer_config.norm_constraint
+    norm_constraint = norm_constraint if norm_constraint >= 0 else None
+
     optimizer = kfac_Optimizer(
         energy_data_val_and_grad,
         l2_reg=optimizer_config.l2_reg,
-        norm_constraint=optimizer_config.norm_constraint,
+        norm_constraint=norm_constraint,
         value_func_has_aux=True,
         value_func_has_rng=True,
         learning_rate_schedule=learning_rate_schedule,
