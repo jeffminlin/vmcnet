@@ -354,7 +354,7 @@ def get_default_vmc_config() -> Dict:
             "proxsr": {
                 # Learning rate params
                 "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 2e-2,  # needs to be tuned with everything else
+                "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
                 "mu": 0.99,
                 "damping": 0.001,
