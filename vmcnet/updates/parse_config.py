@@ -582,11 +582,19 @@ def get_proxsr_update_fn_and_state(
             -> (new params, new state, metrics, new key), and
         initial optimizer state
     """
-    proxsr_update_fn = get_proxsr_update_fn(
-        log_psi_apply,
-        optimizer_config.damping,
-        optimizer_config.mu,
-    )
+    if optimizer_config.constrain_minsr_vector:
+        proxsr_update_fn = get_proxsr_update_fn(
+            log_psi_apply,
+            optimizer_config.damping,
+            optimizer_config.mu,
+            optimizer_config.minsr_relative_norm_constraint,
+        )
+    else:
+        proxsr_update_fn = get_proxsr_update_fn(
+            log_psi_apply,
+            optimizer_config.damping,
+            optimizer_config.mu,
+        )
 
     descent_optimizer = optax.sgd(
         learning_rate=learning_rate_schedule, momentum=0, nesterov=False

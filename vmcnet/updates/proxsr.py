@@ -3,7 +3,7 @@ import jax
 import jax.flatten_util
 import jax.numpy as jnp
 
-from vmcnet.utils.typing import Array, ModelApply, P, Tuple
+from vmcnet.utils.typing import Array, ModelApply, P, Tuple, Optional
 
 import chex
 from vmcnet.utils.pytree_helpers import (
@@ -17,6 +17,7 @@ def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
+    minsr_relative_norm_constraint: Optional[chex.Scalar] = None,
 ):
     """
     Get the ProxSR update function.
@@ -64,6 +65,11 @@ def get_proxsr_update_fn(
         dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
             T_reg, epsion_tilde, assume_a="pos"
         )
+
+        if minsr_relative_norm_constraint is not None:
+            dtheta_residual = constrain_norm(
+                dtheta_residual, minsr_relative_norm_constraint
+            )
 
         SR_G = dtheta_residual + prev_grad_decayed
         return unravel_fn(SR_G)
