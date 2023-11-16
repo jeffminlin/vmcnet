@@ -584,12 +584,6 @@ def _compute_and_save_energy_statistics(
 
 def run_molecule() -> None:
     """Run VMC on a molecule."""
-    A = jnp.array(np.random.normal(size=(4096, 4096)))
-    import timeit
-
-    time = timeit.timeit(lambda: A @ A, number=1000) / 1000
-    logging.info(f"TIMEING TEST RESULT: {time}")
-
     reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
 
     reload_from_checkpoint = (
@@ -606,6 +600,13 @@ def run_molecule() -> None:
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
+
+    A = jnp.array(np.random.normal(size=(4096, 4096)))
+    import timeit
+
+    time = timeit.timeit(lambda: A @ A, number=1000) / 1000
+    logging.info(f"TIMEING TEST RESULT: {time}")
+
     logdir = _get_logdir_and_save_config(reload_config, config)
     _save_git_hash(logdir)
 
