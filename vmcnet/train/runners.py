@@ -510,7 +510,12 @@ def _make_new_data_for_eval(
     if config.distribute:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
     data = _make_initial_data(
-        log_psi_apply, config.eval, init_pos, params, apply_pmap=config.distribute
+        log_psi_apply,
+        config.eval,
+        init_pos,
+        params,
+        dtype=dtype,
+        apply_pmap=config.distribute,
     )
 
     return key, data
