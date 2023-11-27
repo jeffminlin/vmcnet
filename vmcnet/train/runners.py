@@ -74,6 +74,7 @@ def _save_git_hash(logdir):
 
 def _get_dtype(config: ConfigDict):
     if config.dtype == "float32":
+        jax.config.update("jax_enable_x64", False)
         return jnp.float32
     elif config.dtype == "float64":
         jax.config.update("jax_enable_x64", True)
