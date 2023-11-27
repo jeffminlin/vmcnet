@@ -142,18 +142,6 @@ def test_run_molecule_jitted(mocker, tmp_path):
 
 
 @pytest.mark.very_slow
-def test_run_molecule_double_precision(mocker, tmp_path):
-    """End-to-end test of the molecular runner, in double precision."""
-    vmc_nchains = 3 * jax.local_device_count()
-    eval_nchains = 2 * jax.local_device_count()
-    mocker.patch("os.curdir", tmp_path)
-    config = _get_config(vmc_nchains, eval_nchains, False)
-    config.dtype = "float64"
-
-    _run_and_check_output_files(mocker, tmp_path, config)
-
-
-@pytest.mark.very_slow
 def test_reload_append(mocker, tmp_path):
     """Reload and continue a run from a checkpoint.
 
@@ -230,3 +218,17 @@ def test_reload_append(mocker, tmp_path):
         print("test passed for", name)
 
     np.testing.assert_allclose(energies1, energies2, rtol=1e-6)
+
+
+# NOTE (ggoldsh): This test MUST be at the end of the file, otherwise it turns on
+# double precision for later tests and causes them to fail.
+@pytest.mark.very_slow
+def test_run_molecule_double_precision(mocker, tmp_path):
+    """End-to-end test of the molecular runner, in double precision."""
+    vmc_nchains = 3 * jax.local_device_count()
+    eval_nchains = 2 * jax.local_device_count()
+    mocker.patch("os.curdir", tmp_path)
+    config = _get_config(vmc_nchains, eval_nchains, False)
+    config.dtype = "float64"
+
+    _run_and_check_output_files(mocker, tmp_path, config)
