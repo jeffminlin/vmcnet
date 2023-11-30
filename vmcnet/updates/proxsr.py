@@ -17,6 +17,7 @@ def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
+    momentum: chex.Scalar = 0.99,
 ):
     """
     Get the ProxSR update function.
@@ -66,6 +67,8 @@ def get_proxsr_update_fn(
         )
 
         SR_G = dtheta_residual + prev_grad_decayed
+        SR_G = (1 - momentum) * SR_G + momentum * prev_grad
+
         return unravel_fn(SR_G)
 
     return proxsr_update_fn
