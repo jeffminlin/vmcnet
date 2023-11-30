@@ -74,6 +74,7 @@ def _save_git_hash(logdir):
 
 def _get_dtype(config: ConfigDict):
     if config.dtype == "float32":
+        jax.config.update("jax_enable_x64", False)
         return jnp.float32
     elif config.dtype == "float64":
         jax.config.update("jax_enable_x64", True)
@@ -141,6 +142,7 @@ def _make_initial_distributed_data(
     run_config: ConfigDict,
     init_pos: Array,
     params: P,
+    dtype=jnp.float32,
 ) -> dwpa.DWPAData:
     # Need to use distributed_log_psi_apply here, in the case where there is not enough
     # memory to form the initial amplitudes on a single device
@@ -148,7 +150,9 @@ def _make_initial_distributed_data(
     sharded_amplitudes = distributed_log_psi_apply(params, sharded_init_pos)
     move_metadata = utils.distribute.replicate_all_local_devices(
         dwpa.MoveMetadata(
-            std_move=run_config.std_move, move_acceptance_sum=0.0, moves_since_update=0
+            std_move=run_config.std_move,
+            move_acceptance_sum=dtype(0.0),
+            moves_since_update=0,
         )
     )
     return pacore.make_position_amplitude_data(
@@ -161,13 +165,14 @@ def _make_initial_single_device_data(
     run_config: ConfigDict,
     init_pos: Array,
     params: P,
+    dtype=jnp.float32,
 ) -> dwpa.DWPAData:
     amplitudes = log_psi_apply(params, init_pos)
     return dwpa.make_dynamic_width_position_amplitude_data(
         init_pos,
         amplitudes,
         std_move=run_config.std_move,
-        move_acceptance_sum=0.0,
+        move_acceptance_sum=dtype(0.0),
         moves_since_update=0,
     )
 
@@ -177,15 +182,16 @@ def _make_initial_data(
     run_config: ConfigDict,
     init_pos: Array,
     params: P,
+    dtype=jnp.float32,
     apply_pmap: bool = True,
 ) -> dwpa.DWPAData:
     if apply_pmap:
         return _make_initial_distributed_data(
-            utils.distribute.pmap(log_psi_apply), run_config, init_pos, params
+            utils.distribute.pmap(log_psi_apply), run_config, init_pos, params, dtype
         )
     else:
         return _make_initial_single_device_data(
-            log_psi_apply, run_config, init_pos, params
+            log_psi_apply, run_config, init_pos, params, dtype
         )
 
 
@@ -390,7 +396,7 @@ def _setup_vmc(
 
     # Make initial data
     data = _make_initial_data(
-        log_psi_apply, config.vmc, init_pos, params, apply_pmap=apply_pmap
+        log_psi_apply, config.vmc, init_pos, params, dtype=dtype, apply_pmap=apply_pmap
     )
     get_amplitude_fn = pacore.get_amplitude_from_data
     update_data_fn = pacore.get_update_data_fn(log_psi_apply)
@@ -505,7 +511,12 @@ def _make_new_data_for_eval(
     if config.distribute:
         key = utils.distribute.make_different_rng_key_on_all_devices(key)
     data = _make_initial_data(
-        log_psi_apply, config.eval, init_pos, params, apply_pmap=config.distribute
+        log_psi_apply,
+        config.eval,
+        init_pos,
+        params,
+        dtype=dtype,
+        apply_pmap=config.distribute,
     )
 
     return key, data
