@@ -56,7 +56,7 @@ def get_proxsr_update_fn(
 
         T = Ohat @ Ohat.T
         ones = jnp.ones((nchains, 1))
-        T_reg = T + ones @ ones.T + damping * jnp.eye(nchains)
+        T_reg = T + ones @ ones.T / nchains + damping * jnp.eye(nchains)
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
         epsion_tilde = epsilon_bar - Ohat @ prev_grad_decayed
