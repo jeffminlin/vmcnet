@@ -17,7 +17,7 @@ def get_proxsr_update_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
-    momentum: chex.Scalar = 0.99,
+    momentum: chex.Scalar = 0.0,
 ):
     """
     Get the ProxSR update function.
