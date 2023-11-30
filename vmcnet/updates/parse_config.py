@@ -592,9 +592,6 @@ def get_proxsr_update_fn_and_state(
         learning_rate=learning_rate_schedule, momentum=0, nesterov=False
     )
 
-    def get_optimizer_step_count(optimizer_state):
-        return optimizer_state[1].count
-
     def prev_update(optimizer_state):
         return optimizer_state[0].trace
 
@@ -606,21 +603,17 @@ def get_proxsr_update_fn_and_state(
             prev_update(optimizer_state),
             get_position_fn(data),
         )
-        step_count = get_optimizer_step_count(optimizer_state)
-        learning_rate = learning_rate_schedule(step_count)
-
-        if optimizer_config.constrain_norm:
-            grad = constrain_norm_proxsr(
-                grad,
-                learning_rate,
-                optimizer_config.norm_constraint,
-            )
-        else:
-            grad = grad
 
         updates, optimizer_state = descent_optimizer.update(
             grad, optimizer_state, params
         )
+
+        if optimizer_config.constrain_norm:
+            updates = constrain_norm_proxsr(
+                updates,
+                optimizer_config.norm_constraint,
+            )
+
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 
