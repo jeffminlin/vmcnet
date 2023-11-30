@@ -74,11 +74,9 @@ def get_proxsr_update_fn(
 def constrain_norm(
     grad: P,
     norm_constraint: chex.Numeric = 0.001,
-    learning_rate_correction: chex.Numeric = 1.0,
 ) -> P:
     """Euclidean norm constraint."""
-    sq_norm_precond_grads = tree_inner_product(grad, grad)
-    sq_norm_scaled_grads = sq_norm_precond_grads * learning_rate_correction**2
+    sq_norm_scaled_grads = tree_inner_product(grad, grad)
 
     # Sync the norms here, see:
     # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
