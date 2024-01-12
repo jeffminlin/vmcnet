@@ -310,7 +310,7 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "spring",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
