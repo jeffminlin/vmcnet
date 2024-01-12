@@ -1,5 +1,7 @@
 # vmcnet
-Flexible, general-purpose VMC framework, built on [JAX](https://github.com/google/jax).
+Framework for training first-quantized neural network wavefunctions using the variational Monte Carlo method.
+
+Built on [JAX](https://github.com/google/jax).
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
@@ -12,8 +14,8 @@ If running on a GPU, CUDA needs to be set up properly to work with JAX, and you 
 ## Philosophy and usage
 
 This repository is built to serve two purposes:
-1. Provide a general python API for variational Monte Carlo calculations compatible with JAX, with a number of built-in neural network architectures for ready-use. 
-2. Provide a command-line interface exposing a large number of options for more streamlined (but somewhat less custom) experimentation with architecture/optimization/sampling hyperparameters.
+1. To enable the development and testing of new architectures and algorithms for training neural network wavefunctions in first quantization.
+2. To serve as a companion codebase to several papers, listed below.
 
 This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository (and its own JAX branch) can be found [here](https://github.com/deepmind/ferminet).
 
