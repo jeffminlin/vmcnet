@@ -1,7 +1,5 @@
 # vmcnet
-Framework for training first-quantized neural network wavefunctions using the variational Monte Carlo method.
-
-Built on [JAX](https://github.com/google/jax).
+Framework for training first-quantized neural network wavefunctions using VMC, built on [JAX](https://github.com/google/jax).
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
@@ -101,31 +99,75 @@ You can also reload and evaluate or continue training from previous checkpoints 
 
 The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple script is designed to be compatible with the output of an evaluation run with `vmc-molecule`, but can accept any path to a file which contains local energies (a file with nchains x nepochs energies). It computes and saves a json file containing the average energy, the sample variance, the estimated integrated autocorrelation, and the estimated standard error. The options can be viewed simply via `vmc-statistics -h`.
 
-## Contributing
-
-See [how to contribute](CONTRIBUTING.md).
-
 ## Cite
 
-A preprint of the paper which originally introduced this repository can be found at https://arxiv.org/abs/2112.03491, which can be cited via:
+### SPRING
+
+A preprint describing the SPRING optimization algorithm can be found at XXXX, which can be cited via:
+```buildoutcfg
+
 ```
-@misc{lin2021explicitly,
-      title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation}, 
-      author={Jeffmin Lin and Gil Goldshlager and Lin Lin},
-      year={2021},
-      eprint={2112.03491},
-      archivePrefix={arXiv},
-      primaryClass={physics.comp-ph}
+VMCNet can be used straightforwardly to reproduce the results in the preprint. For example to run the preliminary optimization phase
+for the carbon atom use the following command:
+```
+vmc-molecule \
+--config.logdir=/path/to/logs \
+--config.save_to_current_datetime_subfolder=False \
+--config.subfolder_name=C_preliminary \
+--config.problem.ion_pos='((0.,0.,0.),)' \
+--config.problem.ion_charges='(6.,)' \
+--config.problem.nelec='(4,2)' \
+--config.vmc.optimizer_type=kfac \
+--config.vmc.nchains=1000 \
+--config.vmc.nepochs=1000 \
+--config.eval.nepochs=0 \
+--config.model.ferminet.ndeterminants=16 \
+--config.model.ferminet.full_det=True \
+--config.vmc.checkpoint_every=1000
+```
+To then run the main optimization phase with SPRING use:
+```
+vmc-molecule \
+--reload.logdir=/path/to/logs/C_preliminary \
+--reload.checkpoint_relative_file_path=checkpoints/1000.npz \
+--reload.new_optimizer_state=True \
+--reload.append=False \
+--config.logdir=/path/to/logs/C_SPRING \
+--config.vmc.nchains=1000 \
+--config.vmc.nepochs=100000 \
+--config.eval.nchains=2000 \
+--config.eval.nepochs=20000 \
+--config.vmc.optimizer_type=spring \
+--config.vmc.optimizer.spring.learning_rate=0.02
+```
+For other methods, the optimizer and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
+
+### Other
+
+The paper which originally introduced this repository can be found at https://doi.org/10.1016/j.jcp.2022.111765, which can be cited via:
+```
+@article{lin2023explicitly,
+  title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation},
+  author={Lin, Jeffmin and Goldshlager, Gil and Lin, Lin},
+  journal={Journal of Computational Physics},
+  volume={474},
+  pages={111765},
+  year={2023},
+  publisher={Elsevier}
 }
 ```
-If citing version `0.1.0` of this GitHub repository directly, you can use the following citation:
+If citing version `0.2.0` of this GitHub repository directly, you can use the following citation:
 
 ```
 @software{vmcnet2021github,
-  author = {Jeffmin Lin and Gil Goldshlager and Lin Lin},
-  title = {{VMCNet}: Flexible, general-purpose {VMC} framework, built on {JAX}},
+  author = {Jeffmin Lin, Gil Goldshlager, Nilin Abrahamsen, and Lin Lin},
+  title = {{VMCNet}: Framework for training first-quantized neural network wavefunctions using {VMC}, built on {JAX}},
   url = {http://github.com/jeffminlin/vmcnet},
-  version = {0.1.0},
-  year = {2021},
+  version = {0.2.0},
+  year = {2024},
 }
 ```
+
+## Contributing
+
+See [how to contribute](CONTRIBUTING.md).
