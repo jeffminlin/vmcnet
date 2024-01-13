@@ -140,7 +140,7 @@ vmc-molecule \
 --config.vmc.optimizer_type=spring \
 --config.vmc.optimizer.spring.learning_rate=0.02
 ```
-For other methods, the optimizer and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
+Other optimizers and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
 
 ### Other
 
