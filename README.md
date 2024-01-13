@@ -7,7 +7,7 @@ This repository is built to serve two purposes:
 1. To enable the development and testing of new architectures and algorithms for training neural network wavefunctions in first quantization.
 2. To serve as a companion codebase to several papers, listed below.
 
-This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository (and its own JAX branch) can be found [here](https://github.com/deepmind/ferminet).
+This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository can be found [here](https://github.com/deepmind/ferminet).
 
 ## Installation
 
@@ -89,9 +89,13 @@ vmc-molecule \
     --config.problem.ion_charges="(7.0, 7.0)" \
     --config.problem.nelec="(7, 7)" \
     --config.model.ferminet.full_det="True" \
-    --config.logging_level="INFO"
 ```
-will train the full single-determinant FermiNet on the nitrogen molecule at dissociating bond length 4.0 for 2e5 epochs on 2000 walkers (which are distributed across any available GPUs, if supported by the installation).
+will train the full single-determinant FermiNet on the nitrogen molecule at dissociating bond length 4.0 for 2e5 epochs on 2000 walkers. By default the SPRING optimizer will be used,
+which for now only works on a single device. It is possible to run on multiple GPUs with other optimizers, for example by adding the following:
+```
+--config.distribute=True \\
+--config.vmc.optimizer_type=kfac
+```
 
 You can also reload and evaluate or continue training from previous checkpoints via the "`--reload.`" prefix. The options can be seen in [`train.default_config.get_default_reload_config()`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/default_config.py#L47). The reloading will only occur if `--reload.logdir` is set.
 
@@ -100,7 +104,7 @@ The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple s
 
 ## SPRING optimizer
 
-A preprint describing the SPRING optimization algorithm can be found at XXXX and can be cited via:
+The preprint describing the SPRING optimizer can be found at XXXX and can be cited via:
 ```buildoutcfg
 
 ```
@@ -137,6 +141,7 @@ vmc-molecule \
 --config.vmc.optimizer_type=spring \
 --config.vmc.optimizer.spring.learning_rate=0.02
 ```
+SPRING is also effective when run from the start; the preliminary optimization phase was only included to make comparisons between optimizers more fair.
 Other optimizers and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
 
 
