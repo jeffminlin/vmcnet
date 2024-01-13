@@ -84,7 +84,7 @@ def get_default_config() -> ConfigDict:
                 "subfolder_name": NO_NAME,
                 "logging_level": "INFO",
                 "dtype": "float32",
-                "distribute": True,
+                "distribute": False,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
                 "initial_seed": 0,
             }

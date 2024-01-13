@@ -126,6 +126,7 @@ def test_run_molecule_pmapped(mocker, tmp_path):
     eval_nchains = 2 * jax.local_device_count()
     mocker.patch("os.curdir", tmp_path)
     config = _get_config(vmc_nchains, eval_nchains, True)
+    config.vmc.optimizer_type = "kfac"  # Multi-device SPRING not yet implemented
 
     _run_and_check_output_files(mocker, tmp_path, config)
 
