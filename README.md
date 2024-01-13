@@ -3,21 +3,19 @@ Framework for training first-quantized neural network wavefunctions using VMC, b
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## Installation
-
-Python 3.9 is required, and a virtual environment is recommended. After cloning, use `pip install -e .` to install the package in editable/develop mode, or `pip install -e .[testing]` if planning on running tests.
-
-If running on a GPU, CUDA needs to be set up properly to work with JAX, and you will need to install the correct `jaxlib` wheel. See, e.g., https://github.com/google/jax#installation.
-
-## Philosophy and usage
-
 This repository is built to serve two purposes:
 1. To enable the development and testing of new architectures and algorithms for training neural network wavefunctions in first quantization.
 2. To serve as a companion codebase to several papers, listed below.
 
 This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository (and its own JAX branch) can be found [here](https://github.com/deepmind/ferminet).
 
-### Python API
+## Installation
+
+Python 3.9 is required, and a virtual environment is recommended. After cloning, use `pip install -e .` to install the package in editable/develop mode, or `pip install -e .[testing]` if planning on running tests.
+
+If running on a GPU, CUDA needs to be set up properly to work with JAX, and you will need to install the correct `jaxlib` wheel. See, e.g., https://github.com/google/jax#installation.
+
+## Python API
 
 The primary routine exposed by this repository which implements the VMC training loop is the [`train.vmc.vmc_loop`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/vmc.py#L13) function. This function implements a very generic unsupervised training loop. A skeleton of a script which performs varational Monte Carlo would look something like:
 
@@ -78,7 +76,7 @@ params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
 ```
 Note the required function signatures. A simple but complete working example can be found in the [hydrogen-like atom](https://github.com/jeffminlin/vmcnet/blob/master/tests/integrations/examples/test_hydrogen_like_atom.py) example in the test suite.
 
-### Command-line
+## Command-line
 
 Alternatively, a command-line interface has been implemented which provides more streamlined access to subsets of the repository via setting [ConfigDict](https://github.com/google/ml_collections) objects.
 
@@ -99,11 +97,10 @@ You can also reload and evaluate or continue training from previous checkpoints 
 
 The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple script is designed to be compatible with the output of an evaluation run with `vmc-molecule`, but can accept any path to a file which contains local energies (a file with nchains x nepochs energies). It computes and saves a json file containing the average energy, the sample variance, the estimated integrated autocorrelation, and the estimated standard error. The options can be viewed simply via `vmc-statistics -h`.
 
-## Cite
 
-### SPRING
+## SPRING optimizer
 
-A preprint describing the SPRING optimization algorithm can be found at XXXX, which can be cited via:
+A preprint describing the SPRING optimization algorithm can be found at XXXX and can be cited via:
 ```buildoutcfg
 
 ```
@@ -142,9 +139,10 @@ vmc-molecule \
 ```
 Other optimizers and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
 
-### Other
 
-The paper which originally introduced this repository can be found at https://doi.org/10.1016/j.jcp.2022.111765, which can be cited via:
+## Cite
+
+The paper which originally introduced this repository can be found at https://doi.org/10.1016/j.jcp.2022.111765 and can be cited via:
 ```
 @article{lin2023explicitly,
   title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation},
@@ -156,7 +154,7 @@ The paper which originally introduced this repository can be found at https://do
   publisher={Elsevier}
 }
 ```
-If citing version `0.2.0` of this GitHub repository directly, you can use the following citation:
+To cite version `0.2.0` of this GitHub repository directly you can use the following:
 
 ```
 @software{vmcnet2021github,
