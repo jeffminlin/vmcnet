@@ -104,9 +104,16 @@ The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple s
 
 ## SPRING optimizer
 
-The preprint describing the SPRING optimizer can be found at XXXX and can be cited via:
-```buildoutcfg
-
+The preprint describing the SPRING optimizer can be found at https://arxiv.org/abs/2401.10190 and can be cited via:
+```
+@misc{goldshlager2024kaczmarzinspired,
+      title={A Kaczmarz-inspired approach to accelerate the optimization of neural network wavefunctions}, 
+      author={Gil Goldshlager and Nilin Abrahamsen and Lin Lin},
+      year={2024},
+      eprint={2401.10190},
+      archivePrefix={arXiv},
+      primaryClass={physics.comp-ph}
+}
 ```
 VMCNet can be used straightforwardly to reproduce the results in the preprint. For example to run the preliminary optimization phase
 for the carbon atom use the following command:
