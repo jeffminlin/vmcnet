@@ -13,23 +13,23 @@ from vmcnet.utils.pytree_helpers import (
 from vmcnet import utils
 
 
-def get_proxsr_update_fn(
+def get_spring_update_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
     momentum: chex.Scalar = 0.0,
 ):
     """
-    Get the ProxSR update function.
+    Get the SPRING update function.
 
     Args:
         log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
             function is (params, x) -> log|psi(x)|
         damping (float): damping parameter
-        mu (float): ProxSR-specific regularization
+        mu (float): SPRING-specific regularization
 
     Returns:
-        Callable: ProxSR update function. Has the signature
+        Callable: SPRING update function. Has the signature
         (centered_energies, params, prev_grad, positions) -> new_grad
     """
 
@@ -39,7 +39,7 @@ def get_proxsr_update_fn(
 
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
-    def proxsr_update_fn(
+    def spring_update_fn(
         centered_energies: P,
         params: P,
         prev_grad,
@@ -71,7 +71,7 @@ def get_proxsr_update_fn(
 
         return unravel_fn(SR_G)
 
-    return proxsr_update_fn
+    return spring_update_fn
 
 
 def constrain_norm(

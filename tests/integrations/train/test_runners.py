@@ -126,6 +126,7 @@ def test_run_molecule_pmapped(mocker, tmp_path):
     eval_nchains = 2 * jax.local_device_count()
     mocker.patch("os.curdir", tmp_path)
     config = _get_config(vmc_nchains, eval_nchains, True)
+    config.vmc.optimizer_type = "kfac"  # Multi-device SPRING not yet implemented
 
     _run_and_check_output_files(mocker, tmp_path, config)
 
@@ -177,7 +178,7 @@ def test_reload_append(mocker, tmp_path):
         "--config.vmc.checkpoint_every=1",
         "--config.save_to_current_datetime_subfolder=False",
         "--config.subfolder_name=NONE",
-        "--config.vmc.optimizer_type=proxsr",
+        "--config.vmc.optimizer_type=spring",
         "--config.distribute=False",
     ]
     reload_argv = [

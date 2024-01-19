@@ -84,7 +84,7 @@ def get_default_config() -> ConfigDict:
                 "subfolder_name": NO_NAME,
                 "logging_level": "INFO",
                 "dtype": "float32",
-                "distribute": True,
+                "distribute": False,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
                 "initial_seed": 0,
             }
@@ -310,7 +310,7 @@ def get_default_vmc_config() -> Dict:
         "clip_threshold": 5.0,
         "clip_center": "mean",  # mean or median
         "nan_safe": True,
-        "optimizer_type": "kfac",
+        "optimizer_type": "spring",
         "optimizer": {
             "kfac": {
                 "l2_reg": 0.0,
@@ -351,11 +351,12 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
             },
-            "proxsr": {
-                # Learning rate params
+            "spring": {
+                # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
                 "learning_rate": 5e-2,  # needs to be tuned with everything else
                 "learning_decay_rate": 1e-4,
+                # SPRING hyperparams
                 "mu": 0.99,
                 "momentum": 0.0,  # non-zero value not recommended
                 "damping": 0.001,
