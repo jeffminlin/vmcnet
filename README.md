@@ -1,7 +1,13 @@
 # vmcnet
-Flexible, general-purpose VMC framework, built on [JAX](https://github.com/google/jax).
+Framework for training first-quantized neural network wavefunctions using VMC, built on [JAX](https://github.com/google/jax).
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+This repository is built to serve two purposes:
+1. To enable the development and testing of new architectures and algorithms for training neural network wavefunctions in first quantization.
+2. To serve as a companion codebase to several papers, listed below.
+
+This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository can be found [here](https://github.com/deepmind/ferminet).
 
 ## Installation
 
@@ -9,15 +15,7 @@ Python 3.9 is required, and a virtual environment is recommended. After cloning,
 
 If running on a GPU, CUDA needs to be set up properly to work with JAX, and you will need to install the correct `jaxlib` wheel. See, e.g., https://github.com/google/jax#installation.
 
-## Philosophy and usage
-
-This repository is built to serve two purposes:
-1. Provide a general python API for variational Monte Carlo calculations compatible with JAX, with a number of built-in neural network architectures for ready-use. 
-2. Provide a command-line interface exposing a large number of options for more streamlined (but somewhat less custom) experimentation with architecture/optimization/sampling hyperparameters.
-
-This repository was built as a JAX port of an internal TensorFlow project started in 2019 which itself was initially inspired by the work of [David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429). Their repository (and its own JAX branch) can be found [here](https://github.com/deepmind/ferminet).
-
-### Python API
+## Python API
 
 The primary routine exposed by this repository which implements the VMC training loop is the [`train.vmc.vmc_loop`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/vmc.py#L13) function. This function implements a very generic unsupervised training loop. A skeleton of a script which performs varational Monte Carlo would look something like:
 
@@ -78,7 +76,7 @@ params, optimizer_state, data, key, _ = train.vmc.vmc_loop(
 ```
 Note the required function signatures. A simple but complete working example can be found in the [hydrogen-like atom](https://github.com/jeffminlin/vmcnet/blob/master/tests/integrations/examples/test_hydrogen_like_atom.py) example in the test suite.
 
-### Command-line
+## Command-line
 
 Alternatively, a command-line interface has been implemented which provides more streamlined access to subsets of the repository via setting [ConfigDict](https://github.com/google/ml_collections) objects.
 
@@ -91,39 +89,95 @@ vmc-molecule \
     --config.problem.ion_charges="(7.0, 7.0)" \
     --config.problem.nelec="(7, 7)" \
     --config.model.ferminet.full_det="True" \
-    --config.logging_level="INFO"
 ```
-will train the full single-determinant FermiNet on the nitrogen molecule at dissociating bond length 4.0 for 2e5 epochs on 2000 walkers (which are distributed across any available GPUs, if supported by the installation).
+will train the full single-determinant FermiNet on the nitrogen molecule at dissociating bond length 4.0 for 2e5 epochs on 2000 walkers. By default the SPRING optimizer will be used,
+which for now only works on a single device. It is possible to run on multiple GPUs with other optimizers, for example by adding the following:
+```
+--config.distribute=True \\
+--config.vmc.optimizer_type=kfac
+```
 
 You can also reload and evaluate or continue training from previous checkpoints via the "`--reload.`" prefix. The options can be seen in [`train.default_config.get_default_reload_config()`](https://github.com/jeffminlin/vmcnet/blob/master/vmcnet/train/default_config.py#L47). The reloading will only occur if `--reload.logdir` is set.
 
 The `vmc-statistics` command calls `train.runners.vmc_statistics`. This simple script is designed to be compatible with the output of an evaluation run with `vmc-molecule`, but can accept any path to a file which contains local energies (a file with nchains x nepochs energies). It computes and saves a json file containing the average energy, the sample variance, the estimated integrated autocorrelation, and the estimated standard error. The options can be viewed simply via `vmc-statistics -h`.
 
-## Contributing
 
-See [how to contribute](CONTRIBUTING.md).
+## SPRING optimizer
 
-## Cite
-
-A preprint of the paper which originally introduced this repository can be found at https://arxiv.org/abs/2112.03491, which can be cited via:
+The preprint describing the SPRING optimizer can be found at https://arxiv.org/abs/2401.10190 and can be cited via:
 ```
-@misc{lin2021explicitly,
-      title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation}, 
-      author={Jeffmin Lin and Gil Goldshlager and Lin Lin},
-      year={2021},
-      eprint={2112.03491},
+@misc{goldshlager2024kaczmarzinspired,
+      title={A Kaczmarz-inspired approach to accelerate the optimization of neural network wavefunctions}, 
+      author={Gil Goldshlager and Nilin Abrahamsen and Lin Lin},
+      year={2024},
+      eprint={2401.10190},
       archivePrefix={arXiv},
       primaryClass={physics.comp-ph}
 }
 ```
-If citing version `0.1.0` of this GitHub repository directly, you can use the following citation:
+VMCNet can be used straightforwardly to reproduce the results in the preprint. For example to run the preliminary optimization phase
+for the carbon atom use the following command:
+```
+vmc-molecule \
+--config.logdir=/path/to/logs \
+--config.save_to_current_datetime_subfolder=False \
+--config.subfolder_name=C_preliminary \
+--config.problem.ion_pos='((0.,0.,0.),)' \
+--config.problem.ion_charges='(6.,)' \
+--config.problem.nelec='(4,2)' \
+--config.vmc.optimizer_type=kfac \
+--config.vmc.nchains=1000 \
+--config.vmc.nepochs=1000 \
+--config.eval.nepochs=0 \
+--config.model.ferminet.ndeterminants=16 \
+--config.model.ferminet.full_det=True \
+--config.vmc.checkpoint_every=1000
+```
+To then run the main optimization phase with SPRING use:
+```
+vmc-molecule \
+--reload.logdir=/path/to/logs/C_preliminary \
+--reload.checkpoint_relative_file_path=checkpoints/1000.npz \
+--reload.new_optimizer_state=True \
+--reload.append=False \
+--config.logdir=/path/to/logs/C_SPRING \
+--config.vmc.nchains=1000 \
+--config.vmc.nepochs=100000 \
+--config.eval.nchains=2000 \
+--config.eval.nepochs=20000 \
+--config.vmc.optimizer_type=spring \
+--config.vmc.optimizer.spring.learning_rate=0.02
+```
+SPRING is also effective when run from the start; the preliminary optimization phase was only included to make comparisons between optimizers more fair.
+Other optimizers and hyperparameters can be configured following the options in vmcnet/train/default_config.py.
+
+
+## Cite
+
+The paper which originally introduced this repository can be found at https://doi.org/10.1016/j.jcp.2022.111765 and can be cited via:
+```
+@article{lin2023explicitly,
+  title={Explicitly antisymmetrized neural network layers for variational Monte Carlo simulation},
+  author={Lin, Jeffmin and Goldshlager, Gil and Lin, Lin},
+  journal={Journal of Computational Physics},
+  volume={474},
+  pages={111765},
+  year={2023},
+  publisher={Elsevier}
+}
+```
+To cite version `0.2.0` of this GitHub repository directly you can use the following:
 
 ```
 @software{vmcnet2021github,
-  author = {Jeffmin Lin and Gil Goldshlager and Lin Lin},
-  title = {{VMCNet}: Flexible, general-purpose {VMC} framework, built on {JAX}},
+  author = {Jeffmin Lin, Gil Goldshlager, Nilin Abrahamsen, and Lin Lin},
+  title = {{VMCNet}: Framework for training first-quantized neural network wavefunctions using {VMC}, built on {JAX}},
   url = {http://github.com/jeffminlin/vmcnet},
-  version = {0.1.0},
-  year = {2021},
+  version = {0.2.0},
+  year = {2024},
 }
 ```
+
+## Contributing
+
+See [how to contribute](CONTRIBUTING.md).
