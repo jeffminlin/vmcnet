@@ -1,4 +1,4 @@
-# vmcnet
+# VMCNet
 Framework for training first-quantized neural network wavefunctions using VMC, built on [JAX](https://github.com/google/jax).
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -169,9 +169,9 @@ The paper which originally introduced this repository can be found at https://do
 To cite version `0.2.0` of this GitHub repository directly you can use the following:
 
 ```
-@software{vmcnet2021github,
+@software{vmcnet2024github,
   author = {Jeffmin Lin, Gil Goldshlager, Nilin Abrahamsen, and Lin Lin},
-  title = {{VMCNet}: Framework for training first-quantized neural network wavefunctions using {VMC}, built on {JAX}},
+  title = {VMCNet: Framework for training first-quantized neural network wavefunctions using VMC, built on JAX},
   url = {http://github.com/jeffminlin/vmcnet},
   version = {0.2.0},
   year = {2024},
