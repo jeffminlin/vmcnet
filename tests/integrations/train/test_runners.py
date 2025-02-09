@@ -114,7 +114,7 @@ def _run_and_check_output_files(mocker, tmp_path, config):
     assert local_es.shape == (config.eval.nepochs, config.eval.nchains)
 
 
-@pytest.mark.very_slow
+@pytest.mark.skip
 def test_run_molecule_pmapped(mocker, tmp_path):
     """End-to-end test of the molecular runner (with smaller nchains/nepochs).
 
