@@ -4,6 +4,7 @@ Because type-checking with numpy/jax numpy can be tricky and does not always agr
 type-checkers, this package uses types for static type-checking when possible, but
 otherwise they are intended for documentation and clarity.
 """
+
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from jax import Array

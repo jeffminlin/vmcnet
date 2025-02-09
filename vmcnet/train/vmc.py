@@ -1,4 +1,5 @@
 """Main VMC loop."""
+
 from typing import Tuple, Optional
 
 import jax

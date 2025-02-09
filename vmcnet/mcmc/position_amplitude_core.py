@@ -1,4 +1,5 @@
 """Shared routines for position amplitude metropolis data."""
+
 from typing import Any, Callable, Optional, Tuple, TypedDict
 
 import chex
@@ -204,7 +205,7 @@ def make_position_amplitude_metropolis_symmetric_acceptance(
 
 
 def make_position_amplitude_update(
-    update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None
+    update_move_metadata_fn: Optional[Callable[[M, Array], M]] = None,
 ) -> Callable[
     [
         PositionAmplitudeData,

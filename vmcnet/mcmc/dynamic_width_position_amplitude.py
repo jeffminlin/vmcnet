@@ -1,4 +1,5 @@
 """Metropolis routines for position amplitude data with dynamically sized steps."""
+
 from typing import Callable, TypedDict
 
 import chex

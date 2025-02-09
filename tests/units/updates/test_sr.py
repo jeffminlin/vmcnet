@@ -1,4 +1,5 @@
 """Test stochastic reconfiguration routines."""
+
 import functools
 
 import jax.numpy as jnp

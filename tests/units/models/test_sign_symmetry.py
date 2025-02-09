@@ -1,4 +1,5 @@
 """Test sign covariance routines."""
+
 import chex
 import jax
 import jax.numpy as jnp

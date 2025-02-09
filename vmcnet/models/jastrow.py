@@ -1,4 +1,5 @@
 """Jastrow factors."""
+
 from typing import Optional, Sequence, Union
 
 import flax

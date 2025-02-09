@@ -1,4 +1,5 @@
 """Stochastic reconfiguration (SR) routine."""
+
 from enum import Enum, auto
 from typing import Callable, Optional
 

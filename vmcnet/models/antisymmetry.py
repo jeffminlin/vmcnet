@@ -1,4 +1,5 @@
 """Antisymmetry parts to compose into a model."""
+
 import functools
 import itertools
 from typing import Callable, Tuple, Union

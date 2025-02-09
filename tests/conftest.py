@@ -6,6 +6,7 @@ Following the example in https://docs.pytest.org/en/latest/example/simple.html,
 tests marked with pytest.mark.slow will be skipped unless the --runslow option is
 provided.
 """
+
 import chex
 import pytest
 

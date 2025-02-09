@@ -3,6 +3,7 @@
 The spatial parts of the wavefunctions tested here are required to be antisymmetric
 with respect to exchange of like-spin particles.
 """
+
 import jax
 import jax.numpy as jnp
 import numpy as np

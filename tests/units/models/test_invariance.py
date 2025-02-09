@@ -1,4 +1,5 @@
 """Test model invariant components."""
+
 import chex
 import functools
 import pytest

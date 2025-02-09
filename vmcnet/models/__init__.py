@@ -1,4 +1,5 @@
 """Model building routines."""
+
 from . import antiequivariance
 from . import antisymmetry
 from . import construct

@@ -1,4 +1,5 @@
 """Spin calculations."""
+
 from typing import Callable, List
 
 import chex

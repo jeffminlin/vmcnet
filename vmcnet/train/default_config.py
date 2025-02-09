@@ -1,4 +1,5 @@
 """Create configuration of hyperparameters."""
+
 import os
 from typing import Dict
 

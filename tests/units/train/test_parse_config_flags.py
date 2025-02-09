@@ -1,4 +1,5 @@
 """Test parsing config flags from command line."""
+
 from absl import flags
 from ml_collections import ConfigDict
 import os

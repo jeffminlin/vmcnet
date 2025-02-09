@@ -1,4 +1,5 @@
 """Test that KFAC treats Dense and LogDomainDense in the same way."""
+
 import kfac_jax
 import jax
 import jax.numpy as jnp

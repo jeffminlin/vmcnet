@@ -1,4 +1,5 @@
 """Helper functions for pytrees."""
+
 import chex
 import jax
 import jax.numpy as jnp

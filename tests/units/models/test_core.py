@@ -1,4 +1,5 @@
 """Test core model building parts."""
+
 import jax
 import jax.numpy as jnp
 import pytest

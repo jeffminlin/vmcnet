@@ -1,4 +1,5 @@
 """Routines which handle model parameter updating."""
+
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import chex

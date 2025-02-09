@@ -1,4 +1,5 @@
 """Core model building parts."""
+
 import functools
 from typing import Callable, TYPE_CHECKING, Sequence, Tuple, Union, cast
 

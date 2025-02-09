@@ -1,4 +1,5 @@
 """Helper function for log sum exp trick with weights."""
+
 from typing import Optional
 
 import jax.numpy as jnp

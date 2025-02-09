@@ -1,4 +1,5 @@
 """Generate the API reference pages and mkdocs nav."""
+
 from pathlib import Path
 
 import mkdocs_gen_files

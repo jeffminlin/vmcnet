@@ -1,4 +1,5 @@
 """Test kinetic energy functions."""
+
 import jax
 
 import vmcnet.physics as physics

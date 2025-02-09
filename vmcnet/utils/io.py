@@ -1,4 +1,5 @@
 """Input/output utilities."""
+
 import functools
 import os
 from typing import Any, Callable, Dict, IO, TypeVar
@@ -190,7 +191,7 @@ def reload_vmc_state(directory: str, name: str) -> CheckpointData:
             # something else. This WILL BREAK if you use data that is an array of dtype
             # object.
             if data.dtype == np.dtype("object"):
-                data = data.tolist()
+                data = data.tolist()  # type: ignore
 
             params = npz_data["p"].tolist()
             optimizer_state = unwrap_if_singleton(npz_data["o"].tolist())

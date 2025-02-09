@@ -1,4 +1,5 @@
 """Tests for slog array helpers."""
+
 from typing import Tuple
 
 import jax.numpy as jnp
