@@ -6,14 +6,13 @@ otherwise they are intended for documentation and clarity.
 """
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
-from jax.random import KeyArray
 from jax import Array
 from jax.typing import ArrayLike
 import kfac_jax
 import optax
 
 
-PRNGKey = KeyArray
+PRNGKey = Array
 
 # Currently using PyTree = Any just to improve readability in the code.
 # A pytree is a "tree-like structure built out of container-like Python objects": see
