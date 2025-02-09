@@ -35,6 +35,9 @@ broadcast_all_local_devices = pmap(lambda x: x)
 
 def replicate_all_local_devices(obj: T) -> T:
     """Replicate a pytree on all local devices."""
+    if obj is None:
+        return None  # type:ignore
+
     n = jax.local_device_count()
     obj_stacked = jax.tree_map(lambda x: jnp.stack([x] * n, axis=0), obj)
     return broadcast_all_local_devices(obj_stacked)
