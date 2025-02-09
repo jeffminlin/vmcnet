@@ -1,4 +1,5 @@
 """Functions to get weight initializers from names."""
+
 import functools
 from typing import Any, Callable, Dict, Sequence, Union
 

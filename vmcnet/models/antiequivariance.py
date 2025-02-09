@@ -1,4 +1,5 @@
 """Antiequivariant parts to compose into a model."""
+
 from typing import Optional, Tuple
 
 import flax

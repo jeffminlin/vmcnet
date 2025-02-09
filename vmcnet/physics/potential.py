@@ -1,4 +1,5 @@
 """Potential energy terms."""
+
 from typing import Optional, Tuple
 
 import chex

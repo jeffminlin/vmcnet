@@ -1,4 +1,5 @@
 """Combine pieces to form full models."""
+
 # TODO (ggoldsh): split this file into smaller component files
 from enum import Enum
 import functools
@@ -274,24 +275,24 @@ def get_model_from_config(
 
     elif model_config.type in ["orbital_cofactor_net", "per_particle_dets_net"]:
         if model_config.type == "orbital_cofactor_net":
-            antieq_layer: Callable[
-                [Array, Array], ArrayList
-            ] = antiequivariance.OrbitalCofactorAntiequivarianceLayer(
-                spin_split,
-                kernel_initializer_orbital_linear=kernel_init_constructor(
-                    model_config.kernel_init_orbital_linear
-                ),
-                kernel_initializer_envelope_dim=kernel_init_constructor(
-                    model_config.kernel_init_envelope_dim
-                ),
-                kernel_initializer_envelope_ion=kernel_init_constructor(
-                    model_config.kernel_init_envelope_ion
-                ),
-                bias_initializer_orbital_linear=bias_init_constructor(
-                    model_config.bias_init_orbital_linear
-                ),
-                orbitals_use_bias=model_config.orbitals_use_bias,
-                isotropic_decay=model_config.isotropic_decay,
+            antieq_layer: Callable[[Array, Array], ArrayList] = (
+                antiequivariance.OrbitalCofactorAntiequivarianceLayer(
+                    spin_split,
+                    kernel_initializer_orbital_linear=kernel_init_constructor(
+                        model_config.kernel_init_orbital_linear
+                    ),
+                    kernel_initializer_envelope_dim=kernel_init_constructor(
+                        model_config.kernel_init_envelope_dim
+                    ),
+                    kernel_initializer_envelope_ion=kernel_init_constructor(
+                        model_config.kernel_init_envelope_ion
+                    ),
+                    bias_initializer_orbital_linear=bias_init_constructor(
+                        model_config.bias_init_orbital_linear
+                    ),
+                    orbitals_use_bias=model_config.orbitals_use_bias,
+                    isotropic_decay=model_config.isotropic_decay,
+                )
             )
         elif model_config.type == "per_particle_dets_net":
             antieq_layer = antiequivariance.PerParticleDeterminantAntiequivarianceLayer(

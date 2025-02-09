@@ -1,4 +1,5 @@
 """Permutation invariant models."""
+
 import math
 from typing import Iterable, Optional, Sequence
 
@@ -75,9 +76,11 @@ class SplitMeanDense(Module):
         """
         x_split = _split_mean(x, self.split, keepdims=False)
         return [
-            self._dense_layers[i](split)
-            if self.ndense_per_split[i] != 0
-            else jnp.empty(split.shape[:-1] + (0,))
+            (
+                self._dense_layers[i](split)
+                if self.ndense_per_split[i] != 0
+                else jnp.empty(split.shape[:-1] + (0,))
+            )
             for i, split in enumerate(x_split)
         ]
 

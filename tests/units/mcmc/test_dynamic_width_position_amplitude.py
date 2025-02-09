@@ -1,4 +1,5 @@
 """Test dynamic width position amplitude routines."""
+
 import jax.numpy as jnp
 import numpy as np
 

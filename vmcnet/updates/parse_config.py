@@ -1,4 +1,5 @@
 """Get update functions from ConfigDicts."""
+
 from typing import Tuple
 
 from kfac_jax import Optimizer as kfac_Optimizer
@@ -241,7 +242,7 @@ def get_kfac_update_fn_and_state(
         norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,
         value_func_has_rng=True,
-        learning_rate_schedule=learning_rate_schedule,
+        learning_rate_schedule=learning_rate_schedule,  # type:ignore
         curvature_ema=optimizer_config.curvature_ema,
         inverse_update_period=optimizer_config.inverse_update_period,
         min_damping=optimizer_config.min_damping,

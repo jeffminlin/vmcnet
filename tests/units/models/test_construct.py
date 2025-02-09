@@ -1,4 +1,5 @@
 """Test model construction."""
+
 import functools
 
 import chex

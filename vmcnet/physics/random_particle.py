@@ -1,5 +1,6 @@
 """Energy terms related to the random particle approach."""
-from typing import Callable, List
+
+from typing import Callable, List, Optional
 
 import chex
 import jax
@@ -53,7 +54,8 @@ def assemble_random_particle_local_energy(
 ) -> LocalEnergyApply[P]:
     """Assembles the random particle local energy from kinetic and potential terms."""
 
-    def local_energy_fn(params: P, positions: Array, key: PRNGKey) -> Array:
+    def local_energy_fn(params: P, positions: Array, key: Optional[PRNGKey]) -> Array:
+        assert key is not None
         total_particles = positions.shape[-2]
         perm = jax.random.permutation(key, jnp.arange(total_particles))
         permuted_positions = positions[perm, :]

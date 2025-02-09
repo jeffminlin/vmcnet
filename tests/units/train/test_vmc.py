@@ -1,4 +1,5 @@
 """Testing main VMC routine."""
+
 import logging
 
 import jax

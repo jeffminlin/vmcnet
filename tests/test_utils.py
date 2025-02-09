@@ -1,4 +1,5 @@
 """Shared pieces for the test suite."""
+
 from typing import Tuple
 
 import jax

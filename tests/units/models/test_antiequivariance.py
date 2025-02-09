@@ -1,4 +1,5 @@
 """Test model antiequivariances."""
+
 from typing import Any, Callable, Tuple
 
 import chex

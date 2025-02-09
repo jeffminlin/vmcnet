@@ -1,4 +1,5 @@
 """Test a hydrogen-like atom."""
+
 import jax
 import numpy as np
 import pytest

@@ -1,4 +1,5 @@
 """Exactly solvable single-electron hydrogen-like atom."""
+
 from typing import Callable
 
 import chex

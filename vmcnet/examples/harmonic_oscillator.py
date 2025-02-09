@@ -1,4 +1,5 @@
 """Harmonic oscillator model."""
+
 import chex
 import flax
 import jax

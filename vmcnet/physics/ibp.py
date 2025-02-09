@@ -1,4 +1,5 @@
 """Energy terms related to the integration-by-parts approach."""
+
 from typing import Callable, List
 
 import chex
@@ -19,7 +20,7 @@ from .core import combine_local_energy_terms
 
 
 def create_gradient_squared_kinetic_energy(
-    log_psi_apply: Callable[[P, Array], Array]
+    log_psi_apply: Callable[[P, Array], Array],
 ) -> ModelApply[P]:
     """Create the local kinetic energy function in the gradient squared form.
 

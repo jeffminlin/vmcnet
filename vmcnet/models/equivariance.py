@@ -1,4 +1,5 @@
 """Permutation equivariant functions."""
+
 import functools
 from typing import Callable, Optional, Sequence, Tuple
 

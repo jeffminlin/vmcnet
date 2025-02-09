@@ -1,4 +1,5 @@
 """Routines for symmetrizing a function to be sign covariant."""
+
 import functools
 from typing import Callable, List, Tuple, TypeVar
 

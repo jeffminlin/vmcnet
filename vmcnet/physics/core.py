@@ -1,4 +1,5 @@
 """Core local energy and gradient construction routines."""
+
 from typing import Callable, Optional, Sequence, Tuple, cast
 
 import chex

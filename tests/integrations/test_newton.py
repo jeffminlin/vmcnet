@@ -1,4 +1,5 @@
 """Integration test to make sure VMC can find minima of convex functions."""
+
 import jax
 import jax.numpy as jnp
 import numpy as np

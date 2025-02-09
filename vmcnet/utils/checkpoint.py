@@ -4,6 +4,7 @@ Running queues of energy and variance histories are tracked, along with their av
 Unlike many of the other routines in this package, these are not pure functions, as they
 modify the RunningMetrics inside RunningEnergyVariance.
 """
+
 import logging
 import os
 import queue

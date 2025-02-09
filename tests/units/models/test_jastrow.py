@@ -1,4 +1,5 @@
 """Testing jastrow factors."""
+
 import chex
 import jax.numpy as jnp
 import numpy as np

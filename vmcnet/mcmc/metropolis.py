@@ -1,4 +1,5 @@
 """Proposal and acceptance fns for Metropolis-Hastings Markov-Chain Monte Carlo."""
+
 import logging
 from typing import Callable, Tuple, cast
 
