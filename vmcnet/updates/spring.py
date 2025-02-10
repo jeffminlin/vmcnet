@@ -3,6 +3,7 @@
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
+import neural_tangents as nt
 
 from vmcnet.utils.typing import Array, ModelApply, P, Tuple
 
@@ -38,7 +39,9 @@ def get_spring_update_fn(
         log_grads = jax.grad(log_psi_apply)(params, positions)
         return jax.flatten_util.ravel_pytree(log_grads)[0]
 
-    batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
+    batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, trace_axes=(), in_axes=(None, 0))
+
+    kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0)
 
     def spring_update_fn(
         centered_energies: P,
@@ -55,8 +58,12 @@ def get_spring_update_fn(
             nchains
         )
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
+        # T = Ohat @ Ohat.T
 
-        T = Ohat @ Ohat.T
+        T = kernel_fn(positions, positions, 'ntk', params)
+        T = T - jnp.mean(T, axis=0, keepdims=True)
+        T = T - jnp.mean(T, axis=1, keepdims=True)
+
         ones = jnp.ones((nchains, 1))
         T_reg = T + ones @ ones.T / nchains + damping * jnp.eye(nchains)
 
