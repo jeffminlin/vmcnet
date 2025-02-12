@@ -70,10 +70,8 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins):
         models.weights.get_kernel_initializer("orthogonal"),
         models.weights.get_kernel_initializer("xavier_normal"),
         models.weights.get_kernel_initializer("glorot_uniform"),
-        models.weights.get_kernel_initializer("kaiming_uniform"),
         models.weights.get_bias_initializer("zeros"),
         models.weights.get_bias_initializer("zeros"),
-        models.weights.get_bias_initializer("normal"),
         jnp.tanh,
         cyclic_spins=cyclic_spins,
     )
