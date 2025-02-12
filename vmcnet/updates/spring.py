@@ -19,7 +19,7 @@ def get_spring_update_fn(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
-    momentum: chex.Scalar = 0.0,
+    momentum: chex.Scalar = 0.0,  # TODO: remove
 ):
     """
     Get the SPRING update function.
@@ -35,12 +35,6 @@ def get_spring_update_fn(
         (centered_energies, params, prev_grad, positions) -> new_grad
     """
 
-    def raveled_log_psi_grad(params: P, positions: Array) -> Array:
-        log_grads = jax.grad(log_psi_apply)(params, positions)
-        return jax.flatten_util.ravel_pytree(log_grads)[0]
-
-    batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
-
     kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
 
     def spring_update_fn(
@@ -52,15 +46,7 @@ def get_spring_update_fn(
 
         nchains = positions.shape[0]
 
-        # prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
-        # prev_grad_decayed = mu * prev_grad
         prev_grad_decayed = jax.tree_map(lambda x: mu * x, prev_grad)
-
-        log_psi_grads = batch_raveled_log_psi_grad(params, positions) / jnp.sqrt(
-            nchains
-        )
-        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
-        # T = Ohat @ Ohat.T
 
         T = kernel_fn(positions, positions, "ntk", params)
         T = T - jnp.mean(T, axis=0, keepdims=True)
@@ -79,19 +65,10 @@ def get_spring_update_fn(
 
         epsion_tilde = epsilon_bar - Ohat_prev_grad
 
-        # epsion_tilde = epsilon_bar - Ohat @ prev_grad_decayed
-
         solver_output = jax.scipy.linalg.solve(T_reg, epsion_tilde, assume_a="pos")
         dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](solver_output)[0]
-        # dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
-        #     T_reg, epsion_tilde, assume_a="pos"
-        # )
 
         return jax.tree_map(lambda x, y: x + y, dtheta_residual, prev_grad_decayed)
-        # SR_G = dtheta_residual + prev_grad_decayed
-        # SR_G = (1 - momentum) * SR_G + momentum * prev_grad
-
-        # return unravel_fn(SR_G)
 
     return spring_update_fn
 
