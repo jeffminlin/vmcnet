@@ -61,7 +61,7 @@ def sgd_vmc_loop_with_logging(
         nchains,
         local_energy_type=local_energy_type,
     )
-    update_param_fn = updates.params.create_grad_energy_update_param_fn(
+    update_param_fn = updates.update_fns.construct_default_update_param_fn(
         energy_data_val_and_grad,
         sgd_apply,
         get_position_from_data,

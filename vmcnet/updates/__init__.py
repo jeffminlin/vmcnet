@@ -1,4 +1,4 @@
 """Updating routines for data and parameters."""
 
-from . import params
-from . import parse_config
+from . import update_fns
+from . import parse_optimizer_config
