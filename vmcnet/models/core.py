@@ -8,8 +8,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from vmcnet.utils.log_linear_exp import log_linear_exp
-from vmcnet.utils.slog_helpers import slog_sum
 from vmcnet.utils.typing import (
     Array,
     ArrayLike,
@@ -243,56 +241,6 @@ class ElementWiseMultiply(Module):
         return inputs * kernel
 
 
-class LogDomainDense(Module):
-    """A linear transformation applied on the last axis of the input, in the log domain.
-
-    If the inputs are (sign(x), log(abs(x))), the outputs are
-    (sign(Wx + b), log(abs(Wx + b))).
-
-    The bias is implemented by extending the inputs with a vector of ones.
-
-    Attributes:
-        features (int): the number of output features.
-        kernel_init (WeightInitializer, optional): initializer function for the weight
-            matrix. Defaults to orthogonal initialization.
-        use_bias (bool, optional): whether to add a bias to the output. Defaults to
-            True.
-    """
-
-    features: int
-    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
-    use_bias: bool = True
-
-    @flax.linen.compact
-    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
-        """Applies a linear transformation with optional bias along the last dimension.
-
-        Args:
-            x (SLArray): The nd-array in slog form to be transformed.
-
-        Returns:
-            SLArray: The transformed input, in slog form.
-        """
-        sign_x, log_abs_x = x
-        input_dim = log_abs_x.shape[-1]
-
-        if self.use_bias:
-            input_dim += 1
-            sign_x = jnp.concatenate([sign_x, jnp.ones_like(sign_x[..., 0:1])], axis=-1)
-            log_abs_x = jnp.concatenate(
-                [log_abs_x, jnp.zeros_like(log_abs_x[..., 0:1])], axis=-1
-            )
-
-        kernel = self.param("kernel", self.kernel_init, (input_dim, self.features))
-
-        return log_linear_exp(
-            sign_x,
-            log_abs_x,
-            kernel,
-            axis=-1,
-        )
-
-
 class SimpleResNet(Module):
     """Simplest fully-connected ResNet.
 
@@ -358,69 +306,5 @@ class SimpleResNet(Module):
             x = self._activation_fn(x)
             if _valid_skip(prev_x, x):
                 x = cast(Array, x + prev_x)
-
-        return self.final_dense(x)
-
-
-class LogDomainResNet(Module):
-    """Simplest fully-connected ResNet, implemented in the log domain.
-
-    Attributes:
-        ndense_inner (int): number of dense nodes in layers before the final layer.
-        ndense_final (int): number of output features, i.e. the number of dense nodes in
-            the final Dense call.
-        nlayers (int): number of dense layers applied to the input, including the final
-            layer. If this is 0, the final dense layer will still be applied.
-        activation_fn (SLActivation): activation function between intermediate layers
-            (is not applied after the final dense layer). Has the signature
-            SLArray -> SLArray (shape is preserved).
-        kernel_init (WeightInitializer, optional): initializer function for the weight
-            matrices of each layer. Defaults to orthogonal initialization.
-        use_bias (bool, optional): whether the dense layers should all have bias terms
-            or not. Defaults to True.
-    """
-
-    ndense_inner: int
-    ndense_final: int
-    nlayers: int
-    activation_fn: SLActivation
-    kernel_init: WeightInitializer = get_kernel_initializer("orthogonal")
-    use_bias: bool = True
-
-    def setup(self):
-        """Setup dense layers."""
-        # workaround MyPy's typing error for callable attribute, see
-        # https://github.com/python/mypy/issues/708
-        self._activation_fn = self.activation_fn
-
-        self.inner_dense = [
-            LogDomainDense(
-                self.ndense_inner,
-                kernel_init=self.kernel_init,
-                use_bias=self.use_bias,
-            )
-            for _ in range(self.nlayers - 1)
-        ]
-        self.final_dense = LogDomainDense(
-            self.ndense_final,
-            kernel_init=self.kernel_init,
-            use_bias=False,
-        )
-
-    def __call__(self, x: SLArray) -> SLArray:  # type: ignore[override]
-        """Repeated application of (dense layer -> activation -> optional skip) block.
-
-        Args:
-            x (SLArray): an slog input array of shape (..., d)
-
-        Returns:
-            SLArray: slog array of shape (..., self.ndense_final)
-        """
-        for dense_layer in self.inner_dense:
-            prev_x = x
-            x = dense_layer(prev_x)
-            x = self._activation_fn(x)
-            if _sl_valid_skip(prev_x, x):
-                x = slog_sum(x, prev_x)
 
         return self.final_dense(x)
