@@ -275,7 +275,6 @@ def get_backflow_from_config(
         one_electron_skip_scale=backflow_config.one_electron_skip_scale,
         two_electron_skip=backflow_config.two_electron_skip,
         two_electron_skip_scale=backflow_config.two_electron_skip_scale,
-        cyclic_spins=backflow_config.cyclic_spins,
     )
 
     return FermiNetBackflow(residual_blocks)
@@ -296,7 +295,6 @@ def get_residual_blocks_for_ferminet_backflow(
     one_electron_skip_scale: float = 1.0,
     two_electron_skip: bool = True,
     two_electron_skip_scale: float = 1.0,
-    cyclic_spins: bool = True,
 ) -> List[FermiNetResidualBlock]:
     """Construct a list of FermiNet residual blocks composed by FermiNetBackflow.
 
@@ -350,14 +348,6 @@ def get_residual_blocks_for_ferminet_backflow(
             Defaults to True.
         two_electron_skip_scale (float, optional): quantity to scale the two-electron
             output by if a skip connection is added. Defaults to 1.0.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
     """
     residual_blocks = []
     for ndense in ndense_list:
@@ -372,7 +362,6 @@ def get_residual_blocks_for_ferminet_backflow(
             use_bias,
             skip_connection=one_electron_skip,
             skip_connection_scale=one_electron_skip_scale,
-            cyclic_spins=cyclic_spins,
         )
         two_electron_layer = None
         if len(ndense) > 1:

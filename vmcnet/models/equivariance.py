@@ -224,14 +224,6 @@ class FermiNetOneElectronLayer(Module):
             whenever the shapes of the input and output match. Defaults to True.
         skip_connection_scale (float, optional): quantity to scale the final output by
             if a skip connection is added. Defaults to 1.0.
-        cyclic_spins (bool, optional): whether the the concatenation in the one-electron
-            stream should satisfy a cyclic equivariance structure, i.e. if there are
-            three spins (1, 2, 3), then in the mixed part of the stream, after averaging
-            but before the linear transformation, cyclic equivariance means the inputs
-            are [(1, 2, 3), (2, 3, 1), (3, 1, 2)]. If False, then the inputs are
-            [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
-            When there are only two spins (spin-1/2 case), then this is equivalent to
-            true spin equivariance. Defaults to False (original FermiNet).
     """
 
     spin_split: ParticleSplit
@@ -244,7 +236,6 @@ class FermiNetOneElectronLayer(Module):
     use_bias: bool = True
     skip_connection: bool = True
     skip_connection_scale: float = 1.0
-    cyclic_spins: bool = True
 
     def setup(self):
         """Setup Dense layers."""
@@ -277,37 +268,13 @@ class FermiNetOneElectronLayer(Module):
             -> apply the same linear transformation for all i to get [i: (..., 1, d')]
 
         This function does the last two steps.
-
-        There is a choice about how to do the concatenation step. For all spins the
-        concatenation can be exactly the same, say [(1, 2, 3), (1, 2, 3), (1, 2, 3)],
-        which is the approach in the original FermiNet paper, or different, for which
-        there may be many possibilities. Here, if self.cyclic_spins is True, then the
-        concatenation done is [(1, 2, 3), (2, 3, 1), (3, 1, 2)], which obeys
-        an equivariance with respect to cyclic permutations.
-
-        When there are just two spins, this cyclic equivariance is the same has complete
-        permutation equivariance (since the cyclic group of order 2 is group isomorphic
-        to the permutation group of order 2, a single flip). For more than 2 spins, it's
-        not clear if either approach is better from a theoretical standpoint, as both
-        impose an ordering.
         """
         nspins = len(split_means)
-        if self.cyclic_spins:
-            # re-concatenate the averages but as [i: [i, ..., n, 1, ..., i-1]] along
-            # the last dimension
-            split_concats = [_rolled_concat(split_means, idx) for idx in range(nspins)]
 
-            # concatenate on axis=-2 so a single dense layer can be batch applied to
-            # every concatenation
-            all_spins = jnp.concatenate(split_concats, axis=-2)
-            dense_mixed = self._mixed_dense(all_spins)
+        split_concat = jnp.concatenate(split_means, axis=-1)
+        dense_mixed = self._mixed_dense(split_concat)
+        dense_mixed_split = [dense_mixed] * nspins
 
-            # split the results of the batch applied dense layer back into the spins
-            dense_mixed_split = split(dense_mixed, len(split_concats), axis=-2)
-        else:
-            split_concat = jnp.concatenate(split_means, axis=-1)
-            dense_mixed = self._mixed_dense(split_concat)
-            dense_mixed_split = [dense_mixed] * nspins
         return dense_mixed_split
 
     def _compute_transformed_2e_means(self, in_2e: Array) -> ArrayList:
@@ -322,14 +289,6 @@ class FermiNetOneElectronLayer(Module):
             -> for each i, concatenate the splits to get [i: (..., n[i], d * nspins)]
             -> apply the same linear transformation for all i to get
                 [i: (..., n[i], d')]
-
-        As in the mixing of the one-electron part, the concatenation step comes with a
-        choice of what order in which to concatenate the averages. Here if
-        self.cyclic_spins is True, the ith spin is concatenated so that the j=i average
-        is first in the concatenation and the other spins follow cyclically, which is
-        invariant under cyclic permutations of the spin. If self.cyclic_spins is False,
-        all spins are concatenated in the same order, the spin order induced from the
-        particle ordering and the specified spin split.
         """
         # split to get [i: (..., n[i], n_total, d)]
         split_2e = split(in_2e, self.spin_split, axis=-3)
@@ -340,14 +299,7 @@ class FermiNetOneElectronLayer(Module):
             split_arrays = _split_mean(
                 split_2e[spin], self.spin_split, axis=-2, keepdims=False
             )  # [j: (..., n[i], d)]
-            if self.cyclic_spins:
-                # for the ith spin, concatenate as [i, ..., n, 1, ..., i-1] along the
-                # last axis
-                concat_arrays = _rolled_concat(split_arrays, spin)
-            else:
-                # otherwise, for all i, concatenate the averages over [1, ..., n] in
-                # that order
-                concat_arrays = jnp.concatenate(split_arrays, axis=-1)
+            concat_arrays = jnp.concatenate(split_arrays, axis=-1)
             concat_2e.append(concat_arrays)  # [i: (..., n[i], d * nspins)]
 
         # reconcatenate along the split axis to batch apply the same dense layer for all

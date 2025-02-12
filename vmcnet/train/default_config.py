@@ -3,7 +3,7 @@
 import os
 from typing import Dict
 
-from ml_collections import ConfigDict, FieldReference
+from ml_collections import ConfigDict
 
 from vmcnet.utils.checkpoint import DEFAULT_CHECKPOINT_FILE_NAME
 
@@ -115,10 +115,6 @@ def get_default_model_config() -> Dict:
     orthogonal_init = {"type": "orthogonal", "scale": 1.0}
     normal_init = {"type": "normal"}
 
-    # tie together the values of ferminet_backflow.cyclic_spins and
-    # invariance.cyclic_spins
-    cyclic_spins = FieldReference(False)
-
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
@@ -140,7 +136,6 @@ def get_default_model_config() -> Dict:
         "one_electron_skip_scale": 1.0,
         "two_electron_skip": True,
         "two_electron_skip_scale": 1.0,
-        "cyclic_spins": cyclic_spins,
     }
 
     ferminet_backflow = {
@@ -197,7 +192,6 @@ def get_default_model_config() -> Dict:
                         "one_electron_skip_scale": 1.0,
                         "two_electron_skip": True,
                         "two_electron_skip_scale": 1.0,
-                        "cyclic_spins": cyclic_spins,
                     },
                 },
             },

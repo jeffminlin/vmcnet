@@ -57,26 +57,24 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
     bias_initializer = models.weights.get_bias_initializer("normal")
     activation_fn = jnp.tanh
 
-    for cyclic_spin in [False, True]:
-        one_elec_layer = models.equivariance.FermiNetOneElectronLayer(
-            spin_split,
-            ndense,
-            kernel_initializer_unmixed,
-            kernel_initializer_mixed,
-            kernel_initializer_2e,
-            bias_initializer,
-            activation_fn,
-            cyclic_spins=cyclic_spin,
-        )
+    one_elec_layer = models.equivariance.FermiNetOneElectronLayer(
+        spin_split,
+        ndense,
+        kernel_initializer_unmixed,
+        kernel_initializer_mixed,
+        kernel_initializer_2e,
+        bias_initializer,
+        activation_fn,
+    )
 
-        key, subkey = jax.random.split(key)
-        params = one_elec_layer.init(subkey, input_1e, input_2e)
+    key, subkey = jax.random.split(key)
+    params = one_elec_layer.init(subkey, input_1e, input_2e)
 
-        output = one_elec_layer.apply(params, input_1e, input_2e)
-        perm_output = one_elec_layer.apply(params, perm_input_1e, perm_input_2e)
+    output = one_elec_layer.apply(params, input_1e, input_2e)
+    perm_output = one_elec_layer.apply(params, perm_input_1e, perm_input_2e)
 
-        assert output.shape == (nchains, nelec_total, ndense)
-        np.testing.assert_allclose(output[:, permutation, :], perm_output, atol=1e-5)
+    assert output.shape == (nchains, nelec_total, ndense)
+    np.testing.assert_allclose(output[:, permutation, :], perm_output, atol=1e-5)
 
 
 @pytest.mark.slow

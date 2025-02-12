@@ -62,7 +62,7 @@ def _get_compute_input_streams(ion_pos):
     return functools.partial(models.equivariance.compute_input_streams, ion_pos=ion_pos)
 
 
-def _get_backflow(spin_split, ndense_list, cyclic_spins):
+def _get_backflow(spin_split, ndense_list):
     residual_blocks = models.construct.get_residual_blocks_for_ferminet_backflow(
         spin_split,
         ndense_list,
@@ -73,7 +73,6 @@ def _get_backflow(spin_split, ndense_list, cyclic_spins):
         models.weights.get_bias_initializer("zeros"),
         models.weights.get_bias_initializer("zeros"),
         jnp.tanh,
-        cyclic_spins=cyclic_spins,
     )
     return models.construct.FermiNetBackflow(residual_blocks)
 
@@ -89,14 +88,10 @@ def _make_ferminets():
     ) = _get_initial_pos_and_hyperparams()
 
     slog_psis = []
-    # No need for combinatorial testing over these flags; just make sure Ferminet is
-    # tested with and without cyclic spins and with and without full_det
-    for (
-        cyclic_spins,
-        full_det,
-    ) in [(False, False), (True, True)]:
+
+    for full_det in [False, True]:
         compute_input_streams = _get_compute_input_streams(ion_pos)
-        backflow = _get_backflow(spin_split, ndense_list, cyclic_spins)
+        backflow = _get_backflow(spin_split, ndense_list)
 
         slog_psi = models.construct.FermiNet(
             spin_split,
@@ -131,7 +126,6 @@ def _make_factorized_antisymmetries():
     backflow = _get_backflow(
         spin_split,
         ndense_list,
-        cyclic_spins=False,
     )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
@@ -169,7 +163,6 @@ def _make_generic_antisymmetry():
     backflow = _get_backflow(
         spin_split,
         ndense_list,
-        cyclic_spins=True,
     )
     jastrow = models.jastrow.get_two_body_decay_scaled_for_chargeless_molecules(
         ion_pos, ion_charges
