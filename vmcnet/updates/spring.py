@@ -45,16 +45,21 @@ def get_spring_update_fn(
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
         mu_prev = jax.tree_map(lambda x: mu * x, prev_grad)
+        ones = jnp.ones((nchains, 1))
 
+        # Calculate T = Ohat @ Ohat^T using neural-tangents
+        # Some GPUs, particularly A100s and A5000s, can exhibit large numerical errors in these
+        # calculations. As a result, we explicitly symmetrize T and, rather than using a Cholesky
+        # solver to solve against T, we calculate its eigendecomposition and explicitly fix any negative
+        # eigenvalues. We then use the fixed and regularized igendecomposition to solve against T.
+        # This appears to be more stable than Cholesky in practice.
         T = kernel_fn(positions, positions, "ntk", params) / nchains
         T = T - jnp.mean(T, axis=0, keepdims=True)
         T = T - jnp.mean(T, axis=1, keepdims=True)
-        ones = jnp.ones((nchains, 1))
         T = T + ones @ ones.T / nchains
-
-        vals, vecs = jnp.linalg.eigh(T)
-        vals = jnp.maximum(vals, 0) + damping
-        T = vecs @ jnp.diag(vals) @ vecs.T
+        T = (T + T.T) / 2
+        Tvals, Tvecs = jnp.linalg.eigh(T)
+        Tvals = jnp.maximum(Tvals, 0) + damping
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
         O_prev = jax.jvp(
@@ -63,9 +68,9 @@ def get_spring_update_fn(
             (mu_prev, jnp.zeros_like(positions)),
         )[1] / jnp.sqrt(nchains)
         Ohat_prev = O_prev - jnp.mean(O_prev, axis=0, keepdims=True)
-        epsion_tilde = epsilon_bar - Ohat_prev
+        epsilon_tilde = epsilon_bar - Ohat_prev
 
-        zeta = jax.scipy.linalg.solve(T, epsion_tilde, assume_a="pos")
+        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ epsilon_tilde
         zeta_hat = zeta - jnp.mean(zeta)
         dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
 
