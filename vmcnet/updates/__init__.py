@@ -2,4 +2,3 @@
 
 from . import params
 from . import parse_config
-from . import sr
