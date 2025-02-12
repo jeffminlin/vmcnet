@@ -1,15 +1,12 @@
 """Shared pieces for the test suite."""
 
-from typing import Tuple
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 import vmcnet.mcmc as mcmc
-import vmcnet.models as models
 import vmcnet.train.default_config as default_config
-from vmcnet.utils.typing import Array, PRNGKey, ModelParams, PyTree
+from vmcnet.utils.typing import PyTree
 
 
 def get_default_config_with_chosen_model(
@@ -24,12 +21,8 @@ def get_default_config_with_chosen_model(
     config.model.type = model_type
     if use_det_resnet is not None:
         config.model.ferminet.use_det_resnet = use_det_resnet
-        config.model.embedded_particle_ferminet.use_det_resnet = use_det_resnet
     if determinant_fn_mode is not None:
         config.model.ferminet.determinant_fn_mode = determinant_fn_mode
-        config.model.embedded_particle_ferminet.determinant_fn_mode = (
-            determinant_fn_mode
-        )
     if explicit_antisym_subtype is not None:
         config.model.explicit_antisym.antisym_type = explicit_antisym_subtype
     if use_products_covariance is not None:
@@ -99,44 +92,6 @@ def make_dummy_metropolis_fn():
 def dummy_model_apply(params, x):
     """Model eval that outputs indices of the flattened x in the shape of x."""
     return jnp.reshape(jnp.arange(jnp.size(x)), x.shape)
-
-
-def _get_log_domain_params_for_dense_layer(params):
-    if "bias" not in params:
-        return {"kernel": params["kernel"]}
-
-    kernel = params["kernel"]
-    bias = params["bias"]
-    return {"kernel": jnp.concatenate([kernel, jnp.expand_dims(bias, 0)], axis=0)}
-
-
-def get_dense_and_log_domain_dense_same_params(
-    key: PRNGKey,
-    batch: Array,
-    dense_layer: models.core.Dense,
-) -> Tuple[ModelParams, ModelParams]:
-    """Get matching params for Dense and LogDomainDense layers."""
-    dense_params = dict(dense_layer.init(key, batch))
-    log_domain_params = _get_log_domain_params_for_dense_layer(dense_params["params"])
-    log_domain_params = {"params": log_domain_params}
-    return dense_params, log_domain_params
-
-
-def get_resnet_and_log_domain_resnet_same_params(
-    key: PRNGKey,
-    batch: Array,
-    resnet: models.core.SimpleResNet,
-) -> Tuple[ModelParams, ModelParams]:
-    """Get matching params for SimpleResNet and LogDomainResnet models."""
-    resnet_params = dict(resnet.init(key, batch))
-    log_domain_params = {}
-
-    for dense_layer_key, layer_params in resnet_params["params"].items():
-        log_domain_layer_params = _get_log_domain_params_for_dense_layer(layer_params)
-        log_domain_params[dense_layer_key] = log_domain_layer_params
-
-    params = {"params": log_domain_params}
-    return resnet_params, params
 
 
 def assert_pytree_allclose(

@@ -3,7 +3,7 @@
 import os
 from typing import Dict
 
-from ml_collections import ConfigDict, FieldReference
+from ml_collections import ConfigDict
 
 from vmcnet.utils.checkpoint import DEFAULT_CHECKPOINT_FILE_NAME
 
@@ -115,10 +115,6 @@ def get_default_model_config() -> Dict:
     orthogonal_init = {"type": "orthogonal", "scale": 1.0}
     normal_init = {"type": "normal"}
 
-    # tie together the values of ferminet_backflow.cyclic_spins and
-    # invariance.cyclic_spins
-    cyclic_spins = FieldReference(False)
-
     input_streams = {
         "include_2e_stream": True,
         "include_ei_norm": True,
@@ -130,36 +126,21 @@ def get_default_model_config() -> Dict:
     base_backflow_config = {
         "kernel_init_unmixed": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_mixed": orthogonal_init,
-        "kernel_init_transformer": orthogonal_init,
         "kernel_init_2e_1e_stream": orthogonal_init,
         "kernel_init_2e_2e_stream": {"type": "orthogonal", "scale": 2.0},
         "bias_init_1e_stream": normal_init,
         "bias_init_2e_stream": normal_init,
-        "bias_init_transformer": normal_init,
         "activation_fn": "tanh",
         "use_bias": True,
         "one_electron_skip": True,
         "one_electron_skip_scale": 1.0,
         "two_electron_skip": True,
         "two_electron_skip_scale": 1.0,
-        "cyclic_spins": cyclic_spins,
-        "use_transformer": False,
-        "num_heads": 1,
     }
 
     ferminet_backflow = {
         "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
         **base_backflow_config,
-    }
-
-    determinant_resnet = {
-        "ndense": 10,
-        "nlayers": 3,
-        "activation": "gelu",
-        "kernel_init": {"type": "orthogonal", "scale": 2.0},
-        "bias_init": normal_init,
-        "use_bias": True,
-        "mode": "parallel_even",
     }
 
     base_ferminet_config = {
@@ -173,65 +154,12 @@ def get_default_model_config() -> Dict:
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
-        "use_det_resnet": False,
-        "det_resnet": determinant_resnet,
-        "determinant_fn_mode": "parallel_even",
         "full_det": True,
-    }
-
-    invariance_for_antieq = {
-        "ndense_list": ((32,), (32,), (1,)),
-        **base_backflow_config,
-    }
-
-    antieq_config = {
-        "input_streams": input_streams,
-        "backflow": ferminet_backflow,
-        "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
-        "kernel_init_envelope_dim": {"type": "ones"},
-        "kernel_init_envelope_ion": {"type": "ones"},
-        "bias_init_orbital_linear": normal_init,
-        "orbitals_use_bias": True,
-        "isotropic_decay": True,
-        "use_products_covariance": True,
-        "invariance": invariance_for_antieq,
-        "products_covariance": {
-            "kernel_init": {"type": "orthogonal", "scale": 2.0},
-            "use_weights": False,
-        },
-        "multiply_by_eq_features": False,
     }
 
     config = {
         "type": "ferminet",
         "ferminet": base_ferminet_config,
-        "embedded_particle_ferminet": {
-            # NOTE (ggoldsh): mypy throws error on following line; no idea why.
-            **base_ferminet_config,  # type: ignore
-            "nhidden_fermions_per_spin": (2, 2),
-            "invariance": {
-                "input_streams": input_streams,
-                "backflow": ferminet_backflow,
-                "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init,
-                "use_bias": True,
-            },
-        },
-        "extended_orbital_matrix_ferminet": {
-            **base_ferminet_config,
-            "nhidden_fermions_per_spin": (2, 2),
-            "use_separate_invariance_backflow": False,
-            "invariance": {
-                "backflow": ferminet_backflow,
-                "kernel_initializer": {"type": "orthogonal", "scale": 2.0},
-                "bias_initializer": normal_init,
-                "use_bias": True,
-            },
-        },
-        # TODO (ggoldsh): these two should probably be subtypes of a single
-        # "antiequivariance" model type
-        "orbital_cofactor_net": antieq_config,
-        "per_particle_dets_net": antieq_config,
         "explicit_antisym": {
             "input_streams": input_streams,
             "backflow": ferminet_backflow,
@@ -253,22 +181,17 @@ def get_default_model_config() -> Dict:
                     "backflow": {
                         "ndense_list": ((256, 16), (256, 16), (256, 16), (256,)),
                         "kernel_init_unmixed": orthogonal_init,
-                        "kernel_init_transformer": orthogonal_init,
                         "kernel_init_mixed": orthogonal_init,
                         "kernel_init_2e_1e_stream": orthogonal_init,
                         "kernel_init_2e_2e_stream": orthogonal_init,
                         "bias_init_1e_stream": normal_init,
                         "bias_init_2e_stream": normal_init,
-                        "bias_init_transformer": normal_init,
                         "activation_fn": "gelu",
                         "use_bias": True,
                         "one_electron_skip": True,
                         "one_electron_skip_scale": 1.0,
                         "two_electron_skip": True,
                         "two_electron_skip_scale": 1.0,
-                        "cyclic_spins": cyclic_spins,
-                        "use_transformer": False,
-                        "num_heads": 1,
                     },
                 },
             },
