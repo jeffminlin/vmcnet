@@ -50,7 +50,11 @@ def get_spring_update_fn(
         T = T - jnp.mean(T, axis=0, keepdims=True)
         T = T - jnp.mean(T, axis=1, keepdims=True)
         ones = jnp.ones((nchains, 1))
-        T_reg = T + ones @ ones.T / nchains + damping * jnp.eye(nchains)
+        T = T + ones @ ones.T / nchains
+
+        vals, vecs = jnp.linalg.eigh(T)
+        vals = jnp.maximum(vals, 0) + damping
+        T = vecs @ jnp.diag(vals) @ vecs.T
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
         O_prev = jax.jvp(
@@ -61,7 +65,7 @@ def get_spring_update_fn(
         Ohat_prev = O_prev - jnp.mean(O_prev, axis=0, keepdims=True)
         epsion_tilde = epsilon_bar - Ohat_prev
 
-        zeta = jax.scipy.linalg.solve(T_reg, epsion_tilde, assume_a="pos")
+        zeta = jax.scipy.linalg.solve(T, epsion_tilde, assume_a="pos")
         zeta_hat = zeta - jnp.mean(zeta)
         dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
 
