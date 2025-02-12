@@ -43,32 +43,29 @@ def get_spring_update_fn(
         prev_grad,
         positions: Array,
     ) -> Tuple[Array, P]:
-
         nchains = positions.shape[0]
-
-        prev_grad_decayed = jax.tree_map(lambda x: mu * x, prev_grad)
+        mu_prev = jax.tree_map(lambda x: mu * x, prev_grad)
 
         T = kernel_fn(positions, positions, "ntk", params)
         T = T - jnp.mean(T, axis=0, keepdims=True)
         T = T - jnp.mean(T, axis=1, keepdims=True)
-
         ones = jnp.ones((nchains, 1))
         T_reg = T + ones @ ones.T / nchains + damping * jnp.eye(nchains)
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
-
-        Ohat_prev_grad = jax.jvp(
+        O_prev = jax.jvp(
             log_psi_apply,
             (params, positions),
-            (prev_grad_decayed, jnp.zeros_like(positions)),
+            (mu_prev, jnp.zeros_like(positions)),
         )[1]
+        Ohat_prev = O_prev - jnp.mean(O_prev, axis=0, keepdims=True)
+        epsion_tilde = epsilon_bar - Ohat_prev
 
-        epsion_tilde = epsilon_bar - Ohat_prev_grad
+        zeta = jax.scipy.linalg.solve(T_reg, epsion_tilde, assume_a="pos")
+        zeta_hat = zeta - jnp.mean(zeta)
+        dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
 
-        solver_output = jax.scipy.linalg.solve(T_reg, epsion_tilde, assume_a="pos")
-        dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](solver_output)[0]
-
-        return jax.tree_map(lambda x, y: x + y, dtheta_residual, prev_grad_decayed)
+        return jax.tree_map(lambda x, y: x + y, dtheta_residual, mu_prev)
 
     return spring_update_fn
 
