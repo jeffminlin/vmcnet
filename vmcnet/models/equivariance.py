@@ -188,22 +188,6 @@ def compute_electron_electron(
     return input_2e, r_ee
 
 
-def _transformer_mix(
-    x: Array,
-    self_attention_layer: Callable[[Array], Array],
-    splits: ParticleSplit,
-    axis: int = -2,
-) -> ArrayList:
-    """Split x on an axis and apply the self attention layer to each of the splits."""
-    # in_1e has shape (..., n, d_1e)
-    # split_x has shape [i: (..., n[i], d_1e)]
-
-    split_x = split(x, splits, axis=axis)
-    split_x_mix = jax.tree_map(self_attention_layer, split_x)
-
-    return split_x_mix
-
-
 class FermiNetOneElectronLayer(Module):
     """A single layer in the one-electron stream of the FermiNet equivariant part.
 
@@ -222,10 +206,6 @@ class FermiNetOneElectronLayer(Module):
             unmixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the previous one-electron stream output. Has
             signature (key, shape, dtype) -> Array
-        kernel_initializer_transformer (WeightInitializer): kernel initializer for the
-            mixed part of the transformer stream. This initializes the part of the
-            dense kernel which multiplies the average of the previous transformer
-            stream output. Has signature (key, shape, dtype) -> Array
         kernel_initializer_mixed (WeightInitializer): kernel initializer for the
             mixed part of the one-electron stream. This initializes the part of the
             dense kernel which multiplies the average of the previous one-electron
@@ -235,8 +215,6 @@ class FermiNetOneElectronLayer(Module):
             the dense kernel which multiplies the average of the previous two-electron
             stream which is mixed into the one-electron stream. Has signature
             (key, shape, dtype) -> Array
-        bias_initializer (WeightInitializer): bias initializer for the transformer
-            steam. Has signature (key, shape, dtype) -> Array
         bias_initializer (WeightInitializer): bias initializer. Has signature
             (key, shape, dtype) -> Array
         activation_fn (Activation): activation function. Has the signature
@@ -254,27 +232,19 @@ class FermiNetOneElectronLayer(Module):
             [(1, 2, 3), (1, 2, 3), (1, 2, 3)] (as in the original FermiNet).
             When there are only two spins (spin-1/2 case), then this is equivalent to
             true spin equivariance. Defaults to False (original FermiNet).
-        use_transformer (bool, optional): whether to use the transformer stream.
-        num_heads (int, optional): number of heads. If num_heads == 1, then multi-head
-            attention layers are reduced to self-attention layers. if use_transformer is
-            False, then the num_heads argument is ignored. Defaults to 1.
     """
 
     spin_split: ParticleSplit
     ndense: int
-    kernel_initializer_transformer: WeightInitializer
     kernel_initializer_unmixed: WeightInitializer
     kernel_initializer_mixed: WeightInitializer
     kernel_initializer_2e: WeightInitializer
     bias_initializer: WeightInitializer
-    bias_initializer_transformer: WeightInitializer
     activation_fn: Activation
     use_bias: bool = True
     skip_connection: bool = True
     skip_connection_scale: float = 1.0
     cyclic_spins: bool = True
-    use_transformer: bool = False
-    num_heads: int = 1
 
     def setup(self):
         """Setup Dense layers."""
@@ -292,18 +262,9 @@ class FermiNetOneElectronLayer(Module):
             self.ndense, kernel_init=self.kernel_initializer_2e, use_bias=False
         )
 
-        if self.use_transformer:
-            self._attention_1e = SelfAttention(
-                num_heads=self.num_heads,
-                qkv_features=self.ndense * self.num_heads,
-                out_features=self.ndense,
-                kernel_init=self.kernel_initializer_transformer,
-                bias_init=self.bias_initializer_transformer,
-            )
-        else:
-            self._mixed_dense = Dense(
-                self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
-            )
+        self._mixed_dense = Dense(
+            self.ndense, kernel_init=self.kernel_initializer_mixed, use_bias=False
+        )
 
     def _compute_transformed_1e_means(self, split_means: ArrayList) -> ArrayList:
         """Apply a dense layer to the concatenated averages of the 1e stream.
@@ -396,16 +357,9 @@ class FermiNetOneElectronLayer(Module):
         return split(dense_2e, self.spin_split, axis=-2)
 
     def _compute_mixed_split(self, in_1e: Array) -> ArrayList:
-        """Compute the 1e mixed for the given input.
-
-        If use_transformer is True, then the mixed is computed using transformer layer.
-        Else, the mixed is computed using the dense layer with the reduce-mean layer.
-        """
-        if self.use_transformer:
-            return _transformer_mix(in_1e, self._attention_1e, self.spin_split, axis=-2)
-        else:
-            split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
-            return self._compute_transformed_1e_means(split_1e_means)
+        """Compute the 1e mixed for the given input."""
+        split_1e_means = _split_mean(in_1e, self.spin_split, axis=-2, keepdims=True)
+        return self._compute_transformed_1e_means(split_1e_means)
 
     def __call__(  # type: ignore[override]
         self, in_1e: Array, in_2e: Optional[Array] = None
@@ -847,160 +801,6 @@ class FermiNetOrbitalLayer(Module):
                 self._kernel_initializer_envelope_ion,
                 self.isotropic_decay,
                 self.envelope_softening,
-            )
-            orbs = tree_prod(orbs, exp_envelopes)
-        return orbs
-
-
-class DoublyEquivariantOrbitalLayer(Module):
-    """Equivariantly generate an orbital matrix corresponding to each input stream.
-
-    The calculation being done here is a bit subtle, so it's worth explaining here
-    in some detail. Let the equivariant input vectors to this layer be y_i. Then, this
-    layer will generate an orbital matrix M_p for each particle P, such that the
-    (i,j)th element of M_p satisfies M_(p,i,j) = phi_j(y_p, y_i). This is essentially
-    the usual orbital matrix formula M_(i,j) = phi_j(y_i), except with an added
-    dependence on the particle index p which allows us to generate a distinct matrix
-    for each input particle. This construction allows us to generate a unique
-    antisymmetric determinant D_p = det(M_p) for each input particle, which can then
-    be the basis for an expressive antiequivariant layer.
-
-    If r_ei is provided in addition to the main inputs y_i, then an exponentially
-    decaying envelope is also applied equally to every orbital matrix M_p in order to
-    ensure that the orbital values decay to zero far from the ions.
-
-    Attributes:
-        orbitals_split (ParticleSplit): number of pieces to split the input equally,
-            or specified sequence of locations to split along the 2nd-to-last axis.
-            E.g., if nelec = 10, and `orbitals_split` = 2, then the input is split
-            (5, 5). If nelec = 10, and `orbitals_split` = (2, 4), then the input is
-            split into (2, 4, 4) -- note when `orbitals_split` is a sequence, there will
-            be one more split than the length of the sequence. In the original use-case
-            of spin-1/2 particles, `split` should be either the number 2 (for
-            closed-shell systems) or should be a Sequence with length 1 whose element is
-            less than the total number of electrons.
-        norbitals_per_split (Sequence[int]): sequence of integers specifying the number
-            of orbitals to create for each split. This determines the output shapes for
-            each split, i.e. the outputs are shaped (..., split_size[i], norbitals[i])
-        kernel_initializer_linear (WeightInitializer): kernel initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> Array
-        kernel_initializer_envelope_dim (WeightInitializer): kernel initializer for the
-            decay rate in the exponential envelopes. If `isotropic_decay` is True, then
-            this initializes a single decay rate number per ion and orbital. If
-            `isotropic_decay` is False, then this initializes a 3x3 matrix per ion and
-            orbital. Has signature (key, shape, dtype) -> Array
-        kernel_initializer_envelope_ion (WeightInitializer): kernel initializer for the
-            linear combination over the ions of exponential envelopes. Has signature
-            (key, shape, dtype) -> Array
-        bias_initializer_linear (WeightInitializer): bias initializer for the linear
-            part of the orbitals. Has signature (key, shape, dtype) -> Array
-        use_bias (bool, optional): whether to add a bias term to the linear part of the
-            orbitals. Defaults to True.
-        isotropic_decay (bool, optional): whether the decay for each ion should be
-            anisotropic (w.r.t. the dimensions of the input), giving envelopes of the
-            form exp(-||A(r - R)||) for a dxd matrix A or isotropic, giving
-            exp(-||a(r - R||)) for a number a.
-    """
-
-    orbitals_split: ParticleSplit
-    norbitals_per_split: Sequence[int]
-    kernel_initializer_linear: WeightInitializer
-    kernel_initializer_envelope_dim: WeightInitializer
-    kernel_initializer_envelope_ion: WeightInitializer
-    bias_initializer_linear: WeightInitializer
-    use_bias: bool = True
-    isotropic_decay: bool = False
-
-    def setup(self):
-        """Setup envelope kernel initializers."""
-        # workaround MyPy's typing error for callable attribute, see
-        # https://github.com/python/mypy/issues/708
-        self._kernel_initializer_envelope_dim = self.kernel_initializer_envelope_dim
-        self._kernel_initializer_envelope_ion = self.kernel_initializer_envelope_ion
-
-    def _get_orbital_matrices_one_split(self, x: Array, norbitals: int) -> Array:
-        """Get the equivariant orbital matrices for a single split.
-
-        Args:
-            x (Array): input array of shape (..., nelec[i], d).
-            norbitals (int): number of orbitals to generate. For square matrices,
-                norbitals should equal nelec[i]
-
-        Returns:
-            (Array): the equivariant orbitals for this split block, as an array
-                of shape (..., nelec[i], nelec[i], norbitals). Both the -2 and -3 axes
-                are equivariant with respect to the input particles.
-        """
-        batch_dims = x.shape[:-2]
-        nelec = x.shape[-2]
-        d = x.shape[-1]
-        dense_input_piece_shape = (*batch_dims, nelec, nelec, d)
-
-        # Since the goal is to calculate M_(p,i,j) = phi_j(y_p, y_i), we need to create
-        # the right combinations (y_p, y_i) before we can apply a dense layer to
-        # generate the orbitals. The below lines build up these combinations so that,
-        # for example, if x is [[1, 2],[3,4]], then dense_inputs will be equal to
-        # [[[1,2,1,2],[3,4,1,2]], [[1,2,3,4],[3,4,3,4]].
-        axis_2_repeated_inputs = jnp.reshape(
-            jnp.repeat(x, nelec, axis=-2), dense_input_piece_shape
-        )
-        axis_3_repeated_inputs = jnp.reshape(
-            # Expand dim of x here to handle case where there are no batch dimensions
-            jnp.repeat(jnp.expand_dims(x, -3), nelec, axis=-3),
-            dense_input_piece_shape,
-        )
-        dense_inputs = jnp.concatenate(
-            [axis_2_repeated_inputs, axis_3_repeated_inputs], axis=-1
-        )
-
-        return Dense(
-            norbitals,
-            self.kernel_initializer_linear,
-            self.bias_initializer_linear,
-            use_bias=self.use_bias,
-        )(dense_inputs)
-
-    @flax.linen.compact
-    def __call__(  # type: ignore[override]
-        self, x: Array, r_ei: Optional[Array] = None
-    ) -> ArrayList:
-        """Calculate an equivariant orbital matrix for each input particle.
-
-        Args:
-            x (Array): array of shape (..., nelec, d)
-            r_ei (Array): array of shape (..., nelec, nion, d)
-
-        Returns:
-            (ArrayList): list of length nsplits of arrays of shape
-            (..., nelec[i], nelec[i], self.norbitals_per_split[i]). Here nelec[i] is the
-            number of particles in the ith split. The output arrays have both their -2
-            and -3 axes equivariant with respect to the input particles. The exponential
-            envelopes are computed only when r_ei is not None (so, when connected to
-            FermiNetBackflow, when ion locations are specified). To output square
-            matrices, say in order to be able to take antiequivariant per-particle
-            determinants, nelec[i] should be equal to self.norbitals_per_split[i].
-        """
-        # split_x is a list of nsplits arrays of shape (..., nelec[i], d)]
-        split_x = split(x, self.orbitals_split, -2)
-        # orbs is a list of nsplits arrays of shape
-        # (..., nelec[i], nelec[i], norbitals[i])
-        orbs = [
-            self._get_orbital_matrices_one_split(x, self.norbitals_per_split[i])
-            for (i, x) in enumerate(split_x)
-        ]
-
-        if r_ei is not None:
-            exp_envelopes = _compute_exponential_envelopes_all_splits(
-                r_ei,
-                self.orbitals_split,
-                self.norbitals_per_split,
-                self._kernel_initializer_envelope_dim,
-                self._kernel_initializer_envelope_ion,
-                self.isotropic_decay,
-            )
-            # Envelope must be expanded to apply equally to each per-particle matrix.
-            exp_envelopes = jax.tree_map(
-                lambda x: jnp.expand_dims(x, axis=-3), exp_envelopes
             )
             orbs = tree_prod(orbs, exp_envelopes)
         return orbs

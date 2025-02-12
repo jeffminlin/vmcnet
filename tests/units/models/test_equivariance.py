@@ -10,7 +10,6 @@ import vmcnet.models as models
 import vmcnet.physics as physics
 
 from .utils import get_elec_hyperparams, get_input_streams_from_hyperparams
-from itertools import product
 
 
 def test_electron_electron_add_norm():
@@ -52,34 +51,22 @@ def test_ferminet_one_electron_layer_shape_and_equivariance():
     ) = get_input_streams_from_hyperparams(nchains, nelec_total, nion, d, permutation)
 
     ndense = 10
-    kernel_initializer_transformer = models.weights.get_kernel_initializer("orthogonal")
     kernel_initializer_unmixed = models.weights.get_kernel_initializer("orthogonal")
     kernel_initializer_mixed = models.weights.get_kernel_initializer("lecun_normal")
     kernel_initializer_2e = models.weights.get_kernel_initializer("xavier_uniform")
     bias_initializer = models.weights.get_bias_initializer("normal")
-    bias_initializer_transformer = models.weights.get_bias_initializer("normal")
     activation_fn = jnp.tanh
 
-    num_heads_options = [1, 3]
-    cyclic_spins_options = [False, True]
-    use_transformer_options = [False, True]
-
-    for num_heads, cyclic_spin, use_transformer in product(
-        num_heads_options, cyclic_spins_options, use_transformer_options
-    ):
+    for cyclic_spin in [False, True]:
         one_elec_layer = models.equivariance.FermiNetOneElectronLayer(
             spin_split,
             ndense,
-            kernel_initializer_transformer,
             kernel_initializer_unmixed,
             kernel_initializer_mixed,
             kernel_initializer_2e,
             bias_initializer,
-            bias_initializer_transformer,
             activation_fn,
             cyclic_spins=cyclic_spin,
-            use_transformer=use_transformer,
-            num_heads=num_heads,
         )
 
         key, subkey = jax.random.split(key)

@@ -54,15 +54,13 @@ def test_parse_config_with_valid_flags_including_tuple(mocker):
         "sys.argv",
         [
             "vmcnet",
-            "--config.model.type=orbital_cofactor_net",
-            "--config.model.orbital_cofactor_net.isotropic_decay=False",
+            "--config.model.type=explicit_antisym",
             # On the command line setting a tuple value requires extra quotes like
             # '((0.,0.,0.),)', but in testing the extra quotes cause a type error.
             "--config.problem.ion_pos=((0.,0.,0.),)",
         ],
     )
-    expected_config = get_default_config_with_chosen_model("orbital_cofactor_net")
-    expected_config.model.isotropic_decay = False
+    expected_config = get_default_config_with_chosen_model("explicit_antisym")
     expected_config.problem.ion_pos = ((0.0, 0.0, 0.0),)
 
     _, config = parse_flags(flag_values)

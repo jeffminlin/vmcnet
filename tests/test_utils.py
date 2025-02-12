@@ -21,12 +21,8 @@ def get_default_config_with_chosen_model(
     config.model.type = model_type
     if use_det_resnet is not None:
         config.model.ferminet.use_det_resnet = use_det_resnet
-        config.model.embedded_particle_ferminet.use_det_resnet = use_det_resnet
     if determinant_fn_mode is not None:
         config.model.ferminet.determinant_fn_mode = determinant_fn_mode
-        config.model.embedded_particle_ferminet.determinant_fn_mode = (
-            determinant_fn_mode
-        )
     if explicit_antisym_subtype is not None:
         config.model.explicit_antisym.antisym_type = explicit_antisym_subtype
     if use_products_covariance is not None:
