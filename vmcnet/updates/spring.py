@@ -46,7 +46,7 @@ def get_spring_update_fn(
         nchains = positions.shape[0]
         mu_prev = jax.tree_map(lambda x: mu * x, prev_grad)
 
-        T = kernel_fn(positions, positions, "ntk", params)
+        T = kernel_fn(positions, positions, "ntk", params) / nchains
         T = T - jnp.mean(T, axis=0, keepdims=True)
         T = T - jnp.mean(T, axis=1, keepdims=True)
         ones = jnp.ones((nchains, 1))
@@ -61,7 +61,7 @@ def get_spring_update_fn(
             log_psi_apply,
             (params, positions),
             (mu_prev, jnp.zeros_like(positions)),
-        )[1]
+        )[1] / jnp.sqrt(nchains)
         Ohat_prev = O_prev - jnp.mean(O_prev, axis=0, keepdims=True)
         epsion_tilde = epsilon_bar - Ohat_prev
 
@@ -69,7 +69,9 @@ def get_spring_update_fn(
         zeta_hat = zeta - jnp.mean(zeta)
         dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
 
-        return jax.tree_map(lambda x, y: x + y, dtheta_residual, mu_prev)
+        return jax.tree_map(
+            lambda dt, mup: dt / jnp.sqrt(nchains) + mup, dtheta_residual, mu_prev
+        )
 
     return spring_update_fn
 
