@@ -3,7 +3,7 @@
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
-import neural_tangents as nt
+import neural_tangents as nt  # type: ignore
 
 from vmcnet.utils.typing import Array, ModelApply, P, Tuple
 
@@ -34,7 +34,6 @@ def get_spring_update_fn(
         Callable: SPRING update function. Has the signature
         (centered_energies, params, prev_grad, positions) -> new_grad
     """
-
     kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
 
     def spring_update_fn(
@@ -48,11 +47,13 @@ def get_spring_update_fn(
         ones = jnp.ones((nchains, 1))
 
         # Calculate T = Ohat @ Ohat^T using neural-tangents
-        # Some GPUs, particularly A100s and A5000s, can exhibit large numerical errors in these
-        # calculations. As a result, we explicitly symmetrize T and, rather than using a Cholesky
-        # solver to solve against T, we calculate its eigendecomposition and explicitly fix any negative
-        # eigenvalues. We then use the fixed and regularized igendecomposition to solve against T.
-        # This appears to be more stable than Cholesky in practice.
+        # Some GPUs, particularly A100s and A5000s, can exhibit large numerical
+        # errors in these calculations. As a result, we explicitly symmetrize T
+        # and, rather than using a Cholesky solver to solve against T, we
+        # calculate its eigendecomposition and explicitly fix any negative
+        # eigenvalues. We then use the fixed and regularized igendecomposition
+        # to solve against T. This appears to be more stable than Cholesky
+        # in practice.
         T = kernel_fn(positions, positions, "ntk", params) / nchains
         T = T - jnp.mean(T, axis=0, keepdims=True)
         T = T - jnp.mean(T, axis=1, keepdims=True)
