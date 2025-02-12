@@ -165,7 +165,7 @@ def get_default_model_config() -> Dict:
     base_ferminet_config = {
         "input_streams": input_streams,
         "backflow": ferminet_backflow,
-        "ndeterminants": 1,
+        "ndeterminants": 16,
         "kernel_init_orbital_linear": {"type": "orthogonal", "scale": 2.0},
         "kernel_init_envelope_dim": {"type": "ones"},
         "kernel_init_envelope_ion": {"type": "ones"},
@@ -176,7 +176,7 @@ def get_default_model_config() -> Dict:
         "use_det_resnet": False,
         "det_resnet": determinant_resnet,
         "determinant_fn_mode": "parallel_even",
-        "full_det": False,
+        "full_det": True,
     }
 
     invariance_for_antieq = {
@@ -292,7 +292,7 @@ def get_default_molecular_config() -> Dict:
 def get_default_vmc_config() -> Dict:
     """Get a default VMC training configuration."""
     vmc_config = {
-        "nchains": 2000,
+        "nchains": 1000,
         "nepochs": 200000,
         "nburn": 5000,
         "nsteps_per_param_update": 10,
@@ -372,7 +372,7 @@ def get_default_vmc_config() -> Dict:
 def get_default_eval_config() -> Dict:
     """Get a default evaluation configuration."""
     eval_config = {
-        "nchains": 2000,
+        "nchains": 1000,
         "nburn": 5000,
         "nepochs": 20000,
         "nsteps_per_param_update": 10,
