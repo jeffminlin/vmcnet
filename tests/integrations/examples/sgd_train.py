@@ -47,7 +47,7 @@ def sgd_vmc_loop_with_logging(
     )
 
     # Define parameter updates
-    def sgd_apply(grad, params, learning_rate, data, aux):
+    def sgd_apply(grad, params, learning_rate, data):
         del data
         return (
             jax.tree_map(lambda a, b: a - learning_rate * b, params, grad),
