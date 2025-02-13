@@ -17,8 +17,8 @@ from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.typing import UpdateDataFn, GetPositionFromData, LearningRateSchedule
 import vmcnet.physics as physics
 
-from .update_fns import UpdateParamFn, construct_default_update_param_fn
-from .optax_utils import _initialize_optax_optimizer
+from .update_param_fns import UpdateParamFn, construct_default_update_param_fn
+from .optax_utils import initialize_optax_optimizer
 
 
 def initialize_spring(
@@ -105,7 +105,7 @@ def initialize_spring(
         record_param_l1_norm=record_param_l1_norm,
         apply_pmap=apply_pmap,
     )
-    optimizer_state = _initialize_optax_optimizer(
+    optimizer_state = initialize_optax_optimizer(
         descent_optimizer, params, apply_pmap=apply_pmap
     )
 
