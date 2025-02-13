@@ -10,4 +10,4 @@ If contributing code, basic knowledge of git is assumed. Please start by forking
 4. Please also run our tests via `pytest --cov=vmcnet --run_very_slow` and contribute to the test suite to help maintain the overall code quality.
 5. When ready, you can submit your changes for review by opening a pull request against the main repository.
 
-We use `mypy`, `flake8`, and `pydocstyle` to check code for style, and our linting configuration has been set up to follow the `black` formatter. We expect new contributions to include descriptive docstrings, and to be type hinted reasonably consistently. A code review and passing tests (via GitHub CI) will be required before your pull request can be merged.
+We use `mypy` and `flake8` to check code for style, and our linting configuration has been set up to follow the `black` formatter. We expect new contributions to include descriptive docstrings, and to be type hinted reasonably consistently. A code review and passing tests (via GitHub CI) will be required before your pull request can be merged.

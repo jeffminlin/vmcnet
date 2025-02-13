@@ -16,7 +16,3 @@ module = [
     "optax.*",
 ]
 ignore_missing_imports = true
-
-[tool.pydocstyle]
-match = '(.)*\.py'
-add-ignore = "D401"
