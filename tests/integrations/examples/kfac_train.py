@@ -75,7 +75,7 @@ def kfac_vmc_loop_with_logging(
         ),
     )
 
-    update_param_fn = updates.params.create_kfac_update_param_fn(
+    update_param_fn = updates.update_param_fns.create_kfac_update_param_fn(
         optimizer,
         0.001,
         get_position_from_data,

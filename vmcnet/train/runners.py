@@ -371,7 +371,9 @@ def _setup_vmc(
     ModelApply[flax.core.FrozenDict],
     mcmc.metropolis.BurningStep[flax.core.FrozenDict, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[flax.core.FrozenDict, dwpa.DWPAData],
-    updates.params.UpdateParamFn[flax.core.FrozenDict, dwpa.DWPAData, OptimizerState],
+    updates.update_param_fns.UpdateParamFn[
+        flax.core.FrozenDict, dwpa.DWPAData, OptimizerState
+    ],
     GetAmplitudeFromData[dwpa.DWPAData],
     flax.core.FrozenDict,
     dwpa.DWPAData,
@@ -418,7 +420,7 @@ def _setup_vmc(
         update_param_fn,
         optimizer_state,
         key,
-    ) = updates.parse_config.get_update_fn_and_init_optimizer(
+    ) = updates.parse_optimizer_config.initialize_optimizer(
         log_psi_apply,
         config.vmc,
         params,
@@ -453,7 +455,7 @@ def _setup_eval(
     get_position_fn: GetPositionFromData[dwpa.DWPAData],
     apply_pmap: bool = True,
 ) -> Tuple[
-    updates.params.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
+    updates.update_param_fns.UpdateParamFn[P, dwpa.DWPAData, OptimizerState],
     mcmc.metropolis.BurningStep[P, dwpa.DWPAData],
     mcmc.metropolis.WalkerFn[P, dwpa.DWPAData],
 ]:
@@ -469,7 +471,7 @@ def _setup_eval(
         ee_softening,
         log_psi_apply,
     )
-    eval_update_param_fn = updates.params.create_eval_update_param_fn(
+    eval_update_param_fn = updates.update_param_fns.construct_eval_update_param_fn(
         local_energy_fn,
         eval_config.nchains,
         get_position_fn,
@@ -531,7 +533,7 @@ def _burn_and_run_vmc(
     data: D,
     burning_step: mcmc.metropolis.BurningStep[P, D],
     walker_fn: mcmc.metropolis.WalkerFn[P, D],
-    update_param_fn: updates.params.UpdateParamFn[P, D, S],
+    update_param_fn: updates.update_param_fns.UpdateParamFn[P, D, S],
     get_amplitude_fn: GetAmplitudeFromData[D],
     key: PRNGKey,
     is_eval: bool,

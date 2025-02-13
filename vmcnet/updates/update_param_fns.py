@@ -2,10 +2,7 @@
 
 from typing import Callable, Dict, Iterable, Optional, Tuple
 
-import chex
 import jax
-import jax.numpy as jnp
-import kfac_jax
 
 import vmcnet.physics as physics
 import vmcnet.utils as utils
@@ -20,22 +17,11 @@ from vmcnet.utils.typing import (
     OptimizerState,
     P,
     PRNGKey,
-    PyTree,
     S,
     UpdateDataFn,
 )
 
 UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, D, S, Dict, PRNGKey]]
-
-
-def _update_metrics_with_noclip(
-    energy_noclip: float, variance_noclip: float, metrics: Dict
-) -> Dict:
-    if energy_noclip is not None:
-        metrics.update({"energy_noclip": energy_noclip})
-    if variance_noclip is not None:
-        metrics.update({"variance_noclip": variance_noclip})
-    return metrics
 
 
 def _make_traced_fn_with_single_metrics(
@@ -65,7 +51,18 @@ def _make_traced_fn_with_single_metrics(
     return pmapped_update_param_fn_with_single_metrics
 
 
-def create_grad_energy_update_param_fn(
+def update_metrics_with_noclip(
+    energy_noclip: float, variance_noclip: float, metrics: Dict
+) -> Dict:
+    """Update metrics with the unclipped energy and variance."""
+    if energy_noclip is not None:
+        metrics.update({"energy_noclip": energy_noclip})
+    if variance_noclip is not None:
+        metrics.update({"variance_noclip": variance_noclip})
+    return metrics
+
+
+def construct_default_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S]],
     get_position_fn: GetPositionFromData[D],
@@ -119,7 +116,7 @@ def create_grad_energy_update_param_fn(
         data = update_data_fn(data, params)
 
         metrics = {"energy": energy, "variance": aux_energy_data["variance"]}
-        metrics = _update_metrics_with_noclip(
+        metrics = update_metrics_with_noclip(
             aux_energy_data["energy_noclip"],
             aux_energy_data["variance_noclip"],
             metrics,
@@ -133,87 +130,7 @@ def create_grad_energy_update_param_fn(
     return traced_fn
 
 
-def _get_traced_compute_param_norm(
-    apply_pmap: bool = True,
-) -> Callable[[PyTree], Array]:
-    if not apply_pmap:
-        return jax.jit(tree_reduce_l1)
-
-    return utils.distribute.pmap(tree_reduce_l1)
-
-
-def create_kfac_update_param_fn(
-    optimizer: kfac_jax.Optimizer,
-    damping: chex.Numeric,
-    get_position_fn: GetPositionFromData[D],
-    update_data_fn: UpdateDataFn[D, P],
-    record_param_l1_norm: bool = False,
-) -> UpdateParamFn[P, D, OptimizerState]:
-    """Create momentum-less KFAC update step function.
-
-    Args:
-        optimizer (kfac_jax.Optimizer): instance of the Optimizer class from
-            kfac_jax
-        damping (chex.Numeric): damping coefficient
-        get_position_fn (GetPositionFromData): function which gets the walker positions
-            from the data. Has signature data -> Array
-        update_data_fn (Callable): function which updates data for new params
-
-    Returns:
-        Callable: function which updates the parameters given the current data, params,
-        and optimizer state. The signature of this function is
-            (data, params, optimizer_state, key)
-            -> (new_params, new_optimizer_state, metrics, key)
-    """
-    momentum = jnp.asarray(0.0)
-    damping = jnp.asarray(damping)
-    if optimizer.multi_device:
-        momentum = utils.distribute.replicate_all_local_devices(momentum)
-        damping = utils.distribute.replicate_all_local_devices(damping)
-        update_data_fn = utils.distribute.pmap(update_data_fn)
-
-    traced_compute_param_norm = _get_traced_compute_param_norm(optimizer.multi_device)
-
-    def update_param_fn(params, data, optimizer_state, key):
-        key, subkey = utils.distribute.split_or_psplit_key(key, optimizer.multi_device)
-        params, optimizer_state, stats = optimizer.step(
-            params=params,
-            state=optimizer_state,
-            rng=subkey,
-            data_iterator=iter([get_position_fn(data)]),
-            momentum=momentum,
-            damping=damping,
-        )
-        data = update_data_fn(data, params)
-
-        energy = stats["loss"]
-        variance = stats["aux"]["variance"]
-        energy_noclip = stats["aux"]["energy_noclip"]
-        variance_noclip = stats["aux"]["variance_noclip"]
-        picked_stats = (energy, variance, energy_noclip, variance_noclip)
-
-        if record_param_l1_norm:
-            param_l1_norm = traced_compute_param_norm(params)
-            picked_stats = picked_stats + (param_l1_norm,)
-
-        stats_to_save = picked_stats
-        if optimizer.multi_device:
-            stats_to_save = [utils.distribute.get_first(stat) for stat in picked_stats]
-
-        metrics = {"energy": stats_to_save[0], "variance": stats_to_save[1]}
-        metrics = _update_metrics_with_noclip(
-            stats_to_save[2], stats_to_save[3], metrics
-        )
-
-        if record_param_l1_norm:
-            metrics.update({"param_l1_norm": stats_to_save[4]})
-
-        return params, data, optimizer_state, metrics, key
-
-    return update_param_fn
-
-
-def create_eval_update_param_fn(
+def construct_eval_update_param_fn(
     local_energy_fn: LocalEnergyApply[P],
     nchains: int,
     get_position_fn: GetPositionFromData[D],

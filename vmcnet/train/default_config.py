@@ -265,16 +265,6 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 5e-2,
                 "learning_decay_rate": 1e-4,
             },
-            "sr": {
-                "damping": 1.0,  # needs to be tuned with everything else
-                "maxiter": 10,  # when maxiter <= -1, uses default 10 * nparams
-                "descent_type": "sgd",
-                "norm_constraint": 0.001,
-                "mode": "lazy",
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
-                "learning_decay_rate": 1e-4,
-            },
             "spring": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
@@ -282,7 +272,6 @@ def get_default_vmc_config() -> Dict:
                 "learning_decay_rate": 1e-4,
                 # SPRING hyperparams
                 "mu": 0.99,
-                "momentum": 0.0,  # non-zero value not recommended
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,

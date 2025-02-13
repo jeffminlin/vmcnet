@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 import jax
 
 from vmcnet.mcmc.metropolis import WalkerFn
-from vmcnet.updates.params import UpdateParamFn
+from vmcnet.updates.update_param_fns import UpdateParamFn
 from vmcnet.utils.checkpoint import CheckpointWriter, MetricsWriter
 import vmcnet.utils as utils
 from vmcnet.utils.typing import D, GetAmplitudeFromData, P, PRNGKey, S
