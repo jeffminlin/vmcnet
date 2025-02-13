@@ -1,6 +1,5 @@
 """Gauss Newton implementation."""
 
-from typing import Callable, Dict
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
@@ -10,7 +9,12 @@ import chex
 import optax
 
 from vmcnet.utils.typing import Array, D, LocalEnergyApply, P, S, Tuple
-from vmcnet.utils.pytree_helpers import tree_reduce_l1
+from vmcnet.utils.pytree_helpers import (
+    multiply_tree_by_scalar,
+    tree_inner_product,
+    tree_reduce_l1,
+)
+from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.typing import UpdateDataFn, GetPositionFromData, LearningRateSchedule
 
 from .update_param_fns import (
@@ -92,6 +96,12 @@ def initialize_gauss_newton(
             grad, optimizer_state, params
         )
 
+        if optimizer_config.constrain_norm:
+            updates = constrain_norm(
+                updates,
+                optimizer_config.norm_constraint,
+            )
+
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 
@@ -154,3 +164,21 @@ def get_gauss_newton_step(
         return update
 
     return gauss_newton_step
+
+
+def constrain_norm(
+    grad: P,
+    norm_constraint: chex.Numeric = 0.001,
+) -> P:
+    """Euclidean norm constraint."""
+    sq_norm_scaled_grads = tree_inner_product(grad, grad)
+
+    # Sync the norms here, see:
+    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
+    sq_norm_scaled_grads = pmean_if_pmap(sq_norm_scaled_grads)
+
+    norm_scale_factor = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    coefficient = jnp.minimum(norm_scale_factor, 1)
+    constrained_grads = multiply_tree_by_scalar(grad, coefficient)
+
+    return constrained_grads

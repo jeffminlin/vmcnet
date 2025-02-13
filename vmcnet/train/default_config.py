@@ -286,6 +286,8 @@ def get_default_vmc_config() -> Dict:
                 # GN hyperparams
                 "E": 0.0,  # target energy
                 "damping": 0.001,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
             },
         },
     }
