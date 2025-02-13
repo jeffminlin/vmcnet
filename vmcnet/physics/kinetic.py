@@ -49,8 +49,8 @@ def create_laplacian_kinetic_energy(
         zero = zero_tangent_from_primal(flat_x)
 
         _, grads, laps = lap(flattened_log_psi, (flat_x,), (eye,), (zero,))
-        laplacian = jnp.sum(grads**2) + laps
+        laplacian_psi_over_psi = jnp.sum(grads**2) + laps
 
-        return -0.5 * laplacian
+        return -0.5 * laplacian_psi_over_psi
 
     return kinetic_energy_fn
