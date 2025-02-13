@@ -1,5 +1,6 @@
-"""Stochastic reconfiguration (SR) routine."""
+"""SPRING implementation, see https://doi.org/10.1016/j.jcp.2024.113351."""
 
+from typing import Callable, Dict
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
@@ -8,59 +9,77 @@ from ml_collections import ConfigDict
 import chex
 import optax
 
-from vmcnet.utils.typing import Array, D, ModelApply, P, Tuple
+from vmcnet.utils.typing import Array, D, ModelApply, P, S, Tuple
 from vmcnet.utils.pytree_helpers import (
     multiply_tree_by_scalar,
     tree_inner_product,
+    tree_reduce_l1,
 )
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.typing import UpdateDataFn, GetPositionFromData, LearningRateSchedule
 import vmcnet.physics as physics
 
-from .update_param_fns import UpdateParamFn, construct_default_update_param_fn
+from .update_param_fns import (
+    UpdateParamFn,
+    make_traced_fn_with_single_metrics,
+    update_metrics_with_noclip,
+)
 from .optax_utils import initialize_optax_optimizer
+
+
+def construct_spring_update_param_fn(
+    energy_and_statistics_fn: physics.core.ValueGradEnergyFn[P],
+    optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S]],
+    get_position_fn: GetPositionFromData[D],
+    update_data_fn: UpdateDataFn[D, P],
+    apply_pmap: bool = True,
+    record_param_l1_norm: bool = False,
+) -> UpdateParamFn[P, D, S]:
+    """Create the `update_param_fn` based on the gradient of the total energy."""
+
+    def update_param_fn(params, data, optimizer_state, key):
+        position = get_position_fn(data)
+
+        energy, local_energies, aux_energy_data = energy_and_statistics_fn(
+            params, position
+        )
+
+        params, optimizer_state = optimizer_apply(
+            energy,
+            local_energies,
+            params,
+            optimizer_state,
+            data,
+        )
+        data = update_data_fn(data, params)
+
+        metrics = {"energy": energy, "variance": aux_energy_data["variance"]}
+        metrics = update_metrics_with_noclip(
+            aux_energy_data["energy_noclip"],
+            aux_energy_data["variance_noclip"],
+            metrics,
+        )
+        if record_param_l1_norm:
+            metrics.update({"param_l1_norm": tree_reduce_l1(params)})
+        return params, data, optimizer_state, metrics, key
+
+    traced_fn = make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
+
+    return traced_fn
 
 
 def initialize_spring(
     log_psi_apply: ModelApply[P],
+    energy_and_statistics_fn,
     params: P,
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
-    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     learning_rate_schedule: LearningRateSchedule,
     optimizer_config: ConfigDict,
     record_param_l1_norm: bool = False,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, optax.OptState], optax.OptState]:
-    """Get an update param function and initial state for SPRING.
-
-    Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        params (pytree): params with which to initialize optimizer state
-        get_position_fn (Callable): function which gets the position array from the data
-        update_data_fn (Callable): function which updates data for new params
-        energy_data_val_and_grad (Callable): function which computes the clipped energy
-            value and gradient. Has the signature
-                (params, x)
-                -> ((expected_energy, auxiliary_energy_data), grad_energy),
-            where auxiliary_energy_data is the tuple
-            (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        learning_rate_schedule (Callable): function which returns a learning rate from
-            epoch number. Has signature epoch -> learning_rate
-        optimizer_config (ConfigDict): configuration for stochastic reconfiguration
-        record_param_l1_norm (bool, optional): whether to record the L1 norm of the
-            parameters in the metrics. Defaults to False.
-        apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
-            True.
-
-    Returns:
-        (UpdateParamFn, optax.OptState):
-        update param function with signature
-            (params, data, optimizer_state, key)
-            -> (new params, new state, metrics, new key), and
-        initial optimizer state
-    """
+    """Get an update param function and initial state for SPRING."""
     spring_step = get_spring_step(
         log_psi_apply,
         optimizer_config.damping,
@@ -74,10 +93,10 @@ def initialize_spring(
     def prev_update(optimizer_state):
         return optimizer_state[0].trace
 
-    def optimizer_apply(regular_grad, params, optimizer_state, data, aux):
-        del regular_grad
+    def optimizer_apply(energy, local_energies, params, optimizer_state, data):
+        centered_local_energies = local_energies - energy
         grad = spring_step(
-            aux["centered_local_energies"],
+            centered_local_energies,
             params,
             prev_update(optimizer_state),
             get_position_fn(data),
@@ -96,8 +115,8 @@ def initialize_spring(
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
 
-    update_param_fn = construct_default_update_param_fn(
-        energy_data_val_and_grad,
+    update_param_fn = construct_spring_update_param_fn(
+        energy_and_statistics_fn,
         optimizer_apply,
         get_position_fn=get_position_fn,
         update_data_fn=update_data_fn,
@@ -116,19 +135,7 @@ def get_spring_step(
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
 ):
-    """
-    Get the SPRING update function.
-
-    Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        damping (float): damping parameter
-        mu (float): SPRING-specific regularization
-
-    Returns:
-        Callable: SPRING update function. Has the signature
-        (centered_energies, params, prev_grad, positions) -> new_grad
-    """
+    """Get the SPRING update function."""
     kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
 
     def spring_step(

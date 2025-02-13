@@ -21,8 +21,7 @@ from vmcnet.utils.typing import (
 )
 
 EnergyAuxData = Dict[str, Any]
-EnergyData = Tuple[Array, EnergyAuxData]
-ValueGradEnergyFn = Callable[[P, PRNGKey, Array], Tuple[EnergyData, P]]
+ValueGradEnergyFn = Callable[[P, Array], Tuple[Array, EnergyAuxData, P]]
 
 
 def initialize_molecular_pos(
@@ -126,45 +125,33 @@ def get_statistics_from_local_energy(
     return energy, variance
 
 
-def get_clipped_energies_and_aux_data(
+def get_clipped_energies_and_stats(
     local_energies_noclip: Array,
     nchains: int,
     clipping_fn: Optional[ClippingFn],
     nan_safe: bool,
 ) -> Tuple[Array, Array, EnergyAuxData]:
     """Clip local energies if requested and return auxiliary data."""
-    if clipping_fn is not None:
-        # For the unclipped metrics, which are not used in the gradient, don't
-        # do these in a nan-safe way. This makes nans more visible and makes sure
-        # nans checkpointing will work properly.
-        energy_noclip, variance_noclip = get_statistics_from_local_energy(
-            local_energies_noclip, nchains, nan_safe=False
-        )
+    energy_noclip, variance_noclip = get_statistics_from_local_energy(
+        local_energies_noclip, nchains, nan_safe=False
+    )
 
+    if clipping_fn is not None:
         local_energies = clipping_fn(local_energies_noclip, energy_noclip)
-        energy, variance = get_statistics_from_local_energy(
-            local_energies, nchains, nan_safe=nan_safe
-        )
     else:
         local_energies = local_energies_noclip
-        energy, variance = get_statistics_from_local_energy(
-            local_energies_noclip, nchains, nan_safe=nan_safe
-        )
 
-        # Even though there's no clipping function, still record noclip metrics
-        # without nan-safety so that checkpointing epochs with nans can be
-        # supported.
-        energy_noclip, variance_noclip = get_statistics_from_local_energy(
-            local_energies_noclip, nchains, nan_safe=False
-        )
-    aux_data = dict(
+    energy, variance = get_statistics_from_local_energy(
+        local_energies, nchains, nan_safe=nan_safe
+    )
+
+    energy_stats = dict(
         variance=variance,
-        local_energies_noclip=local_energies_noclip,
         energy_noclip=energy_noclip,
         variance_noclip=variance_noclip,
-        centered_local_energies=local_energies - energy,
     )
-    return energy, local_energies, aux_data
+
+    return energy, local_energies, energy_stats
 
 
 def create_value_and_grad_energy_fn(
@@ -208,7 +195,7 @@ def create_value_and_grad_energy_fn(
             (params, x)
             -> ((expected_energy, auxiliary_energy_data), grad_energy),
         where auxiliary_energy_data is the tuple
-        (expected_variance, local_energies, unclipped_energy, unclipped_variance)
+        (expected_variance, local_energies, unclipped_energy, unclipped_variance, centered_local_energies)
     """
     mean_grad_fn = utils.distribute.get_mean_over_first_axis_fn(nan_safe=nan_safe)
 
@@ -230,26 +217,71 @@ def create_value_and_grad_energy_fn(
         )
 
     def get_standard_contribution(local_energies_noclip, params, positions):
-        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
+        energy, local_energies, stats = get_clipped_energies_and_stats(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
         centered_local_energies = local_energies - energy
         grad_E = jax.grad(standard_estimator_forward, argnums=0)(
             params, positions, centered_local_energies
         )
-        return aux_data, energy, grad_E
+        return energy, stats, grad_E
 
-    def energy_val_and_grad(params, key, positions):
-        del key
-
+    def energy_val_and_grad(params, positions):
         local_energies_noclip = jax.vmap(
             local_energy_fn, in_axes=(None, 0, None), out_axes=0
         )(params, positions, None)
 
-        aux_data, energy, grad_E = get_standard_contribution(
+        energy, stats, grad_E = get_standard_contribution(
             local_energies_noclip, params, positions
         )
 
-        return (energy, aux_data), grad_E
+        return energy, stats, grad_E
 
     return energy_val_and_grad
+
+
+def create_energy_and_statistics_fn(
+    local_energy_fn: LocalEnergyApply[P],
+    nchains: int,
+    clipping_fn: Optional[ClippingFn] = None,
+    nan_safe: bool = True,
+) -> ValueGradEnergyFn[P]:
+    """Create a function which computes energies and associated statistics.
+
+    Args:
+        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
+            function is (params, x) -> log|psi(x)|
+        local_energy_fn (Callable): computes local energies Hpsi / psi. Has signature
+            (params, x) -> (Hpsi / psi)(x)
+        nchains (int): total number of chains across all devices, used to compute a
+            sample variance estimate of the local energy
+        clipping_fn (Callable, optional): post-processing function on the local energy,
+            e.g. a function which clips the values to be within some multiple of the
+            total variation from the median. The post-processed values are used for
+            the gradient calculation, if available. Defaults to None.
+        nan_safe (bool, optional): flag which controls if jnp.nanmean and jnp.nansum are
+            used instead of jnp.mean and jnp.sum for the terms in the gradient
+            calculation. Can be set to False when debugging if trying to find the source
+            of unexpected nans. Defaults to True.
+
+    Returns:
+        Callable: function which computes the clipped energy and associated statistics.
+        Has the signature
+            (params, positions)
+            -> (expected_energy, auxiliary_energy_data)
+        where auxiliary_energy_data is the tuple
+        (expected_variance, local_energies, unclipped_energy, unclipped_variance, centered_local_energies)
+    """
+
+    def energy_and_statistics(params, positions):
+        local_energies_noclip = jax.vmap(
+            local_energy_fn, in_axes=(None, 0, None), out_axes=0
+        )(params, positions, None)
+
+        energy, local_energies, aux_data = get_clipped_energies_and_stats(
+            local_energies_noclip, nchains, clipping_fn, nan_safe
+        )
+
+        return energy, local_energies, aux_data
+
+    return energy_and_statistics

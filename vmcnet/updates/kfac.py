@@ -156,8 +156,14 @@ def initialize_kfac(
         initial optimizer state, and
         PRNGKey
     """
+
+    def kfac_value_and_grad_fn(params, rng, positions):
+        del rng
+        energy, stats, grad_E = energy_data_val_and_grad(params, positions)
+        return (energy, stats), grad_E
+
     optimizer = kfac_Optimizer(
-        energy_data_val_and_grad,
+        kfac_value_and_grad_fn,
         l2_reg=optimizer_config.l2_reg,
         norm_constraint=optimizer_config.norm_constraint,
         value_func_has_aux=True,

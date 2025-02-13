@@ -24,11 +24,12 @@ from vmcnet.utils.typing import (
 UpdateParamFn = Callable[[P, D, S, PRNGKey], Tuple[P, D, S, Dict, PRNGKey]]
 
 
-def _make_traced_fn_with_single_metrics(
+def make_traced_fn_with_single_metrics(
     update_param_fn: UpdateParamFn[P, D, S],
     apply_pmap: bool,
     metrics_to_get_first: Optional[Iterable[str]] = None,
 ) -> UpdateParamFn[P, D, S]:
+    """Wrap an update_param_fn to return only the first replica's metrics."""
     if not apply_pmap:
         return jax.jit(update_param_fn)
 
@@ -100,32 +101,26 @@ def construct_default_update_param_fn(
 
     def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
-        key, subkey = jax.random.split(key)
 
-        energy_data, grad_energy = energy_data_val_and_grad(params, subkey, position)
-        energy, aux_energy_data = energy_data
+        energy, stats, grad_energy = energy_data_val_and_grad(params, position)
 
         grad_energy = utils.distribute.pmean_if_pmap(grad_energy)
         params, optimizer_state = optimizer_apply(
-            grad_energy,
-            params,
-            optimizer_state,
-            data,
-            dict(centered_local_energies=aux_energy_data["centered_local_energies"]),
+            grad_energy, params, optimizer_state, data
         )
         data = update_data_fn(data, params)
 
-        metrics = {"energy": energy, "variance": aux_energy_data["variance"]}
+        metrics = {"energy": energy, "variance": stats["variance"]}
         metrics = update_metrics_with_noclip(
-            aux_energy_data["energy_noclip"],
-            aux_energy_data["variance_noclip"],
+            stats["energy_noclip"],
+            stats["variance_noclip"],
             metrics,
         )
         if record_param_l1_norm:
             metrics.update({"param_l1_norm": tree_reduce_l1(params)})
         return params, data, optimizer_state, metrics, key
 
-    traced_fn = _make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
+    traced_fn = make_traced_fn_with_single_metrics(update_param_fn, apply_pmap)
 
     return traced_fn
 
@@ -173,7 +168,7 @@ def construct_eval_update_param_fn(
             metrics.update({"local_energies": local_energies})
         return params, data, optimizer_state, metrics, key
 
-    traced_fn = _make_traced_fn_with_single_metrics(
+    traced_fn = make_traced_fn_with_single_metrics(
         eval_update_param_fn, apply_pmap, {"energy", "variance"}
     )
 
