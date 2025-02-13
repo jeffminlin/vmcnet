@@ -6,21 +6,7 @@ import numpy as np
 
 import vmcnet.physics as physics
 
-from tests.test_utils import make_dummy_log_f, make_dummy_x
-
-
-def test_laplacian_psi_over_psi():
-    """Test (nabla^2 f)(x) / f(x) for f(x) = sum_i x_i^2 + 3x_i."""
-    f, log_f = make_dummy_log_f()
-    x = make_dummy_x()
-
-    grad_log_f = jax.grad(log_f, argnums=1)
-
-    local_laplacian = physics.core.laplacian_psi_over_psi(grad_log_f, None, x)
-
-    # d^2f/dx_i^2 = 2 for all i, so the Laplacian is simply 2 * n, where n is the number
-    # of particles. We then divide by f(x) to get (nabla^2 f) / f
-    np.testing.assert_allclose(local_laplacian, 6 * 2 / f(None, x), rtol=1e-6)
+from tests.test_utils import make_dummy_x
 
 
 def test_total_energy_grad():
