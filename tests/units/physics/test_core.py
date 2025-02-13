@@ -1,6 +1,5 @@
 """Testing energy calculations."""
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -21,7 +20,6 @@ def test_total_energy_grad():
     x = make_dummy_x()
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
     nchains = x.shape[0]
-    key = jax.random.PRNGKey(0)
 
     def local_energy_fn(a, x, key):
         return jnp.sum(x)
@@ -40,12 +38,9 @@ def test_total_energy_grad():
         log_psi_apply, local_energy_fn, nchains
     )
 
-    energy_data, grad_energy = total_energy_value_and_grad(a, key, x)
-    energy = energy_data[0]
-    variance = energy_data[1]["variance"]
-    local_energies = energy_data[1]["local_energies_noclip"]
+    energy, stats, grad_energy = total_energy_value_and_grad(a, x)
+    variance = stats["variance"]
 
-    np.testing.assert_allclose(local_energies, target_local_energies)
     np.testing.assert_allclose(energy, target_energy)
     np.testing.assert_allclose(variance, target_variance)
     np.testing.assert_allclose(grad_energy, target_grad_energy, rtol=1e-6)

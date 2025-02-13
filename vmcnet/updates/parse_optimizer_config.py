@@ -1,13 +1,15 @@
 """Get update functions from ConfigDicts."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 from ml_collections import ConfigDict
 
 import vmcnet.physics as physics
 from vmcnet.utils.typing import (
+    ClippingFn,
     D,
     GetPositionFromData,
     LearningRateSchedule,
+    LocalEnergyApply,
     ModelApply,
     OptimizerState,
     P,
@@ -51,52 +53,29 @@ def _get_learning_rate_schedule(
 
 def initialize_optimizer(
     log_psi_apply: ModelApply[P],
+    local_energy_fn: LocalEnergyApply[P],
+    clipping_fn: Optional[ClippingFn],
     vmc_config: ConfigDict,
     params: P,
     data: D,
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
-    energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
     key: PRNGKey,
     apply_pmap: bool = True,
 ) -> Tuple[UpdateParamFn[P, D, OptimizerState], OptimizerState, PRNGKey]:
-    """Get an update function and initialize optimizer state from the vmc configuration.
-
-    Args:
-        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
-            function is (params, x) -> log|psi(x)|
-        vmc_config (ConfigDict): configuration for VMC
-        params (pytree): params with which to initialize optimizer state
-        data (pytree): data with which to initialize optimizer state
-        get_position_fn (Callable): function which gets the position array from the data
-        update_data_fn (Callable): function which updates data for new params
-        energy_data_val_and_grad (Callable): function which computes the clipped energy
-            value and gradient. Has the signature
-                (params, x)
-                -> ((expected_energy, auxiliary_energy_data), grad_energy),
-            where auxiliary_energy_data is the tuple
-            (expected_variance, local_energies, unclipped_energy, unclipped_variance)
-        key (PRNGKey): PRNGKey with which to initialize optimizer state
-        apply_pmap (bool, optional): whether to pmap the optimizer steps. Defaults to
-            True.
-
-    Raises:
-        ValueError: A non-supported optimizer type is requested. Currently, KFAC, Adam,
-            SGD, and SR (with either Adam or SGD) is supported.
-
-    Returns:
-        (UpdateParamFn, OptimizerState, PRNGKey):
-        update param function with signature
-            (params, data, optimizer_state, key)
-            -> (new params, new state, metrics, new key),
-        initial optimizer state, and
-        PRNGKey
-    """
+    """Get an update function and initialize optimizer state from the vmc configuration."""
     learning_rate_schedule = _get_learning_rate_schedule(
         vmc_config.optimizer[vmc_config.optimizer_type]
     )
 
     if vmc_config.optimizer_type == "kfac":
+        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+            log_psi_apply,
+            local_energy_fn,
+            vmc_config.nchains,
+            clipping_fn,
+            nan_safe=vmc_config.nan_safe,
+        )
         return initialize_kfac(
             params,
             data,
@@ -110,6 +89,13 @@ def initialize_optimizer(
             apply_pmap=apply_pmap,
         )
     elif vmc_config.optimizer_type == "sgd":
+        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+            log_psi_apply,
+            local_energy_fn,
+            vmc_config.nchains,
+            clipping_fn,
+            nan_safe=vmc_config.nan_safe,
+        )
         (
             update_param_fn,
             optimizer_state,
@@ -125,6 +111,13 @@ def initialize_optimizer(
         )
         return update_param_fn, optimizer_state, key
     elif vmc_config.optimizer_type == "adam":
+        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+            log_psi_apply,
+            local_energy_fn,
+            vmc_config.nchains,
+            clipping_fn,
+            nan_safe=vmc_config.nan_safe,
+        )
         (
             update_param_fn,
             optimizer_state,
@@ -141,15 +134,19 @@ def initialize_optimizer(
         return update_param_fn, optimizer_state, key
 
     elif vmc_config.optimizer_type == "spring":
+        energy_and_statistics_fn = physics.core.create_energy_and_statistics_fn(
+            local_energy_fn, vmc_config.nchains, clipping_fn, vmc_config.nan_safe
+        )
+
         (
             update_param_fn,
             optimizer_state,
         ) = initialize_spring(
             log_psi_apply,
+            energy_and_statistics_fn,
             params,
             get_position_fn,
             update_data_fn,
-            energy_data_val_and_grad,
             learning_rate_schedule,
             vmc_config.optimizer.spring,
             vmc_config.record_param_l1_norm,

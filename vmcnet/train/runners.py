@@ -286,37 +286,6 @@ def _get_clipping_fn(
     return clipping_fn
 
 
-def _get_energy_val_and_grad_fn(
-    vmc_config: ConfigDict,
-    problem_config: ConfigDict,
-    ion_pos: Array,
-    ion_charges: Array,
-    log_psi_apply: ModelApply[P],
-) -> physics.core.ValueGradEnergyFn[P]:
-    ei_softening = problem_config.ei_softening
-    ee_softening = problem_config.ee_softening
-
-    local_energy_fn = _assemble_mol_local_energy_fn(
-        ion_pos,
-        ion_charges,
-        ei_softening,
-        ee_softening,
-        log_psi_apply,
-    )
-
-    clipping_fn = _get_clipping_fn(vmc_config)
-
-    energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
-        log_psi_apply,
-        local_energy_fn,
-        vmc_config.nchains,
-        clipping_fn,
-        nan_safe=vmc_config.nan_safe,
-    )
-
-    return energy_data_val_and_grad
-
-
 # TODO: don't forget to update type hint to be more general when
 # _make_initial_distributed_data is more general
 def _setup_vmc(
@@ -369,9 +338,15 @@ def _setup_vmc(
         config.vmc, log_psi_apply, apply_pmap=apply_pmap
     )
 
-    energy_data_val_and_grad = _get_energy_val_and_grad_fn(
-        config.vmc, config.problem, ion_pos, ion_charges, log_psi_apply
+    local_energy_fn = _assemble_mol_local_energy_fn(
+        ion_pos,
+        ion_charges,
+        config.problem.ei_softening,
+        config.problem.ee_softening,
+        log_psi_apply,
     )
+
+    clipping_fn = _get_clipping_fn(config.vmc)
 
     # Setup parameter updates
     if apply_pmap:
@@ -382,12 +357,13 @@ def _setup_vmc(
         key,
     ) = updates.parse_optimizer_config.initialize_optimizer(
         log_psi_apply,
+        local_energy_fn,
+        clipping_fn,
         config.vmc,
         params,
         data,
         pacore.get_position_from_data,
         update_data_fn,
-        energy_data_val_and_grad,
         key,
         apply_pmap=apply_pmap,
     )
