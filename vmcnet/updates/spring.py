@@ -65,7 +65,6 @@ def initialize_spring(
         log_psi_apply,
         optimizer_config.damping,
         optimizer_config.mu,
-        optimizer_config.momentum,
     )
 
     descent_optimizer = optax.sgd(
@@ -116,7 +115,6 @@ def get_spring_step(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
-    momentum: chex.Scalar = 0.0,  # TODO: remove
 ):
     """
     Get the SPRING update function.
