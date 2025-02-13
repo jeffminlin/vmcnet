@@ -222,63 +222,26 @@ def _get_mcmc_fns(
 
 # TODO: figure out where this should go, perhaps in a physics/molecule.py file?
 def _assemble_mol_local_energy_fn(
-    local_energy_type: str,
-    local_energy_config: ConfigDict,
     ion_pos: Array,
     ion_charges: Array,
     ei_softening: chex.Scalar,
     ee_softening: chex.Scalar,
     log_psi_apply: ModelApply[P],
 ) -> LocalEnergyApply[P]:
-    if local_energy_type == "standard":
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
-        ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
-            ion_pos, ion_charges, softening_term=ei_softening
-        )
-        ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
-            softening_term=ee_softening
-        )
-        ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
-            ion_pos, ion_charges
-        )
-        local_energy_fn: LocalEnergyApply[P] = physics.core.combine_local_energy_terms(
-            [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
-        )
-        return local_energy_fn
-    if local_energy_type == "ibp":
-        ibp_parts = local_energy_config.ibp.ibp_parts
-        local_energy_fn = physics.ibp.create_ibp_local_energy(
-            log_psi_apply,
-            ion_pos,
-            ion_charges,
-            "kinetic" in ibp_parts,
-            "ei" in ibp_parts,
-            ei_softening,
-            "ee" in ibp_parts,
-            ee_softening,
-        )
-        return local_energy_fn
-    elif local_energy_type == "random_particle":
-        nparticles = local_energy_config.random_particle.nparticles
-        sample_parts = local_energy_config.random_particle.sample_parts
-        local_energy_fn = (
-            physics.random_particle.create_molecular_random_particle_local_energy(
-                log_psi_apply,
-                ion_pos,
-                ion_charges,
-                nparticles,
-                "kinetic" in sample_parts,
-                "ei" in sample_parts,
-                ei_softening,
-                "ee" in sample_parts,
-                ee_softening,
-            )
-        )
-        return local_energy_fn
-    else:
-        raise ValueError(
-            f"Requested local energy type {local_energy_type} is not supported"
-        )
+    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
+    ei_potential_fn = physics.potential.create_electron_ion_coulomb_potential(
+        ion_pos, ion_charges, softening_term=ei_softening
+    )
+    ee_potential_fn = physics.potential.create_electron_electron_coulomb_potential(
+        softening_term=ee_softening
+    )
+    ii_potential_fn = physics.potential.create_ion_ion_coulomb_potential(
+        ion_pos, ion_charges
+    )
+    local_energy_fn: LocalEnergyApply[P] = physics.core.combine_local_energy_terms(
+        [kinetic_fn, ei_potential_fn, ee_potential_fn, ii_potential_fn]
+    )
+    return local_energy_fn
 
 
 # TODO: figure out where this should go -- the act of clipping energies is kind of just
@@ -334,8 +297,6 @@ def _get_energy_val_and_grad_fn(
     ee_softening = problem_config.ee_softening
 
     local_energy_fn = _assemble_mol_local_energy_fn(
-        vmc_config.local_energy_type,
-        vmc_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,
@@ -351,7 +312,6 @@ def _get_energy_val_and_grad_fn(
         vmc_config.nchains,
         clipping_fn,
         nan_safe=vmc_config.nan_safe,
-        local_energy_type=vmc_config.local_energy_type,
     )
 
     return energy_data_val_and_grad
@@ -463,8 +423,6 @@ def _setup_eval(
     ee_softening = problem_config.ee_softening
 
     local_energy_fn = _assemble_mol_local_energy_fn(
-        eval_config.local_energy_type,
-        eval_config.local_energy,
         ion_pos,
         ion_charges,
         ei_softening,
@@ -478,7 +436,6 @@ def _setup_eval(
         record_local_energies=eval_config.record_local_energies,
         nan_safe=eval_config.nan_safe,
         apply_pmap=apply_pmap,
-        use_PRNGKey=eval_config.local_energy_type == "random_particle",
     )
     eval_burning_step, eval_walker_fn = _get_mcmc_fns(
         eval_config, log_psi_apply, apply_pmap=apply_pmap

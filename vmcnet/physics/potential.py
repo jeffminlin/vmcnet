@@ -24,9 +24,9 @@ def compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
 
 # NOTE: the custom VJP on this method returns 0.0 for the gradient when the norm is
 # zero, even though technically the gradient is undefined in this case. This is
-# currently necessary to ensure that the EE potential energyd oesn't give nans when
-# using the IBP formulation.
-# TODO (ggoldsh): rewrite the EE term of the IBP method to avoid this issue.
+# a vestigate of the fact that it was previously necessary to ensure that the
+# EE potential energy didn't give nans when using the (now gone) IBP code.
+# TODO (ggoldsh): simplify
 @jax.custom_vjp
 def compute_soft_norm(
     displacements: ArrayLike, softening_term: chex.Scalar = 0.0

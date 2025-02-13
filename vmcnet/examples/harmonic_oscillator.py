@@ -170,7 +170,6 @@ def harmonic_oscillator_potential(omega: chex.Scalar, x: Array) -> chex.Numeric:
 def make_harmonic_oscillator_local_energy(
     omega: chex.Scalar,
     log_psi_apply: ModelApply[P],
-    local_energy_type: str = "standard",
 ) -> LocalEnergyApply[P]:
     """Factory to create a local energy fn for the harmonic oscillator log|psi|.
 
@@ -179,8 +178,6 @@ def make_harmonic_oscillator_local_energy(
         log_psi_apply (Callable): function which evaluates log|psi| for a harmonic
             oscillator model wavefunction psi. Has the signature
             (params, x) -> log|psi(x)|.
-        local_energy_type (bool): whether to use standard local energy, or integration
-            by parts, or random particle local energy.
 
     Returns:
         Callable: local energy function with the signature (params, x) -> local energy
@@ -188,25 +185,9 @@ def make_harmonic_oscillator_local_energy(
     """
 
     def potential_fn(params: P, x: Array):
-        # Note: harmonic oscillator potential is smooth, no need to apply sampling or
-        # IBP here.
         del params
         return harmonic_oscillator_potential(omega, x)
 
-    if local_energy_type == "random_particle":
-        random_particle_kinetic_fn = (
-            physics.random_particle.create_random_particle_kinetic_energy(
-                log_psi_apply, nparticles=1
-            )
-        )
-        return physics.random_particle.assemble_random_particle_local_energy(
-            random_particle_kinetic_fn, [potential_fn], sample_kinetic=True
-        )
-    elif local_energy_type == "standard":
-        kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
-    elif local_energy_type == "ibp":
-        kinetic_fn = physics.ibp.create_gradient_squared_kinetic_energy(log_psi_apply)
-    else:
-        raise ValueError()
+    kinetic_fn = physics.kinetic.create_laplacian_kinetic_energy(log_psi_apply)
 
     return physics.core.combine_local_energy_terms([kinetic_fn, potential_fn])

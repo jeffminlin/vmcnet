@@ -8,7 +8,6 @@ import jax.numpy as jnp
 import kfac_jax
 
 import vmcnet.utils as utils
-from vmcnet.utils.pytree_helpers import tree_sum
 from vmcnet.utils.typing import (
     Array,
     ArrayLike,
@@ -262,7 +261,6 @@ def create_value_and_grad_energy_fn(
     nchains: int,
     clipping_fn: Optional[ClippingFn] = None,
     nan_safe: bool = True,
-    local_energy_type: str = "standard",
 ) -> ValueGradEnergyFn[P]:
     """Create a function which computes unbiased energy gradients.
 
@@ -291,18 +289,6 @@ def create_value_and_grad_energy_fn(
             used instead of jnp.mean and jnp.sum for the terms in the gradient
             calculation. Can be set to False when debugging if trying to find the source
             of unexpected nans. Defaults to True.
-        local_energy_type (str): one of [standard, ibp, random_particle]. "standard"
-            implies the standard VMC local energy in which case we can apply the
-            traditional VMC gradient estimator described above. "ibp" means integration
-            by parts in which case we use the "generic" VMC gradient estimator which
-            does not depend on the local energy having the form APsi/Psi for a Hermitian
-            operator A. In practice this means an extra term must be added to the
-            gradient in which the local energy itself is differentiated with respect to
-            the model parameters. "random_particle" means that the local energy uses one
-            or more random particles for each walker, rather than using all the
-            particles. In this case the standard gradient estimator can be used but the
-            code is slightly modified to pass a distinct PRNGkey to each walker.
-            Defaults to standard.
 
     Returns:
         Callable: function which computes the clipped energy value and gradient. Has the
@@ -341,7 +327,7 @@ def create_value_and_grad_energy_fn(
         )
         return aux_data, energy, grad_E
 
-    def standard_energy_val_and_grad(params, key, positions):
+    def energy_val_and_grad(params, key, positions):
         del key
 
         local_energies_noclip = jax.vmap(
@@ -354,55 +340,4 @@ def create_value_and_grad_energy_fn(
 
         return (energy, aux_data), grad_E
 
-    def random_particle_energy_val_and_grad(params, key, positions):
-        nbatch = positions.shape[0]
-        key = jax.random.split(key, nbatch)
-
-        local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0, 0), out_axes=0
-        )(params, positions, key)
-
-        aux_data, energy, grad_E = get_standard_contribution(
-            local_energies_noclip, params, positions
-        )
-        return (energy, aux_data), grad_E
-
-    def generic_energy_val_and_grad(params, key, positions):
-        del key
-
-        val_and_grad_local_energy = jax.value_and_grad(local_energy_fn, argnums=0)
-        val_and_grad_local_energy_vmapped = jax.vmap(
-            val_and_grad_local_energy, in_axes=(None, 0, None), out_axes=0
-        )
-        local_energies_noclip, local_energy_grads = val_and_grad_local_energy_vmapped(
-            params, positions, None
-        )
-        generic_contribution = jax.tree_map(mean_grad_fn, local_energy_grads)
-
-        # Gradient clipping seems to make the optimization fail miserably when using
-        # the generic gradient estimator, so setting clipping_fn=None here.
-        # TODO (ggoldsh): investigate this phenomenon further.
-        energy, local_energies, aux_data = get_clipped_energies_and_aux_data(
-            local_energies_noclip, nchains, clipping_fn=None, nan_safe=nan_safe
-        )
-
-        centered_local_energies = local_energies - energy
-
-        standard_contribution = jax.grad(standard_estimator_forward, argnums=0)(
-            params, positions, centered_local_energies
-        )
-
-        grad_E = tree_sum(standard_contribution, generic_contribution)
-
-        return (energy, aux_data), grad_E
-
-    if local_energy_type == "standard":
-        return standard_energy_val_and_grad
-    elif local_energy_type == "ibp":
-        return generic_energy_val_and_grad
-    elif local_energy_type == "random_particle":
-        return random_particle_energy_val_and_grad
-    else:
-        raise ValueError(
-            f"Requested local energy type {local_energy_type} is not supported"
-        )
+    return energy_val_and_grad
