@@ -278,6 +278,15 @@ def get_default_vmc_config() -> Dict:
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
             },
+            "gauss_newton": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "learning_decay_rate": 1e-4,
+                # GN hyperparams
+                "E": 0.0,  # target energy
+                "damping": 0.001,
+            },
         },
     }
     return vmc_config

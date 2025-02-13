@@ -83,8 +83,7 @@ def combine_local_energy_terms(
         (params, x) -> local energy array of shape (x.shape[0],)
     """
 
-    def local_energy_fn(params: P, x: Array, key: Optional[PRNGKey]) -> Array:
-        del key
+    def local_energy_fn(params: P, x: Array) -> Array:
         local_energy_sum = local_energy_terms[0](params, x)
         for term in local_energy_terms[1:]:
             local_energy_sum = cast(Array, local_energy_sum + term(params, x))
@@ -228,8 +227,8 @@ def create_value_and_grad_energy_fn(
 
     def energy_val_and_grad(params, positions):
         local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0, None), out_axes=0
-        )(params, positions, None)
+            local_energy_fn, in_axes=(None, 0), out_axes=0
+        )(params, positions)
 
         energy, stats, grad_E = get_standard_contribution(
             local_energies_noclip, params, positions
@@ -275,13 +274,13 @@ def create_energy_and_statistics_fn(
 
     def energy_and_statistics(params, positions):
         local_energies_noclip = jax.vmap(
-            local_energy_fn, in_axes=(None, 0, None), out_axes=0
-        )(params, positions, None)
+            local_energy_fn, in_axes=(None, 0), out_axes=0
+        )(params, positions)
 
-        energy, local_energies, aux_data = get_clipped_energies_and_stats(
+        energy, local_energies, stats = get_clipped_energies_and_stats(
             local_energies_noclip, nchains, clipping_fn, nan_safe
         )
 
-        return energy, local_energies, aux_data
+        return energy, local_energies, stats
 
     return energy_and_statistics
