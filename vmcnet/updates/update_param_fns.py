@@ -65,7 +65,7 @@ def update_metrics_with_noclip(
 
 def construct_default_update_param_fn(
     energy_data_val_and_grad: physics.core.ValueGradEnergyFn[P],
-    optimizer_apply: Callable[[P, P, S, D, Dict[str, Array]], Tuple[P, S]],
+    optimizer_apply: Callable[[P, P, S, D], Tuple[P, S]],
     get_position_fn: GetPositionFromData[D],
     update_data_fn: UpdateDataFn[D, P],
     apply_pmap: bool = True,
