@@ -88,6 +88,10 @@ def get_default_config() -> ConfigDict:
                 "distribute": False,
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
                 "initial_seed": 0,
+                "wandb": {
+                    "project": "default",
+                    "name": "vmc-molecule_run",
+                },
             }
         )
     )

@@ -3,6 +3,7 @@
 from typing import Tuple, Optional
 
 import jax
+import wandb
 
 from vmcnet.mcmc.metropolis import WalkerFn
 from vmcnet.updates.update_param_fns import UpdateParamFn
@@ -157,6 +158,7 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
+            wandb.log(metrics)
 
             if nans_detected:
                 break
