@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 from absl import flags
 from ml_collections import ConfigDict
+import wandb
 
 import vmcnet.mcmc as mcmc
 import vmcnet.mcmc.dynamic_width_position_amplitude as dwpa
@@ -544,6 +545,13 @@ def run_molecule() -> None:
             reload_config.checkpoint_relative_file_path,
             ", new optimizer state" if reload_config.new_optimizer_state else "",
         )
+
+    wandb.login()
+    wandb.init(
+        project=config.wandb.project,
+        name=config.wandb.name,
+        config=config,
+    )
 
     root_logger = logging.getLogger()
     root_logger.setLevel(config.logging_level)
