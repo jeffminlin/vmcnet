@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import wandb
 
 import vmcnet.examples.harmonic_oscillator as qho
 from vmcnet.mcmc.simple_position_amplitude import (
@@ -30,6 +31,9 @@ def _make_initial_params_and_data(model_omega, nchains):
     key, subkey = jax.random.split(key)
     params = log_psi_model.init(subkey, random_particle_positions)
     amplitudes = log_psi_model.apply(params, random_particle_positions)
+
+    wandb.init(mode="disabled")
+
     return log_psi_model, params, random_particle_positions, amplitudes, key
 
 

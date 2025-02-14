@@ -3,6 +3,7 @@
 import jax
 import numpy as np
 import pytest
+import wandb
 
 import vmcnet.examples.hydrogen_like_atom as hla
 from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude_data
@@ -25,6 +26,7 @@ def _setup_hla_hyperparams_and_model():
     nsteps_per_param_update = 5
     std_move = 0.4
     learning_rate = 1.0
+    wandb.init(mode="disabled")
 
     # Initialize model and chains of walkers
     log_psi_model = hla.HydrogenLikeWavefunction(model_decay)
