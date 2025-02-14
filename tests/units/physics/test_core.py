@@ -21,7 +21,8 @@ def test_total_energy_grad():
     log_psi_grad_x = jnp.array([5.0, 25.0, 61.0])
     nchains = x.shape[0]
 
-    def local_energy_fn(a, x, key):
+    def local_energy_fn(a, x):
+        del a
         return jnp.sum(x)
 
     # Based on the specific values returned by make_dummy_x

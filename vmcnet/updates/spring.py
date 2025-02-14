@@ -17,7 +17,6 @@ from vmcnet.utils.pytree_helpers import (
 )
 from vmcnet.utils.distribute import pmean_if_pmap
 from vmcnet.utils.typing import UpdateDataFn, GetPositionFromData, LearningRateSchedule
-import vmcnet.physics as physics
 
 from .update_param_fns import (
     UpdateParamFn,
