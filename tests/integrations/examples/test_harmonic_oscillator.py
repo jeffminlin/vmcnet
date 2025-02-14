@@ -52,8 +52,8 @@ def test_five_particle_ground_state_harmonic_oscillator():
     local_energy_fn = qho.make_harmonic_oscillator_local_energy(
         omega, log_psi_model.apply
     )
-    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0, None), out_axes=0)
-    local_energies = vmapped_local_e(params, random_particle_positions, None)
+    vmapped_local_e = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
+    local_energies = vmapped_local_e(params, random_particle_positions)
 
     np.testing.assert_allclose(
         local_energies, omega * (0.5 + 1.5 + 0.5 + 1.5 + 2.5) * jnp.ones(4), rtol=1e-4

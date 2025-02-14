@@ -27,7 +27,7 @@ def compute_displacements(x: ArrayLike, y: ArrayLike) -> Array:
 # a vestigate of the fact that it was previously necessary to ensure that the
 # EE potential energy didn't give nans when using the (now gone) IBP code.
 # TODO (ggoldsh): simplify
-@jax.custom_vjp
+# @jax.custom_vjp
 def compute_soft_norm(
     displacements: ArrayLike, softening_term: chex.Scalar = 0.0
 ) -> Array:
@@ -49,29 +49,29 @@ def compute_soft_norm(
     )
 
 
-def _soft_norm_forward(displacements, softening_term):
-    norm = compute_soft_norm(displacements, softening_term)
-    return (
-        norm,
-        (
-            norm,
-            displacements,
-            softening_term,
-        ),
-    )
+# def _soft_norm_forward(displacements, softening_term):
+#     norm = compute_soft_norm(displacements, softening_term)
+#     return (
+#         norm,
+#         (
+#             norm,
+#             displacements,
+#             softening_term,
+#         ),
+#     )
 
 
-def _soft_norm_bwd(res, g):
-    (norm, displacements, softening_term) = res
-    expanded_norm = jnp.expand_dims(norm, axis=-1)
-    return (
-        jnp.expand_dims(g, -1)
-        * jnp.where(expanded_norm == 0.0, 0.0, displacements / expanded_norm),
-        g * jnp.sum(softening_term / norm),
-    )
+# def _soft_norm_bwd(res, g):
+#     (norm, displacements, softening_term) = res
+#     expanded_norm = jnp.expand_dims(norm, axis=-1)
+#     return (
+#         jnp.expand_dims(g, -1)
+#         * jnp.where(expanded_norm == 0.0, 0.0, displacements / expanded_norm),
+#         g * jnp.sum(softening_term / norm),
+#     )
 
 
-compute_soft_norm.defvjp(_soft_norm_forward, _soft_norm_bwd)
+# compute_soft_norm.defvjp(_soft_norm_forward, _soft_norm_bwd)
 
 
 def _get_ion_ion_info(

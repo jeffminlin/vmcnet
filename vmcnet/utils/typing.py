@@ -69,7 +69,7 @@ Backflow = Callable[[Array, Optional[Array]], Array]
 Jastrow = Callable[[Array, Array, Array, Array, Array], Array]
 
 ModelApply = Callable[[P, Array], Array]
-LocalEnergyApply = Callable[[P, Array, Optional[PRNGKey]], Array]
+LocalEnergyApply = Callable[[P, Array], Array]
 
 GetPositionFromData = Callable[[D], Array]
 GetAmplitudeFromData = GetPositionFromData[D]
