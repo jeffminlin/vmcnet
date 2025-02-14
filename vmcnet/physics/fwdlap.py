@@ -237,7 +237,6 @@ class LapTracer(core.Tracer):
 
 
 class LapTrace(core.Trace):
-
     def pure(self, val):
         zero_jac = zero_tangent_from_primal(val)
         zero_lap = zero_tangent_from_primal(val)
