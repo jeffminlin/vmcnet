@@ -132,53 +132,58 @@ def get_spring_step(
     damping: chex.Scalar = 0.001,
     mu: chex.Scalar = 0.99,
 ):
-    """Get the SPRING update function."""
-    kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
+    """
+    Get the SPRING update function.
 
-    def spring_step(
+    Args:
+        log_psi_apply (Callable): computes log|psi(x)|, where the signature of this
+            function is (params, x) -> log|psi(x)|
+        damping (float): damping parameter
+        mu (float): SPRING-specific regularization
+
+    Returns:
+        Callable: SPRING update function. Has the signature
+        (centered_energies, params, prev_grad, positions) -> new_grad
+    """
+
+    def raveled_log_psi_grad(params: P, positions: Array) -> Array:
+        log_grads = jax.grad(log_psi_apply)(params, positions)
+        return jax.flatten_util.ravel_pytree(log_grads)[0]
+
+    batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
+
+    def spring_update_fn(
         centered_energies: P,
         params: P,
         prev_grad,
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
-        mu_prev = jax.tree_map(lambda x: mu * x, prev_grad)
-        ones = jnp.ones((nchains, 1))
 
-        # Calculate T = Ohat @ Ohat^T using neural-tangents
-        # Some GPUs, particularly A100s and A5000s, can exhibit large numerical
-        # errors in these calculations. As a result, we explicitly symmetrize T
-        # and, rather than using a Cholesky solver to solve against T, we
-        # calculate its eigendecomposition and explicitly fix any negative
-        # eigenvalues. We then use the fixed and regularized igendecomposition
-        # to solve against T. This appears to be more stable than Cholesky
-        # in practice.
-        T = kernel_fn(positions, positions, "ntk", params) / nchains
-        T = T - jnp.mean(T, axis=0, keepdims=True)
-        T = T - jnp.mean(T, axis=1, keepdims=True)
-        T = T + ones @ ones.T / nchains
-        T = (T + T.T) / 2
-        Tvals, Tvecs = jnp.linalg.eigh(T)
-        Tvals = jnp.maximum(Tvals, 0) + damping
+        prev_grad, unravel_fn = jax.flatten_util.ravel_pytree(prev_grad)
+        prev_grad_decayed = mu * prev_grad
+
+        log_psi_grads = batch_raveled_log_psi_grad(params, positions) / jnp.sqrt(
+            nchains
+        )
+        Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
+
+        T = Ohat @ Ohat.T
+        ones = jnp.ones((nchains, 1))
+        T_reg = T + ones @ ones.T / nchains + damping * jnp.eye(nchains)
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
-        O_prev = jax.jvp(
-            log_psi_apply,
-            (params, positions),
-            (mu_prev, jnp.zeros_like(positions)),
-        )[1] / jnp.sqrt(nchains)
-        Ohat_prev = O_prev - jnp.mean(O_prev, axis=0, keepdims=True)
-        epsilon_tilde = epsilon_bar - Ohat_prev
+        epsion_tilde = epsilon_bar - Ohat @ prev_grad_decayed
 
-        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ epsilon_tilde
-        zeta_hat = zeta - jnp.mean(zeta)
-        dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
-
-        return jax.tree_map(
-            lambda dt, mup: dt / jnp.sqrt(nchains) + mup, dtheta_residual, mu_prev
+        dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
+            T_reg, epsion_tilde, assume_a="pos"
         )
 
-    return spring_step
+        SR_G = dtheta_residual + prev_grad_decayed
+
+        return unravel_fn(SR_G)
+
+    return spring_update_fn
 
 
 def constrain_norm(
