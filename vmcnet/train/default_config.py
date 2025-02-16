@@ -91,6 +91,7 @@ def get_default_config() -> ConfigDict:
                 "wandb": {
                     "project": "default",
                     "name": "vmc-molecule_run",
+                    "group": "default",
                 },
             }
         )
