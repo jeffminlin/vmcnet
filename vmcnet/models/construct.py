@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
-from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from vmcnet.utils.slog_helpers import slog_sum_over_axis, array_to_slog
 from vmcnet.utils.typing import (
     Array,
     ArrayList,
@@ -542,6 +542,7 @@ class FermiNet(Module):
     orbitals_use_bias: bool
     isotropic_decay: bool
     full_det: bool
+    bosons: bool = True
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
@@ -630,6 +631,12 @@ class FermiNet(Module):
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
+
+            if self.bosons:
+                amplitudes = jnp.sum(
+                    jnp.prod(jnp.sum(orbitals[0], axis=-1), axis=-1), axis=0
+                )
+                return array_to_slog(amplitudes)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
