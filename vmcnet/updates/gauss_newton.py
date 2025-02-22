@@ -159,7 +159,7 @@ def get_gauss_newton_step(
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
 
-        residuals = residual_fn(params, positions)
+        residuals = residual_fn(params, positions) / jnp.sqrt(nchains)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
         update = jax.vjp(residual_fn, params, positions)[1](zeta / jnp.sqrt(nchains))[0]
