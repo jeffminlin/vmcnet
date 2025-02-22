@@ -347,7 +347,7 @@ def _setup_vmc(
         log_psi_apply,
     )
 
-    clipping_fn = _get_clipping_fn(config.vmc)
+    clipping_fn = None
 
     # Setup parameter updates
     if apply_pmap:

@@ -128,8 +128,11 @@ def get_gauss_newton_step(
     """Get the Gauss Newton update function."""
     local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
+    def residual_fn(params, positions):
+        return jnp.tanh(local_energy_fn(params, positions) - E)
+
     kernel_fn = nt.empirical_kernel_fn(
-        local_energy_fn,
+        residual_fn,
         vmap_axes=0,
         trace_axes=(),
     )
@@ -139,6 +142,8 @@ def get_gauss_newton_step(
         params: P,
         positions: Array,
     ) -> Tuple[Array, P]:
+        del local_energies  # Unused
+
         nchains = positions.shape[0]
 
         # Calculate T = Ohat @ Ohat^T using neural-tangents
@@ -154,12 +159,10 @@ def get_gauss_newton_step(
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
 
-        residuals = (local_energies - E) / jnp.sqrt(nchains)
+        residuals = residual_fn(params, positions)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
-        update = jax.vjp(local_energy_fn, params, positions)[1](
-            zeta / jnp.sqrt(nchains)
-        )[0]
+        update = jax.vjp(residual_fn, params, positions)[1](zeta / jnp.sqrt(nchains))[0]
 
         return update
 

@@ -542,7 +542,7 @@ class FermiNet(Module):
     orbitals_use_bias: bool
     isotropic_decay: bool
     full_det: bool
-    bosons: bool = True
+    bosons: bool = False
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
