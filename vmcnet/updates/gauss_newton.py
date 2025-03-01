@@ -147,6 +147,7 @@ def get_gauss_newton_step(
         return jax.flatten_util.ravel_pytree(grad)[0]
 
     get_jacobian = jax.vmap(ravel_grad_single_residual, in_axes=(None, 0, 0))
+    batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
     def gauss_newton_step(
         local_energies: Array,
@@ -155,7 +156,8 @@ def get_gauss_newton_step(
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
 
-        J = get_jacobian(params, positions, local_energies) / jnp.sqrt(nchains)
+        local_energies_noclip = batch_local_energy_fn(params, positions)
+        J = get_jacobian(params, positions, local_energies_noclip) / jnp.sqrt(nchains)
 
         # Remove any directions that change the norm of the wavefunction
         grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
