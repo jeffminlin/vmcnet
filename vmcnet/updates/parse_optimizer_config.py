@@ -163,6 +163,7 @@ def initialize_optimizer(
             optimizer_state,
         ) = initialize_gauss_newton(
             local_energy_fn,
+            log_psi_apply,
             energy_and_statistics_fn,
             params,
             get_position_fn,
