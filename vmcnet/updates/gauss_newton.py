@@ -135,19 +135,23 @@ def get_gauss_newton_step(
 ):
     """Get the Gauss Newton update function."""
 
-    def single_linearized_residual(params, position, local_energy):
-        return local_energy_fn(params, position) + (local_energy - E) * log_psi_apply(
-            params, position
-        )
+    batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
-    grad_single_residual = jax.grad(single_linearized_residual, argnums=0)
-
-    def ravel_grad_single_residual(params, position, local_energy):
-        grad = grad_single_residual(params, position, local_energy)
+    def ravel_grad_log_psi(params, positions):
+        grad = jax.grad(log_psi_apply, argnums=0)(params, positions)
         return jax.flatten_util.ravel_pytree(grad)[0]
 
-    get_jacobian = jax.vmap(ravel_grad_single_residual, in_axes=(None, 0, 0))
-    batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
+    def ravel_grad_E(params, positions):
+        grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
+        return jax.flatten_util.ravel_pytree(grad)[0]
+
+    def get_jacobian(params, positions, local_energies):
+        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
+        J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
+
+        J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+
+        return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
     def gauss_newton_step(
         local_energies: Array,
@@ -155,17 +159,18 @@ def get_gauss_newton_step(
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
+        _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies_noclip = batch_local_energy_fn(params, positions)
         J = get_jacobian(params, positions, local_energies_noclip) / jnp.sqrt(nchains)
 
         # Remove any directions that change the norm of the wavefunction
-        grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
-        flat_grad_norm, unravel_fn = jax.flatten_util.ravel_pytree(grad_norm)
-        flat_unit_grad_norm = flat_grad_norm / jnp.linalg.norm(flat_grad_norm)
-        J = J - jnp.expand_dims(J @ flat_unit_grad_norm, -1) * jnp.expand_dims(
-            flat_unit_grad_norm, 0
-        )
+        # grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
+        # flat_grad_norm, unravel_fn = jax.flatten_util.ravel_pytree(grad_norm)
+        # flat_unit_grad_norm = flat_grad_norm / jnp.linalg.norm(flat_grad_norm)
+        # J = J - jnp.expand_dims(J @ flat_unit_grad_norm, -1) * jnp.expand_dims(
+        #     flat_unit_grad_norm, 0
+        # )
 
         T = J @ J.T
         T = (T + T.T) / 2
