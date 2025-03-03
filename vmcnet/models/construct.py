@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 from ml_collections import ConfigDict
 
-from vmcnet.utils.slog_helpers import slog_sum_over_axis
+from vmcnet.utils.slog_helpers import slog_sum_over_axis, array_to_slog
 from vmcnet.utils.typing import (
     Array,
     ArrayList,
@@ -131,6 +131,7 @@ def get_model_from_config(
             ),
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
+            bosons=model_config.bosons,
             full_det=model_config.full_det,
         )
     elif model_config.type == "explicit_antisym":
@@ -541,6 +542,7 @@ class FermiNet(Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool
     isotropic_decay: bool
+    bosons: bool = True
     full_det: bool
 
     def setup(self):
@@ -630,6 +632,12 @@ class FermiNet(Module):
 
         if self.full_det:
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
+
+            if self.bosons:
+                amplitudes = jnp.sum(
+                    jnp.prod(jnp.sum(orbitals[0], axis=-1), axis=-1), axis=0
+                )
+                return array_to_slog(amplitudes)
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
