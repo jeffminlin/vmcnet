@@ -43,10 +43,9 @@ def construct_gauss_newton_update_param_fn(
     def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
 
-        energy, local_energies, stats = energy_and_statistics_fn(params, position)
+        energy, _, stats = energy_and_statistics_fn(params, position)
 
         params, optimizer_state = optimizer_apply(
-            local_energies,
             params,
             optimizer_state,
             data,
@@ -86,15 +85,15 @@ def initialize_gauss_newton(
         log_psi_apply,
         optimizer_config.E,
         optimizer_config.damping,
+        optimizer_config.max_res,
     )
 
     descent_optimizer = optax.sgd(
         learning_rate=learning_rate_schedule, momentum=0, nesterov=False
     )
 
-    def optimizer_apply(local_energies, params, optimizer_state, data):
+    def optimizer_apply(params, optimizer_state, data):
         grad = gauss_newton_step(
-            local_energies,
             params,
             get_position_fn(data),
         )
@@ -132,6 +131,7 @@ def get_gauss_newton_step(
     log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
+    max_res: chex.Scalar = 1.0,
 ):
     """Get the Gauss Newton update function."""
 
@@ -154,15 +154,14 @@ def get_gauss_newton_step(
         return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
     def gauss_newton_step(
-        local_energies: Array,
         params: P,
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
-        local_energies_noclip = batch_local_energy_fn(params, positions)
-        J = get_jacobian(params, positions, local_energies_noclip) / jnp.sqrt(nchains)
+        local_energies = batch_local_energy_fn(params, positions)
+        J = get_jacobian(params, positions, local_energies) / jnp.sqrt(nchains)
 
         # Remove any directions that change the norm of the wavefunction
         # grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
@@ -177,7 +176,9 @@ def get_gauss_newton_step(
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
 
-        residuals = (local_energies - E) / jnp.sqrt(nchains)
+        residuals = local_energies - E
+        residuals = jnp.sign(residuals) * jnp.minimum(jnp.abs(residuals), max_res)
+        residuals /= jnp.sqrt(nchains)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
         flat_update = J.T @ zeta
