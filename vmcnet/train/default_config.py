@@ -160,6 +160,7 @@ def get_default_model_config() -> Dict:
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
+        "bosons": False,
         "full_det": True,
     }
 
