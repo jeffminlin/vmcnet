@@ -261,6 +261,7 @@ def _add_amplitude_to_metrics_if_requested(
         amplitudes = get_amplitude_fn(data)
         metrics["amplitude_min"] = jnp.min(amplitudes)
         metrics["amplitude_max"] = jnp.max(amplitudes)
+        metrics["amplitude_mean"] = jnp.mean(amplitudes)
 
 
 def get_checkpoint_metric(
