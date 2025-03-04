@@ -132,43 +132,43 @@ def get_gauss_newton_step(
     log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
-    SR_damping: chex.Scalar = 0.,
+    SR_damping: chex.Scalar = 0.0,
     max_res: chex.Scalar = 1.0,
 ):
     """Get the Gauss Newton update function."""
 
-    SR_kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
     batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
-    def ravel_grad_log_psi(params, positions):
-        grad = jax.grad(log_psi_apply, argnums=0)(params, positions)
-        return jax.flatten_util.ravel_pytree(grad)[0]
+    def forward_fn(params, positions, local_energies_static):
+        log_psi = log_psi_apply(params, positions)
+        log_psi_center = log_psi - jnp.mean(log_psi, axis=0, keepdims=True)
 
-    def ravel_grad_E(params, positions):
-        grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
-        return jax.flatten_util.ravel_pytree(grad)[0]
+        local_energies = batch_local_energy_fn(params, positions)
 
-    def get_J(params, positions, local_energies):
-        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
+        return local_energies + (local_energies_static - E) * log_psi_center
 
-        J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
-
-        return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
+    SR_kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
+    total_kernel_fn = nt.empirical_kernel_fn(forward_fn, vmap_axes=None, trace_axes=())
 
     def gauss_newton_step(
         params: P,
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
-        _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies = batch_local_energy_fn(params, positions)
 
         SR_T = SR_kernel_fn(positions, positions, "ntk", params) / nchains
-
-        J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
-        GN_T = J @ J.T
+        GN_T = (
+            total_kernel_fn(
+                positions,
+                positions,
+                "ntk",
+                params,
+                local_energies_static=local_energies,
+            )
+            / nchains
+        )
 
         T = GN_T + SR_damping * SR_T
         T = (T + T.T) / 2
@@ -180,9 +180,9 @@ def get_gauss_newton_step(
         residuals /= jnp.sqrt(nchains)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
-        flat_update = J.T @ zeta
+        update = jax.vjp(forward_fn, params, positions, local_energies)[1](zeta)[0]
 
-        return unravel_fn(flat_update)
+        return update
 
     return gauss_newton_step
 
