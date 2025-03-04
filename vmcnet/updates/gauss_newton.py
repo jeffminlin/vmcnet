@@ -145,13 +145,13 @@ def get_gauss_newton_step(
         grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
         return jax.flatten_util.ravel_pytree(grad)[0]
 
-    def get_jacobian(params, positions, local_energies):
+    def get_jacobians(params, positions, local_energies):
         J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
         J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
 
         J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
 
-        return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
+        return J_M_center, J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
     def gauss_newton_step(
         params: P,
@@ -161,7 +161,9 @@ def get_gauss_newton_step(
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies = batch_local_energy_fn(params, positions)
-        J = get_jacobian(params, positions, local_energies) / jnp.sqrt(nchains)
+        J_SR, J = get_jacobians(params, positions, local_energies)
+        J_SR /= jnp.sqrt(nchains)
+        J /= jnp.sqrt(nchains)
 
         # Remove any directions that change the norm of the wavefunction
         # grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
@@ -171,16 +173,13 @@ def get_gauss_newton_step(
         #     flat_unit_grad_norm, 0
         # )
 
-        T = J @ J.T
-        T = (T + T.T) / 2
-        Tvals, Tvecs = jnp.linalg.eigh(T)
-        Tvals = jnp.maximum(Tvals, 0) + damping
+        T = J @ J.T + damping * (J_SR @ J_SR.T + jnp.eye(nchains))
 
         residuals = local_energies - E
         residuals = jnp.sign(residuals) * jnp.minimum(jnp.abs(residuals), max_res)
         residuals /= jnp.sqrt(nchains)
 
-        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
+        zeta = jax.scipy.linalg.solve(T, residuals, assume_a="pos")
         flat_update = J.T @ zeta
 
         return unravel_fn(flat_update)
