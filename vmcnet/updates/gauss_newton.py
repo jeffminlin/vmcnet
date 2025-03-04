@@ -135,6 +135,7 @@ def get_gauss_newton_step(
 ):
     """Get the Gauss Newton update function."""
 
+    SR_kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
     batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
     def ravel_grad_log_psi(params, positions):
@@ -166,12 +167,12 @@ def get_gauss_newton_step(
 
         local_energies = batch_local_energy_fn(params, positions)
 
-        J = get_J_SR(params, positions) / jnp.sqrt(nchains)
-        T = damping * J @ J.T
+        SR_T = SR_kernel_fn(positions, positions, "ntk", params) / nchains
 
         J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
-        T += J @ J.T
+        GN_T = J @ J.T
 
+        T = GN_T + damping * SR_T
         T = (T + T.T) / 2
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
