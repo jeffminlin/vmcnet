@@ -166,11 +166,11 @@ def get_gauss_newton_step(
 
         local_energies = batch_local_energy_fn(params, positions)
 
-        J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
-        T = J @ J.T
-
         J_SR = get_J_SR(params, positions) / jnp.sqrt(nchains)
-        T += damping * J_SR @ J_SR.T
+        T = damping * J_SR @ J_SR.T
+
+        J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
+        T += J @ J.T
 
         T = (T + T.T) / 2
         Tvals, Tvecs = jnp.linalg.eigh(T)
