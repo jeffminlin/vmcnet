@@ -85,6 +85,7 @@ def initialize_gauss_newton(
         log_psi_apply,
         optimizer_config.E,
         optimizer_config.damping,
+        optimizer_config.SR_damping,
         optimizer_config.max_res,
     )
 
@@ -131,6 +132,7 @@ def get_gauss_newton_step(
     log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
+    SR_damping: chex.Scalar = 0.,
     max_res: chex.Scalar = 1.0,
 ):
     """Get the Gauss Newton update function."""
@@ -154,10 +156,6 @@ def get_gauss_newton_step(
 
         return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
-    def get_J_SR(params, positions):
-        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        return J_M - jnp.mean(J_M, axis=0, keepdims=True)
-
     def gauss_newton_step(
         params: P,
         positions: Array,
@@ -172,7 +170,7 @@ def get_gauss_newton_step(
         J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
         GN_T = J @ J.T
 
-        T = GN_T + damping * SR_T
+        T = GN_T + SR_damping * SR_T
         T = (T + T.T) / 2
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
