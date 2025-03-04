@@ -542,7 +542,7 @@ class FermiNet(Module):
     bias_initializer_orbital_linear: WeightInitializer
     orbitals_use_bias: bool
     isotropic_decay: bool
-    bosons: bool = True
+    bosons: bool
     full_det: bool
 
     def setup(self):
