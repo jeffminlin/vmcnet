@@ -165,21 +165,16 @@ def get_gauss_newton_step(
         J_SR /= jnp.sqrt(nchains)
         J /= jnp.sqrt(nchains)
 
-        # Remove any directions that change the norm of the wavefunction
-        # grad_norm = jax.vjp(log_psi_apply, params, positions)[1](jnp.ones(nchains))[0]
-        # flat_grad_norm, unravel_fn = jax.flatten_util.ravel_pytree(grad_norm)
-        # flat_unit_grad_norm = flat_grad_norm / jnp.linalg.norm(flat_grad_norm)
-        # J = J - jnp.expand_dims(J @ flat_unit_grad_norm, -1) * jnp.expand_dims(
-        #     flat_unit_grad_norm, 0
-        # )
-
-        T = J @ J.T + damping * (J_SR @ J_SR.T + jnp.eye(nchains))
+        T = J @ J.T + damping * J_SR @ J_SR.T
+        T = (T + T.T) / 2
+        Tvals, Tvecs = jnp.linalg.eigh(T)
+        Tvals = jnp.maximum(Tvals, 0) + damping
 
         residuals = local_energies - E
         residuals = jnp.sign(residuals) * jnp.minimum(jnp.abs(residuals), max_res)
         residuals /= jnp.sqrt(nchains)
 
-        zeta = jax.scipy.linalg.solve(T, residuals, assume_a="pos")
+        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
         flat_update = J.T @ zeta
 
         return unravel_fn(flat_update)
