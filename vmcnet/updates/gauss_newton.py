@@ -86,7 +86,7 @@ def initialize_gauss_newton(
         optimizer_config.E,
         optimizer_config.damping,
         optimizer_config.SR_damping,
-        optimizer_config.max_res,
+        optimizer_config.clip_threshold,
     )
 
     descent_optimizer = optax.sgd(
@@ -132,8 +132,8 @@ def get_gauss_newton_step(
     log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
-    SR_damping: chex.Scalar = 0.,
-    max_res: chex.Scalar = 1.0,
+    SR_damping: chex.Scalar = 0.0,
+    clip_threshold: chex.Scalar = 5.0,
 ):
     """Get the Gauss Newton update function."""
 
@@ -176,7 +176,10 @@ def get_gauss_newton_step(
         Tvals = jnp.maximum(Tvals, 0) + damping
 
         residuals = local_energies - E
-        residuals = jnp.sign(residuals) * jnp.minimum(jnp.abs(residuals), max_res)
+        mean_abs_res = jnp.mean(jnp.abs(residuals))
+        residuals = jnp.clip(
+            residuals, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
+        )
         residuals /= jnp.sqrt(nchains)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals

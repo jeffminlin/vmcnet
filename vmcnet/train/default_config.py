@@ -292,7 +292,7 @@ def get_default_vmc_config() -> Dict:
                 "SR_damping": 0.0,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
-                "max_res": 1.0,
+                "clip_threshold": 5.0,
             },
         },
     }
