@@ -354,8 +354,9 @@ class CuspJastrow(Module):
         nelec_total = r_ee.shape[-2]
         nelec_per_split = get_nelec_per_split(self.spin_split, nelec_total)
 
-        alpha_ee = self.param("alpha_ee", lambda _: jnp.array(1.0))
-        alpha_ei = self.param("alpha_ei", lambda _: jnp.array(1.0))
+        # alpha_ee = self.param("alpha_ee", lambda _: jnp.array(1.0))
+        # alpha_ei = self.param("alpha_ei", lambda _: jnp.array(1.0))
+        alpha_ee, alpha_ei = 1.0, 1.0
 
         ee_norms = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), -1)
 
@@ -363,7 +364,9 @@ class CuspJastrow(Module):
         coeff = coeff.at[0 : nelec_per_split[0], 0 : nelec_per_split[0]].set(1 / 4)
         coeff = coeff.at[nelec_per_split[0] :, nelec_per_split[0] :].set(1 / 4)
 
-        log_gamma_ee = -jnp.sum(jnp.triu(alpha_ee * coeff / (1 + alpha_ee * ee_norms), k=1))
+        log_gamma_ee = -jnp.sum(
+            jnp.triu(alpha_ee * coeff / (1 + alpha_ee * ee_norms), k=1)
+        )
 
         ei_norms = jnp.linalg.norm(r_ei, axis=-1)  # (..., nelec, nion)
         log_gamma_ei = jnp.sum(alpha_ei * self.ion_charges / (1 + alpha_ei * ei_norms))
