@@ -42,6 +42,7 @@ from .equivariance import (
     FermiNetResidualBlock,
     FermiNetTwoElectronLayer,
     compute_input_streams,
+    compute_ee_norm_with_safe_diag,
 )
 from .jastrow import (
     BackflowJastrow,
@@ -133,6 +134,7 @@ def get_model_from_config(
             isotropic_decay=model_config.isotropic_decay,
             bosons=model_config.bosons,
             full_det=model_config.full_det,
+            include_paulinet_jastrow=model_config.include_paulinet_jastrow,
         )
     elif model_config.type == "explicit_antisym":
         jastrow_config = model_config.jastrow
@@ -529,6 +531,7 @@ class FermiNet(Module):
             output of the model would then be the determinant of that single matrix, if
             ndeterminants=1, or the sum of multiple such determinants if
             ndeterminants>1.
+        include_paulinet_jastrow (bool)
     """
 
     spin_split: ParticleSplit
@@ -544,6 +547,7 @@ class FermiNet(Module):
     isotropic_decay: bool
     bosons: bool
     full_det: bool
+    include_paulinet_jastrow: bool
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
@@ -634,6 +638,7 @@ class FermiNet(Module):
             orbitals = [jnp.concatenate(orbitals, axis=-2)]
 
             if self.bosons:
+                print(orbitals[0].shape)
                 amplitudes = jnp.sum(
                     jnp.prod(jnp.sum(orbitals[0], axis=-1), axis=-1), axis=0
                 )
@@ -641,7 +646,26 @@ class FermiNet(Module):
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
-        return slog_sum_over_axis(slog_det_prods)
+        sign_ferminet, log_ferminet = slog_sum_over_axis(slog_det_prods)
+
+        if self.include_paulinet_jastrow:
+            r_ee = jnp.expand_dims(elec_pos, axis=-2) - jnp.expand_dims(
+                elec_pos, axis=-3
+            )
+
+            ee_norms = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), -1)
+
+            nelec_total = ee_norms.shape[-1]
+            nelec_per_split = get_nelec_per_split(self.spin_split, nelec_total)
+
+            coeff = jnp.ones((nelec_total, nelec_total)) / 2
+            coeff = coeff.at[0 : nelec_per_split[0], 0 : nelec_per_split[0]].set(1 / 4)
+            coeff = coeff.at[nelec_per_split[0] :, nelec_per_split[0] :].set(1 / 4)
+
+            log_gamma = -jnp.sum(-coeff / (1 + ee_norms))
+            return sign_ferminet, log_ferminet + log_gamma
+
+        return sign_ferminet, log_ferminet
 
 
 class FactorizedAntisymmetry(Module):
