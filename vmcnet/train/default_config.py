@@ -162,7 +162,7 @@ def get_default_model_config() -> Dict:
         "isotropic_decay": True,
         "bosons": False,
         "full_det": True,
-        "include_paulinet_jastrow": False,
+        "include_cusp_jastrow": False,
     }
 
     config = {

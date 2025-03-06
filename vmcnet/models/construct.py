@@ -48,6 +48,7 @@ from .jastrow import (
     BackflowJastrow,
     OneBodyExpDecay,
     get_two_body_decay_scaled_for_chargeless_molecules,
+    CuspJastrow,
 )
 from .weights import (
     WeightInitializer,
@@ -112,6 +113,10 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type == "ferminet":
+        jastrow = None
+        if model_config.include_cusp_jastrow:
+            jastrow = CuspJastrow(spin_split, ion_charges)
+
         return FermiNet(
             spin_split,
             compute_input_streams,
@@ -134,7 +139,7 @@ def get_model_from_config(
             isotropic_decay=model_config.isotropic_decay,
             bosons=model_config.bosons,
             full_det=model_config.full_det,
-            include_paulinet_jastrow=model_config.include_paulinet_jastrow,
+            jastrow=jastrow,
         )
     elif model_config.type == "explicit_antisym":
         jastrow_config = model_config.jastrow
@@ -547,7 +552,7 @@ class FermiNet(Module):
     isotropic_decay: bool
     bosons: bool
     full_det: bool
-    include_paulinet_jastrow: bool
+    jastrow: Optional[Jastrow]
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
@@ -618,7 +623,7 @@ class FermiNet(Module):
         """
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
 
-        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+        input_stream_1e, input_stream_2e, r_ei, r_ee = self._compute_input_streams(
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
@@ -648,22 +653,9 @@ class FermiNet(Module):
         slog_det_prods = slogdet_product(orbitals)
         sign_ferminet, log_ferminet = slog_sum_over_axis(slog_det_prods)
 
-        if self.include_paulinet_jastrow:
-            r_ee = jnp.expand_dims(elec_pos, axis=-2) - jnp.expand_dims(
-                elec_pos, axis=-3
-            )
-
-            ee_norms = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), -1)
-
-            nelec_total = ee_norms.shape[-1]
-            nelec_per_split = get_nelec_per_split(self.spin_split, nelec_total)
-
-            coeff = jnp.ones((nelec_total, nelec_total)) / 2
-            coeff = coeff.at[0 : nelec_per_split[0], 0 : nelec_per_split[0]].set(1 / 4)
-            coeff = coeff.at[nelec_per_split[0] :, nelec_per_split[0] :].set(1 / 4)
-
-            log_gamma = -jnp.sum(-coeff / (1 + ee_norms))
-            return sign_ferminet, log_ferminet + log_gamma
+        if self.jastrow is not None:
+            log_jastrow = self.jastrow(r_ee, r_ei)
+            return sign_ferminet, log_ferminet + log_jastrow
 
         return sign_ferminet, log_ferminet
 
