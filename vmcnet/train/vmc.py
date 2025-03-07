@@ -163,11 +163,7 @@ def vmc_loop(
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
 
             if epoch % wandb_freq == 0:
-<<<<<<< HEAD
                 wandb.log(metrics, step=epoch)
-=======
-                wandb.log(metrics)
->>>>>>> 9292fbf (Limit wandb logging)
 
             if nans_detected:
                 break
