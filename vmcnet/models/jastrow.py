@@ -369,6 +369,8 @@ class CuspJastrow(Module):
         )
 
         ei_norms = jnp.linalg.norm(r_ei, axis=-1)  # (..., nelec, nion)
-        log_gamma_ei = jnp.sum(alpha_ei * self.ion_charges / (1 + alpha_ei * ei_norms), axis=(-1, -2))
+        log_gamma_ei = jnp.sum(
+            alpha_ei * self.ion_charges / (1 + alpha_ei * ei_norms), axis=(-1, -2)
+        )
 
         return log_gamma_ee + log_gamma_ei
