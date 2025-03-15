@@ -137,13 +137,22 @@ def get_var_sr_step(
 
     SR_kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
     batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
-    
+
+    def ravel_grad_log_psi(params, positions):
+        grad = jax.grad(log_psi_apply, argnums=0)(params, positions)
+        return jax.flatten_util.ravel_pytree(grad)[0]
+
     def ravel_grad_E(params, positions):
         grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
         return jax.flatten_util.ravel_pytree(grad)[0]
 
-    def get_J(params, positions):
-        return jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+    def get_J(params, positions, residuals):
+        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
+        J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
+
+        J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+
+        return J_E + jnp.expand_dims(residuals, -1) * J_M_center
 
     def var_sr_step(
         params: P,
@@ -153,41 +162,34 @@ def get_var_sr_step(
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies = batch_local_energy_fn(params, positions)
+
         residuals = local_energies - E
         mean_abs_res = jnp.mean(jnp.abs(residuals))
         residuals = jnp.clip(
             residuals, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
         )
+        residuals /= jnp.sqrt(nchains)
 
-        # Interestingly (at least on CPU) building J is much faster than doing a vjp
-        g_E = unravel_fn(get_J(params, positions).T @ residuals)
-        v_Psi = residuals**2 - jnp.mean(residuals**2) # Center the residuals insteads of the amplitudes
-        g_Psi = jax.vjp(log_psi_apply, params, positions)[1](v_Psi)[0]
-        g = jax.tree_map(lambda x, y: (x + y) / nchains, g_E, g_Psi)
+        J = get_J(params, positions, residuals) / jnp.sqrt(nchains)
+        g = J.T @ residuals
 
-        SR_T = SR_kernel_fn(positions, positions, "ntk", params) / nchains
-        SR_T = SR_T - jnp.mean(SR_T, axis=0, keepdims=True)
-        SR_T = SR_T - jnp.mean(SR_T, axis=1, keepdims=True)
+        # Follow https://arxiv.org/pdf/2310.17556
+        O = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(
+            params, positions
+        ) / jnp.sqrt(nchains)
+        O_bar = O - jnp.mean(O, axis=0, keepdims=True)
+
+        SR_T = O_bar @ O_bar.T
         SR_T = (SR_T + SR_T.T) / 2
-        Tvals, Tvecs = jnp.linalg.eigh(SR_T)
-        Tvals = jnp.maximum(Tvals, 0) + damping
+        SR_T = SR_T + damping * jnp.eye(SR_T.shape[0])
 
-        O_g = jax.jvp(
-            log_psi_apply,
-            (params, positions),
-            (g, jnp.zeros_like(positions)),
-        )[1] / jnp.sqrt(nchains)
-        O_bar_g = O_g - jnp.mean(O_g, axis=0, keepdims=True)
+        L = jnp.linalg.cholesky(SR_T)
 
-        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ O_bar_g
-        zeta_hat = zeta - jnp.mean(zeta) # Center zeta instead of O
+        Q = jax.scipy.linalg.solve_triangular(L, O_bar, lower=True)
+        Qg = Q @ g
+        flat_update = (1 / damping) * (g - Q.T @ Qg)
 
-        O_contribution = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
-        return jax.tree_map(
-            lambda g_raw, g_O: (g_raw - g_O / jnp.sqrt(nchains)) / damping,
-            g,
-            O_contribution,
-        )
+        return unravel_fn(flat_update)
 
     return var_sr_step
 

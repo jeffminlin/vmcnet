@@ -190,7 +190,7 @@ def initialize_optimizer(
             get_position_fn,
             update_data_fn,
             learning_rate_schedule,
-            vmc_config.optimizer.gauss_newton,
+            vmc_config.optimizer.var_sr,
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
         )
