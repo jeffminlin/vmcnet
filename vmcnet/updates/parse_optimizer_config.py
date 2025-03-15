@@ -25,6 +25,7 @@ from .optax_utils import (
 from .spring import initialize_spring
 from .kfac import initialize_kfac
 from .gauss_newton import initialize_gauss_newton
+from .var_sr import initialize_var_sr
 
 
 def _get_learning_rate_schedule(
@@ -162,6 +163,26 @@ def initialize_optimizer(
             update_param_fn,
             optimizer_state,
         ) = initialize_gauss_newton(
+            local_energy_fn,
+            log_psi_apply,
+            energy_and_statistics_fn,
+            params,
+            get_position_fn,
+            update_data_fn,
+            learning_rate_schedule,
+            vmc_config.optimizer.gauss_newton,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
+        )
+        return update_param_fn, optimizer_state, key
+    elif vmc_config.optimizer_type == "var_sr":
+        energy_and_statistics_fn = physics.core.create_energy_and_statistics_fn(
+            local_energy_fn, vmc_config.nchains, clipping_fn, vmc_config.nan_safe
+        )
+        (
+            update_param_fn,
+            optimizer_state,
+        ) = initialize_var_sr(
             local_energy_fn,
             log_psi_apply,
             energy_and_statistics_fn,
