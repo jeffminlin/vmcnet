@@ -85,7 +85,6 @@ def initialize_gauss_newton(
         log_psi_apply,
         optimizer_config.E,
         optimizer_config.damping,
-        optimizer_config.SR_damping,
         optimizer_config.clip_threshold,
     )
 
@@ -94,20 +93,21 @@ def initialize_gauss_newton(
     )
 
     def optimizer_apply(params, optimizer_state, data):
-        grad = gauss_newton_step(
-            params,
-            get_position_fn(data),
-        )
+        positions = get_position_fn(data)
+        grad = gauss_newton_step(params, positions)
 
         updates, optimizer_state = descent_optimizer.update(
             grad, optimizer_state, params
         )
 
-        if optimizer_config.constrain_norm:
-            updates = constrain_norm(
-                updates,
-                optimizer_config.norm_constraint,
-            )
+        updates = constrain_norm(
+            updates,
+            params,
+            positions,
+            log_psi_apply,
+            optimizer_config.euclidean_constraint,
+            optimizer_config.natural_constraint,
+        )
 
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
@@ -132,12 +132,10 @@ def get_gauss_newton_step(
     log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
-    SR_damping: chex.Scalar = 0.0,
     clip_threshold: chex.Scalar = 5.0,
 ):
     """Get the Gauss Newton update function."""
 
-    SR_kernel_fn = nt.empirical_kernel_fn(log_psi_apply, vmap_axes=0, trace_axes=())
     batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
     def ravel_grad_log_psi(params, positions):
@@ -165,12 +163,8 @@ def get_gauss_newton_step(
 
         local_energies = batch_local_energy_fn(params, positions)
 
-        SR_T = SR_kernel_fn(positions, positions, "ntk", params) / nchains
-
         J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
-        GN_T = J @ J.T
-
-        T = GN_T + SR_damping * SR_T
+        T = J @ J.T
         T = (T + T.T) / 2
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
@@ -192,17 +186,27 @@ def get_gauss_newton_step(
 
 def constrain_norm(
     grad: P,
-    norm_constraint: chex.Numeric = 0.001,
+    params,
+    positions,
+    log_psi_apply,
+    euclidean_constraint: chex.Numeric = 0.001,
+    natural_constraint: chex.Numeric = 0.001,
 ) -> P:
-    """Euclidean norm constraint."""
-    sq_norm_scaled_grads = tree_inner_product(grad, grad)
+    """Euclidean and natural norm constraint."""
+    nchains = positions.shape[0]
 
-    # Sync the norms here, see:
-    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
-    sq_norm_scaled_grads = pmean_if_pmap(sq_norm_scaled_grads)
-
-    norm_scale_factor = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
+    sq_euclidean_norm = tree_inner_product(grad, grad)
+    norm_scale_factor = jnp.sqrt(euclidean_constraint / sq_euclidean_norm)
     coefficient = jnp.minimum(norm_scale_factor, 1)
-    constrained_grads = multiply_tree_by_scalar(grad, coefficient)
+    grad = multiply_tree_by_scalar(grad, coefficient)
 
-    return constrained_grads
+    O_grad = jax.jvp(
+        log_psi_apply, (params, positions), (grad, jnp.zeros_like(positions))
+    )[1] / jnp.sqrt(nchains)
+    O_bar_grad = O_grad - jnp.mean(O_grad, axis=0, keepdims=True)
+    sq_natural_norm = jnp.linalg.norm(O_bar_grad) ** 2
+    norm_scale_factor = jnp.sqrt(natural_constraint / sq_natural_norm)
+    coefficient = jnp.minimum(norm_scale_factor, 1)
+    grad = multiply_tree_by_scalar(grad, coefficient)
+
+    return grad

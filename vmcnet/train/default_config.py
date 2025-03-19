@@ -290,10 +290,9 @@ def get_default_vmc_config() -> Dict:
                 # GN hyperparams
                 "E": 0.0,  # target energy
                 "damping": 0.001,
-                "SR_damping": 0.0,
-                "constrain_norm": True,
-                "norm_constraint": 0.001,
-                "clip_threshold": 5.0,
+                "euclidean_constraint": 0.001,
+                "natural_constraint": 0.001,
+                "clip_threshold": 100000.0,  # No clipping by default
             },
             "var_sr": {
                 # Learning rate settings
