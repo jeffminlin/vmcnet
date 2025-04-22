@@ -548,6 +548,7 @@ def run_molecule() -> None:
 
     wandb.login()
     wandb.init(
+        mode=config.wandb.mode,
         project=config.wandb.project,
         name=config.wandb.name,
         group=config.wandb.group,
