@@ -105,14 +105,11 @@ def initialize_spring(
             grad, optimizer_state, params
         )
 
-        updates = constrain_norm(
-            updates,
-            params,
-            positions,
-            log_psi_apply,
-            optimizer_config.euclidean_constraint,
-            optimizer_config.natural_constraint,
-        )
+        if optimizer_config.constrain_norm:
+            updates = constrain_norm(
+                updates,
+                optimizer_config.norm_constraint,
+            )
 
         params = optax.apply_updates(params, updates)
         return params, optimizer_state
@@ -188,27 +185,17 @@ def get_spring_step(
 
 def constrain_norm(
     grad: P,
-    params,
-    positions,
-    log_psi_apply,
-    euclidean_constraint: chex.Numeric = 0.001,
-    natural_constraint: chex.Numeric = 0.001,
+    norm_constraint: chex.Numeric = 0.001,
 ) -> P:
-    """Euclidean and natural norm constraint."""
-    nchains = positions.shape[0]
+    """Euclidean norm constraint."""
+    sq_norm_scaled_grads = tree_inner_product(grad, grad)
 
-    sq_euclidean_norm = tree_inner_product(grad, grad)
-    norm_scale_factor = jnp.sqrt(euclidean_constraint / sq_euclidean_norm)
+    # Sync the norms here, see:
+    # https://github.com/deepmind/deepmind-research/blob/30799687edb1abca4953aec507be87ebe63e432d/kfac_ferminet_alpha/optimizer.py#L585
+    sq_norm_scaled_grads = pmean_if_pmap(sq_norm_scaled_grads)
+
+    norm_scale_factor = jnp.sqrt(norm_constraint / sq_norm_scaled_grads)
     coefficient = jnp.minimum(norm_scale_factor, 1)
-    grad = multiply_tree_by_scalar(grad, coefficient)
+    constrained_grads = multiply_tree_by_scalar(grad, coefficient)
 
-    O_grad = jax.jvp(
-        log_psi_apply, (params, positions), (grad, jnp.zeros_like(positions))
-    )[1] / jnp.sqrt(nchains)
-    O_bar_grad = O_grad - jnp.mean(O_grad, axis=0, keepdims=True)
-    sq_natural_norm = jnp.linalg.norm(O_bar_grad) ** 2
-    norm_scale_factor = jnp.sqrt(natural_constraint / sq_natural_norm)
-    coefficient = jnp.minimum(norm_scale_factor, 1)
-    grad = multiply_tree_by_scalar(grad, coefficient)
-
-    return grad
+    return constrained_grads

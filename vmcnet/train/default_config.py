@@ -160,7 +160,6 @@ def get_default_model_config() -> Dict:
         "bias_init_orbital_linear": normal_init,
         "orbitals_use_bias": True,
         "isotropic_decay": True,
-        "bosons": False,
         "full_det": True,
         "include_cusp_jastrow": False,
     }
@@ -279,8 +278,8 @@ def get_default_vmc_config() -> Dict:
                 # SPRING hyperparams
                 "mu": 0.99,
                 "damping": 0.001,
-                "euclidean_constraint": 0.001,
-                "natural_constraint": 0.001,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
             },
             "gauss_newton": {
                 # Learning rate settings
@@ -290,21 +289,8 @@ def get_default_vmc_config() -> Dict:
                 # GN hyperparams
                 "E": 0.0,  # target energy
                 "damping": 0.001,
-                "euclidean_constraint": 0.001,
-                "natural_constraint": 0.001,
-                "clip_threshold": 100000.0,  # No clipping by default
-            },
-            "var_sr": {
-                # Learning rate settings
-                "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,
-                "learning_decay_rate": 1e-4,
-                # GN hyperparams
-                "E": 0.0,  # target energy
-                "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
-                "clip_threshold": 5.0,
             },
         },
     }
