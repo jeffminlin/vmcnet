@@ -16,6 +16,7 @@ from vmcnet.utils.typing import (
     ArrayList,
     Backflow,
     ComputeInputStreams,
+    CuspJastrowType,
     Jastrow,
     ParticleSplit,
     SLArray,
@@ -112,9 +113,9 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type == "ferminet":
-        jastrow = None
+        cusp_jastrow: Optional[CuspJastrowType] = None
         if model_config.include_cusp_jastrow:
-            jastrow = CuspJastrow(spin_split, ion_charges)
+            cusp_jastrow = CuspJastrow(spin_split, ion_charges)
 
         return FermiNet(
             spin_split,
@@ -137,7 +138,7 @@ def get_model_from_config(
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
             full_det=model_config.full_det,
-            jastrow=jastrow,
+            jastrow=cusp_jastrow,
         )
     elif model_config.type == "explicit_antisym":
         jastrow_config = model_config.jastrow
@@ -549,7 +550,7 @@ class FermiNet(Module):
     orbitals_use_bias: bool
     isotropic_decay: bool
     full_det: bool
-    jastrow: Optional[Jastrow]
+    jastrow: Optional[CuspJastrowType]
 
     def setup(self):
         """Setup backflow and compute_input_streams."""

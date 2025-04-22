@@ -351,12 +351,13 @@ class CuspJastrow(Module):
         r_ee: Array,
         r_ei: Array,
     ) -> Array:
+        """Compute Jastrow factor for exact cusp enforcement."""
         nelec_total = r_ee.shape[-2]
         nelec_per_split = get_nelec_per_split(self.spin_split, nelec_total)
 
         alpha_ee = self.param("alpha_ee", lambda _: jnp.array(1.0))
         alpha_ei = self.param("alpha_ei", lambda _: jnp.array(1.0))
-        alpha_ee, alpha_ei = 1.0, 1.0
+        alpha_ee, alpha_ei = jnp.array(1.0), jnp.array(1.0)
 
         ee_norms = jnp.squeeze(compute_ee_norm_with_safe_diag(r_ee), -1)
 
