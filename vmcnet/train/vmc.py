@@ -101,6 +101,9 @@ def vmc_loop(
     )
     nans_detected = False
 
+    MAX_WANDB_LOGS = 10000
+    wandb_freq = nepochs // min(nepochs, MAX_WANDB_LOGS)
+
     with CheckpointWriter(
         is_pmapped
     ) as checkpoint_writer, MetricsWriter() as metrics_writer:
@@ -158,7 +161,9 @@ def vmc_loop(
                 get_amplitude_fn=get_amplitude_fn,
             )
             utils.checkpoint.log_vmc_loop_state(epoch, metrics, checkpoint_str)
-            wandb.log(metrics)
+
+            if epoch % wandb_freq == 0:
+                wandb.log(metrics, step=epoch)
 
             if nans_detected:
                 break
