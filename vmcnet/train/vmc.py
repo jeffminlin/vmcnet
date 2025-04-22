@@ -102,7 +102,7 @@ def vmc_loop(
     nans_detected = False
 
     MAX_WANDB_LOGS = 10000
-    wandb_freq = nepochs // min(nepochs, MAX_WANDB_LOGS)
+    wandb_freq = nepochs // min(max(nepochs, 1), MAX_WANDB_LOGS)
 
     with CheckpointWriter(
         is_pmapped
