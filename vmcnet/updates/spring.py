@@ -91,12 +91,14 @@ def initialize_spring(
         return optimizer_state[0].trace
 
     def optimizer_apply(energy, local_energies, params, optimizer_state, data):
+        positions = get_position_fn(data)
+
         centered_local_energies = local_energies - energy
         grad = spring_step(
             centered_local_energies,
             params,
             prev_update(optimizer_state),
-            get_position_fn(data),
+            positions,
         )
 
         updates, optimizer_state = descent_optimizer.update(

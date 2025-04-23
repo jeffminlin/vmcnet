@@ -3,7 +3,6 @@
 import jax
 import jax.flatten_util
 import jax.numpy as jnp
-import neural_tangents as nt  # type: ignore
 from ml_collections import ConfigDict
 import chex
 import optax
@@ -15,7 +14,12 @@ from vmcnet.utils.pytree_helpers import (
     tree_reduce_l1,
 )
 from vmcnet.utils.distribute import pmean_if_pmap
-from vmcnet.utils.typing import UpdateDataFn, GetPositionFromData, LearningRateSchedule
+from vmcnet.utils.typing import (
+    UpdateDataFn,
+    GetPositionFromData,
+    LearningRateSchedule,
+    ModelApply,
+)
 
 from .update_param_fns import (
     UpdateParamFn,
@@ -38,10 +42,9 @@ def construct_gauss_newton_update_param_fn(
     def update_param_fn(params, data, optimizer_state, key):
         position = get_position_fn(data)
 
-        energy, local_energies, stats = energy_and_statistics_fn(params, position)
+        energy, _, stats = energy_and_statistics_fn(params, position)
 
         params, optimizer_state = optimizer_apply(
-            local_energies,
             params,
             optimizer_state,
             data,
@@ -65,6 +68,7 @@ def construct_gauss_newton_update_param_fn(
 
 def initialize_gauss_newton(
     local_energy_fn: LocalEnergyApply[P],
+    log_psi_apply: ModelApply[P],
     energy_and_statistics_fn,
     params: P,
     get_position_fn: GetPositionFromData[D],
@@ -77,20 +81,19 @@ def initialize_gauss_newton(
     """Get an update param function and initial state for SPRING."""
     gauss_newton_step = get_gauss_newton_step(
         local_energy_fn,
+        log_psi_apply,
         optimizer_config.E,
         optimizer_config.damping,
+        optimizer_config.clip_threshold,
     )
 
     descent_optimizer = optax.sgd(
         learning_rate=learning_rate_schedule, momentum=0, nesterov=False
     )
 
-    def optimizer_apply(local_energies, params, optimizer_state, data):
-        grad = gauss_newton_step(
-            local_energies,
-            params,
-            get_position_fn(data),
-        )
+    def optimizer_apply(params, optimizer_state, data):
+        positions = get_position_fn(data)
+        grad = gauss_newton_step(params, positions)
 
         updates, optimizer_state = descent_optimizer.update(
             grad, optimizer_state, params
@@ -122,46 +125,57 @@ def initialize_gauss_newton(
 
 def get_gauss_newton_step(
     local_energy_fn: LocalEnergyApply[P],
+    log_psi_apply: ModelApply[P],
     E: chex.Scalar,
     damping: chex.Scalar = 0.001,
+    clip_threshold: chex.Scalar = 5.0,
 ):
     """Get the Gauss Newton update function."""
-    local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
+    # TODO: optimize this approach to avoid calculating the local energies repeatedly.
+    batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
-    kernel_fn = nt.empirical_kernel_fn(
-        local_energy_fn,
-        vmap_axes=0,
-        trace_axes=(),
-    )
+    def ravel_grad_log_psi(params, positions):
+        grad = jax.grad(log_psi_apply, argnums=0)(params, positions)
+        return jax.flatten_util.ravel_pytree(grad)[0]
+
+    def ravel_grad_E(params, positions):
+        grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
+        return jax.flatten_util.ravel_pytree(grad)[0]
+
+    def get_J(params, positions, local_energies):
+        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
+        J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
+
+        J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+
+        return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
     def gauss_newton_step(
-        local_energies: Array,
         params: P,
         positions: Array,
     ) -> Tuple[Array, P]:
         nchains = positions.shape[0]
+        _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
-        # Calculate T = Ohat @ Ohat^T using neural-tangents
-        # Some GPUs, particularly A100s and A5000s, can exhibit large numerical
-        # errors in these calculations. As a result, we explicitly symmetrize T
-        # and, rather than using a Cholesky solver to solve against T, we
-        # calculate its eigendecomposition and explicitly fix any negative
-        # eigenvalues. We then use the fixed and regularized igendecomposition
-        # to solve against T. This appears to be more stable than Cholesky
-        # in practice.
-        T = kernel_fn(positions, positions, "ntk", params) / nchains
+        local_energies = batch_local_energy_fn(params, positions)
+
+        J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
+        T = J @ J.T
         T = (T + T.T) / 2
         Tvals, Tvecs = jnp.linalg.eigh(T)
         Tvals = jnp.maximum(Tvals, 0) + damping
 
-        residuals = (local_energies - E) / jnp.sqrt(nchains)
+        residuals = local_energies - E
+        mean_abs_res = jnp.mean(jnp.abs(residuals))
+        residuals = jnp.clip(
+            residuals, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
+        )
+        residuals /= jnp.sqrt(nchains)
 
         zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
-        update = jax.vjp(local_energy_fn, params, positions)[1](
-            zeta / jnp.sqrt(nchains)
-        )[0]
+        flat_update = J.T @ zeta
 
-        return update
+        return unravel_fn(flat_update)
 
     return gauss_newton_step
 

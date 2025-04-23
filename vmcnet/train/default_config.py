@@ -161,6 +161,7 @@ def get_default_model_config() -> Dict:
         "orbitals_use_bias": True,
         "isotropic_decay": True,
         "full_det": True,
+        "include_cusp_jastrow": False,
     }
 
     config = {
@@ -272,7 +273,7 @@ def get_default_vmc_config() -> Dict:
             "spring": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "learning_rate": 5e-2,
                 "learning_decay_rate": 1e-4,
                 # SPRING hyperparams
                 "mu": 0.99,
@@ -283,13 +284,14 @@ def get_default_vmc_config() -> Dict:
             "gauss_newton": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
-                "learning_rate": 5e-2,  # needs to be tuned with everything else
+                "learning_rate": 1.0,
                 "learning_decay_rate": 1e-4,
                 # GN hyperparams
                 "E": 0.0,  # target energy
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
+                "clip_threshold": 1000.0,  # GN works best with cusp Jastrow and no clipping
             },
         },
     }

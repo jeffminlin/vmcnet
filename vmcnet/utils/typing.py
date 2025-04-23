@@ -67,6 +67,7 @@ ComputeInputStreams = Callable[[Array], InputStreams]
 Backflow = Callable[[Array, Optional[Array]], Array]
 
 Jastrow = Callable[[Array, Array, Array, Array, Array], Array]
+CuspJastrowType = Callable[[Array, Array], Array]
 
 ModelApply = Callable[[P, Array], Array]
 LocalEnergyApply = Callable[[P, Array], Array]

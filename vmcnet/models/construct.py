@@ -16,6 +16,7 @@ from vmcnet.utils.typing import (
     ArrayList,
     Backflow,
     ComputeInputStreams,
+    CuspJastrowType,
     Jastrow,
     ParticleSplit,
     SLArray,
@@ -47,6 +48,7 @@ from .jastrow import (
     BackflowJastrow,
     OneBodyExpDecay,
     get_two_body_decay_scaled_for_chargeless_molecules,
+    CuspJastrow,
 )
 from .weights import (
     WeightInitializer,
@@ -111,6 +113,10 @@ def get_model_from_config(
     kernel_init_constructor, bias_init_constructor = _get_dtype_init_constructors(dtype)
 
     if model_config.type == "ferminet":
+        cusp_jastrow: Optional[CuspJastrowType] = None
+        if model_config.include_cusp_jastrow:
+            cusp_jastrow = CuspJastrow(spin_split, ion_charges)
+
         return FermiNet(
             spin_split,
             compute_input_streams,
@@ -132,6 +138,7 @@ def get_model_from_config(
             orbitals_use_bias=model_config.orbitals_use_bias,
             isotropic_decay=model_config.isotropic_decay,
             full_det=model_config.full_det,
+            jastrow=cusp_jastrow,
         )
     elif model_config.type == "explicit_antisym":
         jastrow_config = model_config.jastrow
@@ -528,6 +535,7 @@ class FermiNet(Module):
             output of the model would then be the determinant of that single matrix, if
             ndeterminants=1, or the sum of multiple such determinants if
             ndeterminants>1.
+        include_paulinet_jastrow (bool)
     """
 
     spin_split: ParticleSplit
@@ -542,6 +550,7 @@ class FermiNet(Module):
     orbitals_use_bias: bool
     isotropic_decay: bool
     full_det: bool
+    jastrow: Optional[CuspJastrowType] = None
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
@@ -612,7 +621,7 @@ class FermiNet(Module):
         """
         elec_pos, orbitals_split = self._get_elec_pos_and_orbitals_split(elec_pos)
 
-        input_stream_1e, input_stream_2e, r_ei, _ = self._compute_input_streams(
+        input_stream_1e, input_stream_2e, r_ei, r_ee = self._compute_input_streams(
             elec_pos
         )
         stream_1e = self._backflow(input_stream_1e, input_stream_2e)
@@ -633,7 +642,13 @@ class FermiNet(Module):
 
         # slog_det_prods is SLArray of shape (ndeterminants, ...)
         slog_det_prods = slogdet_product(orbitals)
-        return slog_sum_over_axis(slog_det_prods)
+        sign_ferminet, log_ferminet = slog_sum_over_axis(slog_det_prods)
+
+        if self.jastrow is not None:
+            log_jastrow = self.jastrow(r_ee, r_ei)
+            return sign_ferminet, log_ferminet + log_jastrow
+
+        return sign_ferminet, log_ferminet
 
 
 class FactorizedAntisymmetry(Module):
