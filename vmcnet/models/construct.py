@@ -550,7 +550,7 @@ class FermiNet(Module):
     orbitals_use_bias: bool
     isotropic_decay: bool
     full_det: bool
-    jastrow: Optional[CuspJastrowType]
+    jastrow: Optional[CuspJastrowType] = None
 
     def setup(self):
         """Setup backflow and compute_input_streams."""
