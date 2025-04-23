@@ -131,6 +131,7 @@ def get_gauss_newton_step(
     clip_threshold: chex.Scalar = 5.0,
 ):
     """Get the Gauss Newton update function."""
+    # TODO: optimize this approach to avoid calculating the local energies repeatedly.
     batch_local_energy_fn = jax.vmap(local_energy_fn, in_axes=(None, 0), out_axes=0)
 
     def ravel_grad_log_psi(params, positions):

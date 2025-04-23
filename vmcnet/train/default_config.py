@@ -291,6 +291,7 @@ def get_default_vmc_config() -> Dict:
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
+                "clip_threshold": 1000.0,  # GN works best with cusp Jastrow and no clipping
             },
         },
     }
