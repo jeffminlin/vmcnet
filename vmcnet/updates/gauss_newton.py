@@ -159,9 +159,15 @@ def get_gauss_newton_step(
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies = batch_local_energy_fn(params, positions)
-        r = local_energies - jnp.mean(local_energies)
 
-        J, HJ = get_Js(params, positions, local_energies) 
+        r = local_energies - jnp.mean(local_energies)
+        mean_abs_res = jnp.mean(jnp.abs(r))
+        r = jnp.clip(
+            r, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
+        )
+        r /= jnp.sqrt(nchains)
+
+        J, HJ = get_Js(params, positions, local_energies)
         V = HJ
         TJ = J @ J.T
         TV = V @ V.T
