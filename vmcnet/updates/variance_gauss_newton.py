@@ -82,6 +82,7 @@ def initialize_gauss_newton(
     gauss_newton_step = get_gauss_newton_step(
         local_energy_fn,
         log_psi_apply,
+        optimizer_config.E,
         optimizer_config.damping,
         optimizer_config.clip_threshold,
     )
@@ -125,6 +126,7 @@ def initialize_gauss_newton(
 def get_gauss_newton_step(
     local_energy_fn: LocalEnergyApply[P],
     log_psi_apply: ModelApply[P],
+    E: chex.Scalar,
     damping: chex.Scalar = 0.001,
     clip_threshold: chex.Scalar = 5.0,
 ):
@@ -140,16 +142,13 @@ def get_gauss_newton_step(
         grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
         return jax.flatten_util.ravel_pytree(grad)[0]
 
-    def get_Js(params, positions, local_energies):
-        nchains = local_energies.shape[0]
+    def get_J(params, positions, local_energies):
+        J_M = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
+        J_M_center = J_M - jnp.mean(J_M, axis=0, keepdims=True)
 
-        J = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        J = (J - jnp.mean(J, axis=0, keepdims=True))
+        J_E = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
 
-        DE_L = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
-        HJ = DE_L + J * jnp.expand_dims(local_energies, -1)
-
-        return J / jnp.sqrt(nchains), HJ / jnp.sqrt(nchains)
+        return J_E + jnp.expand_dims(local_energies - E, -1) * J_M_center
 
     def gauss_newton_step(
         params: P,
@@ -159,20 +158,22 @@ def get_gauss_newton_step(
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         local_energies = batch_local_energy_fn(params, positions)
-        r = local_energies - jnp.mean(local_energies)
 
-        J, HJ = get_Js(params, positions, local_energies) 
-        V = HJ
-        TJ = J @ J.T
-        TV = V @ V.T
+        J = get_J(params, positions, local_energies) / jnp.sqrt(nchains)
+        T = J @ J.T
+        T = (T + T.T) / 2
+        Tvals, Tvecs = jnp.linalg.eigh(T)
+        Tvals = jnp.maximum(Tvals, 0) + damping
 
-        solve_part = jnp.linalg.solve(TV @ TJ + damping * jnp.eye(nchains), r)
-        flat_update = V.T @ (TJ @ solve_part)
-        # mean_abs_res = jnp.mean(jnp.abs(residuals))
-        # residuals = jnp.clip(
-        #     residuals, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
-        # )
-        # residuals /= jnp.sqrt(nchains)
+        residuals = local_energies - E
+        mean_abs_res = jnp.mean(jnp.abs(residuals))
+        residuals = jnp.clip(
+            residuals, -clip_threshold * mean_abs_res, clip_threshold * mean_abs_res
+        )
+        residuals /= jnp.sqrt(nchains)
+
+        zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ residuals
+        flat_update = J.T @ zeta
 
         return unravel_fn(flat_update)
 
