@@ -85,6 +85,7 @@ def initialize_gauss_newton(
         optimizer_config.tau,
         optimizer_config.damping,
         optimizer_config.clip_threshold,
+        optimizer_config.sketchy,
     )
 
     descent_optimizer = optax.sgd(
@@ -129,6 +130,7 @@ def get_gauss_newton_step(
     tau: chex.Scalar = 0.0,
     damping: chex.Scalar = 0.001,
     clip_threshold: chex.Scalar = 5.0,
+    sketchy=True,
 ):
     """Get the Gauss Newton update function."""
     # TODO: optimize this approach to avoid calculating the local energies repeatedly.
@@ -173,11 +175,15 @@ def get_gauss_newton_step(
         O, A = get_O_A(params, positions, local_energies)
         B = A - tau * O
 
-        TO = O @ O.T
-        TB = B @ B.T
+        if sketchy:
+            TO = O @ O.T
+            TB = B @ B.T
 
-        solve_part = jnp.linalg.solve(TB @ TO + damping * jnp.eye(nchains), r)
-        flat_update = B.T @ (TO @ solve_part)
+            solve_part = jnp.linalg.solve(TB @ TO + damping * jnp.eye(nchains), r)
+            flat_update = B.T @ (TO @ solve_part)
+        else:
+            solve_part = jnp.linalg.solve(B @ O.T + damping * jnp.eye(nchains), r)
+            flat_update = O.T @ solve_part
 
         return unravel_fn(flat_update)
 
