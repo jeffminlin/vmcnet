@@ -146,13 +146,12 @@ def get_gauss_newton_step(
         nchains = local_energies.shape[0]
 
         DE_psi = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        O = (DE_psi - jnp.mean(DE_psi, axis=0, keepdims=True)) / jnp.sqrt(nchains)
+        O = (DE_psi - jnp.mean(DE_psi, axis=0, keepdims=True))
 
         DE_L = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
-        A = DE_L + DE_psi * jnp.expand_dims(local_energies, -1)
-        A = (A - jnp.mean(A, axis=0, keepdims=True)) / jnp.sqrt(nchains)
+        A = DE_L + jnp.expand_dims(local_energies, -1) * O
 
-        return O, A
+        return O / jnp.sqrt(nchains), A / jnp.sqrt(nchains)
 
     def gauss_newton_step(
         params: P,
@@ -176,7 +175,6 @@ def get_gauss_newton_step(
 
         TO = O @ O.T
         TB = B @ B.T
-
 
         solve_part = jnp.linalg.solve(TB @ TO + damping * jnp.eye(nchains), r)
         flat_update = B.T @ (TO @ solve_part)
