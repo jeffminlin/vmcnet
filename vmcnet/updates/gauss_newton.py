@@ -171,7 +171,7 @@ def get_gauss_newton_step(
         r /= jnp.sqrt(nchains)
 
         O, A = get_O_A(params, positions, local_energies)
-        B = A + (tau - E) * O
+        B = A - tau * O
 
         TO = O @ O.T
         TB = B @ B.T
