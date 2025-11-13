@@ -287,7 +287,7 @@ def get_default_vmc_config() -> Dict:
                 "learning_rate": 1.0,
                 "learning_decay_rate": 1e-4,
                 # GN hyperparams
-                "E": 0.0,  # target energy
+                "tau": 0.0,  # target energy / globalization shift
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
