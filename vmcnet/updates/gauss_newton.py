@@ -147,11 +147,11 @@ def get_gauss_newton_step(
     def get_O_A(params, positions, local_energies):
         nchains = local_energies.shape[0]
 
-        DE_psi = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        O = (DE_psi - jnp.mean(DE_psi, axis=0, keepdims=True))
+        O = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
+        O = (O - jnp.mean(O, axis=0, keepdims=True))
 
-        DE_L = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
-        A = DE_L + jnp.expand_dims(local_energies, -1) * O
+        A = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+        A = A + jnp.expand_dims(local_energies, -1) * O
 
         return O / jnp.sqrt(nchains), A / jnp.sqrt(nchains)
 
@@ -173,16 +173,16 @@ def get_gauss_newton_step(
         r /= jnp.sqrt(nchains)
 
         O, A = get_O_A(params, positions, local_energies)
-        B = A - tau * O
+        A = A - tau * O
 
         if sketchy:
             TO = O @ O.T
-            TB = B @ B.T
+            TA = A @ A.T
 
-            solve_part = jnp.linalg.solve(TB @ TO + damping * jnp.eye(nchains), r)
-            flat_update = B.T @ (TO @ solve_part)
+            solve_part = jnp.linalg.solve(TA @ TO + damping * jnp.eye(nchains), r)
+            flat_update = A.T @ (TO @ solve_part)
         else:
-            solve_part = jnp.linalg.solve(B @ O.T + damping * jnp.eye(nchains), r)
+            solve_part = jnp.linalg.solve(A @ O.T + damping * jnp.eye(nchains), r)
             flat_update = O.T @ solve_part
 
         return unravel_fn(flat_update)
