@@ -182,6 +182,8 @@ def get_gauss_newton_step(
             TO = O @ O.T
 
             A = get_A(params, positions, local_energies, O)
+            A = A - tau * O
+
             TA = A @ A.T
 
             solve_part = jnp.linalg.solve(TA @ TO + damping * jnp.eye(nchains), r)
@@ -189,6 +191,7 @@ def get_gauss_newton_step(
         else:
             O = get_O(params, positions, local_energies)
             A = get_A(params, positions, local_energies, O)
+            A = A - tau * O
 
             solve_part = jnp.linalg.solve(A @ O.T + damping * jnp.eye(nchains), r)
             flat_update = O.T @ solve_part
