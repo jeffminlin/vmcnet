@@ -280,6 +280,7 @@ def get_default_vmc_config() -> Dict:
                 "damping": 0.001,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
+                "sketchy_QR": False,
             },
             "gauss_newton": {
                 # Learning rate settings
