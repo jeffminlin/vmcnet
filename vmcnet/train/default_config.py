@@ -89,7 +89,7 @@ def get_default_config() -> ConfigDict:
                 "debug_nans": False,  # If true, OVERRIDES config.distribute to be False
                 "initial_seed": 0,
                 "wandb": {
-                    "mode": "disabled",
+                    "mode": "disabled", # disabled or online or offline
                     "project": "default",
                     "name": "vmc-molecule_run",
                     "group": "default",
@@ -281,6 +281,20 @@ def get_default_vmc_config() -> Dict:
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
             },
+            "spring_diag": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,
+                "learning_decay_rate": 1e-4,
+                # SPRING diag hyperparams
+                "damping": 0.001,
+                "mu": 0.,
+                "beta": 0.995,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
+                "preconditioner_type": "fisher", # fisher, march, march_fisher, or ones
+            },
+
             "gauss_newton": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
