@@ -294,7 +294,19 @@ def get_default_vmc_config() -> Dict:
                 "norm_constraint": 0.001,
                 "preconditioner_type": "fisher", # fisher, march, march_fisher, or ones
             },
-
+            "spring_nys": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,
+                "learning_decay_rate": 1e-4,
+                # SPRING nys hyperparams
+                "damping": 0.001,
+                "mu": 0.,
+                "beta": 0.995,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
+                "rank": 100, # rank of Nyström approximation
+            },
             "gauss_newton": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
