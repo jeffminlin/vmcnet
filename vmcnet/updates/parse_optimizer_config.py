@@ -184,10 +184,12 @@ def initialize_optimizer(
         (
             update_param_fn,
             optimizer_state,
+            key
         ) = initialize_spring_nys(
             log_psi_apply,
             energy_and_statistics_fn,
             params,
+            key,
             get_position_fn,
             update_data_fn,
             learning_rate_schedule,

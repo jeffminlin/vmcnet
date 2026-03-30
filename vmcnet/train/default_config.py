@@ -303,6 +303,7 @@ def get_default_vmc_config() -> Dict:
                 "damping": 0.001,
                 "mu": 0.,
                 "beta": 0.995,
+                "nu": 1e-6,
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
                 "rank": 100, # rank of Nyström approximation
