@@ -82,11 +82,11 @@ def initialize_spring_nys(
     nparams = sum(x.size for x in jax.tree_util.tree_leaves(params))
 
     key, subkey = jax.random.split(key)
-    omega = jax.random.normal(subkey, (nparams, rank))
+    omega = jax.random.normal(subkey, (nparams, rank)) / rank
 
     spring_step = get_spring_step(
         log_psi_apply,
-        omega,   
+        omega,
         optimizer_config.damping,
         optimizer_config.mu,
         optimizer_config.beta,
@@ -161,20 +161,20 @@ def get_spring_step(
     batch_raveled_log_psi_grad = jax.vmap(raveled_log_psi_grad, in_axes=(None, 0))
 
     def nys_solve(Y, b):
-        Ynu = Y + nu * omega
+        Y = Y + nu * omega
 
-        C = jnp.linalg.cholesky(omega.T @ Ynu).T
-        B = jax.scipy.linalg.solve_triangular(C.T, Ynu.T, lower=True).T
+        C = jnp.linalg.cholesky(omega.T @ Y).T
+        B = jax.scipy.linalg.solve_triangular(C.T, Y.T, lower=True).T
         R = B.T @ B
 
         eigs, _ = jnp.linalg.eigh(R)
         min_eig = jnp.min(eigs)
         R = R + min_eig * jnp.eye(R.shape[0])
 
-        Rsolve = jax.scipy.linalg.solve(R, B.T @ b)
+        Rsolve = jax.scipy.linalg.solve(R, B.T @ b, assume_a='pos')
         BinvOhatT = 1/min_eig * b - 1/min_eig * B @ Rsolve
         return BinvOhatT
-    
+
     def spring_step(
         centered_energies: P,
         params: P,
@@ -193,7 +193,7 @@ def get_spring_step(
         Ohat = log_psi_grads - jnp.mean(log_psi_grads, axis=0, keepdims=True)
         
         Y = beta * Y + (1 - beta) * Ohat.T @ (Ohat @ omega)
-        BinvOhatT = nys_solve(Y, Ohat.T) 
+        BinvOhatT = nys_solve(Y, Ohat.T)
 
         T = Ohat @ BinvOhatT
         ones = jnp.ones((nchains, 1))
