@@ -83,7 +83,13 @@ def main():
 
     print("\nRun one trial per sweep:")
     for preconditioner, sweep_id in sweep_ids.items():
-        print(f"  wandb agent --count 1 {ENTITY}/{PROJECT}/{sweep_id}  # {preconditioner}")
+        sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
+        print(f"  wandb agent --count 1 {sweep_path}  # {preconditioner}")
+
+    print("\nLaunch on cluster (20 agents each):")
+    for preconditioner, sweep_id in sweep_ids.items():
+        sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
+        print(f"  ./slurm/launch_sweep.sh {sweep_path}  # {preconditioner}")
 
 
 if __name__ == "__main__":
