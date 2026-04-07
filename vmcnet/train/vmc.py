@@ -32,6 +32,7 @@ def vmc_loop(
     nhistory_max: int = 200,
     is_pmapped=True,
     start_epoch: int = 0,
+    ema_decay: float = 0.0,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     """Main Variational Monte Carlo loop routine.
 
@@ -100,6 +101,8 @@ def vmc_loop(
         checkpoint_dir, nhistory_max, logdir, checkpoint_every
     )
     nans_detected = False
+    ema_energy_noclip: Optional[float] = None
+    ema_variance_noclip: Optional[float] = None
 
     MAX_WANDB_LOGS = 10000
     wandb_freq = nepochs // min(max(nepochs, 1), MAX_WANDB_LOGS)
@@ -130,6 +133,16 @@ def vmc_loop(
                 continue
 
             metrics["accept_ratio"] = accept_ratio
+
+            if ema_decay > 0.0:
+                if ema_energy_noclip is None:
+                    ema_energy_noclip = metrics["energy_noclip"]
+                    ema_variance_noclip = metrics["variance_noclip"]
+                else:
+                    ema_energy_noclip = ema_decay * ema_energy_noclip + (1.0 - ema_decay) * metrics["energy_noclip"]
+                    ema_variance_noclip = ema_decay * ema_variance_noclip + (1.0 - ema_decay) * metrics["variance_noclip"]
+                metrics["energy_noclip_ema"] = ema_energy_noclip
+                metrics["variance_noclip_ema"] = ema_variance_noclip
 
             (
                 checkpoint_metric,

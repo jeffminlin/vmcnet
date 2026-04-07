@@ -1,0 +1,15 @@
+{
+    "notes": "Carbon atom",
+    "subfolder_name": "C",
+    "problem": {
+        "ion_pos": [
+            [ 0.0, 0.0, 0.0 ]
+        ],
+        "ion_charges": [
+            6.0
+        ],
+        "nelec": [
+            4, 2
+        ]
+    }
+}

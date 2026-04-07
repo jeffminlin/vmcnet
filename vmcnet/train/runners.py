@@ -474,6 +474,7 @@ def _burn_and_run_vmc(
     is_pmapped: bool,
     skip_burn: bool = False,
     start_epoch: int = 0,
+    ema_decay: float = 0.0,
 ) -> Tuple[P, S, D, PRNGKey, bool]:
     if not is_eval:
         checkpoint_every = run_config.checkpoint_every
@@ -514,6 +515,7 @@ def _burn_and_run_vmc(
         nhistory_max=nhistory_max,
         is_pmapped=is_pmapped,
         start_epoch=start_epoch,
+        ema_decay=ema_decay,
     )
 
 
@@ -530,29 +532,30 @@ def _compute_and_save_energy_statistics(
     )
 
 
-def run_molecule() -> None:
-    """Run VMC on a molecule."""
-    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+def _apply_wandb_sweep_params(config: ConfigDict, sweep_dict: dict) -> None:
+    """Recursively apply a nested sweep dict to an (unlocked) ConfigDict.
 
+    Called after wandb.init() in sweep mode to patch the base config with the
+    hyperparameter values chosen by the sweep controller.
+    """
+    for key, value in sweep_dict.items():
+        if not hasattr(config, key):
+            logging.warning("Sweep param '%s' not found in config, skipping.", key)
+            continue
+        if isinstance(value, dict):
+            _apply_wandb_sweep_params(getattr(config, key), value)
+        else:
+            setattr(config, key, value)
+
+
+def _run_molecule_body(reload_config: ConfigDict, config: ConfigDict) -> None:
+    """Core VMC training and evaluation logic.
+
+    Assumes wandb has already been initialized before this is called.
+    """
     reload_from_checkpoint = (
         reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
         and reload_config.use_checkpoint_file
-    )
-
-    if reload_from_checkpoint:
-        config.notes = config.notes + " (reloaded from {}/{}{})".format(
-            reload_config.logdir,
-            reload_config.checkpoint_relative_file_path,
-            ", new optimizer state" if reload_config.new_optimizer_state else "",
-        )
-
-    wandb.login()
-    wandb.init(
-        mode=config.wandb.mode,
-        project=config.wandb.project,
-        name=config.wandb.name,
-        group=config.wandb.group,
-        config=config,
     )
 
     root_logger = logging.getLogger()
@@ -640,6 +643,7 @@ def run_molecule() -> None:
         is_pmapped=config.distribute,
         skip_burn=reload_from_checkpoint and not reload_config.reburn,
         start_epoch=start_epoch,
+        ema_decay=config.logging.ema_decay,
     )
 
     if nans_detected:
@@ -703,6 +707,70 @@ def run_molecule() -> None:
         _compute_and_save_energy_statistics(
             local_energies_filepath, eval_logdir, "statistics"
         )
+
+
+def run_molecule() -> None:
+    """Run VMC on a molecule."""
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+
+    reload_from_checkpoint = (
+        reload_config.logdir != train.default_config.NO_RELOAD_LOG_DIR
+        and reload_config.use_checkpoint_file
+    )
+
+    if reload_from_checkpoint:
+        config.notes = config.notes + " (reloaded from {}/{}{})".format(
+            reload_config.logdir,
+            reload_config.checkpoint_relative_file_path,
+            ", new optimizer state" if reload_config.new_optimizer_state else "",
+        )
+
+    wandb.login()
+    wandb.init(
+        mode=config.wandb.mode,
+        project=config.wandb.project,
+        name=config.wandb.name,
+        group=config.wandb.group,
+        config=config,
+    )
+
+    _run_molecule_body(reload_config, config)
+
+
+def run_molecule_sweep() -> None:
+    """Run VMC as one trial in a wandb hyperparameter sweep.
+
+    The base config (problem geometry, model architecture, preset) is provided via
+    the normal CLI flags (e.g. --presets.name=C), typically baked into the sweep
+    YAML's ``command`` section. Sweep hyperparameters are injected by the wandb
+    sweep controller into wandb.config after wandb.init() and are then merged into
+    the ml_collections ConfigDict before training starts.
+
+    Typical usage (after creating a sweep with ``wandb sweep sweeps/my_sweep.yaml``):
+
+    .. code-block:: bash
+
+        wandb agent --count 1 <entity>/<project>/<sweep_id>
+    """
+    reload_config, config = train.parse_config_flags.parse_flags(FLAGS)
+
+    wandb.login()
+    # Do NOT pass config= here; the sweep controller populates wandb.config with
+    # the trial's hyperparameter values, which we read and apply below.
+    wandb.init(
+        mode=config.wandb.mode,
+        project=config.wandb.project,
+        group=config.wandb.group,
+    )
+
+    # Apply sweep hyperparameters from wandb.config onto the base config.
+    with config.unlocked():
+        _apply_wandb_sweep_params(config, dict(wandb.config))
+
+    # Push the full resolved config back to wandb for reproducibility.
+    wandb.config.update(config.to_dict(), allow_val_change=True)
+
+    _run_molecule_body(reload_config, config)
 
 
 def vmc_statistics() -> None:
