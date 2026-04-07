@@ -182,8 +182,6 @@ def get_spring_step(
         else:
             raise ValueError(f"Invalid preconditioner type: {preconditioner_type}")
 
-        diag_P = diag_P / jnp.mean(diag_P) # normalize to be comparable to the identity
-
         Ohat_pre = Ohat / jnp.sqrt(diag_P)
         T = Ohat_pre @ Ohat_pre.T
         ones = jnp.ones((nchains, 1))

@@ -23,14 +23,7 @@ BASE_SWEEP = {
         "${env}",
         "vmc-sweep",
         "--presets.name=C",
-        "--config.model.ferminet.ndeterminants=1",
-        "--config.model.ferminet.backflow.ndense_list=((32,16),(32,16),(32,16),(32,))",
-        "--config.vmc.nchains=100",
-        "--config.vmc.nburn=1000",
-        "--config.vmc.nepochs=1000",
-        "--config.eval.nchains=100",
-        "--config.eval.nburn=0",
-        "--config.eval.nepochs=0",
+        "--config.vmc.nepochs=100000",
         "--config.wandb.mode=online",
         f"--config.wandb.project={PROJECT}",
     ],
@@ -38,7 +31,7 @@ BASE_SWEEP = {
     "count": 20,
     "metric": {
         "goal": "minimize",
-        "name": "energy_noclip",
+        "name": "energy_noclip_ema",
     },
     "parameters": {
         "vmc": {
@@ -52,7 +45,7 @@ BASE_SWEEP = {
                                 "learning_rate": {
                                     "distribution": "log_uniform_values",
                                     "min": 1.0e-3,
-                                    "max": 5.0e-1,
+                                    "max": 1.0,
                                 },
                                 "damping": {
                                     "distribution": "log_uniform_values",
