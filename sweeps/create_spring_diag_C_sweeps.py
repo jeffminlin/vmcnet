@@ -22,13 +22,14 @@ BASE_SWEEP = {
     "command": [
         "${env}",
         "vmc-sweep",
-        "--presets.name=C",
-        "--config.vmc.nepochs=100000",
+        "--presets.name=Be",
+        "--config.vmc.nepochs=20000",
+        "--config.eval.nepochs=5000",
+        "--config.logdir=/global/scratch/users/ggoldshlager/logs/sweeps/",
         "--config.wandb.mode=online",
         f"--config.wandb.project={PROJECT}",
     ],
-    "method": "bayes",
-    "count": 20,
+    "method": "grid",
     "metric": {
         "goal": "minimize",
         "name": "energy_noclip_ema",
@@ -43,14 +44,10 @@ BASE_SWEEP = {
                             "parameters": {
                                 # preconditioner_type filled in per sweep below
                                 "learning_rate": {
-                                    "distribution": "log_uniform_values",
-                                    "min": 1.0e-3,
-                                    "max": 1.0,
+                                    "values": [1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1, 5e-1, 1.0],
                                 },
                                 "damping": {
-                                    "distribution": "log_uniform_values",
-                                    "min": 1.0e-5,
-                                    "max": 1.0,
+                                    "values": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0],
                                 },
                             }
                         }
@@ -79,10 +76,10 @@ def main():
         sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
         print(f"  wandb agent --count 1 {sweep_path}  # {preconditioner}")
 
-    print("\nLaunch on cluster (20 agents each):")
+    print("\nLaunch on cluster (60 agents each, one per grid point):")
     for preconditioner, sweep_id in sweep_ids.items():
         sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
-        print(f"  ./slurm/launch_sweep.sh {sweep_path}  # {preconditioner}")
+        print(f"  ./slurm/launch_sweep.sh {sweep_path} 60  # {preconditioner}")
 
 
 if __name__ == "__main__":

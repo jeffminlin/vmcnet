@@ -1,0 +1,15 @@
+{
+    "notes": "Beryllium atom",
+    "subfolder_name": "Be",
+    "problem": {
+        "ion_pos": [
+            [ 0.0, 0.0, 0.0 ]
+        ],
+        "ion_charges": [
+            4.0
+        ],
+        "nelec": [
+            2, 2
+        ]
+    }
+}
