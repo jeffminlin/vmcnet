@@ -1,10 +1,10 @@
-"""Create one wandb sweep per spring_diag preconditioner type on the Carbon atom.
+"""Create one wandb sweep per spring_diag preconditioner type on the Beryllium atom.
 
-Each sweep runs a 20-trial Bayesian search over learning_rate and damping with the
+Each sweep runs a 60-trial grid search over learning_rate and damping with the
 preconditioner type fixed. Run this script once to register all 4 sweeps, then
 launch agents individually:
 
-    python sweeps/create_spring_diag_C_sweeps.py
+    python sweeps/create_spring_diag_Be_sweeps.py
 
     wandb agent --count 1 <entity>/preconditioning/<sweep_id>
 """
@@ -63,7 +63,7 @@ def main():
     sweep_ids = {}
     for preconditioner in PRECONDITIONER_TYPES:
         config = copy.deepcopy(BASE_SWEEP)
-        config["name"] = f"spring-diag-C-{preconditioner}"
+        config["name"] = f"spring-diag-Be-{preconditioner}"
         config["parameters"]["vmc"]["parameters"]["optimizer"]["parameters"][
             "spring_diag"
         ]["parameters"]["preconditioner_type"] = {"value": preconditioner}
