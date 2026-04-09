@@ -95,7 +95,7 @@ def get_default_config() -> ConfigDict:
                     "group": "default",
                 },
                 "logging": {
-                    "ema_decay": 0.99,  # EMA smoothing for noclip metrics; 0.0 disables
+                    "ema_decay": 0.999,  # EMA smoothing for noclip metrics; 0.0 disables
                 },
             }
         )
