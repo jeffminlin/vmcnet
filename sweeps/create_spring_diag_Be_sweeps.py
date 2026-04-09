@@ -1,6 +1,6 @@
 """Create one wandb sweep per spring_diag preconditioner type on the Beryllium atom.
 
-Each sweep runs a 60-trial grid search over learning_rate and damping with the
+Each sweep runs a 42-trial grid search over learning_rate and damping with the
 preconditioner type fixed. Run this script once to register all 4 sweeps, then
 launch agents individually:
 
@@ -45,7 +45,7 @@ BASE_SWEEP = {
                             "parameters": {
                                 # preconditioner_type filled in per sweep below
                                 "learning_rate": {
-                                    "values": [1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1, 5e-1, 1.0],
+                                    "values": [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1.0],
                                 },
                                 "damping": {
                                     "values": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0],
@@ -77,10 +77,10 @@ def main():
         sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
         print(f"  wandb agent --count 1 {sweep_path}  # {preconditioner}")
 
-    print("\nLaunch on cluster (60 agents each, one per grid point):")
+    print("\nLaunch on cluster (42 agents each, one per grid point):")
     for preconditioner, sweep_id in sweep_ids.items():
         sweep_path = f"{ENTITY}/{PROJECT}/{sweep_id}"
-        print(f"  ./slurm/launch_sweep.sh {sweep_path} 60  # {preconditioner}")
+        print(f"  ./slurm/launch_sweep.sh {sweep_path} 42  # {preconditioner}")
 
 
 if __name__ == "__main__":
