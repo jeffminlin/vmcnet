@@ -136,7 +136,6 @@ def initialize_spring_diag(
     return update_param_fn, optimizer_state
 
 
-"""Get the SPRING update function."""
 def get_spring_step(
     log_psi_apply: ModelApply[P],
     damping: chex.Scalar = 0.001,
@@ -144,6 +143,7 @@ def get_spring_step(
     beta = 0.995,
     preconditioner_type: str = "fisher",
 ):
+    """Get the SPRING update function."""
 
     def raveled_log_psi_grad(params: P, positions: Array) -> Array:
         log_grads = jax.grad(log_psi_apply)(params, positions)
@@ -177,6 +177,7 @@ def get_spring_step(
             diag_B = beta * diag_B + (1- beta) * prev_grad**2
             diag_P = diag_B
         elif preconditioner_type == "ones":
+            # Noop update
             diag_B = diag_B
             diag_P = diag_B
         else:
@@ -189,10 +190,10 @@ def get_spring_step(
 
 
         epsilon_bar = centered_energies / jnp.sqrt(nchains)
-        epsion_tilde = epsilon_bar - Ohat @ prev_grad_decayed
+        epsilon_tilde = epsilon_bar - Ohat @ prev_grad_decayed
 
         dtheta_residual = Ohat.T @ jax.scipy.linalg.solve(
-            T_reg, epsion_tilde, assume_a="pos"
+            T_reg, epsilon_tilde, assume_a="pos"
         ) / diag_P
 
         SR_G = dtheta_residual + prev_grad_decayed

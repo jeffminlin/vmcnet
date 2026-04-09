@@ -22,16 +22,17 @@ BASE_SWEEP = {
         "--config.logdir=/global/scratch/users/ggoldshlager/logs/sweeps/",
         "--config.wandb.mode=online",
         f"--config.wandb.project={PROJECT}",
+        "--config.vmc.optimizer_type=spring_nys",
+        "--config.vmc.optimizer.spring_nys.constrain_norm=False",
     ],
     "method": "grid",
     "metric": {
         "goal": "minimize",
-        "name": "energy_noclip_ema",
+        "name": "variance_noclip_ema",
     },
     "parameters": {
         "vmc": {
             "parameters": {
-                "optimizer_type": {"value": "spring_nys"},
                 "optimizer": {
                     "parameters": {
                         "spring_nys": {
