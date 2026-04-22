@@ -293,6 +293,16 @@ def get_default_vmc_config() -> Dict:
                 "norm_constraint": 0.001,
                 "clip_threshold": 1000.0,  # GN works best with cusp Jastrow and no clipping
             },
+            "energy_gauss_newton": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 0.5,
+                "learning_decay_rate": 1e-6,
+                # GN hyperparams
+                "damping": 1e-3,
+                "constrain_norm": True,
+                "norm_constraint": 1.,
+            },
         },
     }
     return vmc_config
