@@ -144,8 +144,8 @@ def get_energy_gauss_newton_step(
         return jax.flatten_util.ravel_pytree(grad)[0]
 
     def ravel_grad_E(params, positions):
-        grad = jax.grad(local_energy_fn, argnums=0)(params, positions)
-        return jax.flatten_util.ravel_pytree(grad)[0]
+        value, grad = jax.value_and_grad(local_energy_fn, argnums=0)(params, positions)
+        return value, jax.flatten_util.ravel_pytree(grad)[0]
 
     def energy_gauss_newton_step(
         centered_energies: P,
@@ -157,14 +157,15 @@ def get_energy_gauss_newton_step(
         _, unravel_fn = jax.flatten_util.ravel_pytree(params)
 
         O = jax.vmap(ravel_grad_log_psi, in_axes=(None, 0))(params, positions)
-        O = (O - jnp.mean(O, axis=0, keepdims=True)) / jnp.sqrt(nchains)
+        O = (O - jnp.mean(O, axis=0, keepdims=True))
 
-        A = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+        EL, EL_grad = jax.vmap(ravel_grad_E, in_axes=(None, 0))(params, positions)
+        EL = (EL - jnp.mean(EL)) / jnp.sqrt(nchains)
+        A = EL_grad + EL[:, None] * O
         A = (A - jnp.mean(A, axis=0, keepdims=True)) / jnp.sqrt(nchains)
+        O /= jnp.sqrt(nchains)
 
-        V = A @ O.T
-
-        flat_update = O.T @ jnp.linalg.lstsq(V, centered_energies, rcond=damping)[0]
+        flat_update = O.T @ jnp.linalg.lstsq(A @ O.T, EL, rcond=damping)[0]
 
         return unravel_fn(flat_update)
 
