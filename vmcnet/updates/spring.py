@@ -173,16 +173,39 @@ def get_spring_step(
 
         if sketchy_QR:
             J = get_J(params, positions)
-            V = jnp.concatenate([J, jnp.sqrt(damping) * jnp.eye(nchains)], axis=-1).T # (n + k) x k
+            V = jnp.concatenate([J, jnp.sqrt(damping) * jnp.eye(nchains)], axis=-1) # (n + k) x k
 
             nparams = J.shape[1]
 
             key, subkey = jax.random.split(key)
             sketch_size = 2 * nchains
             gaussian_sketch = jax.random.normal(subkey, shape=(sketch_size, nparams + nchains)) / jnp.sqrt(sketch_size)
+            B = gaussian_sketch @ V.T
 
-            # TODO: implement the update
-            dtheta = None
+            _, R_hat = jax.scipy.linalg.qr(B, mode='economic')
+
+            # T = V @ V.T 
+            # T = T + ones @ ones.T / nchains
+            # T = (T + T.T) / 2
+            # W = jax.scipy.linalg.solve_triangular(R_hat.T, T,   lower=True)  # R_hat^{-T} T CLAUDE
+            # P = jax.scipy.linalg.solve_triangular(R_hat.T, W.T, lower=True)  # R_hat^{-T} T R_hat^{-1}   ✓ symmetric CLAUDE
+            # W = jax.scipy.linalg.solve_triangular(R_hat.T, T, lower=True)
+            # P = jax.scipy.linalg.solve_triangular(R_hat, W.T, lower=True) #wrong bc R_hat.T needed
+ 
+            R_V = jax.scipy.linalg.solve_triangular(R_hat.T, V, lower=True)
+            P = R_V @ R_V.T 
+            # P = (P + P.T)/2
+            # Pvals, Pvecs = jnp.linalg.eigh(P)
+            # Pvals = jnp.maximum(Pvals, 0)
+
+            rhs = jax.scipy.linalg.solve_triangular(R_hat.T, epsilon_tilde, lower=True)
+            # y =  Pvecs @ jnp.diag(1 / Pvals) @ Pvecs.T @ rhs
+            y = jax.scipy.linalg.solve(P, rhs, assume_a='pos')
+            # z = jax.scipy.linalg.solve_triangular(R_hat, y, lower=False)
+
+            # x_full = V.T @ z
+            x_full = R_V.T @ y
+            dtheta = x_full[:nparams]    
 
             return jax.tree_map(
                 lambda dt, mup: dt + mup, unravel_fn(dtheta), mu_prev
@@ -197,21 +220,26 @@ def get_spring_step(
             # eigenvalues. We then use the fixed and regularized igendecomposition
             # to solve against T. This appears to be more stable than Cholesky
             # in practice.
-            T = kernel_fn(positions, positions, "ntk", params) / nchains
-            T = T - jnp.mean(T, axis=0, keepdims=True)
-            T = T - jnp.mean(T, axis=1, keepdims=True)
-            T = T + ones @ ones.T / nchains
-            T = (T + T.T) / 2
+            # T = kernel_fn(positions, positions, "ntk", params) / nchains
+            # T = T - jnp.mean(T, axis=0, keepdims=True)
+            # T = T - jnp.mean(T, axis=1, keepdims=True)
+            # T = T + ones @ ones.T / nchains
+            # T = (T + T.T) / 2
 
-            Tvals, Tvecs = jnp.linalg.eigh(T)
-            Tvals = jnp.maximum(Tvals, 0) + damping
+            J = get_J(params, positions)
+            T = J @ J.T + damping * jnp.eye(nchains)
 
-            zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ epsilon_tilde
-            zeta_hat = zeta - jnp.mean(zeta)
-            dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
 
+            # Tvals, Tvecs = jnp.linalg.eigh(T)
+            # Tvals = jnp.maximum(Tvals, 0) + damping
+
+            zeta =  jax.scipy.linalg.solve(T, epsilon_tilde, assume_a='pos')
+            # zeta = Tvecs @ jnp.diag(1 / Tvals) @ Tvecs.T @ epsilon_tilde
+            # zeta_hat = zeta - jnp.mean(zeta)
+            # dtheta_residual = jax.vjp(log_psi_apply, params, positions)[1](zeta_hat)[0]
+            dtheta_residual = J.T @ zeta
             return jax.tree_map(
-                lambda dt, mup: dt / jnp.sqrt(nchains) + mup, dtheta_residual, mu_prev
+                lambda dt, mup: dt / jnp.sqrt(nchains) + mup, unravel_fn(dtheta_residual), mu_prev
             ), key
 
     return spring_step
