@@ -281,6 +281,27 @@ def get_default_vmc_config() -> Dict:
                 "constrain_norm": True,
                 "norm_constraint": 0.001,
             },
+            "kfac_spring": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,
+                "learning_decay_rate": 1e-4,
+                # SPRING/minSR hyperparams. Set mu = 0.0 for KFAC-minSR.
+                "mu": 0.99,
+                "sketch_damping": 0.001,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
+                # KFAC Fisher approximation and inverse-application hyperparams.
+                "kfac_l2_reg": 0.0,
+                "kfac_norm_constraint": None,
+                "kfac_curvature_ema": 0.95,
+                "kfac_min_damping": 1e-4,
+                "kfac_register_only_generic": False,
+                "kfac_estimation_mode": "fisher_exact",
+                "kfac_inverse_damping": 0.001,
+                "exact_power": True,
+                "use_cached": False,
+            },
             "gauss_newton": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time

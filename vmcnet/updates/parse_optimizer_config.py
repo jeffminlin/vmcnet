@@ -24,6 +24,7 @@ from .optax_utils import (
 )
 from .spring import initialize_spring
 from .kfac import initialize_kfac
+from .kfac_spring import initialize_kfac_spring
 from .gauss_newton import initialize_gauss_newton
 
 
@@ -150,6 +151,36 @@ def initialize_optimizer(
             update_data_fn,
             learning_rate_schedule,
             vmc_config.optimizer.spring,
+            vmc_config.record_param_l1_norm,
+            apply_pmap=apply_pmap,
+        )
+        return update_param_fn, optimizer_state, key
+    elif vmc_config.optimizer_type == "kfac_spring":
+        energy_and_statistics_fn = physics.core.create_energy_and_statistics_fn(
+            local_energy_fn, vmc_config.nchains, clipping_fn, vmc_config.nan_safe
+        )
+        energy_data_val_and_grad = physics.core.create_value_and_grad_energy_fn(
+            log_psi_apply,
+            local_energy_fn,
+            vmc_config.nchains,
+            clipping_fn,
+            nan_safe=vmc_config.nan_safe,
+        )
+        (
+            update_param_fn,
+            optimizer_state,
+            key,
+        ) = initialize_kfac_spring(
+            log_psi_apply,
+            energy_and_statistics_fn,
+            energy_data_val_and_grad,
+            params,
+            data,
+            get_position_fn,
+            update_data_fn,
+            key,
+            learning_rate_schedule,
+            vmc_config.optimizer.kfac_spring,
             vmc_config.record_param_l1_norm,
             apply_pmap=apply_pmap,
         )
