@@ -546,7 +546,8 @@ def run_molecule() -> None:
             ", new optimizer state" if reload_config.new_optimizer_state else "",
         )
 
-    wandb.login()
+    if config.wandb.mode != "disabled":
+        wandb.login()
     wandb.init(
         mode=config.wandb.mode,
         project=config.wandb.project,

@@ -302,6 +302,26 @@ def get_default_vmc_config() -> Dict:
                 "exact_power": True,
                 "use_cached": False,
             },
+            "spring_nystrom": {
+                # Learning rate settings
+                "schedule_type": "inverse_time",  # constant or inverse_time
+                "learning_rate": 5e-2,
+                "learning_decay_rate": 1e-4,
+                # SPRING hyperparams
+                "mu": 0.99,
+                "sketch_damping": 0.001,
+                "constrain_norm": True,
+                "norm_constraint": 0.001,
+                # Streaming Nyström Fisher approximation hyperparams.
+                "nystrom_rank": 32,
+                "nystrom_ema_decay": 0.95,
+                "metric_shift_strategy": "constant",
+                "metric_identity_shift": 1.0,
+                "nystrom_warmup_steps": 100,
+                "nystrom_phasein_steps": 100,
+                "eigenvalue_floor": 1e-8,
+                "collect_during_warmup": True,
+            },
             "gauss_newton": {
                 # Learning rate settings
                 "schedule_type": "inverse_time",  # constant or inverse_time
