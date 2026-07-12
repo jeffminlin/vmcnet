@@ -51,12 +51,33 @@ class NystromDiagnostics(NamedTuple):
 
     phasein: Array
     metric_shift: Array
+    metric_scale: Array
     trace: Array
     max_eigenvalue: Array
     min_eigenvalue: Array
     effective_rank: Array
     clipped_eigenvalues: Array
     kernel_trace: Array
+
+
+class NystromEigendecomposition(NamedTuple):
+    """Low-rank eigendecomposition recovered from a Nyström sketch."""
+
+    eigenvectors: Array
+    eigenvalues: Array
+    c_eigenvalues: Array
+    clipped_count: Array
+
+
+class SpringLinearSolveResult(NamedTuple):
+    """Intermediate quantities from the preconditioned SPRING solve."""
+
+    flat_direction: Array
+    preconditioned_kernel: Array
+    regularized_kernel: Array
+    residual: Array
+    zeta: Array
+    centered_zeta: Array
 
 
 def initialize_nystrom_state(
@@ -69,7 +90,6 @@ def initialize_nystrom_state(
     parameter_count = flat_params.shape[0]
     sketch_rank = min(max(rank, 1), parameter_count)
     omega = jax.random.normal(key, (parameter_count, sketch_rank))
-    omega, _ = jnp.linalg.qr(omega, mode="reduced")
     return NystromPreconditionerState(
         omega=omega,
         y=jnp.zeros_like(omega),
@@ -112,22 +132,80 @@ def update_nystrom_state(
 def get_nystrom_eigendecomposition(
     state: NystromPreconditionerState,
     eigenvalue_floor: chex.Numeric,
-) -> Tuple[Array, Array, Array, Array]:
+) -> NystromEigendecomposition:
     """Return eigenvectors/eigenvalues of the low-rank Nyström approximation."""
-    c_matrix = state.omega.T @ state.y
-    c_matrix = (c_matrix + c_matrix.T) / 2
-    c_eigenvalues, c_eigenvectors = jnp.linalg.eigh(c_matrix)
-    clipped_c_eigenvalues = jnp.maximum(c_eigenvalues, eigenvalue_floor)
-    c_inverse = (c_eigenvectors / clipped_c_eigenvalues) @ c_eigenvectors.T
+    return get_nystrom_eigendecomposition_from_sketch(
+        state.omega, state.y, eigenvalue_floor
+    )
 
-    q_matrix, r_matrix = jnp.linalg.qr(state.y, mode="reduced")
-    small_matrix = r_matrix @ c_inverse @ r_matrix.T
-    small_matrix = (small_matrix + small_matrix.T) / 2
-    eigenvalues, small_eigenvectors = jnp.linalg.eigh(small_matrix)
-    clipped_count = jnp.sum(eigenvalues < eigenvalue_floor)
-    eigenvalues = jnp.maximum(eigenvalues, 0.0)
-    eigenvectors = q_matrix @ small_eigenvectors
-    return eigenvectors, eigenvalues, c_eigenvalues, clipped_count
+
+def get_nystrom_eigendecomposition_from_sketch(
+    omega: Array,
+    y_matrix: Array,
+    eigenvalue_floor: chex.Numeric,
+) -> NystromEigendecomposition:
+    """Return eigenpairs for the Nyström matrix ``Y (Omega^T Y)^-1 Y^T``."""
+    c_matrix = omega.T @ y_matrix
+    c_matrix = c_matrix + eigenvalue_floor * jnp.eye(c_matrix.shape[0])
+    chol = jnp.linalg.cholesky(c_matrix)
+    z_matrix = jnp.linalg.solve(chol, y_matrix.T).T
+    eigenvectors, singular_values, _ = jnp.linalg.svd(
+        z_matrix, full_matrices=False
+    )
+    eigenvalues = jnp.square(singular_values)
+    c_eigenvalues = jnp.linalg.eigvalsh((c_matrix + c_matrix.T) / 2)
+    clipped_count = jnp.asarray(0)
+    return NystromEigendecomposition(
+        eigenvectors, eigenvalues, c_eigenvalues, clipped_count
+    )
+
+
+def reconstruct_nystrom_matrix(
+    eigenvectors: Array,
+    eigenvalues: Array,
+) -> Array:
+    """Materialize a low-rank Nyström approximation for small tests."""
+    return (eigenvectors * eigenvalues) @ eigenvectors.T
+
+
+def get_effective_rank(eigenvalues: Array) -> Array:
+    """Return the participation-ratio effective rank of a PSD spectrum."""
+    trace = jnp.sum(eigenvalues)
+    squared_trace = jnp.sum(jnp.square(eigenvalues))
+    return jnp.where(
+        squared_trace > 0.0,
+        trace * trace / squared_trace,
+        0.0,
+    )
+
+
+def get_nystrom_metric_scale(
+    eigenvalues: Array,
+    normalization: str,
+    eigenvalue_floor: chex.Numeric,
+) -> Array:
+    """Return the scalar used to normalize the Nyström metric eigenvalues."""
+    if normalization == "none":
+        return jnp.asarray(1.0)
+    if normalization == "trace_effective_rank":
+        trace = jnp.sum(eigenvalues)
+        squared_trace = jnp.sum(jnp.square(eigenvalues))
+        scale = squared_trace / jnp.maximum(trace, eigenvalue_floor)
+        scale = jnp.maximum(scale, eigenvalue_floor)
+        return jnp.where(trace > eigenvalue_floor, scale, 1.0)
+    raise ValueError(f"Unsupported Nyström metric normalization: {normalization}")
+
+
+def normalize_nystrom_eigenvalues(
+    eigenvalues: Array,
+    normalization: str,
+    eigenvalue_floor: chex.Numeric,
+) -> Tuple[Array, Array]:
+    """Normalize Nyström metric eigenvalues and return ``(values, scale)``."""
+    metric_scale = get_nystrom_metric_scale(
+        eigenvalues, normalization, eigenvalue_floor
+    )
+    return eigenvalues / metric_scale, metric_scale
 
 
 def apply_nystrom_inverse_to_flat_vector(
@@ -165,6 +243,45 @@ def get_metric_shift(
     raise ValueError(f"Unsupported Nyström shift strategy: {shift_strategy}")
 
 
+def solve_preconditioned_spring_system(
+    scaled_jacobian: Array,
+    centered_energies: Array,
+    flat_mu_previous: Array,
+    apply_inverse,
+    sketch_damping: chex.Numeric,
+) -> SpringLinearSolveResult:
+    """Solve the walker-space SPRING system for a generic inverse metric."""
+    nchains = scaled_jacobian.shape[0]
+    preconditioned_jacobian_t = jax.vmap(apply_inverse, in_axes=1, out_axes=1)(
+        scaled_jacobian.T
+    )
+    preconditioned_kernel = scaled_jacobian @ preconditioned_jacobian_t
+    preconditioned_kernel = (preconditioned_kernel + preconditioned_kernel.T) / 2
+
+    kernel_eigenvalues, kernel_eigenvectors = jnp.linalg.eigh(preconditioned_kernel)
+    kernel_eigenvalues = jnp.maximum(kernel_eigenvalues, 0) + sketch_damping
+    regularized_kernel = (kernel_eigenvectors * kernel_eigenvalues) @ (
+        kernel_eigenvectors.T
+    )
+
+    residual = centered_energies / jnp.sqrt(nchains)
+    residual = residual - scaled_jacobian @ flat_mu_previous
+
+    zeta = kernel_eigenvectors @ (
+        (kernel_eigenvectors.T @ residual) / kernel_eigenvalues
+    )
+    centered_zeta = zeta - jnp.mean(zeta)
+    flat_direction = preconditioned_jacobian_t @ centered_zeta
+    return SpringLinearSolveResult(
+        flat_direction,
+        preconditioned_kernel,
+        regularized_kernel,
+        residual,
+        zeta,
+        centered_zeta,
+    )
+
+
 def get_spring_nystrom_step(
     log_psi_apply: ModelApply[P],
     sketch_damping: chex.Scalar,
@@ -175,6 +292,7 @@ def get_spring_nystrom_step(
     nystrom_phasein_steps: int,
     eigenvalue_floor: chex.Scalar,
     collect_during_warmup: bool,
+    metric_normalization: str = "none",
     mu: chex.Scalar = 0.99,
 ):
     """Get a streaming Nyström-preconditioned SPRING step function."""
@@ -202,8 +320,15 @@ def get_spring_nystrom_step(
             nystrom_warmup_steps,
             nystrom_phasein_steps,
         )
-        eigenvectors, eigenvalues, c_eigenvalues, clipped_count = (
-            get_nystrom_eigendecomposition(nystrom_state, eigenvalue_floor)
+        nystrom_eigendecomposition = get_nystrom_eigendecomposition(
+            nystrom_state, eigenvalue_floor
+        )
+        eigenvectors = nystrom_eigendecomposition.eigenvectors
+        raw_eigenvalues = nystrom_eigendecomposition.eigenvalues
+        eigenvalues, metric_scale = normalize_nystrom_eigenvalues(
+            raw_eigenvalues,
+            metric_normalization,
+            eigenvalue_floor,
         )
         metric_shift = get_metric_shift(
             eigenvalues,
@@ -219,49 +344,37 @@ def get_spring_nystrom_step(
             phasein,
             metric_shift,
         )
-        preconditioned_jacobian_t = jax.vmap(apply_inverse, in_axes=1, out_axes=1)(
-            scaled_jacobian.T
-        )
-        preconditioned_kernel = scaled_jacobian @ preconditioned_jacobian_t
-        preconditioned_kernel = (preconditioned_kernel + preconditioned_kernel.T) / 2
-
-        kernel_eigenvalues, kernel_eigenvectors = jnp.linalg.eigh(
-            preconditioned_kernel
-        )
-        kernel_eigenvalues = jnp.maximum(kernel_eigenvalues, 0) + sketch_damping
 
         mu_previous = jax.tree_map(lambda x: mu * x, previous_direction)
         flat_mu_previous, _ = jax.flatten_util.ravel_pytree(mu_previous)
-        residual = centered_energies / jnp.sqrt(nchains)
-        residual = residual - scaled_jacobian @ flat_mu_previous
-
-        zeta = kernel_eigenvectors @ (
-            (kernel_eigenvectors.T @ residual) / kernel_eigenvalues
+        solve_result = solve_preconditioned_spring_system(
+            scaled_jacobian,
+            centered_energies,
+            flat_mu_previous,
+            apply_inverse,
+            sketch_damping,
         )
-        zeta = zeta - jnp.mean(zeta)
 
-        flat_direction = preconditioned_jacobian_t @ zeta
-        direction = unravel_fn(flat_direction)
+        direction = unravel_fn(solve_result.flat_direction)
         direction = jax.tree_map(
             lambda dtheta, previous: dtheta + previous, direction, mu_previous
         )
 
         trace = jnp.sum(eigenvalues)
-        squared_trace = jnp.sum(jnp.square(eigenvalues))
-        effective_rank = jnp.where(
-            squared_trace > 0.0,
-            trace * trace / squared_trace,
-            0.0,
-        )
+        effective_rank = get_effective_rank(eigenvalues)
         diagnostics = NystromDiagnostics(
             phasein=phasein,
             metric_shift=metric_shift,
+            metric_scale=metric_scale,
             trace=trace,
             max_eigenvalue=jnp.max(eigenvalues),
             min_eigenvalue=jnp.min(eigenvalues),
             effective_rank=effective_rank,
-            clipped_eigenvalues=clipped_count + jnp.sum(c_eigenvalues < eigenvalue_floor),
-            kernel_trace=jnp.trace(preconditioned_kernel),
+            clipped_eigenvalues=(
+                nystrom_eigendecomposition.clipped_count
+                + jnp.sum(nystrom_eigendecomposition.c_eigenvalues < eigenvalue_floor)
+            ),
+            kernel_trace=jnp.trace(solve_result.preconditioned_kernel),
         )
         return direction, nystrom_state, diagnostics
 
@@ -301,6 +414,7 @@ def construct_spring_nystrom_update_param_fn(
         )
         metrics["nystrom_spring_phasein"] = diagnostics.phasein
         metrics["nystrom_spring_metric_shift"] = diagnostics.metric_shift
+        metrics["nystrom_spring_metric_scale"] = diagnostics.metric_scale
         metrics["nystrom_spring_trace"] = diagnostics.trace
         metrics["nystrom_spring_max_eigenvalue"] = diagnostics.max_eigenvalue
         metrics["nystrom_spring_min_eigenvalue"] = diagnostics.min_eigenvalue
@@ -346,6 +460,7 @@ def initialize_spring_nystrom(
         optimizer_config.nystrom_phasein_steps,
         optimizer_config.eigenvalue_floor,
         optimizer_config.collect_during_warmup,
+        optimizer_config.metric_normalization,
         optimizer_config.mu,
     )
     descent_optimizer = optax.sgd(

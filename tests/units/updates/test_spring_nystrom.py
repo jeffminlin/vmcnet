@@ -15,8 +15,14 @@ from vmcnet.mcmc.position_amplitude_core import (
 )
 from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude_data
 from vmcnet.updates.spring_nystrom import (
+    apply_nystrom_inverse_to_flat_vector,
+    get_effective_rank,
     get_phasein_coefficient,
+    get_nystrom_eigendecomposition_from_sketch,
+    normalize_nystrom_eigenvalues,
     initialize_spring_nystrom,
+    reconstruct_nystrom_matrix,
+    solve_preconditioned_spring_system,
 )
 
 
@@ -61,6 +67,7 @@ def _make_config():
             nystrom_ema_decay=0.0,
             metric_shift_strategy="constant",
             metric_identity_shift=1.0,
+            metric_normalization="none",
             nystrom_warmup_steps=1,
             nystrom_phasein_steps=1,
             eigenvalue_floor=1e-8,
@@ -73,6 +80,136 @@ def test_phasein_coefficient_schedule():
     assert get_phasein_coefficient(jnp.asarray(0), 1, 2) == 0.0
     assert get_phasein_coefficient(jnp.asarray(2), 1, 2) == 0.5
     assert get_phasein_coefficient(jnp.asarray(3), 1, 2) == 1.0
+
+
+def test_nystrom_approximation_improves_with_rank():
+    basis_seed = jnp.asarray(
+        [
+            [1.0, 0.3, -0.2, 0.4],
+            [0.2, 1.0, 0.5, -0.3],
+            [-0.4, 0.1, 1.0, 0.2],
+            [0.3, -0.5, 0.1, 1.0],
+        ]
+    )
+    eigenvectors, _ = jnp.linalg.qr(basis_seed)
+    eigenvalues = jnp.asarray([6.0, 2.0, 0.5, 0.1])
+    matrix = (eigenvectors * eigenvalues) @ eigenvectors.T
+
+    def get_approximation_error(rank):
+        omega = eigenvectors[:, :rank]
+        y_matrix = matrix @ omega
+        decomposition = get_nystrom_eigendecomposition_from_sketch(
+            omega, y_matrix, 1e-8
+        )
+        approximation = reconstruct_nystrom_matrix(
+            decomposition.eigenvectors, decomposition.eigenvalues
+        )
+        return jnp.linalg.norm(matrix - approximation), approximation
+
+    rank_one_error, _ = get_approximation_error(1)
+    rank_three_error, _ = get_approximation_error(3)
+    full_rank_error, full_rank_approximation = get_approximation_error(4)
+
+    assert rank_three_error < rank_one_error
+    np.testing.assert_allclose(full_rank_error, 0.0, atol=2e-5)
+    np.testing.assert_allclose(full_rank_approximation, matrix, atol=2e-5)
+
+
+def test_nystrom_inverse_application_matches_dense_metric_inverse():
+    eigenvectors = jnp.asarray(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.0, 0.0],
+        ]
+    )
+    eigenvalues = jnp.asarray([3.0, 1.0])
+    phasein = 0.75
+    metric_shift = 2.0
+    vector = jnp.asarray([2.0, -1.0, 4.0])
+
+    diagonal_weight = (1.0 - phasein) + phasein * metric_shift
+    dense_metric = diagonal_weight * jnp.eye(3) + phasein * (
+        eigenvectors * eigenvalues
+    ) @ eigenvectors.T
+
+    actual = apply_nystrom_inverse_to_flat_vector(
+        vector, eigenvectors, eigenvalues, phasein, metric_shift
+    )
+    expected = jnp.linalg.solve(dense_metric, vector)
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_trace_effective_rank_normalization_sets_weighted_average_to_one():
+    eigenvalues = jnp.asarray([10.0, 2.0, 1.0, 0.5])
+
+    normalized_eigenvalues, metric_scale = normalize_nystrom_eigenvalues(
+        eigenvalues, "trace_effective_rank", 1e-8
+    )
+    weighted_average = (
+        jnp.sum(jnp.square(normalized_eigenvalues))
+        / jnp.sum(normalized_eigenvalues)
+    )
+
+    np.testing.assert_allclose(
+        metric_scale,
+        jnp.sum(jnp.square(eigenvalues)) / jnp.sum(eigenvalues),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(weighted_average, 1.0, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(
+        get_effective_rank(normalized_eigenvalues),
+        get_effective_rank(eigenvalues),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_preconditioned_spring_solve_satisfies_linear_system():
+    scaled_jacobian = jnp.asarray(
+        [
+            [1.0, -0.2],
+            [0.3, 0.7],
+            [-0.5, 0.4],
+        ]
+    )
+    centered_energies = jnp.asarray([0.6, -0.2, -0.4])
+    flat_mu_previous = jnp.asarray([0.1, -0.3])
+    inverse_metric = jnp.asarray(
+        [
+            [0.4, -0.1],
+            [-0.1, 0.7],
+        ]
+    )
+    sketch_damping = 0.2
+
+    result = solve_preconditioned_spring_system(
+        scaled_jacobian,
+        centered_energies,
+        flat_mu_previous,
+        lambda vector: inverse_metric @ vector,
+        sketch_damping,
+    )
+
+    expected_kernel = scaled_jacobian @ inverse_metric @ scaled_jacobian.T
+    expected_residual = centered_energies / jnp.sqrt(3.0)
+    expected_residual = expected_residual - scaled_jacobian @ flat_mu_previous
+    expected_direction = inverse_metric @ scaled_jacobian.T @ result.centered_zeta
+
+    np.testing.assert_allclose(
+        result.preconditioned_kernel, expected_kernel, rtol=1e-6, atol=1e-6
+    )
+    np.testing.assert_allclose(
+        result.regularized_kernel @ result.zeta,
+        expected_residual,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(result.residual, expected_residual, atol=1e-6)
+    np.testing.assert_allclose(result.flat_direction, expected_direction, atol=1e-6)
+    np.testing.assert_allclose(jnp.mean(result.centered_zeta), 0.0, atol=1e-6)
 
 
 def test_spring_nystrom_update_is_finite_and_keeps_fixed_sketch():
@@ -104,7 +241,9 @@ def test_spring_nystrom_update_is_finite_and_keeps_fixed_sketch():
     assert jnp.isfinite(metrics["energy"])
     assert jnp.isfinite(metrics["variance"])
     assert jnp.isfinite(metrics["nystrom_spring_kernel_trace"])
+    assert jnp.isfinite(metrics["nystrom_spring_metric_scale"])
     assert jnp.isfinite(metrics["nystrom_spring_trace"])
+    assert metrics["nystrom_spring_metric_scale"] == 1.0
     assert metrics["nystrom_spring_phasein"] == 0.0
     np.testing.assert_allclose(optimizer_state.nystrom_state.omega, initial_omega)
     assert all(jnp.all(jnp.isfinite(leaf)) for leaf in jax.tree_util.tree_leaves(params))

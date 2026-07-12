@@ -317,6 +317,7 @@ def get_default_vmc_config() -> Dict:
                 "nystrom_ema_decay": 0.95,
                 "metric_shift_strategy": "constant",
                 "metric_identity_shift": 1.0,
+                "metric_normalization": "none",
                 "nystrom_warmup_steps": 100,
                 "nystrom_phasein_steps": 100,
                 "eigenvalue_floor": 1e-8,
