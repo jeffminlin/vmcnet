@@ -243,6 +243,36 @@ def get_metric_shift(
     raise ValueError(f"Unsupported Nyström shift strategy: {shift_strategy}")
 
 
+def get_nystrom_metric_parameters(
+    eigenvalues: Array,
+    metric_identity_shift: chex.Numeric,
+    metric_shift_strategy: str,
+    sketch_damping: chex.Numeric,
+    eigenvalue_floor: chex.Numeric,
+) -> Tuple[Array, Array, Array]:
+    """Return low-rank eigenvalues, identity shift, and reported metric scale.
+
+    ``regularization_coupled`` constructs the metric
+
+    ``B = I + F_hat / sketch_damping``
+
+    so the same regularization scale is used in the parameter-space metric and
+    the walker-space minSR solve. Other strategies retain the original
+    ``B = delta I + F_hat`` behavior.
+    """
+    if metric_shift_strategy == "regularization_coupled":
+        damping = jnp.maximum(jnp.asarray(sketch_damping), eigenvalue_floor)
+        return eigenvalues / damping, jnp.asarray(1.0), damping
+
+    metric_shift = get_metric_shift(
+        eigenvalues,
+        metric_identity_shift,
+        metric_shift_strategy,
+        eigenvalue_floor,
+    )
+    return eigenvalues, metric_shift, jnp.asarray(1.0)
+
+
 def solve_preconditioned_spring_system(
     scaled_jacobian: Array,
     centered_energies: Array,
@@ -330,17 +360,21 @@ def get_spring_nystrom_step(
             metric_normalization,
             eigenvalue_floor,
         )
-        metric_shift = get_metric_shift(
-            eigenvalues,
-            metric_identity_shift,
-            metric_shift_strategy,
-            eigenvalue_floor,
+        metric_eigenvalues, metric_shift, coupled_metric_scale = (
+            get_nystrom_metric_parameters(
+                eigenvalues,
+                metric_identity_shift,
+                metric_shift_strategy,
+                sketch_damping,
+                eigenvalue_floor,
+            )
         )
+        metric_scale = metric_scale * coupled_metric_scale
 
         apply_inverse = lambda flat_vector: apply_nystrom_inverse_to_flat_vector(
             flat_vector,
             eigenvectors,
-            eigenvalues,
+            metric_eigenvalues,
             phasein,
             metric_shift,
         )
@@ -443,6 +477,14 @@ def initialize_spring_nystrom(
     """Initialize the streaming Nyström-preconditioned SPRING prototype."""
     if apply_pmap:
         raise NotImplementedError("Nyström-SPRING prototype only supports single-device.")
+    if (
+        optimizer_config.metric_shift_strategy == "regularization_coupled"
+        and optimizer_config.metric_normalization != "none"
+    ):
+        raise ValueError(
+            "regularization_coupled requires metric_normalization='none' so "
+            "B = I + F_hat / sketch_damping"
+        )
 
     key, subkey = jax.random.split(key)
     nystrom_state = initialize_nystrom_state(

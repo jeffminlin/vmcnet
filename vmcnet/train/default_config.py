@@ -315,7 +315,8 @@ def get_default_vmc_config() -> Dict:
                 # Streaming Nyström Fisher approximation hyperparams.
                 "nystrom_rank": 32,
                 "nystrom_ema_decay": 0.95,
-                "metric_shift_strategy": "constant",
+                # regularization_coupled gives B = I + F_hat / sketch_damping.
+                "metric_shift_strategy": "regularization_coupled",
                 "metric_identity_shift": 1.0,
                 "metric_normalization": "none",
                 "nystrom_warmup_steps": 100,

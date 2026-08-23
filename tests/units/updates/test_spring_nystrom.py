@@ -17,6 +17,7 @@ from vmcnet.mcmc.simple_position_amplitude import make_simple_position_amplitude
 from vmcnet.updates.spring_nystrom import (
     apply_nystrom_inverse_to_flat_vector,
     get_effective_rank,
+    get_nystrom_metric_parameters,
     get_phasein_coefficient,
     get_nystrom_eigendecomposition_from_sketch,
     normalize_nystrom_eigenvalues,
@@ -139,6 +140,23 @@ def test_nystrom_inverse_application_matches_dense_metric_inverse():
     expected = jnp.linalg.solve(dense_metric, vector)
 
     np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_regularization_coupled_metric_is_identity_plus_fisher_over_damping():
+    eigenvalues = jnp.asarray([3.0, 1.0])
+    damping = 0.2
+
+    metric_eigenvalues, metric_shift, metric_scale = get_nystrom_metric_parameters(
+        eigenvalues,
+        metric_identity_shift=7.0,
+        metric_shift_strategy="regularization_coupled",
+        sketch_damping=damping,
+        eigenvalue_floor=1e-8,
+    )
+
+    np.testing.assert_allclose(metric_eigenvalues, eigenvalues / damping)
+    np.testing.assert_allclose(metric_shift, 1.0)
+    np.testing.assert_allclose(metric_scale, damping)
 
 
 def test_trace_effective_rank_normalization_sets_weighted_average_to_one():
