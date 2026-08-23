@@ -27,6 +27,13 @@ nelec = (4, 2)
 Use the default VMCNet 16-determinant dense FermiNet and seed `0`. Do not load
 a preliminary-optimization or pretraining checkpoint.
 
+Use independent deterministic random streams for the VMC calculation and the
+Nyström probe matrix. The shared VMC initialization and sampler seed is `0`.
+For the Nyström method, use `nystrom_seed = 1` to construct the fixed Gaussian
+probe matrix without advancing the sampler key. This keeps the initial model,
+walkers, burn-in proposals, and subsequent sampler PRNG stream paired across
+the two methods.
+
 Use the paper's training and inference settings:
 
 ```text
@@ -76,6 +83,7 @@ Use VMCNet optimizer `spring_nystrom` with:
 ```text
 nystrom_rank = 100
 nystrom_ema_decay = 0.999
+nystrom_seed = 1
 nystrom_warmup_steps = 0
 nystrom_phasein_steps = 0
 collect_during_warmup = true
@@ -115,21 +123,24 @@ Tikhonov damping and the scale of the explicit Fisher approximation. The
 
 ## Cluster Execution
 
-Use persistent Slurm batch jobs on the `savio3_gpu` partition with one
-`GTX2080TI` GPU and two CPU cores per method. Use the
-`codex_preconditioning` environment with a purged module environment and
+Use two separate persistent Slurm batch jobs in the NERSC Perlmutter `shared`
+QOS, with one standard 40 GB A100 GPU and 16 CPU cores per method. Charge GPU
+account `m1266_g`, request a 24-hour walltime for each production job, and use
+the `codex_preconditioning` environment with a purged module environment and
 disabled Weights & Biases logging.
 
 Store all logs, checkpoints, metrics, and evaluation samples below
 
 ```text
-/global/scratch/users/ggoldshlager/codex/preconditioning/carbon_fig2_nystrom/
+/pscratch/sd/g/ggoldsh/codex/preconditioning/carbon_fig2_nystrom/
 ```
 
 Save regular checkpoints every `5000` training iterations. Before submitting
 the full jobs, run both configurations for two training iterations at the full
-walker count and network size, with evaluation disabled. Proceed to the full
-runs only if both batch smoke tests complete successfully on a 2080 Ti.
+walker count and network size, with evaluation disabled. Run both smoke tests
+on standard 40 GB A100 GPUs. If either smoke test fails, report the failure and
+do not submit the production jobs. If both pass, submit the two independent
+24-hour production jobs on the same standard-A100 constraint.
 
 ## Analysis
 

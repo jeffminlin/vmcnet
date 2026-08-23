@@ -315,6 +315,10 @@ def get_default_vmc_config() -> Dict:
                 # Streaming Nyström Fisher approximation hyperparams.
                 "nystrom_rank": 32,
                 "nystrom_ema_decay": 0.95,
+                # Independent seed for the fixed Gaussian Nyström probes. Keeping
+                # this separate prevents optimizer setup from advancing the VMC
+                # sampler key.
+                "nystrom_seed": 0,
                 # regularization_coupled gives B = I + F_hat / sketch_damping.
                 "metric_shift_strategy": "regularization_coupled",
                 "metric_identity_shift": 1.0,

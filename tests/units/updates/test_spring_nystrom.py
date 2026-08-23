@@ -20,6 +20,7 @@ from vmcnet.updates.spring_nystrom import (
     get_nystrom_metric_parameters,
     get_phasein_coefficient,
     get_nystrom_eigendecomposition_from_sketch,
+    initialize_nystrom_state,
     normalize_nystrom_eigenvalues,
     initialize_spring_nystrom,
     reconstruct_nystrom_matrix,
@@ -66,6 +67,7 @@ def _make_config():
             norm_constraint=1e-3,
             nystrom_rank=2,
             nystrom_ema_decay=0.0,
+            nystrom_seed=17,
             metric_shift_strategy="constant",
             metric_identity_shift=1.0,
             metric_normalization="none",
@@ -238,6 +240,10 @@ def test_spring_nystrom_update_is_finite_and_keeps_fixed_sketch():
         local_energy_fn, nchains, None, True
     )
     config = _make_config()
+    sampler_key = key
+    expected_omega = initialize_nystrom_state(
+        params, jax.random.PRNGKey(config.nystrom_seed), config.nystrom_rank
+    ).omega
 
     update_param_fn, optimizer_state, key = initialize_spring_nystrom(
         model.apply,
@@ -251,6 +257,9 @@ def test_spring_nystrom_update_is_finite_and_keeps_fixed_sketch():
         apply_pmap=False,
     )
     initial_omega = optimizer_state.nystrom_state.omega
+
+    np.testing.assert_array_equal(key, sampler_key)
+    np.testing.assert_allclose(initial_omega, expected_omega)
 
     params, _, optimizer_state, metrics, key = update_param_fn(
         params, data, optimizer_state, key

@@ -4,7 +4,7 @@ set -euo pipefail
 
 mode=${1:?usage: submit_jobs.sh smoke|full}
 script_dir=$(cd "$(dirname "$0")" && pwd)
-output_root=/global/scratch/users/ggoldshlager/codex/preconditioning/carbon_fig2_nystrom
+output_root=/pscratch/sd/g/ggoldsh/codex/preconditioning/carbon_fig2_nystrom
 slurm_dir="$output_root/slurm"
 mkdir -p "$slurm_dir"
 
@@ -15,7 +15,7 @@ case "$mode" in
     run_arg=--smoke
     ;;
   full)
-    walltime=14-00:00:00
+    walltime=24:00:00
     suffix=full
     run_arg=
     ;;

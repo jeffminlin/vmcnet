@@ -486,10 +486,10 @@ def initialize_spring_nystrom(
             "B = I + F_hat / sketch_damping"
         )
 
-    key, subkey = jax.random.split(key)
+    nystrom_key = jax.random.PRNGKey(int(optimizer_config.get("nystrom_seed", 0)))
     nystrom_state = initialize_nystrom_state(
         params,
-        subkey,
+        nystrom_key,
         int(optimizer_config.nystrom_rank),
     )
     spring_nystrom_step = get_spring_nystrom_step(

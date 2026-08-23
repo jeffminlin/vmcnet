@@ -16,6 +16,7 @@ LEARNING_RATE = 0.1
 DAMPING = 1e-3
 NYSTROM_RANK = 100
 NYSTROM_EMA_DECAY = 0.999
+NYSTROM_SEED = 1
 
 RUN_NAMES = {
     "minsr": "carbon_minsr_seed0",
@@ -88,6 +89,7 @@ def optimizer_config_args(method: str) -> list[str]:
                 f"{prefix}.sketch_damping={DAMPING}",
                 f"{prefix}.nystrom_rank={NYSTROM_RANK}",
                 f"{prefix}.nystrom_ema_decay={NYSTROM_EMA_DECAY}",
+                f"{prefix}.nystrom_seed={NYSTROM_SEED}",
                 f"{prefix}.metric_shift_strategy=regularization_coupled",
                 f"{prefix}.metric_identity_shift=1.0",
                 f"{prefix}.metric_normalization=none",

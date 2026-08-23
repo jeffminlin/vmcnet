@@ -1,10 +1,11 @@
 #!/bin/bash
-#SBATCH --account=co_esmath
-#SBATCH --partition=savio3_gpu
-#SBATCH --gres=gpu:GTX2080TI:1
+#SBATCH --account=m1266_g
+#SBATCH --qos=shared
+#SBATCH --constraint=gpu&hbm40g
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus-per-task=1
 
 set -euo pipefail
 
@@ -20,17 +21,20 @@ if [[ -n "$mode" ]]; then
 fi
 
 module purge
-export PATH=/global/home/groups/co_esmath/ggoldshlager/envs/codex_preconditioning/bin:$PATH
+export PATH=/pscratch/sd/g/ggoldsh/envs/codex_preconditioning/bin:$PATH
 export WANDB_MODE=disabled
-export MPLCONFIGDIR=/global/scratch/users/ggoldshlager/codex/preconditioning/.matplotlib-cache
+export MPLCONFIGDIR=/pscratch/sd/g/ggoldsh/codex/preconditioning/.matplotlib-cache
 
-worktree=/global/home/groups/co_esmath/ggoldshlager/VMCNet_codex/preconditioning/vmcnet
-output_root=/global/scratch/users/ggoldshlager/codex/preconditioning/carbon_fig2_nystrom
+worktree=/global/homes/g/ggoldsh/codex/preconditioning/vmcnet
+output_root=/pscratch/sd/g/ggoldsh/codex/preconditioning/carbon_fig2_nystrom
 
 mkdir -p "$MPLCONFIGDIR" "$output_root"
 cd "$worktree"
 
-python experiments/preconditioning/carbon_fig2_nystrom/run_experiment.py \
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+
+srun -n 1 -c 16 -G 1 --gpu-bind=none \
+  python experiments/preconditioning/carbon_fig2_nystrom/run_experiment.py \
   --method "$method" \
   --output-root "$output_root" \
   "${extra_args[@]}"
