@@ -124,7 +124,7 @@ Tikhonov damping and the scale of the explicit Fisher approximation. The
 ## Cluster Execution
 
 Use two separate persistent Slurm batch jobs in the NERSC Perlmutter `shared`
-QOS, with one standard 40 GB A100 GPU and 16 CPU cores per method. Charge GPU
+QOS, with one standard 40 GB A100 GPU and 32 CPU cores per method. Charge GPU
 account `m1266_g`, request a 24-hour walltime for each production job, and use
 the `codex_preconditioning` environment with a purged module environment and
 disabled Weights & Biases logging.

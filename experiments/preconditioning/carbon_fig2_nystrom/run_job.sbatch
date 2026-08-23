@@ -4,7 +4,7 @@
 #SBATCH --constraint=gpu&hbm40g
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-task=1
 
 set -euo pipefail
@@ -33,7 +33,7 @@ cd "$worktree"
 
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 
-srun -n 1 -c 16 -G 1 --gpu-bind=none \
+srun -n 1 -c 32 -G 1 --gpu-bind=none \
   python experiments/preconditioning/carbon_fig2_nystrom/run_experiment.py \
   --method "$method" \
   --output-root "$output_root" \
